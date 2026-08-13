@@ -1,0 +1,1 @@
+recreate the frappe CRM into django CRM
