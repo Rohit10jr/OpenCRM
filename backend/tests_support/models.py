@@ -11,7 +11,6 @@ and becomes fully routable in <=3 lines": the decorator, the class line, and the
 
 from django.db import models
 
-from frappe_core.assignment import register_todo_model
 from frappe_core.models import AutoIncrementDocument, BaseDocument
 from frappe_core.naming import FieldValue, Format, Hash, NamingSeries, Prompt
 from frappe_core.registry import register_doctype
@@ -107,25 +106,11 @@ class PromptDoc(BaseDocument):
         name_strategy = Prompt()
 
 
-@register_doctype("Phase Zero ToDo")
-class TodoDoc(BaseDocument):
-    """Stands in for the platform ``ToDo`` that phase 1 cluster 1 will build.
-
-    Phase 0 owns the ``_assign`` sync mechanism but not the model
-    (PHASE_0_FOUNDATION.md section 9), so the mechanism is proved against this.
-    Field names match Frappe's ToDo exactly.
-    """
-
-    reference_type = models.CharField(max_length=140, blank=True, default="")
-    reference_name = models.CharField(max_length=140, blank=True, default="")
-    allocated_to = models.CharField(max_length=140, blank=True, default="")
-    status = models.CharField(max_length=50, default="Open")
-
-    class Meta:
-        name_strategy = Hash()
-
-
-register_todo_model(TodoDoc)
+# Phase 0 stood in for the platform ``ToDo`` here, because it owned the ``_assign``
+# sync mechanism but not the model. Phase 1 cluster 1 landed the real
+# ``frappe_platform.ToDo`` and calls ``register_todo_model`` itself, so the stand-in is
+# gone and ``tests/test_assignment.py`` now exercises the real thing. Keeping both would
+# mean two models racing to own the same global signal registration.
 
 
 @register_doctype("Phase Zero Child", is_child_table=True)

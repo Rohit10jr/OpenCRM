@@ -17,7 +17,8 @@ from frappe_core.assignment import (
     rebuild_assign_cache,
 )
 from frappe_core.session import session_user
-from tests_support.models import TodoDoc, Widget
+from frappe_platform.models import ToDo
+from tests_support.models import Widget
 
 pytestmark = pytest.mark.django_db
 
@@ -31,10 +32,10 @@ def widget(alice):
 
 
 def assign(widget, user, status="Open"):
-    return TodoDoc.objects.create(
+    return ToDo.objects.create(
         reference_type=DOCTYPE,
         reference_name=widget.name,
-        allocated_to=user.name,
+        allocated_to=user,
         status=status,
     )
 

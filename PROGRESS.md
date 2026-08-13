@@ -32,7 +32,7 @@ section of each phase first — that is where the honest uncertainty lives.
 ---
 
 ## Phase 0 — PASS   [branch: phase-0-foundation]
-Started: 2026-08-14 00:45   Finished: 2026-08-14 01:35   Commit: `<see git log>`
+Started: 2026-08-14 00:45   Finished: 2026-08-14 01:45   Commit: `2a3b8df`
 
 **Built:** The Django skeleton and the whole phase-0 contract: `BaseDocument` with the
 six naming strategies and the four underscore caches, the DocType registry, the Frappe
@@ -380,3 +380,223 @@ All four marked **"PROVISIONAL — revised by phase-0 agent, pending human revie
 - **`PHASE_6_REALTIME.md`** — auth and permission sections now point at the concrete
   phase-0 functions (`session_user`, `check_object_permission`) and at
   `frontend/JWT_PATCH.md` as the place to document the second frontend deviation.
+
+---
+
+## Phase 1 — PASS   [branch: phase-0-foundation]
+Started: 2026-08-14 01:50   Finished: 2026-08-14 02:55   Commit: `<below>`
+
+**Built:** All 46 models — the 9 platform doctypes (cluster 1) and 37 CRM doctypes
+(clusters 2–6). Every one registers with the phase-0 registry and is routable with no
+view code. Plus two pieces of framework the models turned out to need: credential
+field-blocking and inline child-table serialisation.
+
+**Tests:** **592 passing**, 31 skipped, 0 failing (~32s). Up from 235 at the end of
+phase 0.
+
+The 31 skips are all intentional and structural, not silence: `test_crm_models.py`
+parametrises every doctype over the same checks, so "is this child table shaped
+correctly" skips for the 27 doctypes that are not child tables, and the naming check
+skips for the 3 singletons.
+
+| Criterion (PHASE_1_MODELS.md §7) | How it is covered |
+|---|---|
+| Platform cluster lands first | Built and committed first; `test_platform_models.py` (51 tests) |
+| Every model registers and is routable | `test_doctype_is_registered`, `test_child_tables_are_flagged_and_not_routable`, parametrised over all 37 |
+| Correct naming strategy per doctype | `test_naming_strategy_matches_the_json` — reads `autoname` from each JSON and asserts the strategy class *and* its argument |
+| No layout fieldtypes leaked | `test_no_layout_fieldtype_leaked_into_the_model` — 130 layout fields across the 39 JSONs, none materialised |
+| Child tables: no route, inline, replace-on-write | `test_child_tables_are_not_routable_over_http`, `test_children_serialise_inline`, `test_writing_a_parent_replaces_children_wholesale` |
+| `_assign` consistent with ToDo both ways | `test_assignment.py` (22) now runs against the real `ToDo`; plus `test_crm_behaviour.py` on real leads/deals |
+| Migrations apply cleanly from empty | `makemigrations --check` clean; pytest-django rebuilds `test_opencrm` every run |
+| Every `frappe.throw` has identical text | `test_crm_behaviour.py` asserts each message verbatim, incl. the two lost-reason messages that differ by one word |
+| Cross-cluster FK targets exist | `test_link_fields_point_at_the_right_doctype` resolves every `Link` in every JSON to the actual related model's doctype |
+
+**The schema tests read the Frappe JSON directly** rather than restating it. Transcribing
+a schema by hand and then asserting my transcription matches my transcription proves
+nothing; these compare the model to the source file, field by field, and skip loudly if
+the source is missing.
+
+**Also closed here:** phase 0's owed item — criterion 1 was tested against a stand-in
+doctype because spec §9 forbade building `CRM Lead`. It now runs against the real one
+(`test_lead_is_listable_with_the_criterion_1_request_shape`).
+
+### Two defects I found in my own phase-0 work
+
+- **`register_doctype` only worked for `BaseDocument` subclasses.** `User` derives from
+  `AbstractBaseUser` (Django requires that of `AUTH_USER_MODEL`), so it had no
+  `get_doctype()`. Every `Link`-target check against `User` therefore resolved to `None`
+  and **passed vacuously**. Found by writing the FK-target test, which failed on 12
+  doctypes at once. The decorator now attaches the accessor to any registered model.
+  A test that only ever passes is worse than no test, and this one was one line from
+  being exactly that.
+
+- **Registering `User` and `Email Account` exposed credentials.** The generic serializer
+  used `fields="__all__"` and the list endpoint honoured `fields=["*"]`, so
+  `GET /api/resource/User?fields=["*"]` would have returned `password` — the hash — to
+  any authenticated caller. Phase 0 was safe only because no model with a credential was
+  registered yet. Added `frappe_core/field_security.py`, applied in **both** places that
+  can emit a column (serializer and `query.resolve_fields`), plus `order_by`/`group_by`.
+  Nine tests, including one that reads the JSON and asserts every `Password` fieldtype in
+  the source is declared `SENSITIVE_FIELDS` — so a future agent adding one cannot forget.
+
+### Codex findings
+
+13 findings. **11 fixed, 1 disputed, 1 already-known.** Every fix has a regression test.
+
+> **Read this caveat first.** Codex could not read the repo (the sandbox defect at the
+> top), so for the controllers it **searched the web and read `frappe/crm` on GitHub
+> `develop`**. This checkout is `main`. I therefore re-verified **every** finding against
+> the local source before acting, and cite the local line numbers below. Two of its
+> findings would have been wrong if taken at face value against the wrong branch; as it
+> happens both areas agree between branches, but the risk was real and is the reason
+> none of these were applied on Codex's word alone.
+
+**Three findings were caused by my own tooling, and that is the lesson of this gate.**
+My JSON inspection script truncated `options` at 50 characters. I then transcribed the
+visible prefix and *guessed nothing* - I simply did not notice the values were cut off:
+
+| Field | I had | Source actually has |
+|---|---|---|
+| `CRM Lead/Deal Status.color` | 9 colours, ending `yellow` | 13 - also `cyan`, `teal`, `violet`, `purple` |
+| `CRM Fields Layout.type` | `...Data Fields, Grid Settings` | `...Data Fields, Grid Row, Required Fields` |
+| `FCRM Settings.service_provider` | free `CharField` | a `Select` with 4 fixed providers |
+
+I inspected the source through a lossy view and treated the result as the source. There
+is now a test, `test_select_options_match_the_json_exactly`, that reads the **full**
+`options` string for every `Select` on every ported doctype and fails if the model's
+choices do not cover it - so a truncated transcription cannot pass again.
+
+**The two substantive behavioural findings:**
+
+- **`CRM Lead` name derivation was wrong in four ways** (`crm_lead.py:113-135`).
+  `set_full_name` **mutates `lead_name`** and runs *before* `set_lead_name`; it fires
+  only when `first_name` is set; it **includes the salutation**; and the email fallback
+  uses the **local part** (`ada@example.com` → `ada`), not the whole address. My version
+  returned a value nobody called, omitted the salutation, and stored the full address.
+  `lead_name` is the primary display field on the busiest screen in the product, so this
+  would have been visible on every lead. Six tests.
+
+- **`CRM Call Log` could not be created manually** (`crm_call_log.py:50-54`). Upstream's
+  `before_insert` generates a 12-char hash when `id` is blank and defaults
+  `telephony_medium` to `"Manual"`. Without it, `field:id` naming raises - so the "log a
+  call" flow would have failed outright. Three tests.
+
+Also fixed: `CRM Product.set_product_name` (blank name falls back to the code),
+`CRM Organization.update_exchange_rate` (ported with the settings read and the FX call
+injected, since both are later phases), and `CRM Notification.on_update` (now a named
+phase-6 seam rather than a silent omission - `PHASE_6_REALTIME.md` §2 lists that event
+as in scope).
+
+**Disputed — `facebook_lead_id` / `facebook_form_id` on `CRM Lead`.** Codex said these
+should be absent because Facebook lead sync is phase-7 deferred. They are **plain `Data`
+columns on `crm_lead.json`**, not part of the deferred `facebook_*` *doctypes*. Dropping
+them would delete real columns from a doctype that is in scope and lose data on any
+imported lead. Kept.
+
+**Reversed my own decision — `FCRM Settings.access_key`.** I had marked it
+`SENSITIVE_FIELDS` because it is an FX-provider credential. Codex pointed out the JSON
+declares it `Data`, unhidden - upstream shows it in the settings UI, so the settings
+screen reads it back. Blocking it would have broken that screen in exchange for a
+hardening the source does not make. Reverted to readable, and flagged below rather than
+diverged from silently.
+
+**Already known:** Codex's remaining findings are the unported `validate` hooks on
+`CRM Lead` and `CRM Deal` (default status selection, status-change-log append,
+owner share/assign, primary-contact sync, Won `closed_date`). These were already listed
+under Concerns before the review ran, and they remain the largest gap in phase 1. They
+are not fixed here — see Concerns.
+
+**Not ported, newly noted:** `CRM Call Log.links` is a `Table` of Frappe's `Dynamic Link`
+platform doctype, which is outside the nine platform models in scope. Recorded as a gap.
+
+### Decisions made without you
+
+11. **Three child tables cannot take a foreign key.** `PHASE_1_MODELS.md` §3 says child
+    tables get "FK to parent + parenttype, parentfield, idx". `CRM Products`,
+    `CRM Status Change Log` and `CRM Rolling Response Time` are each embedded by **two**
+    doctypes (`crm_lead.*` and `crm_deal.*`), so there is no single target. Verified by
+    dumping every `Table` field across all 39 JSONs. Those three use Frappe's own
+    polymorphic `parent` + `parenttype`; the other six child tables do get a real FK.
+    Parents declare the polymorphic ones via `POLYMORPHIC_CHILD_TABLES`.
+
+12. **Five Link targets are modelled as `CharField`, not tables.** `Salutation`,
+    `Gender`, `Currency`, `Address` and `DocType` are Frappe platform lookups outside
+    `PHASE_1_MODELS.md` §1's list of nine. The stored and transmitted value is identical
+    (`"Mr"`, `"USD"`, `"CRM Lead"`), so the wire contract is unaffected. Creating five
+    more platform tables would have been scope the spec explicitly warns against
+    ("do not reimplement Frappe's platform").
+
+13. **Platform doctype naming is the weakest evidence in the port.** The CRM repo shows
+    which platform fields exist but never their `autoname`. `ToDo`/`Communication`/
+    `Comment`/`File` are hash-named, `Email Template`/`Tag` prompt-named,
+    `Email Account` field-named, and **`Contact` is named from its full name with a
+    numeric suffix on collision**. Contact is the risky one — the frontend routes on it
+    (`/contacts/:contactId`) — and it is a guess constrained by usage, not read from
+    source. Flagged for review.
+
+14. **`from` and `to` are Python keywords.** `CRM Status Change Log` and `CRM Call Log`
+    both have fields with those names. Installed via `Model.add_to_class` so the wire
+    name stays exact; access them with `getattr(obj, "from")` or `filter(**{"from": x})`.
+    Renaming them would have silently broken any ported query.
+
+15. **Singletons are pinned to a fixed PK string**, not `pk=1` — our PKs are strings.
+    `SingletonMixin.load()` is the accessor. Keeps the singleton reachable through the
+    same generic endpoint as everything else.
+
+16. **`CRM Territory` and `CRM Sales Hierarchy` keep `lft`/`rgt` as plain columns.**
+    `PHASE_2_PERMISSIONS.md` §3 calls for django-treebeard. Phase 1 ports the schema
+    faithfully (both are indexed for the range scan) and **leaves the tree behaviour to
+    phase 2**, which is where the performance requirement actually bites and where the
+    subtree query gets written. Deferring keeps phase 1 mechanical, as its spec asks.
+    Phase 2 should decide treebeard-vs-nested-set with the query in front of it.
+
+### Deviations from spec
+
+- Child-table FK rule — decision 11.
+- Five unmodelled Link targets — decision 12.
+- Tree implementation deferred to phase 2 — decision 16.
+- **`CRMDeal.validate_forecasting` takes the flag as a parameter** rather than reading
+  `FCRM Settings` itself, so the rule is testable and the caller owns the settings
+  lookup. Upstream reads the singleton inline (`crm_deal.py:249`). Phase 3 must call it.
+- **SLA lifecycle is a named no-op** (`apply_sla`). Upstream calls it from `before_save`;
+  the columns are ported, the arithmetic is phase 5 per `PHASE_5_ASYNC.md` §4.
+
+### Concerns
+
+- **Lifecycle porting is partial and this is the biggest gap in phase 1.** The
+  validations that raise are ported verbatim and tested. What is *not* ported:
+  `crm_lead.share_with_agent` / `assign_agent` (they create ToDo and DocShare rows on
+  owner change), `add_status_change_log`, `crm_deal.update_default_probability` /
+  `update_expected_deal_value`, and the whole `convert_to_deal` path. These are real
+  behaviour, they live in the two 500-LOC controllers the spec told me to read line by
+  line, and a later phase will assume they exist. **Phase 3 or a phase-1 follow-up must
+  finish them.**
+- **`Contact` naming is a guess** — decision 13. It decides a URL.
+- **No lifecycle signal wiring for `_comments` / `_user_tags`.** `_assign` is kept in
+  sync with `ToDo`; the other two underscore caches are columns with no writer yet.
+  `Comment` and `Tag` exist, so phase 3 can wire them.
+- **`crm_products` totals are not computed.** `amount`, `net_amount`, `total`,
+  `net_total` are ported as columns; upstream computes them from qty × rate less
+  discount. Not wired.
+- **The polymorphic child tables have no referential integrity.** `parent` is a string,
+  so deleting a lead leaves its product rows orphaned. Frappe has the same property, but
+  Frappe also has a `on_trash` cascade that this port does not yet.
+- **`FCRM Settings.access_key` is readable by any authenticated user.** That is faithful
+  to the source (`Data`, unhidden) but it is an FX-provider API key. If you want it
+  restricted, that is a **product decision that diverges from upstream** and needs the
+  settings screen changed too — one line in `SENSITIVE_FIELDS` on the model.
+- **`CRM Call Log.links`** (a `Table` of Frappe's `Dynamic Link`) is not ported;
+  `Dynamic Link` is a platform doctype outside the nine in scope. Upstream uses it to
+  attach notes/tasks/leads/deals to a call. Phase 3 will need it.
+- **My JSON inspection truncated `options` and I did not notice.** Three wrong `Select`
+  field definitions reached the review because of it. A test now covers that class of
+  mistake, but it is worth knowing that the schema I transcribed by eye was checked by a
+  tool I had also written — and the tool was the thing that was wrong.
+
+### Gate
+
+1. `pytest` — **610 passed, 31 skipped, 0 failed**
+2. Migrations — `makemigrations --check` clean; applied to `opencrm`; rebuilt from empty
+   on every test run
+3. Codex review — ran, 13 findings, acted on above (with the branch caveat recorded)
+4. Commit — below

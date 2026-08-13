@@ -19,6 +19,7 @@ from typing import Any
 
 from frappe_core import permissions, registry
 from frappe_core.exceptions import ValidationError
+from frappe_core.field_security import sensitive_fields
 from frappe_core.filters import apply_filters
 from frappe_core.session import get_current_user
 
@@ -54,9 +55,20 @@ def concrete_field_names(model) -> set[str]:
 
 
 def resolve_fields(model, fields: Any) -> list[str]:
-    """Validate a requested field list. ``["*"]`` means every concrete field."""
-    allowed = concrete_field_names(model)
-    default = [f.name for f in model._meta.get_fields() if getattr(f, "concrete", False)]
+    """Validate a requested field list. ``["*"]`` means every concrete field.
+
+    Credential columns are never selectable, whether named explicitly or swept up by
+    ``["*"]`` - see :mod:`frappe_core.field_security`. ``User`` and ``Email Account``
+    are routable doctypes, so without this a list request would hand out password
+    hashes.
+    """
+    blocked = sensitive_fields(model)
+    allowed = concrete_field_names(model) - blocked
+    default = [
+        f.name
+        for f in model._meta.get_fields()
+        if getattr(f, "concrete", False) and f.name not in blocked
+    ]
 
     if not fields:
         return default
@@ -68,6 +80,8 @@ def resolve_fields(model, fields: Any) -> list[str]:
     resolved: list[str] = []
     for raw in fields:
         field = str(raw).strip()
+        if field in blocked:
+            raise ValidationError(f"Field {field!r} is not readable")
         if field not in allowed:
             # Deliberately strict: silently dropping an unknown field would let a
             # typo'd column quietly disappear from a list view instead of failing loudly.
@@ -113,6 +127,8 @@ def resolve_order_by(model, order_by: Any) -> list[str]:
             raise ValidationError(f"Cannot parse sort clause {clause!r}")
         field = match.group("field")
         direction = (match.group("direction") or "asc").lower()
+        if field in sensitive_fields(model):
+            raise ValidationError(f"Cannot order by {field!r}")
         if field not in allowed:
             raise ValidationError(f"Cannot order by unknown field {field!r}")
         resolved.append(f"-{field}" if direction == "desc" else field)
@@ -125,6 +141,8 @@ def resolve_group_by(model, group_by: Any) -> str | None:
     field = str(group_by).strip()
     if "." in field:
         field = field.rsplit(".", 1)[-1].strip("`\"")
+    if field in sensitive_fields(model):
+        raise ValidationError(f"Cannot group by {field!r}")
     if field not in concrete_field_names(model):
         raise ValidationError(f"Cannot group by unknown field {field!r}")
     return field

@@ -143,6 +143,14 @@ def register_doctype(
         _REGISTRY[doctype] = entry
         # Let the model answer get_doctype() without a registry round-trip.
         model_cls._doc_meta = {**doc_meta, "doctype": doctype}
+        if not hasattr(model_cls, "get_doctype"):
+            # `BaseDocument` provides this, but a registered model need not be one -
+            # `User` derives from `AbstractBaseUser` because Django requires it of
+            # AUTH_USER_MODEL. Without this, resolving a Link target that points at User
+            # silently yields None, and every FK-target check passes vacuously.
+            model_cls.get_doctype = classmethod(
+                lambda cls: (cls._doc_meta or {}).get("doctype")
+            )
         return model_cls
 
     return decorator

@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     # local
     "frappe_core",
     "frappe_platform",
+    "crm_app",
 ]
 
 MIDDLEWARE = [
