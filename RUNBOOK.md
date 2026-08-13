@@ -1,32 +1,60 @@
-# Unattended Run — Phases 0 to 2 Only
+# Unattended Run — Phases 0 to 4
 
 **You are running without a human available. Read this whole file before starting.**
 
+## Scope and the branch split
+
+Two branches. This split is deliberate: it keeps reviewed work separate from work built
+on unreviewed foundations, so phases 3–4 can be discarded wholesale without touching
+phases 0–2.
+
+| Branch | Phases | Why |
+|---|---|---|
+| `phase-0-foundation` (current) | **0 → 1 → 2** | The contract, the models, the security boundary |
+| `phase-3-4-provisional` (you create it) | **4 → 3** | Built on specs revised but not reviewed |
+
+Order on the second branch is **4 then 3**, not 3 then 4. Several of phase 3's Group A
+endpoints (`get_filterable_fields`, `get_quick_filters`, `update_quick_filters`,
+`get_views`) read and write the metadata layer phase 4 builds. Building them first means
+building against stubs and then revising.
+
 ## HARD STOP
 
-Run **phase 0, then phase 1, then phase 2. Then STOP.**
+**After phase 3's gate passes, STOP.** Do not start phase 5, 6 or 7. Write your final
+report and halt, even with time and capacity left.
 
-**Do not start phase 3.** Do not start phases 4–7. When phase 2's gate passes, write
-your final report and halt, even if you have time and capacity left.
+---
 
-Phase 2 is the security boundary — row-level permissions. It needs human review before
-anything builds on it. Phase 3's spec is provisional and will have been revised by you,
-unreviewed. Stopping here is the correct outcome, not a failure.
+## Gate before leaving `phase-0-foundation`
+
+Phases 3–4 may **only** begin if phase 2 finished genuinely clean. Do not proceed if
+any of these is true:
+
+- Phase 2's gate needed a second attempt
+- Codex's phase-2 security review raised anything you disputed rather than fixed
+- Any phase-2 acceptance criterion lacks a real test
+- You made a judgment call on permission semantics you are not confident about
+
+If any apply: **stop at phase 2.** Log why in `PROGRESS.md`. Phases 3–4 built on a
+shaky permission layer are worse than no phases 3–4, because they make the eventual fix
+more expensive.
+
+Permissions are the one thing where "probably right" is not good enough.
 
 ---
 
 ## Before you begin
 
-Read, in this order:
+Read, in order:
 
 1. `CLAUDE.md` — project rules
 2. `PORT_PLAN.md` — inventory, frontend contract, settled decisions
 3. `specs/README.md` — spec index and status
 4. `specs/PHASE_0_FOUNDATION.md` — your first task
 
-Environment is already prepared. Do not reconfigure it:
+Environment is prepared. Do not reconfigure it:
 
-- Branch `phase-0-foundation`, scaffold committed at `04b4d44`
+- Branch `phase-0-foundation`, scaffold committed
 - PostgreSQL 17 running, database `opencrm`, credentials in `.env` (gitignored)
 - Redis reachable on 6379
 - `frontend/` holds the real Vue frontend (52,449 LOC) — your acceptance reference
@@ -38,7 +66,7 @@ Backend goes in `backend/`. Create the venv there.
 
 ## The loop
 
-For each phase in **0, 1, 2**:
+For each phase in **0, 1, 2** — then, if the gate above allows, **4, 3**:
 
 ```
 1. Read specs/PHASE_<N>_*.md in full
@@ -50,8 +78,16 @@ For each phase in **0, 1, 2**:
    Fails twice  → STOP. Log and halt.
 ```
 
-**Phases run strictly in sequence.** Never begin a phase before the previous gate has
-passed. Within phase 1 you may fan out by cluster; never two agents in one file.
+Phases run strictly in sequence. Within phase 1 you may fan out by cluster; never two
+agents in one file.
+
+After phase 2 passes and the gate above allows:
+
+```powershell
+git checkout -b phase-3-4-provisional
+```
+
+Then continue the same loop with phase 4, then phase 3.
 
 ---
 
@@ -66,22 +102,22 @@ cd backend
 pytest -q
 ```
 
-Must exit 0. Every acceptance criterion in the phase spec must have a corresponding
-test. A criterion with no test does not count as met.
+Must exit 0. Every acceptance criterion in the phase spec needs a corresponding test.
+A criterion with no test does not count as met.
 
-### 2. Migrations are clean and apply from empty
+### 2. Migrations clean and applying from empty
 
 ```powershell
-python manage.py makemigrations --check --dry-run   # no unmade model changes
-python manage.py migrate                            # applies to opencrm
+python manage.py makemigrations --check --dry-run
+python manage.py migrate
 ```
 
-`pytest-django` builds and drops `test_opencrm` on every run, which proves migrations
-apply from empty. If it doesn't, fix it before proceeding.
+`pytest-django` builds and drops `test_opencrm` each run, proving migrations apply from
+empty. If it doesn't, fix that before proceeding.
 
 ### 3. Codex review — independent second opinion
 
-Run from the repo root. Read-only, so Codex cannot touch your files:
+Run from the repo root, read-only so Codex cannot touch your files.
 
 **Phase 0:**
 ```powershell
@@ -98,12 +134,22 @@ codex exec -s read-only "Review the Django models in backend/ against the DocTyp
 codex exec -s read-only "Security review. Compare backend/ permission code against D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm\permissions\org_hierarchy.py and specs/PHASE_2_PERMISSIONS.md. Verify the rule evaluation ORDER matches exactly, that ToDo (not _assign) backs assignment checks, that cancelled ToDos grant no access, and that list filtering and has_permission agree in every case. Try to find a way to see a row you shouldn't via filters, fields, order_by or group_by. Report file:line."
 ```
 
-**Act on the findings.** Fix real defects. Where you disagree with Codex, record the
-disagreement and your reasoning in `PROGRESS.md` — do not silently ignore it.
+**Phase 4:**
+```powershell
+codex exec -s read-only "Review the metadata layer in backend/ against specs/PHASE_4_METADATA.md and the Frappe source at D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm. Verify the 4-step column resolution order in api/doc.py:get_data is reproduced exactly; that filterable and group-by fieldtype allowlists match source; that get_non_filterable_fields() is honoured; that one user's saved view is invisible to another. Report file:line."
+```
+
+**Phase 3:**
+```powershell
+codex exec -s read-only "Review the API endpoints in backend/ against crm/api/*.py at D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm and specs/PHASE_3_ENDPOINTS.md. Verify every dotted path and parameter name matches source exactly, responses are wrapped in {'message': ...}, frappe.throw messages are preserved verbatim, and no endpoint bypasses the phase-2 permission layer. Pay special attention to bulk operations being permission-checked per item. Report file:line."
+```
+
+**Act on the findings.** Fix real defects. Where you disagree, record the disagreement
+and your reasoning in `PROGRESS.md` — never silently ignore it.
 
 ### 4. Commit
 
-One commit per phase. Message states the phase and what landed.
+One commit per phase, stating the phase and what landed.
 
 ---
 
@@ -111,24 +157,24 @@ One commit per phase. Message states the phase and what landed.
 
 **If a gate fails twice on the same phase, STOP.**
 
-Write to `PROGRESS.md`: what failed, the actual error, what you tried, and your best
-read of the cause. Then halt.
+Write to `PROGRESS.md`: what failed, the actual error, what you tried, your best read of
+the cause. Then halt.
 
-Do not work around a failing gate. Do not skip to the next phase. Do not disable or
-weaken a test to make it pass — that is the worst possible outcome, because it hides
-the failure rather than reporting it.
+Do not work around a failing gate. Do not skip ahead. **Do not disable or weaken a test
+to make it pass** — that is the worst possible outcome, because it hides the failure
+instead of reporting it.
 
-A clean stop after phase 1 is far more useful than three phases of unverified code.
+A clean stop after phase 1 is far more useful than four phases of unverified code.
 
 ---
 
 ## PROGRESS.md
 
-Create it at the repo root and append after every phase, pass or fail. This is what
-gets read first on return, so make it scannable.
+Create it at the repo root, append after every phase, pass or fail. This gets read first
+on return — make it scannable.
 
 ```markdown
-## Phase <N> — <PASS | FAILED | STOPPED>
+## Phase <N> — <PASS | FAILED | STOPPED>   [branch: <name>]
 Started: <time>   Finished: <time>   Commit: <sha>
 
 **Built:** 2-3 lines on what actually landed.
@@ -155,14 +201,13 @@ You will hit ambiguity. In order of preference:
 1. **Read the Frappe source.** It is the source of truth and it is right there.
 2. **Read the frontend.** `frontend/src/stores/`, `src/data/document.js`,
    `src/composables/document.js` show what the API is expected to return.
-3. **Choose the option that matches upstream behaviour**, implement it, and log the
-   decision in `PROGRESS.md`.
+3. **Choose the option matching upstream behaviour**, implement it, log the decision.
 
 Never invent semantics to make something easier. Never widen scope beyond the phase
 spec. If a choice would be expensive to reverse and the evidence is genuinely
-ambiguous, prefer to **stop and ask** over guessing — log it and halt.
+ambiguous, prefer to stop and ask over guessing — log it and halt.
 
-Two questions are already known-open and need answering from source:
+Two known-open questions to answer from source:
 - SLA computed on write or on a schedule? (`specs/PHASE_5_ASYNC.md` §4)
 - The exact error-envelope shape the frontend parses (`specs/PHASE_0_FOUNDATION.md` §6c)
 
@@ -171,23 +216,23 @@ Two questions are already known-open and need answering from source:
 ## One extra phase-0 task
 
 Phase 0 owns the provisional specs. After phase 0's gate passes, revise
-`specs/PHASE_3_ENDPOINTS.md` through `PHASE_6_REALTIME.md` to match what you actually
-built.
+`specs/PHASE_3_ENDPOINTS.md` through `PHASE_6_REALTIME.md` to match what you built.
 
-**Leave their status as PROVISIONAL.** Your revision is itself unreviewed. Note at the
+**Leave their status as PROVISIONAL** — your revision is itself unreviewed. Note at the
 top of each: "Revised by phase-0 agent, pending human review."
 
 ---
 
 ## Final report
 
-When phase 2's gate passes — or when you stop early — write a closing entry in
+When phase 3's gate passes — or whenever you stop early — write a closing entry in
 `PROGRESS.md`:
 
-- Which phases completed and their commit SHAs
-- Total tests passing
+- Which phases completed, on which branch, with commit SHAs
+- Total tests passing per branch
 - Every decision made without the user, gathered in one place
-- What phase 3 should tackle first
-- Anything you would want a human to look at before the port continues
+- Whether `phase-3-4-provisional` is worth keeping or should be redone after review
+- What phase 5 should tackle first
+- Anything you want a human to look at before the port continues
 
-Then stop. Do not start phase 3.
+Then stop.
