@@ -23,10 +23,28 @@ ADMINISTRATOR = "Administrator"
 
 _current_user: ContextVar[str] = ContextVar("frappe_current_user", default=GUEST_USER)
 
+#: Per-request memo, the equivalent of Frappe's ``@request_cache``.
+#: PHASE_2_PERMISSIONS.md section 3 requires the subtree lookup to be cached per
+#: request, because it runs on *every* list query for leads and deals.
+_request_cache: ContextVar[dict] = ContextVar("frappe_request_cache", default=None)
+
 
 def get_current_user() -> str:
     """Return the current user's email/PK, or ``"Guest"``."""
     return _current_user.get()
+
+
+def get_request_cache() -> dict:
+    """The current request's memo dict. Empty and unshared outside a request."""
+    cache = _request_cache.get()
+    if cache is None:
+        cache = {}
+        _request_cache.set(cache)
+    return cache
+
+
+def clear_request_cache() -> None:
+    _request_cache.set({})
 
 
 def set_current_user(user: str | None) -> object:
@@ -46,10 +64,12 @@ def session_user(user: str | None):
     ...     doc.save()
     """
     token = set_current_user(user)
+    cache_token = _request_cache.set({})
     try:
         yield
     finally:
         reset_current_user(token)
+        _request_cache.reset(cache_token)
 
 
 class CurrentUserMiddleware:

@@ -384,7 +384,7 @@ All four marked **"PROVISIONAL — revised by phase-0 agent, pending human revie
 ---
 
 ## Phase 1 — PASS   [branch: phase-0-foundation]
-Started: 2026-08-14 01:50   Finished: 2026-08-14 02:55   Commit: `<below>`
+Started: 2026-08-14 01:50   Finished: 2026-08-14 03:20   Commit: `6e18bd8`
 
 **Built:** All 46 models — the 9 platform doctypes (cluster 1) and 37 CRM doctypes
 (clusters 2–6). Every one registers with the phase-0 registry and is routable with no
@@ -599,4 +599,118 @@ platform doctype, which is outside the nine platform models in scope. Recorded a
 2. Migrations — `makemigrations --check` clean; applied to `opencrm`; rebuilt from empty
    on every test run
 3. Codex review — ran, 13 findings, acted on above (with the branch caveat recorded)
-4. Commit — below
+4. Commit — `6e18bd8`
+
+---
+
+## Phase 2 — PASS   [branch: phase-0-foundation]
+Started: 2026-08-14 03:25   Finished: 2026-08-14 04:05   Commit: `<below>`
+
+**Built:** The row-level permission engine — `crm_app/permissions/`. The six-step rule
+order for CRM Lead and CRM Deal, CRM Notification's own separate rule, nested-set
+maintenance for `CRM Sales Hierarchy`, and a per-request memo so the subtree lookup does
+not run per row. Registered through the phase-0 extension points; **no phase-0 code was
+edited to make the rules fit** — the only phase-0 changes were two security fixes found
+by probing (below).
+
+**Tests:** **666 passing**, 31 skipped. `test_permissions.py` alone is 60 tests.
+
+The full spec §6 matrix is covered, for CRM Lead *and* CRM Deal:
+
+| User | Hierarchy | In tree | Sees | Test |
+|---|---|---|---|---|
+| Administrator | either | either | all | `test_administrator_sees_everything` |
+| System Manager | either | either | all | `test_system_manager_sees_everything` |
+| Sales Manager | off | no | all | `test_sales_manager_hierarchy_off_sees_everything` |
+| Sales Manager | on | no | all | `test_sales_manager_hierarchy_on_but_not_in_tree_sees_everything` |
+| Sales Manager | on | yes | own + subtree + subtree-assigned | `test_sales_manager_in_tree_sees_own_and_subtree` |
+| Sales User | off | no | own + directly assigned | `test_sales_user_hierarchy_off_sees_only_own` |
+| Sales User | on | yes | own + subtree + subtree-assigned | `test_sales_user_in_tree_sees_own_and_subtree` |
+
+Row 4 is the one worth naming: **a Sales Manager who is not placed in the tree keeps the
+legacy see-everything behaviour.** That is deliberate upstream (`org_hierarchy.py:30`),
+and it is why the rule order is load-bearing — moving that check below the tree
+evaluation would silently narrow access for every unplaced manager.
+
+Other criteria: cancelled ToDos grant nothing; **closed** ToDos still do (the permission
+filter excludes only `Cancelled`, unlike the display list); `has_permission` and list
+filtering are asserted to agree **row by row, per user**, in both hierarchy modes;
+create is permitted for unsaved documents; the subtree lookup is proved not to N+1; and
+`fields` / `order_by` / `group_by` / `filters` / `or_filters` are each probed for a
+bypass.
+
+### Two security holes I found by probing, before the review
+
+Both were in **phase-0 code**, exposed only once real rules existed.
+
+- **`POST /api/resource/<DocType>` never asked the create hook.** The org-hierarchy rule
+  returns `True` for `create`, so leads and deals were unaffected and the gap was
+  invisible — but `CRM Notification`'s rule returns **`False`**, and any authenticated
+  user could POST a notification addressed to anyone else. Now checked before save.
+  Codex independently reported this as **High** on a snapshot taken just before the fix,
+  which is a useful confirmation that it was real and not over-caution.
+
+- **Kanban column resolution bypassed the permission layer.** `get_data` enumerated the
+  Link target's rows through the plain manager; upstream uses `frappe.get_all`, which
+  applies permissions. Grouping deals by `lead` therefore listed every lead's name to a
+  user who could see one. Now routed through `base_queryset`.
+
+### Codex findings
+
+Two, on the pre-fix snapshot.
+
+- **High — Notification create not enforced.** Already fixed (above). Confirms it.
+- **Medium — list and object rules disagree when `to_user` is blank.** Real, and it
+  mirrors upstream (`crm_notification.py:55-56`), but it is **unreachable here**:
+  `to_user` is `reqd=1` in the JSON so the column is NOT NULL. Rather than diverge from
+  the source by deleting the branch, or leave a latent hole, I pinned the constraint
+  that makes it unreachable — `test_to_user_is_not_nullable_which_is_what_makes_the_blank_branch_unreachable`
+  fails with an explanatory message if anyone makes the column nullable.
+  `test_list_and_object_agree_for_every_real_notification` covers the rows that can
+  actually exist.
+
+Codex found **no** `fields` / `order_by` / `group_by` bypass, and confirmed the rule
+order and the ToDo-not-`_assign` backing match upstream.
+
+### Decisions made without you
+
+17. **Nested-set rebuild instead of django-treebeard.** `PHASE_2_PERMISSIONS.md` §3
+    suggests treebeard. I did not use it: treebeard owns its own columns and expects
+    node creation through `add_root`/`add_child`, but our rows arrive through the generic
+    `/api/resource/` endpoint with `reports_to` set, and the schema we must match is
+    Frappe's `lft`/`rgt`. Adopting treebeard would have meant a second tree
+    representation to keep in sync with the one the wire format already fixes. Instead
+    `tree.py` recomputes the whole tree on hierarchy writes — O(n) on write, one indexed
+    range scan on read. Hierarchies are one row per user and change rarely; list queries
+    run constantly, so the cost is deliberately on the write side. **This is a deviation
+    from the spec and the reasoning should be checked.**
+
+18. **The subtree query is one cached bounds lookup plus one subquery.** Upstream's
+    range self-join has no clean correlated-subquery form in the ORM. The manager's
+    `(lft, rgt)` is fetched once per request and memoised, then used to build a single
+    `IN (SELECT ...)`. The memo key includes the user — `test_the_cache_does_not_leak_between_users`
+    exists because a memo keyed without it would hand one user another's subtree.
+
+19. **`lead_owner`, not `owner`, is the access column** — and this surprised me. A Sales
+    User who creates a lead and leaves `lead_owner` blank **cannot see it afterwards**.
+    That is upstream's rule (`org_hierarchy.py:34,54`); upstream's UI always sets
+    `lead_owner`, which is why it rarely surfaces there. Two phase-1 tests had to be
+    corrected because their setup was unrealistic. **Any phase-3 endpoint that creates a
+    lead or deal must set the owner field**, or the record vanishes for its author —
+    `test_a_lead_without_a_lead_owner_is_hidden_from_its_creator` pins it down.
+
+### Concerns
+
+- **The hierarchy rebuild is not concurrency-safe.** Two simultaneous writes to
+  `CRM Sales Hierarchy` could interleave and produce inconsistent bounds. Writes are
+  rare and admin-only, but this wants a lock or a serialised task before production.
+- **`_get_object` distinguishes 403 from 404**, so a user can tell whether a record they
+  cannot see exists. Upstream behaves the same way, so this is faithful, but it is an
+  existence oracle and worth a deliberate decision.
+- **Only the three upstream doctypes have row rules.** Everything else — organizations,
+  tasks, notes, call logs, contacts — is visible to every authenticated user, exactly as
+  upstream. That is a much larger surface than it sounds like, and it is worth
+  confirming it is what you want rather than inheriting it by default.
+- **`has_permission` runs one query per object check.** Fine for a detail route; a
+  phase-3 bulk operation that checks N items will issue N queries. `delete_bulk_docs`
+  is specced to permission-check per item, so that path needs batching.

@@ -24,7 +24,12 @@ from frappe_core.query import (
     resolve_group_by,
 )
 from frappe_core.renderers import Envelope, FrappeEnvelopeRenderer
-from frappe_core.session import get_current_user, reset_current_user, set_current_user
+from frappe_core.session import (
+    clear_request_cache,
+    get_current_user,
+    reset_current_user,
+    set_current_user,
+)
 
 
 class FrappeAPIView(APIView):
@@ -43,6 +48,9 @@ class FrappeAPIView(APIView):
         user = getattr(request, "user", None)
         name = user.pk if (user is not None and getattr(user, "is_authenticated", False)) else None
         self._session_token = set_current_user(name)
+        # A fresh memo per request - a cached subtree must never outlive the request
+        # that computed it, or a hierarchy change would not take effect until restart.
+        clear_request_cache()
 
     def finalize_response(self, request, response, *args, **kwargs):
         response = super().finalize_response(request, response, *args, **kwargs)
@@ -92,6 +100,18 @@ class ResourceListView(FrappeAPIView):
 
     def post(self, request, doctype: str):
         entry = _resolve_routable_entry(doctype)
+
+        # Create is a permission decision too, and not always a permissive one. The
+        # org-hierarchy rule returns True for `create` (an unsaved document always
+        # passes), but CRM Notification's own rule returns *False* - a user may not mint
+        # notifications for other people. Without this check that endpoint was open.
+        # An empty instance is enough: every registered rule decides `create` before it
+        # looks at any field.
+        if not permissions.check_object_permission(entry.model(), "create", get_current_user()):
+            raise FrappePermissionError(
+                f"Not permitted to create {doctype}", title="Not Permitted"
+            )
+
         serializer_class = entry.get_serializer_class()
         serializer = serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)

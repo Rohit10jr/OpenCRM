@@ -517,7 +517,12 @@ def test_get_data_works_against_the_real_lead_controller_defaults(alice, statuse
     from frappe_core.api.doc import get_data
 
     with session_user(alice.name):
-        CRMLead.objects.create(status=statuses["open"], first_name="Ada", email="ada@example.com")
+        # lead_owner, not just owner: the phase-2 rule filters on the CRM's own owner
+        # field (`org_hierarchy.py:34`), so a lead with a blank lead_owner is invisible
+        # even to the user who created it. See test_a_lead_without_a_lead_owner_is_hidden.
+        CRMLead.objects.create(
+            status=statuses["open"], first_name="Ada", email="ada@example.com", lead_owner=alice
+        )
         result = get_data(doctype="CRM Lead", filters={}, order_by="modified desc")
 
     assert len(result["data"]) == 1
@@ -562,7 +567,7 @@ def test_lead_is_listable_with_the_criterion_1_request_shape(auth_api, alice, st
     building CRM models), and PROGRESS.md flagged this as owed. Here it is.
     """
     with session_user(alice.name):
-        CRMLead.objects.create(status=statuses["open"], first_name="Ada")
+        CRMLead.objects.create(status=statuses["open"], first_name="Ada", lead_owner=alice)
 
     response = auth_api.get(
         "/api/resource/" + quote("CRM Lead"),

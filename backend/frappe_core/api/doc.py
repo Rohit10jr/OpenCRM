@@ -134,6 +134,14 @@ def get_doctype_fields(doctype: str) -> list[dict]:
     return fields
 
 
+def _has_field(model, fieldname: str) -> bool:
+    try:
+        model._meta.get_field(fieldname)
+        return True
+    except Exception:
+        return False
+
+
 def _hidden_fields(entry) -> set[str]:
     """Fieldnames the doctype declares hidden - upstream's ``DocField.hidden``.
 
@@ -378,10 +386,21 @@ def _kanban(
         except Exception:
             field = None
         if field is not None and field.is_relation and field.related_model is not None:
+            related = field.related_model
+            related_doctype = getattr(related, "get_doctype", lambda: None)()
+            # Upstream resolves these with frappe.get_all, which applies permissions.
+            # Going through base_queryset keeps that property: a kanban grouped by a
+            # restricted doctype must not enumerate rows the user cannot see.
+            if related_doctype and registry.has_doctype(related_doctype):
+                from frappe_core.query import base_queryset
+
+                queryset = base_queryset(related_doctype, user)
+            else:
+                queryset = related._default_manager.all()
+            order_field = "modified" if _has_field(related, "modified") else "pk"
             kanban_columns = [
                 {"name": pk}
-                for pk in field.related_model._default_manager.order_by("modified")
-                .values_list("pk", flat=True)
+                for pk in queryset.order_by(order_field).values_list("pk", flat=True)
             ]
         elif field is not None and getattr(field, "choices", None):
             kanban_columns = [{"name": choice[0]} for choice in field.choices]
