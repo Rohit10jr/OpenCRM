@@ -1,6 +1,8 @@
 # Phase 5 — Background Jobs
 
-> **PROVISIONAL** — the phase-0 agent must revise and flip to Authoritative.
+> **PROVISIONAL — revised by phase-0 agent, pending human review.**
+> §4's open question is now **answered from source**. Status stays PROVISIONAL per
+> `RUNBOOK.md` (overriding `specs/README.md`) because this revision is unreviewed.
 
 **Fan out.** Needs phase 1. Celery + Redis (Redis is already required by phase 6).
 
@@ -60,9 +62,28 @@ Outbound identity comes from the configured `Email Account`, not `DEFAULT_FROM_E
 drive first-response and resolution tracking against business hours
 (`crm_service_day`) and holidays (`crm_holiday_list`).
 
-> **VERIFY:** whether upstream computes SLA state on write (in the Deal/Lead
-> controller) or on a schedule. Read `crm_service_level_agreement.py` before choosing
-> — if it is write-time, do **not** invent a periodic job.
+> **ANSWERED — SLA is computed entirely on write. There is no scheduled job. Do not
+> invent one.**
+>
+> Evidence from source:
+>
+> | Fact | Location |
+> |---|---|
+> | `before_validate()` → `set_sla()` picks the applicable SLA | `crm_lead.py:78-79`, `crm_deal.py:80-81` |
+> | `before_save()` → `apply_sla()` recomputes every SLA field | `crm_lead.py:99-100`, `crm_deal.py:104-105` |
+> | `apply(doc)` mutates the doc in place — `sla_creation`, `first_responded_on`, `first_response_time`, `response_by`, `sla_status` | `crm_service_level_agreement.py:74-79` |
+> | `scheduler_events` contains **no** SLA entry — only invitations, view-settings cleanup, telemetry and lead sync | `hooks.py:217-231` |
+>
+> A `grep` for `sla|service_level` across `hooks.py` returns nothing at all.
+>
+> **The consequence is counter-intuitive and must be preserved.** `handle_sla_status`
+> decides "Failed" by comparing `response_by < now_datetime()` *at save time*
+> (`crm_service_level_agreement.py:173-187`). A lead that breaches its SLA while nobody
+> touches it therefore keeps showing `First Response Due` until the next write. That is
+> upstream behaviour, not a bug to fix here: adding a periodic sweep would make our list
+> views disagree with upstream's for the same data. If a product decision later wants
+> live breach detection, that is a **new feature**, and it belongs in its own spec with
+> the divergence stated explicitly.
 
 Timezone handling is the risk. Business hours are local; store UTC, compute in the
 site timezone.
@@ -79,3 +100,8 @@ site timezone.
 - [ ] Product reconcile emits its completion event (phase 6 consumes it)
 - [ ] Tasks are idempotent — a retry must not double-apply
 - [ ] Test mode runs tasks eagerly (upstream patches enqueue to run inline; do the same with `CELERY_TASK_ALWAYS_EAGER`)
+- [ ] **No** SLA beat entry exists — §4. A test should assert the beat schedule contains
+      nothing SLA-related, so a later agent cannot quietly add one
+- [ ] `update_modified_background` uses a bare `UPDATE`, not `.save()` — phase 0's
+      `assignment.rebuild_assign_cache` is the worked example of a cache write that must
+      not re-stamp `modified_by`

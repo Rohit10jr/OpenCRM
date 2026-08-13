@@ -19,10 +19,10 @@ import {
   Alert,
   Badge,
   setConfig,
-  frappeRequest,
   FeatherIcon,
 } from 'frappe-ui'
 
+import { jwtRequest } from '@/auth/jwtRequest'
 import { telemetryPlugin } from 'frappe-ui/frappe'
 // injects the lucide SVG sprite into the DOM so the IconPicker and lucide Icons
 // (used for view icons) can render from it
@@ -45,7 +45,11 @@ let pinia = createPinia()
 
 let app = createApp(App)
 
-setConfig('resourceFetcher', frappeRequest)
+// JWT PATCH (see ../JWT_PATCH.md): the Django port authenticates with bearer tokens
+// rather than the `sid` cookie, so every resource fetch goes through a wrapper that
+// attaches the header and refreshes on 401. This one line is the whole integration -
+// none of the 225 createResource call sites change.
+setConfig('resourceFetcher', jwtRequest)
 app.use(FrappeUI)
 app.use(spritePlugin)
 app.use(pinia)
@@ -60,7 +64,7 @@ app.config.globalProperties.$dialog = createDialog
 
 let socket
 if (import.meta.env.DEV) {
-  frappeRequest({ url: '/api/method/crm.www.crm.get_context_for_dev' }).then(
+  jwtRequest({ url: '/api/method/crm.www.crm.get_context_for_dev' }).then(
     (values) => {
       for (let key in values) {
         window[key] = values[key]

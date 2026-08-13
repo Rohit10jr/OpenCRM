@@ -1,0 +1,21 @@
+# Frappe CRM -> Django port. Pins chosen for Python 3.13.
+Django==5.1.5
+djangorestframework==3.15.2
+djangorestframework-simplejwt==5.4.0
+psycopg[binary]==3.2.3
+django-cors-headers==4.6.0
+django-environ==0.11.2
+
+# Trees (phase 2 hierarchy / territory) - declared now so the stack is fixed.
+django-treebeard==4.7.1
+
+# Async stack (phases 5-6) - declared now, unused in phases 0-4.
+celery==5.4.0
+redis==5.2.1
+channels==4.2.0
+channels-redis==4.2.1
+
+# Testing
+pytest==8.3.4
+pytest-django==4.9.0
+pytest-cov==6.0.0

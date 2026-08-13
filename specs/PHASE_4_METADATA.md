@@ -1,6 +1,9 @@
 # Phase 4 — Metadata Layer
 
-> **PROVISIONAL** — the phase-0 agent must revise and flip to Authoritative.
+> **PROVISIONAL — revised by phase-0 agent, pending human review.**
+> §2a and §3 now describe the seams phase 0 actually left. Status stays PROVISIONAL
+> per `RUNBOOK.md` (which overrides `specs/README.md` on this point) because the
+> revision is itself unreviewed.
 
 **Fan out.** Needs phase 0 and phase 1 cluster 6.
 
@@ -51,6 +54,53 @@ Reimplement exactly as `get_data` does it:
 Then: every column key must also appear in `rows`; hidden fields are dropped; the
 `group_by_field` is appended to `rows` if missing.
 
+> **Already built.** Phase 0 implemented all four steps in
+> `backend/frappe_core/api/doc.py:get_data`, in upstream's order, plus the two fixups
+> (`_liked_by` width `10rem`→`50px`, hidden-column removal). Step 2 is the only stub —
+> see §2a. Covered by `backend/tests/test_get_data.py`.
+
+---
+
+## 2a. The seam phase 0 left for you
+
+**Do not edit `get_data`.** Step 2 is a registered provider, not a code change:
+
+```python
+from frappe_core import registry
+
+def saved_view(doctype, user, view_type):
+    """Return {"columns": [...], "rows": [...]} or None to fall through."""
+    ...
+
+registry.register_metadata_hooks(
+    "CRM Lead",
+    list_columns_provider=saved_view,
+    filterable_fields_provider=...,   # optional; overrides the phase-0 default
+)
+```
+
+Contract, all asserted in `backend/tests/test_hooks.py`:
+
+- The provider is called with `(doctype, user, view_type or "list")` — `view_type`
+  already defaulted, so the `{"dt", "type", "is_standard": 1, "user"}` lookup key in §2
+  maps straight onto the arguments.
+- It is called **only when the caller passed no `columns`/`rows`**, matching upstream's
+  `if not custom_view` guard. A custom view must not hit the database.
+- Returning `None` falls through to `default_list_data()` — that is upstream's `elif`.
+- A non-`None` return sets `is_default = False`.
+
+Phase-0 stubs to replace, all marked `PHASE 4` in `frappe_core/api/doc.py`:
+
+| Stub | Returns now | Owes |
+|---|---|---|
+| `_load_saved_view` | `None` unless a provider is registered | the CRM View Settings lookup |
+| `_get_views` | `[]` | `crm/api/views.py:get_views` |
+| `_get_form_script` | `None` | `crm_form_script.get_form_script` (also `list_script`) |
+| `is_default` / `custom_view_name` | never re-reads the saved view | upstream reads `load_default_columns` off it |
+
+The **response shape is already final** — every key upstream returns is present and
+tested. Filling these in must not add or rename a key.
+
 ### `default_list_data()`
 Each doctype controller defines its own default columns and rows. Port these as a
 classmethod on each model. Phase-1 agents may have skipped them — check, and fill the
@@ -80,6 +130,22 @@ Standard fields are appended to the filterable list and must be present:
 
 A controller may declare `get_non_filterable_fields()` to subtract from this. Honour it.
 
+> **Phase-0 status.** `frappe_core/metadata.py` already implements
+> `get_filterable_fields`, `get_group_by_fields` and the standard-field list, honours
+> `get_non_filterable_fields()` (resolved off the model class, as upstream resolves it
+> off the controller), and applies the two allowlists. **But it expresses them as
+> Django internal types, not Frappe fieldtypes** — `FILTERABLE_INTERNAL_TYPES` /
+> `GROUP_BY_INTERNAL_TYPES`. That mapping is lossy in both directions:
+> `Long Text`/`Small Text`/`Text Editor` all collapse to `TextField`, and
+> `Duration`/`Rating` are indistinguishable from `IntegerField`/`FloatField`.
+>
+> **Phase 4 owns fixing this.** Once phase 1 records each field's original Frappe
+> fieldtype, filter on *that* and delete the internal-type sets. Until then the group-by
+> list is slightly wrong: `Long Text`, `Small Text` and `Text Editor` are correctly
+> excluded, but so is nothing else that maps to `TextField` — and `Duration`, which
+> upstream *does* allow to group by, is currently included only because it shares
+> `IntegerField`. Flagged in `PROGRESS.md`.
+
 ---
 
 ## 4. Acceptance criteria
@@ -92,3 +158,6 @@ A controller may declare `get_non_filterable_fields()` to subtract from this. Ho
 - [ ] `get_non_filterable_fields()` is respected
 - [ ] Standard fields appear in filter dropdowns
 - [ ] One user's saved view is invisible to another user
+- [ ] Allowlists are keyed on the **Frappe fieldtype**, not the Django internal type
+- [ ] `get_data`'s response keys are unchanged from phase 0 — the four `PHASE 4` stubs
+      are filled in, nothing is added or renamed

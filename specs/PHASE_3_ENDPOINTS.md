@@ -1,7 +1,10 @@
 # Phase 3 — API Endpoints
 
-> **PROVISIONAL** — written before phase 0 landed. The phase-0 agent must revise the
-> registry/serializer assumptions here and flip this to Authoritative.
+> **PROVISIONAL — revised by phase-0 agent, pending human review.**
+> The registry/serializer assumptions below now describe what phase 0 actually built
+> (see §1a). The revision is itself unreviewed, so the status stays PROVISIONAL per
+> `RUNBOOK.md`. Note this overrides `specs/README.md`, which told the phase-0 agent to
+> flip these to Authoritative — the runbook wins.
 
 **Fan out by module.** Needs phase 1. One agent per module group; never two agents in
 one file.
@@ -21,6 +24,52 @@ POST /api/method/crm.api.contact.get_linked_deals
 Response envelope is `{"message": <return value>}` for `/api/method/*`. Signatures below
 are verified from source — **parameter names are part of the contract**, the frontend
 sends them by name.
+
+---
+
+## 1a. What phase 0 actually built — use this, do not re-invent it
+
+Registering an endpoint is one decorator. The dotted path is **declared, not derived**,
+because our modules do not live at `crm.api.*`:
+
+```python
+from frappe_core.whitelist import whitelist
+
+@whitelist("crm.api.contact.get_linked_deals")
+def get_linked_deals(contact: str):
+    ...
+```
+
+| Need | Use | Where |
+|---|---|---|
+| Register an endpoint | `@whitelist(path, allow_guest=False, methods=("GET","POST"))` | `frappe_core/whitelist.py` |
+| Make it resolvable | import the module from your app's `AppConfig.ready()` | `frappe_core/apps.py` is the worked example |
+| Envelope | automatic — `MethodView` wraps the return value in `{"message": ...}` | `frappe_core/method_views.py` |
+| Throw a user-facing error | `throw("text")` / `raise ValidationError("text")` | `frappe_core/exceptions.py` |
+| List rows, permission-filtered | `query.fetch_rows(doctype, fields=, filters=, order_by=, ...)` | `frappe_core/query.py` |
+| Count, permission-filtered | `query.count_rows(doctype, filters=)` | `frappe_core/query.py` |
+| Single-object permission check | `permissions.check_object_permission(doc, ptype, user)` | `frappe_core/permissions.py` |
+| Current user (`frappe.session.user`) | `session.get_current_user()` | `frappe_core/session.py` |
+| Model / serializer / defaults for a doctype | `registry.get_entry(doctype)` | `frappe_core/registry.py` |
+| Who is assigned (via ToDo) | `assignment.get_assigned_users(doctype, name)` | `frappe_core/assignment.py` |
+
+Behaviours you can rely on, all covered by `backend/tests/`:
+
+- **Parameters** are merged from the query string *and* the JSON body, then JSON-decoded
+  (`query.parse_json_param`). A param may therefore arrive as `'["a","b"]'` or `["a","b"]`
+  — you do not need your own `parse_json` call.
+- **Surplus parameters are dropped** (`whitelist.bind_arguments`), matching Frappe, so
+  `cmd` and cache-busters do not 500 your endpoint.
+- **Auth**: non-`allow_guest` endpoints return 401 `AuthenticationError` when
+  unauthenticated. Do not re-check.
+- **Permissions**: `fetch_rows` / `count_rows` / `base_queryset` all apply the phase-2
+  hook. An endpoint that reads through them cannot bypass row-level security. An
+  endpoint that calls `Model.objects` directly **can** — don't.
+- **`fields`, `order_by` and `group_by` are validated** against the model's concrete
+  fields, so relation traversal (`owner__password`) is rejected with 417.
+
+`get_data` is **already built** at `frappe_core/api/doc.py` and registered as
+`crm.api.doc.get_data`. Do not reimplement it; extend it.
 
 ---
 
@@ -50,7 +99,16 @@ doctype metadata from the phase-0 registry; several overlap with phase 4, so
 coordinate rather than duplicating.
 
 `get_assigned_users` / `remove_assignments` operate on `ToDo`, not `_assign`
-(`PHASE_2_PERMISSIONS.md` §2).
+(`PHASE_2_PERMISSIONS.md` §2). Phase 0 already provides
+`frappe_core.assignment.get_assigned_users(doctype, name, for_permission=False)` —
+use it. Note its two status filters differ deliberately: the display list excludes
+`Closed` **and** `Cancelled` (matching `crm/api/doc.py:615`), while the permission view
+(`for_permission=True`) excludes only `Cancelled`. The endpoint here wants the default.
+
+`get_filterable_fields` / `get_group_by_fields` already have phase-0 implementations in
+`frappe_core/metadata.py`, but they key their allowlists on Django internal types rather
+than Frappe fieldtypes — see `PHASE_4_METADATA.md` §3. Coordinate with phase 4 rather
+than writing a third version.
 
 ### Group B — session, users, auth
 
@@ -148,3 +206,7 @@ Concentrations: `crm_view_settings` (8), `crm_deal` (4), `crm_fields_layout` (3)
 - [ ] Permission checks applied; no endpoint bypasses phase 2
 - [ ] `frappe.throw` messages preserved verbatim
 - [ ] Bulk operations (`delete_bulk_docs`) are transactional and permission-checked per item
+- [ ] No endpoint reaches `Model.objects` directly for a list read — everything goes
+      through `frappe_core.query`, which is what applies the phase-2 hook
+- [ ] Endpoints that take a document name check `permissions.check_object_permission`
+      before returning or mutating it

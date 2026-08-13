@@ -1,6 +1,8 @@
 # Phase 6 — Realtime (Django Channels)
 
-> **PROVISIONAL** — the phase-0 agent must revise and flip to Authoritative.
+> **PROVISIONAL — revised by phase-0 agent, pending human review.**
+> §1 and §3 now reference what phase 0 actually built for auth and permissions. Status
+> stays PROVISIONAL per `RUNBOOK.md` (overriding `specs/README.md`).
 
 **Fan out.** Needs phase 5. Not blocking — the app is usable without it.
 
@@ -17,7 +19,11 @@ plain WebSocket client and keep the **event names and payload shapes identical**
 only the transport changes and no component code moves.
 
 This is the second sanctioned frontend change, after the JWT interceptor
-(`PORT_PLAN.md` §3). Document it in the same place.
+(`PORT_PLAN.md` §3). Document it in the same place — phase 0 created that place:
+**`frontend/JWT_PATCH.md`**, which lists every touched file and why. Add a matching
+section there rather than starting a new document, and update
+`frontend/src/socket.js` (currently the socket.io client, reading
+`window.socketio_port`).
 
 ---
 
@@ -41,12 +47,21 @@ the publish helper so they need no new plumbing.
 - **Groups**: one per user (`user_<email_hash>`), plus one per open document
   (`doc_<doctype>_<name>`) for live document refresh
 - **Auth**: JWT in the connect query string or first message — Channels has no cookie
-  to lean on. **Reject unauthenticated connects**; do not fall back to anonymous
+  to lean on. **Reject unauthenticated connects**; do not fall back to anonymous.
+  The token is the same one `frontend/src/auth/tokens.js` stores; validate it with
+  SimpleJWT and resolve the `user_id` claim (the email PK) exactly as
+  `frappe_core/views.py:FrappeAPIView.initial` does for HTTP
+- **Bind the session user.** Consumers run outside the request cycle, so
+  `frappe_core.session.get_current_user()` is `"Guest"` unless you set it. Wrap handler
+  bodies in `with session_user(user):` — `@me` resolution, `owner` stamping and the
+  phase-2 hooks all read that contextvar. It is a `ContextVar`, so it is async-safe
 - **Publish helper**: one function mirroring `frappe.publish_realtime(event, user=...)`
   so Celery tasks and model signals call the same thing
 - **Permission on subscribe**: a client may only join a doc group for a document it can
-  read. Run the phase-2 `has_permission` check on subscribe, not just on the initial
-  fetch — otherwise realtime becomes a permission bypass
+  read. Call `frappe_core.permissions.check_object_permission(doc, "read", user)` on
+  subscribe, not just on the initial fetch — otherwise realtime becomes a permission
+  bypass. Do not re-implement the rule; that function is the one the HTTP detail route
+  uses, so the two cannot drift
 
 ---
 
