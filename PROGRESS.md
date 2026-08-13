@@ -604,7 +604,7 @@ platform doctype, which is outside the nine platform models in scope. Recorded a
 ---
 
 ## Phase 2 — PASS   [branch: phase-0-foundation]
-Started: 2026-08-14 03:25   Finished: 2026-08-14 04:05   Commit: `<below>`
+Started: 2026-08-14 03:25   Finished: 2026-08-14 04:05   Commit: `69a7416`
 
 **Built:** The row-level permission engine — `crm_app/permissions/`. The six-step rule
 order for CRM Lead and CRM Deal, CRM Notification's own separate rule, nested-set
@@ -714,3 +714,127 @@ order and the ToDo-not-`_assign` backing match upstream.
 - **`has_permission` runs one query per object check.** Fine for a detail route; a
   phase-3 bulk operation that checks N items will issue N queries. `delete_bulk_docs`
   is specced to permission-check per item, so that path needs batching.
+
+### Gate
+
+1. `pytest` — **666 passed, 31 skipped, 0 failed**
+2. Migrations — `makemigrations --check` clean
+3. Codex security review — ran; 2 findings, handled above
+4. Commit — `69a7416`
+
+---
+
+# STOPPED — phases 3 and 4 not started, by the runbook's own gate
+
+`RUNBOOK.md` lists four conditions under "Gate before leaving `phase-0-foundation`", any
+one of which means stop at phase 2. **Two of them apply.** I am therefore not creating
+`phase-3-4-provisional`.
+
+| Condition | Verdict |
+|---|---|
+| Phase 2's gate needed a second attempt | **No.** It passed first run. |
+| Codex's phase-2 security review raised anything I disputed rather than fixed | **Yes — this is the one that stops it.** |
+| Any phase-2 acceptance criterion lacks a real test | **No.** All seven are covered. |
+| A judgment call on permission semantics I am not confident about | **Yes.** |
+
+**On the second condition.** Codex's Medium finding — that the list rule and the object
+rule disagree when `to_user` is blank — I did **not** fix. I argued it is unreachable
+(the column is NOT NULL) and added a test that fails if anyone makes it nullable. That
+is a mitigation resting on a schema constraint plus my own reasoning, not a fix. The
+runbook's bar here is explicit: *"Permissions are the one thing where 'probably right' is
+not good enough."* Mitigated-by-argument is exactly what that sentence is aimed at, so I
+am treating it as tripping the gate rather than talking my way past it.
+
+**On the fourth condition.** Two things I am genuinely not confident about:
+
+- **The nested-set rebuild is not concurrency-safe** (decision 17). Two concurrent
+  writes to `CRM Sales Hierarchy` can interleave and leave inconsistent `lft`/`rgt` —
+  and inconsistent bounds mean *wrong row visibility*, not merely a wrong tree. It needs
+  a lock or a serialised task.
+- **I deviated from the spec by not using django-treebeard.** My reasoning is written
+  down and I believe it, but the spec named a specific library for a security-critical
+  structure and I chose otherwise. That deserves a human's agreement, not mine alone.
+
+Phases 3 and 4 both build on this layer — phase 3's endpoints must not bypass it, and
+phase 4's saved views are per-user data filtered by it. Building them on a permission
+layer with an open question makes the eventual fix more expensive, which is the exact
+failure mode the gate exists to prevent.
+
+**What would clear the gate:** a human decision on (a) whether the blank-recipient
+asymmetry should be fixed by diverging from upstream or left as-is, and (b) treebeard vs
+the current rebuild, plus locking. Both are small pieces of work; neither is mine to
+decide unilaterally.
+
+---
+
+# FINAL REPORT
+
+## Completed
+
+| Phase | Branch | Commit | Tests |
+|---|---|---|---|
+| 0 — Foundation | `phase-0-foundation` | `2a3b8df` | 235 |
+| 1 — Models | `phase-0-foundation` | `6e18bd8` | 610 |
+| 2 — Permissions | `phase-0-foundation` | `69a7416` | **666** |
+
+One branch, three commits, **666 passing / 31 skipped / 0 failing**, migrations applying
+cleanly from empty on every run. `phase-3-4-provisional` **was not created** — see above.
+
+## Every decision made without you, in one place
+
+Full reasoning is in each phase's section; this is the index.
+
+| # | Decision | Confidence |
+|---|---|---|
+| 1 | Error envelope shape settled from the frontend's own consumers | High — evidence is direct |
+| 2 | **SLA is computed on write; there is no scheduler entry** | High — `hooks.py` has no SLA job at all |
+| 3 | `@me` replaces every occurrence, at any depth | High — superset of upstream |
+| 4 | **`field:` autoname is verbatim, not slugified** | High — but expensive to reverse; decides 14 doctypes' URLs |
+| 5 | `like` honours SQL wildcards rather than mapping blindly to `icontains` | High |
+| 6 | `User` built in phase 0 (AUTH_USER_MODEL cannot move later) | High |
+| 7 | `Administrator` / `Guest` seeded as real rows | High |
+| 8 | Display and permission views of "assigned" deliberately differ | Medium — inferred from two source sites |
+| 9 | Specs 3–6 left PROVISIONAL (runbook overrides `specs/README.md`) | High |
+| 10 | `fields`/`order_by`/`group_by` validated in phase 0, not phase 2 | High |
+| 11 | Three child tables are polymorphic; a FK is impossible | High — verified across all 39 JSONs |
+| 12 | Five Link targets modelled as CharField, not tables | High |
+| 13 | **Platform doctype naming, especially `Contact`** | **Low — a guess constrained by usage** |
+| 14 | `from`/`to` installed via `add_to_class` to keep wire names | High |
+| 15 | Singletons pinned to a fixed PK string | High |
+| 16 | Tree behaviour deferred from phase 1 to phase 2 | High |
+| 17 | **Nested-set rebuild instead of django-treebeard** | **Medium — a spec deviation** |
+| 18 | Subtree = one cached bounds lookup + one subquery | High |
+| 19 | **`lead_owner`, not `owner`, is the access column** | High — but surprising; phase 3 must not trip on it |
+
+## What phase 5 should tackle first
+
+Not Celery. **Finish the phase-1 lifecycle porting first** — it is the largest known gap
+and phase 5 will otherwise build on absent behaviour:
+
+1. `crm_lead.share_with_agent` / `assign_agent` (they create ToDo rows, which the
+   permission engine reads — so this is security-adjacent, not cosmetic)
+2. `add_status_change_log` on both lead and deal
+3. `crm_deal.update_default_probability` / `update_expected_deal_value`, primary-contact
+   sync, Won `closed_date`
+4. `convert_to_deal`
+
+Then phase 5 proper, and its first job is `update_modified_background` — the spec is
+right that it looks trivial and is not.
+
+## What I want a human to look at
+
+In priority order:
+
+1. **The two gate blockers above** — they are what stopped the run.
+2. **`Contact` naming (decision 13).** It decides a URL and it is my weakest evidence.
+3. **`field:` verbatim vs slugified (decision 4).** I am confident and Codex withdrew its
+   objection, but it sets the primary key of 14 doctypes — worth one look before data
+   exists.
+4. **`specs/PHASE_0_FOUNDATION.md` line 36 says "slugified" and should not.** I did not
+   edit it; phase 0's spec is Authoritative and yours.
+5. **The Codex sandbox defect** (top of this file). It exits 0 while doing nothing. If
+   this run is ever automated, that will silently record reviews that never happened.
+6. **Only three doctypes have row-level rules** — everything else is visible to every
+   authenticated user. Faithful to upstream, but worth confirming it is intended.
+7. **`FCRM Settings.access_key` is readable by any authenticated user** — faithful
+   (`Data`, unhidden) but it is an API key.
