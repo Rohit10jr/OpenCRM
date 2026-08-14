@@ -1,0 +1,231 @@
+"""The six Frappe ``autoname`` strategies (PHASE_0_FOUNDATION.md section 2).
+
+Every strategy is a class so a phase-1 agent declares one rather than hand-rolling
+naming::
+
+    @register_doctype("CRM Lead")
+    class CRMLead(BaseDocument):
+        class Meta:
+            name_strategy = NamingSeries("CRM-LEAD-.YYYY.-")
+
+``generate()`` returns the primary key value, or ``None`` to mean "let the database
+assign it" (autoincrement only).
+
+Verified against the DocType JSON in ``crm/fcrm/doctype/*/*.json``: 14 doctypes use
+``field:``, 3 use ``autoincrement``, 2 use ``hash``, 2 use ``naming_series:``, 1 uses
+``format:``, 1 uses ``prompt``.
+"""
+
+import re
+from datetime import datetime, timezone
+
+from django.apps import apps
+from django.db import transaction
+
+DEFAULT_SERIES_DIGITS = 5
+
+# Date tokens Frappe substitutes inside a naming series, longest first so that
+# YYYY is matched before YY.
+_SERIES_DATE_TOKENS = ("YYYY", "YY", "MM", "DD", "WW")
+
+
+class NameError_(ValueError):
+    """Raised when a strategy cannot produce a name."""
+
+
+class NameStrategy:
+    """Base class. Subclasses implement :meth:`generate`."""
+
+    #: True when the client must supply ``name`` on create (``prompt``).
+    requires_client_name = False
+    #: True when the database assigns the PK (``autoincrement``).
+    db_assigned = False
+
+    def generate(self, instance) -> str | None:  # pragma: no cover - abstract
+        raise NotImplementedError
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}()"
+
+
+class NamingSeries(NameStrategy):
+    """``naming_series:`` - e.g. ``CRM-LEAD-.YYYY.-`` -> ``CRM-LEAD-2026-00001``.
+
+    The pattern is split on ``.``; date tokens are substituted, a ``#``-run becomes the
+    zero-padded counter. Frappe appends a 5-digit counter when the pattern contains no
+    explicit ``#`` run, which is the case for both CRM series.
+
+    The counter is drawn from the :class:`~frappe_core.models.NamingSeriesCounter`
+    table under ``select_for_update()``, so it is atomic across concurrent creates.
+    """
+
+    def __init__(self, pattern: str, digits: int = DEFAULT_SERIES_DIGITS):
+        if not pattern:
+            raise ValueError("NamingSeries requires a pattern")
+        self.pattern = pattern
+        self.digits = digits
+
+    def __repr__(self) -> str:
+        return f"NamingSeries({self.pattern!r})"
+
+    def resolve_prefix(self, instance=None, now: datetime | None = None) -> tuple[str, int]:
+        """Return ``(prefix, digits)`` with date tokens resolved."""
+        now = now or datetime.now(timezone.utc)
+        parts = self.pattern.split(".")
+        prefix_parts: list[str] = []
+        digits = self.digits
+
+        for part in parts:
+            if not part:
+                continue
+            if part in _SERIES_DATE_TOKENS:
+                prefix_parts.append(self._format_date_token(part, now))
+            elif set(part) == {"#"}:
+                digits = len(part)
+            else:
+                prefix_parts.append(part)
+
+        return "".join(prefix_parts), digits
+
+    @staticmethod
+    def _format_date_token(token: str, now: datetime) -> str:
+        if token == "YYYY":
+            return f"{now.year:04d}"
+        if token == "YY":
+            return f"{now.year % 100:02d}"
+        if token == "MM":
+            return f"{now.month:02d}"
+        if token == "DD":
+            return f"{now.day:02d}"
+        if token == "WW":
+            # Frappe's week-of-year, 1-based from Jan 1.
+            return f"{int(now.strftime('%U')) + 1:02d}"
+        return token  # pragma: no cover - guarded by _SERIES_DATE_TOKENS
+
+    def generate(self, instance) -> str:
+        prefix, digits = self.resolve_prefix(instance)
+        current = next_series_value(prefix)
+        return f"{prefix}{current:0{digits}d}"
+
+
+class FieldValue(NameStrategy):
+    """``field:<fieldname>`` - the PK is that field's value.
+
+    Frappe's ``_field_autoname`` takes the value and ``.strip()``s it; it does *not*
+    slugify. Verified indirectly at ``crm/fcrm/doctype/crm_lead/crm_lead.py:244-262``,
+    where a lead's free-text ``organization`` round-trips through the organization's PK
+    and back into ``organization_name`` - slugifying would corrupt the display name on
+    the second lead that references the same organization.
+
+    Uniqueness is the PK constraint's job; a collision surfaces as ``IntegrityError``,
+    matching Frappe's ``DuplicateEntryError``.
+    """
+
+    def __init__(self, fieldname: str):
+        if not fieldname:
+            raise ValueError("FieldValue requires a fieldname")
+        self.fieldname = fieldname
+
+    def __repr__(self) -> str:
+        return f"FieldValue({self.fieldname!r})"
+
+    def generate(self, instance) -> str:
+        value = getattr(instance, self.fieldname, None)
+        # Link fields hand back a model instance; use its PK.
+        if hasattr(value, "pk"):
+            value = value.pk
+        value = ("" if value is None else str(value)).strip()
+        if not value:
+            raise NameError_(f"{self.fieldname} is required to name this document")
+        return value
+
+
+class AutoIncrement(NameStrategy):
+    """``autoincrement`` - genuinely integer PKs.
+
+    Only ``crm_task``, ``crm_view_settings`` and ``crm_product_sync_issue``. Models
+    using this must inherit :class:`~frappe_core.models.AutoIncrementDocument`.
+    """
+
+    db_assigned = True
+
+    def generate(self, instance) -> None:
+        return None
+
+
+class Hash(NameStrategy):
+    """``hash`` - a random hex string. Frappe's default is 10 characters."""
+
+    def __init__(self, length: int = 10):
+        self.length = length
+
+    def __repr__(self) -> str:
+        return f"Hash({self.length})"
+
+    def generate(self, instance) -> str:
+        import secrets
+
+        # token_hex(n) yields 2n chars; take the requested width.
+        return secrets.token_hex((self.length + 1) // 2)[: self.length]
+
+
+_FORMAT_TOKEN = re.compile(r"\{(\w+)\}")
+
+
+class Format(NameStrategy):
+    """``format:{dt}-{type}`` - interpolate field values into a template.
+
+    Only ``crm_fields_layout`` uses this.
+    """
+
+    def __init__(self, template: str):
+        if not template:
+            raise ValueError("Format requires a template")
+        self.template = template
+
+    def __repr__(self) -> str:
+        return f"Format({self.template!r})"
+
+    def generate(self, instance) -> str:
+        def substitute(match: re.Match) -> str:
+            value = getattr(instance, match.group(1), None)
+            if hasattr(value, "pk"):
+                value = value.pk
+            return "" if value is None else str(value)
+
+        name = _FORMAT_TOKEN.sub(substitute, self.template).strip()
+        if not name:
+            raise NameError_(f"Could not build a name from {self.template!r}")
+        return name
+
+
+class Prompt(NameStrategy):
+    """``prompt`` - the client supplies ``name`` on create; reject if absent.
+
+    Only ``crm_form_script`` uses this.
+    """
+
+    requires_client_name = True
+
+    def generate(self, instance) -> str:
+        value = (instance.pk or "") if instance.pk is not None else ""
+        value = str(value).strip()
+        if not value:
+            raise NameError_("Name is required")
+        return value
+
+
+def next_series_value(prefix: str) -> int:
+    """Atomically increment and return the counter for ``prefix``.
+
+    ``select_for_update()`` inside a transaction serialises concurrent creates
+    (PHASE_0_FOUNDATION.md section 2: "not max(id)+1").
+    """
+    NamingSeriesCounter = apps.get_model("frappe_core", "NamingSeriesCounter")
+    with transaction.atomic():
+        # get_or_create absorbs the first-insert race via the unique constraint.
+        NamingSeriesCounter.objects.get_or_create(prefix=prefix)
+        row = NamingSeriesCounter.objects.select_for_update().get(prefix=prefix)
+        row.current += 1
+        row.save(update_fields=["current"])
+        return row.current

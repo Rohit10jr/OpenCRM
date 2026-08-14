@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.Python
+
+# Django
+*.log
+*.sqlite3
+/backend/media/
+/backend/staticfiles/
+local_settings.py
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Celery
+celerybeat-schedule*
+*.pid
+
+# Node / frontend
+node_modules/
+/frontend/dist/
+.vite/
+*.local
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Agent scratch
+.agents/
+*.orig
+*.rej
