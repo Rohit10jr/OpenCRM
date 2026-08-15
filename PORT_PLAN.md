@@ -2,9 +2,31 @@
 
 Source analysis and architecture brief for agents working on this port.
 
-> **Per-phase specs live in [`specs/`](specs/).** Read this document first for context
-> and settled decisions, then your phase spec. Start at
-> [`specs/PHASE_0_FOUNDATION.md`](specs/PHASE_0_FOUNDATION.md) — it blocks everything.
+> **Start at [`specs/AS_BUILT.md`](specs/AS_BUILT.md)** — what phases 0-2 actually built.
+> Then this document for context and settled decisions, then your phase spec.
+
+## Where this stands
+
+| | |
+|---|---|
+| **Shipped** | Phases 0, 1, 2 — foundation, 46 models, row-level permissions |
+| **Tests** | 813 passing, 31 skipped, 0 failing |
+| **Branch** | `phase-0-foundation` |
+| **Next** | Phase 3 (~50 endpoints), then 4, 5, 6 |
+| **Deferred** | Phase 7 (integrations, flagged off) |
+| **Parked** | Phase 8 (auth UI and the Desk — ports nothing, needs a scope decision) |
+
+Phases 0-2 were reviewed afterwards and every concern resolved, reproduced with reasoning,
+or assigned to a later phase — see the **Review Resolution** section at the end of
+`PROGRESS.md`. Nine upstream bugs found along the way are catalogued in `UPSTREAM_BUGS.md`
+(local, gitignored).
+
+Both source repositories are now readable, which they were not during phases 0-2:
+
+```
+CRM app    D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm    (main)
+framework  D:\02_Personal\01_OpenSource\02_FrameWorks\frappe           (version-15)
+```
 
 | | |
 |---|---|

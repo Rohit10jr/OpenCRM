@@ -1,64 +1,62 @@
-# Unattended Run — Phases 0 to 4
+# Unattended Run — Phases 3 to 6
 
 **You are running without a human available. Read this whole file before starting.**
 
-## Scope and the branch split
+## Scope
 
-Two branches. This split is deliberate: it keeps reviewed work separate from work built
-on unreviewed foundations, so phases 3–4 can be discarded wholesale without touching
-phases 0–2.
+Phases **3, 4, 5, 6**, in that order, on one new branch:
 
-| Branch | Phases | Why |
-|---|---|---|
-| `phase-0-foundation` (current) | **0 → 1 → 2** | The contract, the models, the security boundary |
-| `phase-3-4-provisional` (you create it) | **4 → 3** | Built on specs revised but not reviewed |
+```powershell
+git checkout -b phases-3-to-6
+```
 
-Order on the second branch is **4 then 3**, not 3 then 4. Several of phase 3's Group A
-endpoints (`get_filterable_fields`, `get_quick_filters`, `update_quick_filters`,
-`get_views`) read and write the metadata layer phase 4 builds. Building them first means
-building against stubs and then revising.
+Phases 0-2 are **complete, reviewed and merged** on `phase-0-foundation` — 813 tests
+passing. Do not revisit them; if you believe one is wrong, log it rather than reopening it.
 
 ## HARD STOP
 
-**After phase 3's gate passes, STOP.** Do not start phase 5, 6 or 7. Write your final
-report and halt, even with time and capacity left.
+**After phase 6's gate passes, STOP.** Do not start phase 7 (integrations, deferred
+behind flags) or phase 8 (parked — it ports nothing and needs a human scope decision).
 
----
+## Order matters, and phase 3 is the big one
 
-## Gate before leaving `phase-0-foundation`
+**3 → 4 → 5 → 6.** Roughly 50 endpoints in phase 3 against 12 in phase 4 and less again
+after; the work is heavily front-loaded.
 
-Phases 3–4 may **only** begin if phase 2 finished genuinely clean. Do not proceed if
-any of these is true:
+Phase 4 comes after 3 rather than before it this time — the reverse of the earlier plan —
+because phase 0 already implemented `get_data`'s four-step column resolution and left
+`_load_saved_view` as a registered provider hook. Phase 3's metadata endpoints read that
+seam; they do not need phase 4 to have filled it.
 
-- Phase 2's gate needed a second attempt
-- Codex's phase-2 security review raised anything you disputed rather than fixed
-- Any phase-2 acceptance criterion lacks a real test
-- You made a judgment call on permission semantics you are not confident about
-
-If any apply: **stop at phase 2.** Log why in `PROGRESS.md`. Phases 3–4 built on a
-shaky permission layer are worse than no phases 3–4, because they make the eventual fix
-more expensive.
-
-Permissions are the one thing where "probably right" is not good enough.
-
----
+**If the window runs out mid-phase, stop cleanly.** Phase 3 complete with 4-6 untouched
+is a good outcome. Three phases done properly beats four half-done — that is what the
+gate is for.
 
 ## Before you begin
 
 Read, in order:
 
-1. `CLAUDE.md` — project rules
-2. `PORT_PLAN.md` — inventory, frontend contract, settled decisions
-3. `specs/README.md` — spec index and status
-4. `specs/PHASE_0_FOUNDATION.md` — your first task
+1. **`specs/AS_BUILT.md`** — what phases 0-2 actually built
+2. `CLAUDE.md` — project rules and the reviewer policy
+3. `PORT_PLAN.md` — inventory, frontend contract, settled decisions
+4. `specs/PHASE_3_ENDPOINTS.md` — your first task
+
+**Read `specs/AS_BUILT.md` first — before `CLAUDE.md`, before your phase spec.** It
+records what phases 0-2 actually built, as opposed to what the specs predicted. The
+largest available time-waster is rewriting part of the framework layer that already
+exists. Where a phase spec and `AS_BUILT.md` disagree, `AS_BUILT.md` wins.
 
 Environment is prepared. Do not reconfigure it:
 
-- Branch `phase-0-foundation`, scaffold committed
+- Branch `phase-0-foundation`, phases 0-2 complete at 813 tests passing
 - PostgreSQL 17 running, database `opencrm`, credentials in `.env` (gitignored)
 - Redis reachable on 6379
 - `frontend/` holds the real Vue frontend (52,449 LOC) — your acceptance reference
-- Frappe source: `D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm`
+- Frappe **CRM app**: `D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm` (`main`)
+- Frappe **framework**: `D:\02_Personal\01_OpenSource\02_FrameWorks\frappe` (`version-15`)
+  — unavailable during phases 0-2, and several defects were only findable in it. The
+  pairing `main` + `version-15` is what the CRM's own CI uses; do not read `develop`.
+  — unavailable during phases 0-2; several defects were only findable in it
 
 Backend goes in `backend/`. Create the venv there.
 
@@ -66,7 +64,7 @@ Backend goes in `backend/`. Create the venv there.
 
 ## The loop
 
-For each phase in **0, 1, 2** — then, if the gate above allows, **4, 3**:
+For each phase in **3, 4, 5, 6**:
 
 ```
 1. Read specs/PHASE_<N>_*.md in full
@@ -78,16 +76,9 @@ For each phase in **0, 1, 2** — then, if the gate above allows, **4, 3**:
    Fails twice  → STOP. Log and halt.
 ```
 
-Phases run strictly in sequence. Within phase 1 you may fan out by cluster; never two
-agents in one file.
-
-After phase 2 passes and the gate above allows:
-
-```powershell
-git checkout -b phase-3-4-provisional
-```
-
-Then continue the same loop with phase 4, then phase 3.
+Phases run strictly in sequence. Within a phase you may fan out by module or cluster;
+**never two agents in one file**. Phase 3's five module groups (`specs/PHASE_3_ENDPOINTS.md`
+§2) are the natural split.
 
 ---
 
@@ -146,29 +137,24 @@ verified — less *diversely* covered, not less competently reviewed.
 `pwsh` resolves to `C:\Users\New\pwsh7\pwsh.exe`. Run from the repo root, read-only so
 Codex cannot touch your files. Use the per-phase prompts below.
 
-**Phase 0:**
+**Phase 3:**
 ```powershell
-codex exec -s read-only "Review backend/ against specs/PHASE_0_FOUNDATION.md and the Frappe source at D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm. Focus on: does the filter-grammar translator match Frappe semantics (especially 'like' being case-insensitive on Postgres); are all six autoname strategies correct; does get_data return the right shape; is the ToDo/_assign relationship correct. Report concrete defects with file:line. Do not suggest style changes."
-```
-
-**Phase 1:**
-```powershell
-codex exec -s read-only "Review the Django models in backend/ against the DocType JSON in D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm\fcrm\doctype and specs/PHASE_1_MODELS.md. Check: missing or wrong fields vs the JSON, layout fieldtypes (Section/Column/Tab Break) wrongly made into columns, wrong Link targets, child tables exposed as standalone routes, lifecycle hooks not ported from the .py controllers. Report file:line."
-```
-
-**Phase 2:**
-```powershell
-codex exec -s read-only "Security review. Compare backend/ permission code against D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm\permissions\org_hierarchy.py and specs/PHASE_2_PERMISSIONS.md. Verify the rule evaluation ORDER matches exactly, that ToDo (not _assign) backs assignment checks, that cancelled ToDos grant no access, and that list filtering and has_permission agree in every case. Try to find a way to see a row you shouldn't via filters, fields, order_by or group_by. Report file:line."
+codex exec -s read-only "Review the API endpoints in backend/ against crm/api/*.py at D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm and specs/PHASE_3_ENDPOINTS.md. Verify every dotted path and parameter name matches source exactly, responses are wrapped in {'message': ...}, frappe.throw messages are preserved verbatim, and no endpoint bypasses the phase-2 permission layer by using Model.objects directly instead of query.fetch_rows. Check that any endpoint creating a lead or deal sets lead_owner/deal_owner, or the record is invisible to its creator. Pay special attention to bulk operations being permission-checked per item. Report file:line."
 ```
 
 **Phase 4:**
 ```powershell
-codex exec -s read-only "Review the metadata layer in backend/ against specs/PHASE_4_METADATA.md and the Frappe source at D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm. Verify the 4-step column resolution order in api/doc.py:get_data is reproduced exactly; that filterable and group-by fieldtype allowlists match source; that get_non_filterable_fields() is honoured; that one user's saved view is invisible to another. Report file:line."
+codex exec -s read-only "Review the metadata layer in backend/ against specs/PHASE_4_METADATA.md and the Frappe source at D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm. Verify the 4-step column resolution order in get_data is preserved (phase 0 already implemented it - check it was extended, not rewritten); that filterable and group-by allowlists are keyed on the Frappe fieldtype rather than the Django internal type; that get_non_filterable_fields() is honoured; and that one user's saved view is invisible to another. Report file:line."
 ```
 
-**Phase 3:**
+**Phase 5:**
 ```powershell
-codex exec -s read-only "Review the API endpoints in backend/ against crm/api/*.py at D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm and specs/PHASE_3_ENDPOINTS.md. Verify every dotted path and parameter name matches source exactly, responses are wrapped in {'message': ...}, frappe.throw messages are preserved verbatim, and no endpoint bypasses the phase-2 permission layer. Pay special attention to bulk operations being permission-checked per item. Report file:line."
+codex exec -s read-only "Review the Celery tasks and beat schedule in backend/ against specs/PHASE_5_ASYNC.md and crm/hooks.py at D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm. Verify the beat entries match hooks.py scheduler_events exactly; that NO SLA sweep job exists (upstream computes SLA on write only); that deferred lead-sync tasks are registered but no-op behind a flag; that bulk delete permission-checks each item inside the task rather than only at request time; and that cache writes use a bare UPDATE rather than save(), so modified is not re-stamped. Report file:line."
+```
+
+**Phase 6:**
+```powershell
+codex exec -s read-only "Review the Channels realtime layer in backend/ against specs/PHASE_6_REALTIME.md. Verify unauthenticated WebSocket connects are rejected; that joining a document group runs the phase-2 permission check rather than trusting the client; that event names and payloads match the publish sites in crm/ at D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm; and that nothing in the app breaks when Channels is switched off. Report file:line."
 ```
 
 #### Detecting a failed review — do not trust the exit code
@@ -283,28 +269,48 @@ State what you chose and the evidence.
 
 You will hit ambiguity. In order of preference:
 
-1. **Read the Frappe source.** It is the source of truth and it is right there.
-2. **Read the frontend.** `frontend/src/stores/`, `src/data/document.js`,
+1. **Read the CRM source.** It is the source of truth and it is right there.
+2. **Read the framework source.** New since phases 0–2, and it answers things the CRM
+   app cannot — `fetch_from`, `validate_name`, `append_number_if_name_exists`, nested-set
+   locking and the shared-docs query were all only findable there.
+3. **Read the frontend.** `frontend/src/stores/`, `src/data/document.js`,
    `src/composables/document.js` show what the API is expected to return.
-3. **Choose the option matching upstream behaviour**, implement it, log the decision.
+4. **Choose the option matching upstream behaviour**, implement it, log the decision.
 
 Never invent semantics to make something easier. Never widen scope beyond the phase
 spec. If a choice would be expensive to reverse and the evidence is genuinely
 ambiguous, prefer to stop and ask over guessing — log it and halt.
 
-Two known-open questions to answer from source:
-- SLA computed on write or on a schedule? (`specs/PHASE_5_ASYNC.md` §4)
-- The exact error-envelope shape the frontend parses (`specs/PHASE_0_FOUNDATION.md` §6c)
+### When upstream is wrong
+
+It sometimes is — nine cases are catalogued in `UPSTREAM_BUGS.md`. The rule:
+
+> **Diverge on bugs nothing can observe. Reproduce bugs that are user-visible.**
+
+Before diverging, **check whether anything reads the field or behaviour**. A status-log
+field was corrected because nothing reads it; an odd guard on expected deal value was
+reproduced because users see the result. Record either choice in the code with the source
+line, and add an entry to `UPSTREAM_BUGS.md`.
+
+### When something looks impossible
+
+Suspect a missing framework mechanism before suspecting your own code. `fetch_from` was
+never ported, and the symptom — "converted deals have a contact but no email" — looked
+like a conversion bug for an hour. Check the framework source for the feature before
+working around it.
 
 ---
 
-## One extra phase-0 task
+## Two standing obligations
 
-Phase 0 owns the provisional specs. After phase 0's gate passes, revise
-`specs/PHASE_3_ENDPOINTS.md` through `PHASE_6_REALTIME.md` to match what you built.
+**Keep `specs/AS_BUILT.md` current.** It is what stops the next agent rewriting your
+work. When you add a helper other phases will call, add the row. When a phase spec turns
+out to be wrong about what exists, fix `AS_BUILT.md` first.
 
-**Leave their status as PROVISIONAL** — your revision is itself unreviewed. Note at the
-top of each: "Revised by phase-0 agent, pending human review."
+**Flip your spec's status when the gate passes.** Specs 3-6 are marked *PROVISIONAL —
+revised by phase-0 agent, pending human review*. Once a phase is built, tested and
+reviewed, replace that header with what is actually true of it. A spec still claiming to
+be provisional after its phase shipped is worse than no status at all.
 
 ---
 

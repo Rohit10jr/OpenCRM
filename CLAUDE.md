@@ -7,6 +7,7 @@ existing Vue frontend.
 
 | File | What it is |
 |---|---|
+| **`specs/AS_BUILT.md`** | **What already exists. Read this first** |
 | `PORT_PLAN.md` | Source inventory, frontend contract, settled architecture decisions |
 | `specs/README.md` | Index of per-phase specs and their status |
 | `specs/PHASE_<N>_*.md` | Your phase's spec |
@@ -16,14 +17,24 @@ decisions that are already settled — re-deciding them creates divergence.
 
 ## Source of truth
 
-The Frappe original lives at:
+Two repositories, both readable:
 
 ```
-D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm
+CRM app    D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm    (main)
+framework  D:\02_Personal\01_OpenSource\02_FrameWorks\frappe           (version-15)
 ```
 
-Read it whenever behaviour is unclear. **Never invent semantics** — match the source,
-or flag the ambiguity in your report.
+That pairing is what the CRM's own CI uses — do not read `develop`, it is v16 pre-release.
+The framework was unavailable during phases 0–2, and several defects were only findable
+in it.
+
+Read them whenever behaviour is unclear. **Never invent semantics** — match the source,
+or flag the ambiguity in your report. If something looks impossible, suspect a missing
+framework mechanism before suspecting your own code.
+
+**When upstream is wrong** — and it sometimes is; nine cases are in `UPSTREAM_BUGS.md` —
+diverge only on bugs nothing can observe, and reproduce user-visible ones. Check whether
+anything actually reads the field before deciding, and record the choice.
 
 ## Hard rules
 

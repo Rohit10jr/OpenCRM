@@ -1,8 +1,9 @@
 # Phase 6 — Realtime (Django Channels)
 
-> **PROVISIONAL — revised by phase-0 agent, pending human review.**
-> §1 and §3 now reference what phase 0 actually built for auth and permissions. Status
-> stays PROVISIONAL per `RUNBOOK.md` (overriding `specs/README.md`).
+> **PROVISIONAL** — flip this header to Authoritative when your gate passes.
+>
+> **Read `specs/AS_BUILT.md` first.** It lists what phases 0-2 actually built; where it
+> and this spec disagree, it wins.
 
 **Fan out.** Needs phase 5. Not blocking — the app is usable without it.
 

@@ -1,11 +1,31 @@
 # Phase 4 — Metadata Layer
 
-> **PROVISIONAL — revised by phase-0 agent, pending human review.**
-> §2a and §3 now describe the seams phase 0 actually left. Status stays PROVISIONAL
-> per `RUNBOOK.md` (which overrides `specs/README.md` on this point) because the
-> revision is itself unreviewed.
+> **PROVISIONAL** — flip this header to Authoritative when your gate passes.
+>
+> **Read `specs/AS_BUILT.md` first.** It lists what phases 0-2 actually built; where it
+> and this spec disagree, it wins.
 
-**Fan out.** Needs phase 0 and phase 1 cluster 6.
+**Fan out.** Runs *after* phase 3, not before it — phase 0 already built `get_data`'s
+four-step resolution and left `_load_saved_view` as a registered provider, so phase 3's
+metadata endpoints read that seam without needing this phase filled in first.
+
+### This phase owns C7
+
+`frappe_core/metadata.py` keys its filterable and group-by allowlists on **Django
+internal types** (`FILTERABLE_INTERNAL_TYPES`, `GROUP_BY_INTERNAL_TYPES`), which is lossy
+both ways: `Long Text`/`Small Text`/`Text Editor` all collapse to `TextField`, and
+`Duration`/`Rating` are indistinguishable from `IntegerField`/`FloatField`. So `Duration`
+is currently group-by-able only by accident.
+
+Phase 1 records each field's original Frappe fieldtype — filter on **that** and delete the
+internal-type sets. `metadata._frappe_fieldtype` already exists as the resolver.
+
+### And C6, partly
+
+`get_data`'s kanban branch is structural: column resolution from a Link target or Select
+options works, but `get_records_based_on_order` (per-column manual ordering) and
+`getCounts` (the email/comment/task/note badge counts) are absent. The counts need the
+`Comment` and `ToDo` models, both of which are ported.
 
 Source: `crm_view_settings` (328 LOC, 8 endpoints), `crm_fields_layout` (259 LOC, 3),
 `crm_form_script`, `crm_dashboard`, and `api/doc.py:get_data`.

@@ -1,8 +1,9 @@
 # Phase 5 — Background Jobs
 
-> **PROVISIONAL — revised by phase-0 agent, pending human review.**
-> §4's open question is now **answered from source**. Status stays PROVISIONAL per
-> `RUNBOOK.md` (overriding `specs/README.md`) because this revision is unreviewed.
+> **PROVISIONAL** — flip this header to Authoritative when your gate passes.
+>
+> **Read `specs/AS_BUILT.md` first.** It lists what phases 0-2 actually built; where it
+> and this spec disagree, it wins.
 
 **Fan out.** Needs phase 1. Celery + Redis (Redis is already required by phase 6).
 
@@ -62,6 +63,18 @@ Beat job**. It only deletes tokens already past their expiry, so it cannot log a
 
 Deleting nothing is the failure mode to watch: if the job silently stops, the symptom is
 a slowly growing table and slower blacklist lookups, not an error.
+
+## 2b. What already exists
+
+Several things this phase would otherwise build were done during the phase 0-2 review:
+
+- **`assignment.rebuild_assign_cache`** and **`doc_caches.rebuild_comment_cache`** already
+  maintain `_assign` and `_comments` by signal. Both write with a bare `update()`, never
+  `save()` — copy that pattern for `update_modified_background`, which exists precisely so
+  a comment does not re-stamp `modified_by` while still reordering the list.
+- **`doc_caches.add_tag` / `remove_tag`** maintain `_user_tags`.
+- **`children.delete_polymorphic_children`** cascades child rows on parent delete.
+- **`crm_app.conversion.convert_to_deal`** is complete, in one transaction.
 
 ## 3. Email
 
