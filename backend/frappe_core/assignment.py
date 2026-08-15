@@ -134,6 +134,56 @@ def get_assigned_users(doctype: str, name, *, for_permission: bool = False) -> l
     return [u for u in dict.fromkeys(rows) if u]
 
 
+def assign_to_user(doctype: str, name, user: str, *, description: str = "") -> bool:
+    """Port of ``frappe.desk.form.assign_to._add`` (``frappe/desk/form/assign_to.py:58``).
+
+    Creates the ``ToDo`` row that *is* the assignment. Returns True if one was created,
+    False if the user already had an open assignment on this document - upstream's
+    ``users_with_duplicate_todo`` branch, which skips silently rather than erroring.
+
+    The ``_assign`` cache updates itself: :func:`_on_todo_write` fires on the insert.
+
+    Not ported from upstream's ``_add``:
+
+    * the permission check - every caller here passes ``ignore_permissions=True``
+    * ``assigned_to`` field sync - no CRM doctype declares that field
+    * the share-on-missing-permission fallback, which needs ``DocShare`` (see
+      ``CRMLead.share_with_agent``)
+    * follow/notification side effects, which belong to phases 5 and 6
+    """
+    if _TODO_MODEL is None:
+        return False
+
+    existing = _TODO_MODEL._default_manager.filter(
+        **{
+            _FIELDS["reference_type"]: doctype,
+            _FIELDS["reference_name"]: name,
+            _FIELDS["status"]: "Open",
+            _FIELDS["allocated_to"]: user,
+        }
+    ).exists()
+    if existing:
+        return False
+
+    from django.utils import timezone
+
+    from frappe_core.session import get_current_user
+
+    _TODO_MODEL._default_manager.create(
+        **{
+            _FIELDS["allocated_to"] + "_id": user,
+            _FIELDS["reference_type"]: doctype,
+            _FIELDS["reference_name"]: str(name),
+            _FIELDS["status"]: "Open",
+            "description": description or f"Assignment for {doctype} {name}",
+            "priority": "Medium",
+            "date": timezone.now().date(),
+            "assigned_by_id": get_current_user(),
+        }
+    )
+    return True
+
+
 def rebuild_assign_cache(doctype: str, name) -> list[str] | None:
     """Recompute one document's ``_assign`` from its ToDo rows."""
     if not registry.has_doctype(doctype):

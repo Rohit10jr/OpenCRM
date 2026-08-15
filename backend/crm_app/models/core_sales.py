@@ -26,10 +26,12 @@ section 4, which establishes that upstream computes them on write, not on a sche
 
 from django.db import models
 
+from frappe_core import assignment
 from frappe_core.exceptions import MandatoryError, ValidationError
 from frappe_core.models import AutoIncrementDocument, BaseDocument
 from frappe_core.naming import FieldValue, Hash, NamingSeries
 from frappe_core.registry import register_doctype
+from frappe_core.session import get_current_user
 
 EMPLOYEE_COUNT_CHOICES = [
     (c, c) for c in ("1-10", "11-50", "51-200", "201-500", "501-1000", "1000+")
@@ -167,8 +169,102 @@ class SLAFieldsMixin(models.Model):
         return None
 
 
+class OwnerAssignmentMixin(models.Model):
+    """Assign the record to its owner, as ``CRM Lead`` and ``CRM Deal`` both do.
+
+    Upstream (``crm_lead.py:86-88,94-98``, ``crm_deal.py:86-88,98-102``)::
+
+        def validate(self):
+            if not self.is_new() and self.has_value_changed("<x>_owner") and self.<x>_owner:
+                self.share_with_agent(self.<x>_owner)
+                self.assign_agent(self.<x>_owner)
+
+        def after_insert(self):
+            if self.<x>_owner:
+                if self.<x>_owner != frappe.session.user:
+                    self.share_with_agent(self.<x>_owner)
+                self.assign_agent(self.<x>_owner)
+
+    Subclasses set :attr:`owner_field`.
+
+    Note this assigns the record to its **own owner**, who already satisfies the
+    permission rule's ``<x>_owner == user`` clause (``PHASE_2_PERMISSIONS.md`` section 2).
+    So the ``ToDo`` written here does not grant access - it drives the assignee chip the
+    list views render from ``_assign``. The ``ToDo`` path matters for *access* when
+    someone other than the owner is assigned, which happens through the phase-3
+    assignment endpoints.
+    """
+
+    #: ``"lead_owner"`` or ``"deal_owner"``.
+    owner_field: str = ""
+
+    class Meta:
+        abstract = True
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        # Frappe compares against the stored document in has_value_changed(); stash the
+        # loaded value so the same check costs no extra query.
+        instance._loaded_owner = getattr(instance, f"{cls.owner_field}_id", None)
+        return instance
+
+    def _owner_value(self):
+        return getattr(self, f"{self.owner_field}_id", None)
+
+    def assign_agent(self, agent) -> None:
+        """``crm_lead.py:158-169``. Skips silently when already assigned."""
+        if not agent:
+            return
+        if agent in assignment.get_assigned_users(self.get_doctype(), self.pk):
+            return
+        assignment.assign_to_user(self.get_doctype(), self.pk, agent)
+
+    def share_with_agent(self, agent) -> None:
+        """``crm_lead.py:171-201`` - **deliberate no-op seam.**
+
+        Upstream writes ``DocShare`` rows: it adds one for the new owner and removes
+        every other share on the document. We do not port that yet, because nothing in
+        this port would read the result.
+
+        Frappe folds shares into a list query as
+        ``(user_permission_conditions OR shared) AND permission_query_conditions``
+        (``frappe/model/db_query.py:856-865`` then ``:881``). Two consequences: sharing
+        never overrides the org-hierarchy rule even upstream, and we have neither a
+        ``DocShare`` model nor a user-permissions layer for it to widen. Porting it alone
+        would write rows no query consults.
+
+        To finish it: port ``DocShare`` as a tenth platform doctype, add the shared-docs
+        clause to ``frappe_core.query``, then implement this method. The call sites are
+        already faithful, so nothing else moves.
+        """
+        return None
+
+    def sync_owner_assignment(self, *, created: bool) -> None:
+        """Run the owner-change side effects. Call *after* the row exists.
+
+        Upstream splits this across ``validate`` and ``after_insert``; both need
+        ``self.name``, and on create it only exists post-insert.
+        """
+        owner = self._owner_value()
+        if not owner:
+            return
+
+        if created:
+            if owner != get_current_user():
+                self.share_with_agent(owner)
+            self.assign_agent(owner)
+            return
+
+        if owner != getattr(self, "_loaded_owner", None):
+            self.share_with_agent(owner)
+            self.assign_agent(owner)
+
+
 @register_doctype("CRM Lead")
-class CRMLead(SLAFieldsMixin, BaseDocument):
+class CRMLead(OwnerAssignmentMixin, SLAFieldsMixin, BaseDocument):
+    owner_field = "lead_owner"
+
     naming_series = models.CharField(max_length=140, blank=True, default="CRM-LEAD-.YYYY.-")
     salutation = models.CharField(max_length=140, blank=True, default="")
     first_name = models.CharField(max_length=140, blank=True, default="")
@@ -316,7 +412,12 @@ class CRMLead(SLAFieldsMixin, BaseDocument):
     def save(self, *args, **kwargs):
         self.run_validate(ignore_mandatory=kwargs.pop("ignore_mandatory", False))
         self.apply_sla()
-        return super().save(*args, **kwargs)
+        creating = self._state.adding
+        result = super().save(*args, **kwargs)
+        # After the insert, because assignment references self.name.
+        self.sync_owner_assignment(created=creating)
+        self._loaded_owner = self._owner_value()
+        return result
 
     @staticmethod
     def default_list_data():
@@ -352,7 +453,9 @@ class CRMLead(SLAFieldsMixin, BaseDocument):
 
 
 @register_doctype("CRM Deal")
-class CRMDeal(SLAFieldsMixin, BaseDocument):
+class CRMDeal(OwnerAssignmentMixin, SLAFieldsMixin, BaseDocument):
+    owner_field = "deal_owner"
+
     naming_series = models.CharField(max_length=140, blank=True, default="CRM-DEAL-.YYYY.-")
     organization = models.ForeignKey(
         CRMOrganization, on_delete=models.PROTECT, null=True, blank=True, related_name="deals"
@@ -468,7 +571,11 @@ class CRMDeal(SLAFieldsMixin, BaseDocument):
     def save(self, *args, **kwargs):
         self.validate_lost_reason()
         self.apply_sla()
-        return super().save(*args, **kwargs)
+        creating = self._state.adding
+        result = super().save(*args, **kwargs)
+        self.sync_owner_assignment(created=creating)
+        self._loaded_owner = self._owner_value()
+        return result
 
     @staticmethod
     def default_list_data():
