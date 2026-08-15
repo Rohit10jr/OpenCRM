@@ -126,12 +126,20 @@ at tier 1, and the reader must be able to tell.
 |---|---|---|
 | **1** | Codex via PowerShell 7 | **Preferred** — different model, reads the repo itself |
 | **2** | Codex via PowerShell 5.1 | Same reviewer, fallback shell |
-| **3** | Claude subagent | **Degraded** — same model, correlated blind spots |
+| **3** | Claude subagent | **Degraded** — same model and same spec |
 
-**Tier 3 is a real fallback, not an equivalent one.** A Claude subagent reviewing
-Claude's code shares the writer's assumptions; across phases 0–2 Codex found 20 real
-defects precisely because it did not. If you land on tier 3, say so plainly in
-`PROGRESS.md` and treat the phase as less verified, not equally verified.
+**Tier 3 is a real fallback, not an equivalent one** — but be precise about why. A fresh
+subagent gets only the task prompt, so it is **not** carrying the writer's context. The
+weakness is that it shares the writer's **model** (same priors, same failure modes) and
+its **inputs** (the same spec — and when `PHASE_0_FOUNDATION.md` wrongly said `field:`
+PKs are "slugified", only Codex caught it, by reading the Frappe source instead).
+
+Since the weakness is model correlation, isolating context further does not help;
+`claude -p` buys nothing over a fresh subagent. Only a different model does. Across
+phases 0–2 Codex found 20 real defects precisely because it is one.
+
+If you land on tier 3, say so plainly in `PROGRESS.md` and treat the phase as less
+verified — less *diversely* covered, not less competently reviewed.
 
 #### Tier 1 — Codex on PowerShell 7 (default)
 

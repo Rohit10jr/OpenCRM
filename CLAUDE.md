@@ -51,7 +51,7 @@ tier you used.
 |---|---|---|
 | **1** | Codex via PowerShell 7 | Preferred — different model, reads the repo itself |
 | **2** | Codex via PowerShell 5.1 | Same reviewer, fallback shell |
-| **3** | Claude subagent | **Degraded** — same model, correlated blind spots |
+| **3** | Claude subagent | **Degraded** — same model and same spec, so correlated blind spots |
 
 Full procedure, including the per-phase prompts: `RUNBOOK.md` §3.
 
@@ -78,10 +78,32 @@ it. Phases 0–2 were reviewed blind this way.
 
 ## Tier 3 — Claude subagent
 
-Spawn a **fresh** subagent, not a `fork` — a fork inherits the context that produced the
-bug, which is the opposite of a second opinion. Prefer a subagent over `claude -p`: no
-process startup, parallelisable, harness-managed. Use `claude -p` only if you are
-yourself a subagent and cannot spawn one.
+Spawn a **fresh** subagent, not a `fork`. A fresh subagent receives only the task
+prompt — no conversation history — so it is genuinely context-isolated. A `fork`
+inherits the writer's full context including the reasoning that produced the bug, which
+is the opposite of a second opinion.
+
+**Why tier 3 is still degraded — and what it is not.** The weakness is *not* shared
+context; a fresh subagent has none. It is:
+
+1. **Same model** — same priors and same failure modes. If this model misreads a Frappe
+   idiom once, a second instance reading the same code is likely to misread it the same way.
+2. **Same inputs** — writer and reviewer read the same spec. When
+   `PHASE_0_FOUNDATION.md` wrongly said `field:` PKs are "slugified", both would have
+   inherited that error. Codex caught it only by going to the Frappe source instead.
+
+Because the weakness is model correlation, **isolating context further does not help** —
+`claude -p` buys nothing over a fresh subagent here. Only a different model does. Use
+`claude -p` only if you are yourself a subagent and cannot spawn one.
+
+Tier 3 is weak at finding *different* bugs, not at finding bugs. In phase 0 the writing
+agent re-read its own work after Codex signed off and found two real defects Codex
+missed, including the most serious one in the phase. Same-model review has real value;
+it just covers less new ground.
+
+**Compensate** by pointing tier 3 at the Frappe source rather than the spec wherever
+they could disagree, and by adding: *"Assume the author was competent and the obvious
+things are right. Look for what a reader who shares the author's assumptions would skip."*
 
 ## Always
 
