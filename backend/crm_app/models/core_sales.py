@@ -698,15 +698,20 @@ class CRMDeal(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
         if self.lost_reason_id == "Other" and not self.lost_notes:
             raise ValidationError("Please specify the reason for losing the deal.")
 
-    def validate_forecasting(self, forecasting_enabled: bool):
+    def validate_forecasting(self, forecasting_enabled: bool | None = None):
         """``crm_deal.py:249-253``.
 
-        Upstream reads ``FCRM Settings.enable_forecasting`` (a singleton, cluster 6).
-        The flag is a parameter here so the rule is testable before that model lands and
-        so the caller owns the settings lookup. Note upstream raises ``MandatoryError``,
-        not ``ValidationError`` - the frontend branches on ``exc_type == 'MandatoryError'``
-        (``src/data/document.js:61``), so the class matters.
+        Upstream reads ``FCRM Settings.enable_forecasting`` inline. We now do the same
+        when the caller passes nothing - phase 1 made it a required parameter, which left
+        the rule silently inert because nothing passed it. The override is kept so a test
+        can exercise both branches without touching the singleton.
+
+        Upstream raises ``MandatoryError``, not ``ValidationError`` - the frontend
+        branches on ``exc_type == 'MandatoryError'`` (``src/data/document.js:61``), so the
+        class matters.
         """
+        if forecasting_enabled is None:
+            forecasting_enabled = self._settings_flag("enable_forecasting")
         if not forecasting_enabled:
             return
         if not self.expected_deal_value:
@@ -714,15 +719,123 @@ class CRMDeal(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
         if not self.expected_closure_date:
             raise MandatoryError("Expected closure date is required.")
 
+    @staticmethod
+    def _settings_flag(name: str) -> bool:
+        from crm_app.models.metadata import FCRMSettings
+
+        return bool(getattr(FCRMSettings.load(), name, False))
+
+    def update_closed_date(self) -> None:
+        """``crm_deal.py:220-225``.
+
+        Note this compares the status **name** to the literal ``"Won"``, while
+        :meth:`save` separately sets ``closed_date`` when the status *type* is ``Won``.
+        Both are upstream, and they are not equivalent: rename the Won status and only
+        the type check still fires. Ported as-is - the type check is the one that
+        actually covers the case, and this one is harmless.
+        """
+        if self.status_id == "Won" and not self.closed_date:
+            self.closed_date = timezone.now().date()
+
+    def update_default_probability(self) -> None:
+        """``crm_deal.py:227-232`` - inherit the status's probability when unset."""
+        if self.probability:
+            return
+        self.probability = (
+            registry.get_model("CRM Deal Status")
+            ._default_manager.filter(pk=self.status_id)
+            .values_list("probability", flat=True)
+            .first()
+            or 0
+        )
+
+    def update_expected_deal_value(self) -> None:
+        """``crm_deal.py:234-243``.
+
+        The guard reads oddly and is faithful: upstream requires ``expected_deal_value``
+        to be **already set** before it will overwrite it from the product total. So this
+        never populates an empty value - it only keeps a non-empty one in step. A deal
+        with products but no expected value is left alone, and then
+        ``validate_forecasting`` raises for it when forecasting is on. Reproduced rather
+        than corrected, because the behaviour is user-visible either way.
+        """
+        if not self._settings_flag("auto_update_expected_deal_value"):
+            return
+        total = self.net_total or self.total
+        if total and self.expected_deal_value:
+            self.expected_deal_value = total
+
+    def validate_forecasting_fields(self) -> None:
+        """``crm_deal.py:245-253`` - the three updates, then the mandatory checks."""
+        self.update_closed_date()
+        self.update_default_probability()
+        self.update_expected_deal_value()
+        self.validate_forecasting()
+
+    def set_primary_contact(self, contact=None) -> None:
+        """``crm_deal.py:114-125``.
+
+        With exactly one contact and no explicit choice, that contact becomes primary.
+        Naming an explicit contact makes it primary and demotes the rest.
+        """
+        rows = list(self.contacts.all())
+        if not rows:
+            return
+
+        if not contact and len(rows) == 1:
+            rows[0].is_primary = True
+            rows[0].save(update_fields=["is_primary"])
+            return
+
+        if contact:
+            for row in rows:
+                row.is_primary = row.contact_id == contact
+                row.save(update_fields=["is_primary"])
+
+    def set_primary_email_mobile_no(self) -> None:
+        """``crm_deal.py:127-149`` - denormalise the primary contact's details.
+
+        With no contacts, or none flagged primary, the three fields are **cleared**;
+        upstream does the same rather than leaving stale values behind.
+        """
+        rows = list(self.contacts.all())
+        if not rows:
+            self.email = self.mobile_no = self.phone = ""
+            return
+
+        primaries = [row for row in rows if row.is_primary]
+        if len(primaries) > 1:
+            raise ValidationError("Only one Contact can be set as primary.")
+
+        if not primaries:
+            self.email = self.mobile_no = self.phone = ""
+            return
+
+        primary = primaries[0]
+        self.email = (primary.email or "").strip()
+        self.mobile_no = (primary.mobile_no or "").strip()
+        self.phone = (primary.phone or "").strip()
+
     def clean(self):
         self.validate_lost_reason()
 
     def save(self, *args, **kwargs):
         self.validate_status()
+        # Child rows only exist once the parent does, so the contact-derived fields are
+        # resolved post-insert on create (see below) and inline on update.
+        if not self._state.adding:
+            self.set_primary_contact()
+            self.set_primary_email_mobile_no()
+        self.validate_forecasting_fields()
         self.validate_lost_reason()
         self.apply_sla()
         creating = self._state.adding
         status_moved = creating or self.status_id != getattr(self, "_loaded_status", None)
+        won = status_moved and getattr(self.status, "type", None) == "Won"
+        if won:
+            # crm_deal.py:91-93 - the *type* check, distinct from update_closed_date's
+            # name check, and it overwrites rather than only filling a blank.
+            self.closed_date = timezone.now().date()
         result = super().save(*args, **kwargs)
         if status_moved:
             self.add_status_change_log(created=creating)
@@ -730,6 +843,18 @@ class CRMDeal(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
         self.sync_owner_assignment(created=creating)
         self._loaded_owner = self._owner_value()
         return result
+
+    def sync_contact_fields(self) -> None:
+        """Re-derive the contact-linked fields and persist them.
+
+        Callers that add or change child contacts run this; ``save()`` cannot, because on
+        create the rows do not exist until the parent is inserted.
+        """
+        self.set_primary_contact()
+        self.set_primary_email_mobile_no()
+        type(self)._default_manager.filter(pk=self.pk).update(
+            email=self.email, mobile_no=self.mobile_no, phone=self.phone
+        )
 
     @staticmethod
     def default_list_data():
