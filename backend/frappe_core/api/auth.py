@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.settings import api_settings as jwt_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from frappe_core.exceptions import AuthenticationError, ValidationError
@@ -81,6 +82,18 @@ def logout(refresh: str = "", **extra) -> dict:
 
 @whitelist("token/refresh", allow_guest=True, methods=("POST",))
 def refresh_token(refresh: str = "", **extra) -> dict:
+    """Exchange a refresh token for a new access token, rotating the refresh token.
+
+    This endpoint is hand-rolled rather than SimpleJWT's ``TokenRefreshView`` (the path
+    and envelope are fixed by the frontend contract), so ``ROTATE_REFRESH_TOKENS`` and
+    ``BLACKLIST_AFTER_ROTATION`` are honoured here explicitly - setting them in
+    ``SIMPLE_JWT`` alone would have no effect on this code path.
+
+    Rotation makes a refresh token single-use: one captured in transit stops working as
+    soon as the legitimate client next refreshes. Safe for the frontend because
+    ``jwtRequest.js`` passes the whole response to ``setTokens``, which persists the new
+    refresh token (``frontend/src/auth/tokens.js:22-25``).
+    """
     token = refresh or extra.get("refresh_token") or ""
     if not token:
         raise ValidationError("refresh token is required")
@@ -88,7 +101,20 @@ def refresh_token(refresh: str = "", **extra) -> dict:
         parsed = RefreshToken(token)
     except TokenError as exc:
         raise AuthenticationError(str(exc)) from None
-    return {"access": str(parsed.access_token), "refresh": str(parsed)}
+
+    access = str(parsed.access_token)
+
+    if jwt_settings.ROTATE_REFRESH_TOKENS:
+        if jwt_settings.BLACKLIST_AFTER_ROTATION:
+            try:
+                parsed.blacklist()
+            except AttributeError:  # pragma: no cover - blacklist app not installed
+                pass
+        parsed.set_jti()
+        parsed.set_exp()
+        parsed.set_iat()
+
+    return {"access": access, "refresh": str(parsed)}
 
 
 @whitelist("frappe.auth.get_logged_user", methods=("GET", "POST"))

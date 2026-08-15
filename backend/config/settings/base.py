@@ -30,6 +30,10 @@ INSTALLED_APPS = [
     # third party
     "rest_framework",
     "rest_framework_simplejwt",
+    # Gives ``logout`` something to revoke. Without it ``RefreshToken.blacklist()``
+    # raises AttributeError and the endpoint is a no-op, so a stolen refresh token
+    # stays usable for its full lifetime.
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "treebeard",
     # local
@@ -123,7 +127,10 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(
         days=env.int("JWT_REFRESH_TOKEN_LIFETIME_DAYS", default=7)
     ),
-    "ROTATE_REFRESH_TOKENS": False,
+    # Rotate on refresh and blacklist the token just used, so a refresh token captured
+    # in transit is single-use: whichever party redeems it first invalidates the other.
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
     # Our user PK is the email string.
     "USER_ID_FIELD": "name",

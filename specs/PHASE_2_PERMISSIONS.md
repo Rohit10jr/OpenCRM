@@ -132,6 +132,36 @@ That third one matters: unsaved documents always pass. Skip it and every create 
 
 ---
 
+## 4a. Two inherited behaviours, confirmed rather than assumed
+
+Both are faithful to upstream and were reviewed deliberately rather than left to default.
+
+### Only three doctypes have row-level rules
+
+Verified in `crm/hooks.py`: `permission_query_conditions` and `has_permission` are
+registered for **`CRM Lead`, `CRM Deal`, `CRM Notification`** and nothing else.
+
+Everything else — **organizations, tasks, notes, call logs, contacts, products,
+territories, SLAs and all settings** — is readable by **every authenticated user**.
+Only role permissions apply. That is a much wider surface than "the CRM has row-level
+security" suggests, and it is upstream's design: leads and deals are the confidential
+records, the surrounding reference data is shared.
+
+**Decision: keep.** Widening it is a product change, not a port fix, and it would break
+the frontend in non-obvious ways — an org or contact linked to a lead you *can* see would
+start returning 403 on the detail fetch.
+
+### 403 and 404 are distinguishable
+
+`_get_object` raises `DoesNotExistError` for a missing row and `PermissionError` for a
+forbidden one, so a user can tell whether a record they cannot see exists. That is an
+existence oracle, and it matches upstream exactly.
+
+**Decision: keep.** Collapsing both to 404 would diverge from upstream and break the
+frontend's error handling, which branches on `exc_type`
+(`frontend/src/data/document.js:40`). The information leaked is the existence of a record
+name the user already had to guess.
+
 ## 5. Roles
 
 Four, seeded in phase 0, mapped to Django Groups: `Administrator`, `System Manager`,

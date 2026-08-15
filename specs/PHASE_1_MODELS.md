@@ -142,6 +142,23 @@ Cluster 1 blocks 2–6. Clusters 2–6 run concurrently once it lands.
 
 ---
 
+## 5a. `FCRM Settings.access_key` stays readable — confirmed
+
+It is an exchange-rate provider API key, and any authenticated user can read it. That
+looks like something to lock down, and it is deliberate:
+
+- The JSON declares it `Data`, **not** `Password`, and unhidden.
+- The settings screen **reads it back** — `DashboardSettings.vue:157` binds it with
+  `v-model`, and `:216` checks whether it is set.
+
+So adding it to `SENSITIVE_FIELDS` would blank the field for the admin who needs to see
+it, and break the screen in exchange for a hardening upstream does not make.
+
+**Decision: keep readable.** Restricting it is a product change that needs the settings
+screen changed too — one line in `SENSITIVE_FIELDS` plus a write-only field treatment.
+Note it is a third-party FX key, not a CRM credential; the blast radius is the exchange
+rate service.
+
 ## 6. Singletons
 
 `fcrm_settings`, `crm_twilio_settings`, `crm_exotel_settings`, `erpnext_crm_settings`

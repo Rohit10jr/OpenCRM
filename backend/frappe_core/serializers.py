@@ -17,7 +17,26 @@ from frappe_core import children, registry
 from frappe_core.field_security import sensitive_fields
 
 #: Standard fields the client may never set directly; the model stamps them.
-READ_ONLY_FIELDS = ("owner", "modified_by", "creation", "modified")
+#: Audit columns the server stamps, plus the four underscore caches.
+#:
+#: The underscore fields are **projections of other tables**, not user input
+#: (PHASE_0_FOUNDATION.md section 3): ``_assign`` mirrors ``ToDo`` rows, ``_comments``
+#: mirrors ``Comment``, ``_user_tags`` mirrors tag links, and ``_liked_by`` is toggled
+#: through its own endpoint upstream. Leaving them writable let any client with write
+#: access set them directly - not an access-control hole, because the permission layer
+#: reads ``ToDo`` rather than ``_assign``, but a client could still make a document
+#: advertise assignees it does not have, and the next rebuild would silently overwrite
+#: the value. The maintainers write them with bare UPDATEs, which bypass the serializer.
+READ_ONLY_FIELDS = (
+    "owner",
+    "modified_by",
+    "creation",
+    "modified",
+    "_assign",
+    "_liked_by",
+    "_comments",
+    "_user_tags",
+)
 
 
 class DocumentSerializer(serializers.ModelSerializer):
