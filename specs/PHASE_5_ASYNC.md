@@ -48,6 +48,21 @@ hard to trace back.
 
 ---
 
+## 2a. Flush expired JWTs — new, and not optional
+
+Not in upstream (Frappe uses session cookies); it exists because of our JWT decision.
+
+`token_blacklist` records **every** rotated and revoked refresh token, and nothing
+removes them. With `ROTATE_REFRESH_TOKENS` on and a 5-minute access token, each active
+user rotates ~12 times an hour, so the table grows by roughly *12 rows per user per hour*
+and never shrinks.
+
+SimpleJWT ships the cleanup: `manage.py flushexpiredtokens`. Register it as a **daily
+Beat job**. It only deletes tokens already past their expiry, so it cannot log anyone out.
+
+Deleting nothing is the failure mode to watch: if the job silently stops, the symptom is
+a slowly growing table and slower blacklist lookups, not an error.
+
 ## 3. Email
 
 Frappe has its own queue with retry and per-account config (`Email Account`, ported in
