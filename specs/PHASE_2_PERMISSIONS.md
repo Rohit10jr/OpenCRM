@@ -79,9 +79,40 @@ Upstream uses `lft`/`rgt` columns. Subtree membership is:
 Member.lft >= Mgr.lft AND Member.lft <= Mgr.rgt
 ```
 
-Use **`django-treebeard`** (`MP_Node` or `NS_Node`), not a self-referential FK — a
-plain FK forces recursive CTEs for every list query and will not perform. `crm_territory`
-is also a tree; check it for `lft`/`rgt` and give it the same treatment.
+**Superseded — do not use `django-treebeard`.** This section originally named it; the
+implementation is a full rebuild in `crm_app/permissions/tree.py`, and that decision is
+now settled rather than provisional. Treebeard owns its own columns and expects node
+creation through `add_root`/`add_child`, but rows arrive through the generic
+`/api/resource/` endpoint with `reports_to` set, and the schema we must match is Frappe's
+`lft`/`rgt`. Adopting it would mean a second tree representation to keep in sync.
+
+Frappe itself does neither: it maintains bounds **incrementally**
+(`frappe/utils/nestedset.py:update_add_node` / `update_move_node`) and reserves
+`rebuild_tree` for repair. That is a third write path, matching neither treebeard nor
+ours. Do not use a self-referential FK alone — it forces recursive CTEs on every list
+query. `crm_territory` is also a tree; give it the same treatment.
+
+### The rebuild must be serialised, and a row lock is not enough
+
+`lft`/`rgt` decide **which rows a user can see**, so overlapping bounds are a permission
+defect, not a cosmetic one.
+
+The hazard is concurrent **inserts**, not concurrent rebuilds — rebuilding a fixed node
+set twice is harmless, since the walk derives bounds from `reports_to` alone. The damage
+happens when one transaction walks `n` nodes while another walks `n+1`: each writes only
+the rows it read, so the newcomer keeps bounds from one walk and its siblings keep bounds
+from the other.
+
+**`select_for_update()` does not fix this.** A row lock only covers rows the query already
+matched; the second writer blocks, re-reads *those* rows, and still cannot see the row the
+first writer inserted — the classic phantom. It walks `n` nodes regardless, and the bounds
+still collide. This was verified by test: the corruption reproduces with `select_for_update`
+in place.
+
+The lock has to be taken **before the read**, over the operation rather than a row set —
+a transaction-scoped advisory lock (`pg_advisory_xact_lock`). Any test for this must be
+checked to fail with the lock removed; a version that spawned concurrent
+`rebuild_sales_hierarchy()` calls over a static tree passed either way and proved nothing.
 
 Subtree lookup runs on **every list request** for leads and deals. Cache it per
 request at minimum; upstream uses `@request_cache` on the hierarchy checks. Do the

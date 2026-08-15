@@ -484,20 +484,52 @@ def test_list_and_object_agree_for_every_real_notification(notifications, users)
             ), f"{actor} disagrees on {notification.name}"
 
 
-def test_notification_without_a_recipient_is_readable(users):
-    """``crm_notification.py:55-56`` - the ``if not doc.to_user`` guard.
+def test_notification_without_a_recipient_is_denied(users):
+    """Deliberate divergence from ``crm_notification.py:55-56``, which returns True.
 
-    Exercised against a stand-in rather than a row: ``to_user`` is ``reqd=1`` in the
-    JSON, so this port makes the column NOT NULL and the branch is **unreachable through
-    the database**. It is ported anyway because the source has it, but pretending a real
-    row can reach it would mean loosening a constraint the schema is right to have.
+    Upstream contradicts itself: the list rule emits ``to_user = <user>``, which a blank
+    never matches, so such a row is hidden from every list yet readable directly by
+    anyone. We deny instead, so the two rules agree.
+
+    Nothing observable changes against upstream. ``to_user`` is a ``ForeignKey`` with no
+    ``null=True`` here - NOT NULL at the database level - so no *saved* row can reach
+    this branch. (Upstream's ``reqd: 1`` is document-level validation only, so its own
+    branch is not quite dead.) The path that *is* reachable is an unsaved instance, and
+    there granting a read was the wrong default.
+
+    Exercised against a stand-in rather than a row, because constructing a real one would
+    mean loosening a constraint the schema is right to have.
     """
     from crm_app.permissions.notification import has_permission
 
     class _Recipientless:
         to_user_id = None
 
-    assert has_permission(_Recipientless(), "read", users["outsider"].name) is True
+    assert has_permission(_Recipientless(), "read", users["outsider"].name) is False
+
+
+def test_notification_list_and_object_rules_agree_on_a_blank_recipient(users):
+    """The asymmetry itself - this is what tripped the phase-2 gate.
+
+    The list rule filters ``to_user=<user>``, so a blank recipient matches nobody. The
+    object rule must reach the same verdict, or a row is invisible in lists but readable
+    by URL.
+    """
+    from crm_app.permissions.notification import (
+        get_permission_query_conditions,
+        has_permission,
+    )
+
+    class _Recipientless:
+        to_user_id = None
+
+    user = users["outsider"].name
+    condition = get_permission_query_conditions(user)
+
+    # The list rule cannot match a NULL/blank to_user ...
+    assert "to_user" in str(condition)
+    # ... and the object rule now agrees.
+    assert has_permission(_Recipientless(), "read", user) is False
 
 
 # ---------------------------------------------------------------------------

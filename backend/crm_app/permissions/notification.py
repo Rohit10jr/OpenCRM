@@ -51,7 +51,23 @@ def has_permission(doc, ptype: str = "read", user: str | None = None) -> bool:
     if ptype == "create":
         return False
 
+    # DELIBERATE DIVERGENCE, in unreachable code, in the safe direction.
+    #
+    # Upstream returns True here (crm_notification.py:55-56), which contradicts its own
+    # list rule: get_permission_query_conditions emits `to_user = <user>`, and a blank
+    # to_user never matches that - so upstream hides such a row from every list while
+    # letting anyone read it directly.
+    #
+    # Upstream's `reqd: 1` is document-level validation, not a column constraint, so its
+    # branch is not quite dead. Ours is a plain ForeignKey with no null=True - NOT NULL
+    # at the database level - so no *saved* row can reach here. It is reachable on an
+    # unsaved instance, where returning True would grant a read.
+    #
+    # Denying makes the object rule agree with the list rule. Nothing observable changes
+    # against upstream (no saved row can take this path), the asymmetry stops being
+    # something later readers have to re-derive as safe, and the failure direction is
+    # deny rather than grant.
     if not doc.to_user_id:
-        return True
+        return False
 
     return doc.to_user_id == user
