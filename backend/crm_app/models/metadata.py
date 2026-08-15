@@ -254,6 +254,9 @@ class CRMSalesHierarchy(BaseDocument):
     code that depends on its performance. ``lft`` and ``rgt`` are indexed for the
     range scan either way.
     """
+    #: ``fetch_from`` in ``crm_sales_hierarchy.json``.
+    FETCH_FROM = {"full_name": ("user", "full_name")}
+
 
     full_name = models.CharField(max_length=280, blank=True, default="")
     user = models.ForeignKey(

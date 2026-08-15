@@ -566,6 +566,17 @@ class CRMLead(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
         self._loaded_owner = self._owner_value()
         return result
 
+    def convert_to_deal(self, deal: dict | None = None, **kwargs):
+        """``crm_lead.py:405-406`` - delegates to :mod:`crm_app.conversion`."""
+        from crm_app.conversion import convert_to_deal
+
+        return convert_to_deal(self, deal=deal, **kwargs)
+
+    @staticmethod
+    def get_non_filterable_fields():
+        """``crm_lead.py:409-410``."""
+        return ["converted"]
+
     @staticmethod
     def default_list_data():
         """Verbatim from ``crm_lead.py:default_list_data``."""
@@ -898,6 +909,17 @@ class CRMContacts(BaseDocument):
     )
     parenttype = models.CharField(max_length=140, default="CRM Deal")
     parentfield = models.CharField(max_length=140, default="contacts")
+
+    #: ``fetch_from`` in ``crm_contacts.json`` - these five mirror the linked Contact
+    #: on every save. Without them, converting a lead produced a deal with a contact
+    #: attached but no email or phone, because the child row was never populated.
+    FETCH_FROM = {
+        "full_name": ("contact", "full_name"),
+        "email": ("contact", "email_id"),
+        "mobile_no": ("contact", "mobile_no"),
+        "phone": ("contact", "phone"),
+        "gender": ("contact", "gender"),
+    }
 
     contact = models.ForeignKey(
         "frappe_platform.Contact", on_delete=models.CASCADE, null=True, blank=True, related_name="+"

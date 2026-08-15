@@ -137,6 +137,9 @@ CRMCallLog.add_to_class("to", models.CharField(max_length=140))
 @register_doctype("CRM Telephony Agent")
 class CRMTelephonyAgent(BaseDocument):
     """``autoname=field:user`` - one agent record per user."""
+    #: ``fetch_from`` in ``crm_telephony_agent.json``.
+    FETCH_FROM = {"user_name": ("user", "full_name")}
+
 
     user = models.OneToOneField(
         "frappe_platform.User", on_delete=models.CASCADE, related_name="telephony_agent"

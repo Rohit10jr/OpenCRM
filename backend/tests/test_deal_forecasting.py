@@ -198,8 +198,19 @@ def test_the_flag_is_read_from_settings_when_not_passed(alice, statuses, setting
 
 
 def _add_contact(deal, **kwargs):
+    """Details go on the **Contact**, not the child row.
+
+    ``CRM Contacts`` declares ``fetch_from`` for email/mobile/phone/full_name/gender
+    (``crm_contacts.json``), so the child row mirrors the linked Contact on every save
+    and anything written directly to it is overwritten. Setting them on the child was
+    how these tests were originally written, and it only passed because fetch_from was
+    not ported yet.
+    """
     contact = Contact.objects.create(
-        first_name=kwargs.pop("first_name", "Jane"), last_name=kwargs.pop("last_name", "Doe")
+        first_name=kwargs.pop("first_name", "Jane"),
+        last_name=kwargs.pop("last_name", "Doe"),
+        email_id=kwargs.pop("email", ""),
+        mobile_no=kwargs.pop("mobile_no", ""),
     )
     return CRMContacts.objects.create(parent_deal=deal, contact=contact, **kwargs)
 

@@ -119,6 +119,25 @@ class BaseDocument(models.Model, metaclass=DocumentBase):
         max_length=500, blank=True, default="", db_column="_user_tags"
     )
 
+    #: Port of Frappe's ``fetch_from`` (``frappe/model/base_document.py:818-890``): a
+    #: field whose value is pulled from a linked document on every save.
+    #:
+    #: ``{target_field: (link_field, source_field_on_the_linked_doc)}``
+    #:
+    #: Frappe overwrites unconditionally unless the field also sets ``fetch_if_empty``;
+    #: none of the seven in this app do, so this always overwrites too. Declared per
+    #: model rather than derived, because we have no DocType metadata to read it from.
+    FETCH_FROM: dict[str, tuple[str, str]] = {}
+
+    def apply_fetch_from(self) -> None:
+        """Copy each declared ``FETCH_FROM`` value off its linked document."""
+        for target, (link_field, source_field) in self.FETCH_FROM.items():
+            linked = getattr(self, link_field, None)
+            if linked is None:
+                continue
+            value = getattr(linked, source_field, None)
+            setattr(self, target, "" if value is None else value)
+
     class Meta:
         abstract = True
         ordering = ["-modified"]
@@ -165,6 +184,8 @@ class BaseDocument(models.Model, metaclass=DocumentBase):
     def save(self, *args, **kwargs):
         now = timezone.now()
         user_pk = get_current_user()
+
+        self.apply_fetch_from()
 
         creating = self._state.adding
         if creating:
