@@ -169,6 +169,13 @@ class BaseDocument(models.Model, metaclass=DocumentBase):
         creating = self._state.adding
         if creating:
             self._assign_name()
+            # Frappe validates on insert, after naming, for every name however it was
+            # produced - generated, prompt-supplied, or caller-forced (naming.py:181).
+            # ``pk`` is still None for autoincrement, which the database assigns.
+            if self.pk:
+                self.pk = naming_strategies.validate_name(
+                    self.get_doctype(), str(self.pk), is_single=self.is_single()
+                )
             if not self.creation:
                 self.creation = now
             if self.owner_id is None:

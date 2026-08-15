@@ -33,7 +33,7 @@ Frappe's `autoname` decides the PK per doctype. **Verified mapping from source:*
 | Strategy | Django implementation | DocTypes |
 |---|---|---|
 | `naming_series:` | Series generator, `CRM-LEAD-.YYYY.-` → `CRM-LEAD-2026-00001` | `crm_lead`, `crm_deal` |
-| `field:<name>` | PK = that field's value, slugified, uniqueness enforced | 13 doctypes: `crm_organization` (`organization_name`), `crm_territory`, `crm_industry`, `crm_lead_status`, `crm_deal_status`, `crm_lead_source`, `crm_lost_reason`, `crm_product` (`product_code`), `crm_call_log` (`id`), `crm_dashboard` (`title`), `crm_holiday_list`, `crm_telephony_agent` (`user`), `crm_communication_status`, `crm_service_level_agreement` (`sla_name`) |
+| `field:<name>` | PK = that field's value **verbatim** — `.strip()` only, **never slugified**; uniqueness enforced by the PK constraint | 14 doctypes: `crm_organization` (`organization_name`), `crm_territory`, `crm_industry`, `crm_lead_status`, `crm_deal_status`, `crm_lead_source`, `crm_lost_reason`, `crm_product` (`product_code`), `crm_call_log` (`id`), `crm_dashboard` (`title`), `crm_holiday_list`, `crm_telephony_agent` (`user`), `crm_communication_status`, `crm_service_level_agreement` (`sla_name`) |
 | `autoincrement` | `BigAutoField` — **genuinely integer PKs** | `crm_task`, `crm_view_settings`, `crm_product_sync_issue` |
 | `hash` | Random 10-char hex string | `crm_global_settings`, `crm_sales_hierarchy` |
 | `format:{dt}-{type}` | Template interpolation from field values | `crm_fields_layout` |
@@ -43,6 +43,30 @@ Frappe's `autoname` decides the PK per doctype. **Verified mapping from source:*
 > universal. Three doctypes really are autoincrement. Implement `NameStrategy` as a
 > pluggable class on the model Meta so phase-1 agents declare a strategy rather than
 > hand-rolling one.
+
+### Names are verbatim, and that has consequences
+
+Verified against Frappe `version-15` — the branch CRM `main` targets
+(`.github/workflows/builds.yml:43`), cloned at
+`D:\02_Personal\01_OpenSource\02_FrameWorks\frappe`:
+
+- **`_field_autoname` is `(cstr(doc.get(fieldname)) or "").strip()`** and nothing else
+  (`frappe/model/naming.py:553-559`). No slugification anywhere in Frappe or the CRM app.
+- **`validate_name` forbids only `<` and `>`** (`naming.py:498-501`). Spaces, slashes,
+  `#`, `&`, `?` are all legal document names.
+- Corroborated in the app: `crm/demo/deals.py:75-96` keys `_org_logos` by the **raw**
+  organization name (`"ScaleUp Labs"`) while its *values* are slugified asset paths
+  (`scaleup-labs.png`). Upstream slugifies filenames, never record names.
+
+Two things follow, both implemented:
+
+1. **A name may contain `/`.** "R/GA" is a real company. Upstream routes these with a
+   path converter — `Rule("/resource/<doctype>/<path:name>/")`
+   (`frappe/api/v1.py:148-151`). Our URL pattern must do the same; `[^/]+` makes such
+   records permanently unreachable, and percent-encoding does not help because WSGI
+   decodes `%2F` before Django resolves.
+2. **`validate_name` must run on insert for every name** — generated, prompt-supplied,
+   or caller-forced — reproducing upstream's three rules and their message text.
 
 The naming series counter must be atomic under concurrency — use a dedicated
 `NamingSeries` table with `select_for_update()`, not `max(id)+1`.
