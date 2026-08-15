@@ -230,6 +230,18 @@ contract.
 | **5** | Celery: email queue, SLA timers, notifications, assignment rules | Fan out | Needs 1 |
 | **6** | Channels realtime: notifications, live refresh | Fan out | Needs 5 |
 | **7** | ERPNext / Exotel / Twilio / Facebook integrations | Fan out | **Deferred** — feature-flag off |
+| **8** | Auth UI and the rest of the Desk | — | **Parked** — see below |
+
+### Phase 8 is not a port
+
+Frappe ships a **Desk** — auth screens and a generic admin UI — alongside the CRM app.
+This port replaces the app and drops the Desk, but the CRM assumes the Desk is present:
+`router.js:222` sends logged-out users to `/login`, and accepting an invitation redirects
+to a Desk-hosted set-password page. **So there is no way to onboard a second user today.**
+
+That work is real and wanted, but it is new product rather than a port — there is no
+upstream to be faithful to — so it is recorded in `specs/PHASE_8_AUTH_AND_DESK.md` and
+deliberately parked until phases 0–7 are complete.
 
 **Phases 0 and 2 must be single-agent.** Both define contracts that everything else
 depends on; splitting them produces divergent designs that then need reconciling.

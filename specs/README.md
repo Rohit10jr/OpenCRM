@@ -13,6 +13,13 @@ the frontend contract, and the settled architecture decisions. These specs assum
 | [`PHASE_5_ASYNC.md`](PHASE_5_ASYNC.md) | Celery jobs and schedules | Fan out | Provisional |
 | [`PHASE_6_REALTIME.md`](PHASE_6_REALTIME.md) | Django Channels | Fan out | Provisional |
 | [`PHASE_7_INTEGRATIONS.md`](PHASE_7_INTEGRATIONS.md) | ERPNext, Twilio, Exotel, Facebook | Fan out | Deferred |
+| [`PHASE_8_AUTH_AND_DESK.md`](PHASE_8_AUTH_AND_DESK.md) | Auth UI and the rest of the Desk | — | **Parked** |
+
+**Phase 8 is parked, not scheduled.** It is also the only phase that ports nothing:
+Frappe ships a Desk (auth screens, generic admin UI) alongside the CRM app, and this port
+dropped it. Blocking consequence recorded there — **there is currently no way to onboard
+a second user**, because accepting an invitation redirects to a Desk-hosted set-password
+page. Do not start it before phases 0–7 are done.
 
 ## What "Provisional" means
 
