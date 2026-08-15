@@ -19,7 +19,7 @@ from django.utils import timezone
 
 from frappe_core.assignment import register_todo_model
 from frappe_core.models import BaseDocument
-from frappe_core.naming import FieldValue, Hash, Prompt
+from frappe_core.naming import FieldValue, Hash, Prompt, append_number_if_name_exists
 from frappe_core.registry import register_doctype
 
 #: The four roles seeded as Django Groups. PHASE_2_PERMISSIONS.md section 5.
@@ -104,9 +104,26 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self) -> str:
         return str(self.name)
 
+    #: Frappe's two built-ins are named from ``first_name``, not from an email
+    #: (``frappe/core/doctype/user/user.py:152-153``), which is why they are literally
+    #: "Administrator" and "Guest" rather than addresses.
+    BUILTIN_NAMES = frozenset({"Administrator", "Guest"})
+
     def save(self, *args, **kwargs):
         if not self.full_name:
             self.full_name = " ".join(p for p in (self.first_name, self.last_name) if p)
+
+        # Port of ``User.autoname`` (frappe/core/doctype/user/user.py:150-156): the PK is
+        # the email, **lowercased and stripped**. Without this, "John@Example.com" and
+        # "john@example.com" are two different users - and because ``owner``,
+        # ``ToDo.allocated_to``, ``_assign`` entries and every ``@me`` filter compare
+        # this value as a string, the mismatch surfaces as silently missing rows rather
+        # than an error.
+        if self.name and str(self.name) not in self.BUILTIN_NAMES:
+            self.name = str(self.name).strip().lower()
+            if self.email:
+                self.email = str(self.email).strip().lower()
+
         return super().save(*args, **kwargs)
 
     @property
@@ -153,11 +170,15 @@ class Contact(BaseDocument):
     upstream recomputes them on validate from whichever row is flagged primary. Same
     here, in :meth:`sync_primary_values`.
 
-    > **NAMING - LOW CONFIDENCE.** Frappe names a Contact from its full name, with a
-    > numeric suffix on collision, but the exact template is not visible from this repo.
-    > Implemented as ``full name`` (+ ``-<company>`` when set), deduplicated with a
-    > numeric suffix. Flagged in PROGRESS.md; the frontend routes on this value
-    > (``/contacts/:contactId``), so confirm before shipping data.
+    **NAMING - RESOLVED** against ``frappe`` ``version-15``, the branch CRM ``main``
+    targets. Contact declares no ``autoname``; naming is a controller method
+    (``frappe/contacts/doctype/contact/contact.py:54-63``) - a seventh strategy beyond
+    the six in ``PHASE_0_FOUNDATION.md`` section 2. See :meth:`_assign_name`.
+
+    The earlier guess was wrong in three ways, all corrected: ``company_name`` is a
+    *fallback* rather than a suffix (``contact.py:463-473``), the first collision suffix
+    is ``-1`` rather than ``-2``, and an empty name raises instead of falling back to
+    the email address.
     """
 
     first_name = models.CharField(max_length=140, blank=True, default="")
@@ -203,22 +224,49 @@ class Contact(BaseDocument):
         }
 
     def build_full_name(self) -> str:
+        """Port of ``get_full_name`` (``frappe/contacts/doctype/contact/contact.py:463``).
+
+        ``company_name`` is a **fallback** used only when first/middle/last are all
+        empty - it is never a suffix.
+        """
         parts = [self.first_name, self.middle_name, self.last_name]
-        return " ".join(p.strip() for p in parts if p and p.strip())
+        full_name = " ".join(p.strip() for p in parts if p and p.strip())
+        if not full_name and self.company_name:
+            full_name = self.company_name
+        return full_name
+
+    def name_links_suffix(self) -> str:
+        """The ``-<first Dynamic Link>`` fragment upstream appends (contact.py:57-60).
+
+        Upstream iterates ``self.links`` and ``break``s, so only the *first* row counts.
+
+        ``Dynamic Link`` is a platform doctype outside phase 1 cluster 1, so there is
+        nothing to read yet and this returns "". Every CRM path that creates a Contact
+        (``crm_lead.py:213``, ``crm_deal.py:427``, ``install.py``, ``demo/``) sets
+        ``company_name`` but never appends to ``links``, so upstream's suffix does not
+        fire for CRM-created contacts either - the two agree today. **When Dynamic Link
+        is ported (it is also needed for ``CRM Call Log.links``), implement this method
+        and the naming becomes faithful with no other change.**
+        """
+        return ""
 
     def _assign_name(self) -> bool:
-        """Contact naming - see the class docstring's confidence note."""
+        """Port of ``Contact.autoname`` (contact.py:54-63).
+
+        Frappe declares no ``autoname`` in ``contact.json``; naming lives in a
+        controller method, which is a seventh strategy beyond the six in
+        ``PHASE_0_FOUNDATION.md`` section 2. ``crm/overrides/contact.py`` overrides only
+        ``default_list_data``, so this algorithm applies unchanged under the CRM app.
+
+        An empty name is deliberately **not** given a fallback: upstream reaches
+        ``validate_name`` with "" and raises "No Name Specified for Contact". CRM always
+        supplies one (``crm_lead.py:214`` uses ``first_name or lead_name``, and
+        ``lead_name`` itself falls back to the email local part), so raising is safe.
+        """
         if self.pk:
             return False
-        base = self.build_full_name() or self.email_id or "Contact"
-        if self.company_name:
-            base = f"{base}-{self.company_name}"
-        candidate = base
-        suffix = 1
-        while type(self)._default_manager.filter(pk=candidate).exists():
-            suffix += 1
-            candidate = f"{base}-{suffix}"
-        self.pk = candidate
+        base = self.build_full_name() + self.name_links_suffix()
+        self.pk = append_number_if_name_exists(type(self), base)
         return True
 
     def sync_primary_values(self) -> None:

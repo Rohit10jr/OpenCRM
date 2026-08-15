@@ -76,6 +76,11 @@ codex exec --approve-for-me "<task>"         # only if I ask Codex to make edits
 asks you to paste files — the review **did not happen**. Escalate a tier; do not accept
 it. Phases 0–2 were reviewed blind this way.
 
+**A run that does not return within ~10 minutes is also a failure.** Broad prompts over
+a large repo can run indefinitely. Re-run once with a narrower prompt — name the exact
+files and the exact claims to check rather than asking it to go looking — then escalate
+a tier if it times out again.
+
 ## Tier 3 — Claude subagent
 
 Spawn a **fresh** subagent, not a `fork`. A fresh subagent receives only the task

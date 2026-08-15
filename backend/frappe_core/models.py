@@ -171,8 +171,11 @@ class BaseDocument(models.Model, metaclass=DocumentBase):
             self._assign_name()
             # Frappe validates on insert, after naming, for every name however it was
             # produced - generated, prompt-supplied, or caller-forced (naming.py:181).
-            # ``pk`` is still None for autoincrement, which the database assigns.
-            if self.pk:
+            # ``is not None`` rather than a truth test: an *empty* name must reach
+            # validate_name so it raises "No Name Specified", which is upstream's
+            # behaviour and the only thing stopping a nameless row. ``None`` means
+            # autoincrement, where the database assigns the PK and there is nothing yet.
+            if self.pk is not None:
                 self.pk = naming_strategies.validate_name(
                     self.get_doctype(), str(self.pk), is_single=self.is_single()
                 )

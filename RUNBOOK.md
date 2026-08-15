@@ -189,6 +189,13 @@ I couldn't complete the review
 or if Codex asks you to paste files in. A review where Codex could not read the repo is
 not a review. Escalate to the next tier rather than accepting it.
 
+**Also treat it as FAILED if it does not return within ~10 minutes.** A broad prompt over
+a large repo can run indefinitely — it reads far more than you expect. Two options, in
+order: re-run once with a **narrower** prompt (name the specific files and the specific
+claims to check, rather than asking it to go find things), and if that also times out,
+escalate a tier. Record the timeout in `PROGRESS.md` the same way as any other failure —
+a review that never returned is not a review that passed.
+
 #### Tier 2 — Codex on PowerShell 5.1
 
 If tier 1 fails, retry the identical prompt with `pwsh` hidden, so Codex falls back to

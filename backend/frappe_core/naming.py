@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 
 from django.apps import apps
 from django.db import transaction
+from django.db.models.functions import Length
 
 DEFAULT_SERIES_DIGITS = 5
 
@@ -36,6 +37,36 @@ class NameError_(ValueError):
 #: Characters Frappe refuses in a document name. Only these two - slashes, spaces,
 #: ``#``, ``&`` and the rest are all legal names upstream.
 FORBIDDEN_NAME_CHARACTERS = "<>"
+
+
+def append_number_if_name_exists(model, value: str, separator: str = "-") -> str:
+    """Port of ``frappe.model.naming.append_number_if_name_exists`` (naming.py:506-530).
+
+    Returns ``value`` untouched when it is free. On collision it finds the **highest**
+    existing ``value-<n>`` and returns ``value-<n+1>``; when the base name is taken but
+    no numbered sibling exists yet, the first suffix is ``-1``.
+
+    Upstream orders by ``length(name) DESC, name DESC`` rather than numerically, so that
+    ``-10`` sorts above ``-9``; reproduced here with ``Length``.
+
+    Used by ``Contact`` (contact.py:63). Not one of the six ``autoname`` strategies - a
+    controller calls it directly.
+    """
+    manager = model._default_manager
+    if not manager.filter(pk=value).exists():
+        return value
+
+    pattern = f"^{re.escape(value)}{re.escape(separator)}[0-9]+$"
+    last = manager.filter(pk__regex=pattern).order_by(Length("pk").desc(), "-pk").first()
+
+    count = 1
+    if last is not None:
+        try:
+            count = int(str(last.pk).rsplit(separator, 1)[1]) + 1
+        except (IndexError, ValueError):  # pragma: no cover - defensive, mirrors cint()
+            count = 1
+
+    return f"{value}{separator}{count}"
 
 
 def validate_name(doctype: str, name: str, is_single: bool = False) -> str:

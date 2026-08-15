@@ -71,6 +71,15 @@ Two things follow, both implemented:
 The naming series counter must be atomic under concurrency — use a dedicated
 `NamingSeries` table with `select_for_update()`, not `max(id)+1`.
 
+### A seventh strategy: controller `autoname()`
+
+The six above are the JSON `autoname` values. Frappe also lets a **controller define an
+`autoname()` method**, which takes precedence and can implement anything. No CRM doctype
+uses this, but three *platform* doctypes do — `User`, `Contact` and `File`
+(`PHASE_1_MODELS.md` §1). `Contact`'s also calls `append_number_if_name_exists`
+(`frappe/model/naming.py:506-530`), which is ported in `frappe_core/naming.py` and
+returns the value untouched when free, else `-1`, `-2`, … taking **last + 1**.
+
 ---
 
 ## 3. `BaseDocument` — the standard fields
