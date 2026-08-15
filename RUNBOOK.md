@@ -4,33 +4,50 @@
 
 ## Scope
 
-Phases **3, 4, 5, 6**, in that order, on one new branch:
+**All four phases: 3, 4, 5, 6.** Each on its own branch, each cut from the previous
+phase's completed tip, each with its own progress file:
 
-```powershell
-git checkout -b phases-3-to-6
-```
+| Phase | Branch | Cut from | Progress file |
+|---|---|---|---|
+| 3 | `phase-3-endpoints` | `phase-0-foundation` | `PROGRESS_PHASE_3.md` |
+| 4 | `phase-4-metadata` | `phase-3-endpoints` | `PROGRESS_PHASE_4.md` |
+| 5 | `phase-5-async` | `phase-4-metadata` | `PROGRESS_PHASE_5.md` |
+| 6 | `phase-6-realtime` | `phase-5-async` | `PROGRESS_PHASE_6.md` |
 
-Phases 0-2 are **complete, reviewed and merged** on `phase-0-foundation` — 813 tests
-passing. Do not revisit them; if you believe one is wrong, log it rather than reopening it.
+`PROGRESS.md` is the phase 0-2 record — **do not append to it.** Each phase writes its
+own file in the same format.
+
+Phases 0-2 are **complete and reviewed** on `phase-0-foundation` — 813 tests passing. Do
+not revisit them; if you believe one is wrong, log it rather than reopening it.
 
 ## HARD STOP
 
 **After phase 6's gate passes, STOP.** Do not start phase 7 (integrations, deferred
 behind flags) or phase 8 (parked — it ports nothing and needs a human scope decision).
 
-## Order matters, and phase 3 is the big one
+## Order, and pacing
 
-**3 → 4 → 5 → 6.** Roughly 50 endpoints in phase 3 against 12 in phase 4 and less again
-after; the work is heavily front-loaded.
+**3 → 4 → 5 → 6.** Phase 4 comes after 3 rather than before it — the reverse of the
+earlier plan — because phase 0 already implemented `get_data`'s four-step column
+resolution and left `_load_saved_view` as a registered provider hook. Phase 3's metadata
+endpoints read that seam; they do not need phase 4 to have filled it.
 
-Phase 4 comes after 3 rather than before it this time — the reverse of the earlier plan —
-because phase 0 already implemented `get_data`'s four-step column resolution and left
-`_load_saved_view` as a registered provider hook. Phase 3's metadata endpoints read that
-seam; they do not need phase 4 to have filled it.
+**All four are expected to land.** Phase 3 is the largest (~50 endpoints) but 4, 5 and 6
+are progressively smaller and build on a framework layer that already exists. Do not
+treat phase 3 as the whole job.
 
-**If the window runs out mid-phase, stop cleanly.** Phase 3 complete with 4-6 untouched
-is a good outcome. Three phases done properly beats four half-done — that is what the
-gate is for.
+### Do not idle
+
+Stalling is the failure mode to avoid, not moving too fast.
+
+- **Fan out within a phase.** Phase 3's five module groups are independent, and so are
+  phase 4's components. Never two agents in one file; several files at once is fine.
+- **Blocked on one module? Move to another.** Do not serialise on a parkable question.
+- **Never wait on an external service.** See "Tests needing external services" below.
+- **Do not re-litigate settled decisions** (`PORT_PLAN.md` §10, `specs/AS_BUILT.md`).
+  Log the disagreement and keep going.
+- **When a gate passes, branch and start the next phase immediately.** The gate exists to
+  keep the work honest, not to provide a stopping point.
 
 ## Before you begin
 
@@ -56,7 +73,6 @@ Environment is prepared. Do not reconfigure it:
 - Frappe **framework**: `D:\02_Personal\01_OpenSource\02_FrameWorks\frappe` (`version-15`)
   — unavailable during phases 0-2, and several defects were only findable in it. The
   pairing `main` + `version-15` is what the CRM's own CI uses; do not read `develop`.
-  — unavailable during phases 0-2; several defects were only findable in it
 
 Backend goes in `backend/`. Create the venv there.
 
@@ -71,9 +87,9 @@ For each phase in **3, 4, 5, 6**:
 2. Implement it
 3. Write tests for its acceptance criteria — real tests, not assertions of intent
 4. Run the gate (below)
-5. Gate passes  → commit, log to PROGRESS.md, next phase
+5. Gate passes  → commit, write PROGRESS_PHASE_<N>.md, branch for the next phase
    Gate fails   → fix, re-run gate (ONCE)
-   Fails twice  → STOP. Log and halt.
+   Fails twice  → STOP. Log and halt. Do not branch.
 ```
 
 Phases run strictly in sequence. Within a phase you may fan out by module or cluster;
@@ -106,11 +122,31 @@ python manage.py migrate
 `pytest-django` builds and drops `test_opencrm` each run, proving migrations apply from
 empty. If it doesn't, fix that before proceeding.
 
+#### Tests that would need external services
+
+**A missing service must never block the gate.** Phases 5 and 6 look like they need
+infrastructure; almost none is actually required, because in-process substitutes exist:
+
+| Instead of | Use |
+|---|---|
+| A running Celery worker | `CELERY_TASK_ALWAYS_EAGER = True` — tasks run inline |
+| A running Celery Beat | Assert `app.conf.beat_schedule`; do not run the scheduler |
+| Redis as a channel layer | `InMemoryChannelLayer` in test settings |
+| A real WebSocket server | `channels.testing.WebsocketCommunicator` |
+| An SMTP server | `locmem` backend; assert `django.core.mail.outbox` |
+
+Write the test properly first. Reach for a skip only where the behaviour genuinely cannot
+be exercised in-process — a real broker round-trip, a live third-party API.
+
+When you do skip: `pytest.mark.skip` **with a reason naming what it would need**, and list
+it in that phase's progress file. An explicitly skipped test with a reason does not block
+the gate; a silently missing one is the thing to avoid.
+
 ### 3. Independent review — three tiers, tried in order
 
 The point of this step is a reviewer that **does not share your blind spots**. Try the
 tiers in order and stop at the first that genuinely works. **Record which tier you used
-in `PROGRESS.md`** — a phase reviewed at tier 3 has had a weaker check than one reviewed
+in that phase's `PROGRESS_PHASE_<N>.md`** — a phase reviewed at tier 3 has had a weaker check than one reviewed
 at tier 1, and the reader must be able to tell.
 
 | Tier | Reviewer | Strength |
@@ -129,7 +165,7 @@ Since the weakness is model correlation, isolating context further does not help
 `claude -p` buys nothing over a fresh subagent. Only a different model does. Across
 phases 0–2 Codex found 20 real defects precisely because it is one.
 
-If you land on tier 3, say so plainly in `PROGRESS.md` and treat the phase as less
+If you land on tier 3, say so plainly in the phase's progress file and treat it as less
 verified — less *diversely* covered, not less competently reviewed.
 
 #### Tier 1 — Codex on PowerShell 7 (default)
@@ -179,7 +215,7 @@ not a review. Escalate to the next tier rather than accepting it.
 a large repo can run indefinitely — it reads far more than you expect. Two options, in
 order: re-run once with a **narrower** prompt (name the specific files and the specific
 claims to check, rather than asking it to go find things), and if that also times out,
-escalate a tier. Record the timeout in `PROGRESS.md` the same way as any other failure —
+escalate a tier. Record the timeout in the phase's progress file like any other failure —
 a review that never returned is not a review that passed.
 
 #### Tier 2 — Codex on PowerShell 5.1
@@ -214,7 +250,8 @@ Because tier 3 shares your blind spots, add one instruction the other tiers don'
 reader who shares the author's assumptions would skip."*
 
 **Act on the findings.** Fix real defects. Where you disagree, record the disagreement
-and your reasoning in `PROGRESS.md` — never silently ignore it. **State the tier used.**
+and your reasoning in the phase's progress file — never silently ignore it. **State the
+tier used.**
 
 ### 4. Commit
 
@@ -226,7 +263,7 @@ One commit per phase, stating the phase and what landed.
 
 **If a gate fails twice on the same phase, STOP.**
 
-Write to `PROGRESS.md`: what failed, the actual error, what you tried, your best read of
+Write to `PROGRESS_PHASE_<N>.md`: what failed, the actual error, what you tried, your best read of
 the cause. Then halt.
 
 Do not work around a failing gate. Do not skip ahead. **Do not disable or weaken a test
@@ -237,13 +274,16 @@ A clean stop after phase 1 is far more useful than four phases of unverified cod
 
 ---
 
-## PROGRESS.md
+## PROGRESS_PHASE_<N>.md
 
-Create it at the repo root, append after every phase, pass or fail. This gets read first
-on return — make it scannable.
+One file per phase, at the repo root, on that phase's branch. Written when the phase ends
+— pass, fail or stop. This is what gets read first on return, so make it scannable.
+
+Do **not** append to `PROGRESS.md`; that is the phase 0-2 record and its Review
+Resolution section closes it out.
 
 ```markdown
-## Phase <N> — <PASS | FAILED | STOPPED>   [branch: <name>]
+# Phase <N> — <PASS | FAILED | STOPPED>   [branch: <name>]
 Started: <time>   Finished: <time>   Commit: <sha>
 
 **Built:** 2-3 lines on what actually landed.
@@ -316,14 +356,15 @@ be provisional after its phase shipped is worse than no status at all.
 
 ## Final report
 
-When phase 3's gate passes — or whenever you stop early — write a closing entry in
-`PROGRESS.md`:
+When phase 6's gate passes — or whenever you stop early — write `FINAL_REPORT.md` on the
+last branch you reached:
 
-- Which phases completed, on which branch, with commit SHAs
-- Total tests passing per branch
+- Which phases completed, on which branch, with commit SHAs and test counts
+- Any phase attempted but not finished, and exactly where it stopped
+- Every skipped test, with what it would need to run
 - Every decision made without the user, gathered in one place
-- Whether `phase-3-4-provisional` is worth keeping or should be redone after review
-- What phase 5 should tackle first
+- Which review tier each phase actually got
+- What the next session should tackle first
 - Anything you want a human to look at before the port continues
 
 Then stop.
