@@ -69,6 +69,22 @@ name IN (SELECT reference_name FROM ToDo
 (`PHASE_0_FOUNDATION.md` §3) and must not be trusted for access control. The
 `status != 'Cancelled'` filter is required — cancelled assignments do not grant access.
 
+#### The two definitions of "assigned" differ — verified
+
+| | Excluded statuses | Source |
+|---|---|---|
+| **Display** (`_assign`) | `Closed`, `Cancelled` | `crm/api/doc.py:614`; `frappe/desk/form/assign_to.py:37,163` |
+| **Permission** | `Cancelled` only | `crm/permissions/org_hierarchy.py:47,58` |
+
+So a **`Closed` ToDo still grants access** while no longer appearing in `_assign`. That
+is precisely why the permission layer must query `ToDo` rather than read the cache — the
+cache is deliberately narrower than the access rule.
+
+Originally inferred from two source sites and rated Medium confidence; now confirmed
+against the framework as well. **No third definition exists** — Frappe's own permission
+layer never reads `ToDo` (it uses `DocShare` and User Permissions), so ToDo-based access
+is entirely the CRM's `org_hierarchy` rule.
+
 ---
 
 ## 3. `CRM Sales Hierarchy` is a nested-set tree

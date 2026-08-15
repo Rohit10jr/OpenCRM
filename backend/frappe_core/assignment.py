@@ -43,7 +43,22 @@ from django.db.models.signals import post_delete, post_save, pre_save
 
 from frappe_core import registry
 
-#: Statuses that keep a ToDo out of the ``_assign`` cache (``api/doc.py:615``).
+# The two definitions of "assigned" differ, deliberately. VERIFIED against three
+# independent sources (this was previously inferred, and rated Medium confidence):
+#
+#   display     ("Closed", "Cancelled")  crm/api/doc.py:614
+#                                        frappe/desk/form/assign_to.py:37,163
+#   permission  ("Cancelled",)           crm/permissions/org_hierarchy.py:47,58
+#
+# So a **Closed** ToDo still grants access while no longer appearing in ``_assign``.
+# That is the whole reason the permission layer must query ToDo rather than read the
+# cache - the cache is deliberately narrower than the access rule.
+#
+# There is no third definition to reconcile: Frappe's own permission layer never reads
+# ToDo at all (it uses DocShare and User Permissions), so ToDo-based access is entirely
+# the CRM's org_hierarchy rule.
+
+#: Statuses that keep a ToDo out of the ``_assign`` cache.
 INACTIVE_FOR_DISPLAY = ("Closed", "Cancelled")
 
 #: Statuses that revoke access (PHASE_2_PERMISSIONS.md section 2). Phase 2 imports this

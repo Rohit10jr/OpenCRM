@@ -345,17 +345,33 @@ def get_data(
 
 
 def _selectable(entry, rows: list[str]) -> list[str]:
-    """Drop row keys the model has no column for.
+    """Validate the row keys and hand them to the query.
 
-    ``default_list_data()`` is authored against the Frappe doctype and can name a field
-    a partially-ported model does not carry yet. Upstream would raise; during the port
-    that would make every list view fail on a single missing column, so unknown keys are
-    skipped for the *query* while remaining in the returned ``rows`` (the frontend reads
-    ``rows`` to decide which columns to offer).
+    **This used to silently drop unknown keys.** That was a deliberate port-time
+    concession: ``default_list_data()`` is authored against the Frappe doctype, and while
+    models were half-built a single missing column would have broken an entire list view.
+    The concession carried a stated expiry - "revisit once phase 1 is complete, by then a
+    missing field is a genuine bug and should raise".
+
+    Phase 1 is complete and all 46 models were checked: **no ``default_list_data()``
+    names a field its model lacks**. So the concession is retired, and this now behaves
+    like every other field path - ``resolve_fields`` raises on an unknown name, for the
+    reason recorded there: silently dropping one lets a typo'd column quietly vanish from
+    a list view instead of failing loudly. Upstream raises here too.
+
+    The empty-``rows`` fallback stays: it is not an error, just nothing selected yet.
     """
+    if not rows:
+        return ["name"]
+
     available = concrete_field_names(entry.model)
-    selected = [r for r in rows if r in available]
-    return selected or ["name"]
+    unknown = [r for r in rows if r not in available]
+    if unknown:
+        raise ValidationError(
+            f"Unknown field{'s' if len(unknown) > 1 else ''} "
+            f"{', '.join(repr(u) for u in unknown)} for {entry.doctype}"
+        )
+    return list(rows)
 
 
 def _kanban(
