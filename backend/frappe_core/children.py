@@ -89,9 +89,14 @@ def replace_children(instance, fieldname: str, spec: dict, rows: list[dict]) -> 
 
     child_model._default_manager.filter(**base_filter).delete()
 
-    concrete = {
-        f.name for f in child_model._meta.get_fields() if getattr(f, "concrete", False)
-    }
+    # Both the field name and its attname, so a caller may pass either ``log_owner``
+    # (an instance) or ``log_owner_id`` (a raw PK). Without the attname, FK values
+    # supplied by PK were silently dropped and the column came back NULL.
+    concrete = set()
+    for f in child_model._meta.get_fields():
+        if getattr(f, "concrete", False):
+            concrete.add(f.name)
+            concrete.add(getattr(f, "attname", f.name))
     for index, row in enumerate(rows or [], start=1):
         payload = {k: v for k, v in (row or {}).items() if k in concrete and k != "name"}
         payload.update(base_filter)

@@ -24,9 +24,12 @@ section 4, which establishes that upstream computes them on write, not on a sche
 :meth:`CRMLead.apply_sla` / :meth:`CRMDeal.apply_sla` are the named seams.
 """
 
-from django.db import models
+from datetime import timedelta
 
-from frappe_core import assignment
+from django.db import models
+from django.utils import timezone
+
+from frappe_core import assignment, registry
 from frappe_core.exceptions import MandatoryError, ValidationError
 from frappe_core.models import AutoIncrementDocument, BaseDocument
 from frappe_core.naming import FieldValue, Hash, NamingSeries
@@ -169,6 +172,143 @@ class SLAFieldsMixin(models.Model):
         return None
 
 
+class StatusLifecycleMixin(models.Model):
+    """Default the status on create, and log every status transition.
+
+    Ports ``validate_status`` (``crm_lead.py:103-108``, ``crm_deal.py:107-112``) and
+    ``add_status_change_log`` (``crm_status_change_log.py:45-83``). Subclasses set
+    :attr:`status_model_name` and :attr:`default_status`.
+    """
+
+    #: ``"CRM Lead Status"`` or ``"CRM Deal Status"``.
+    status_model_name: str = ""
+    #: ``"New"`` for a lead, ``"Qualification"`` for a deal.
+    default_status: str = ""
+
+    class Meta:
+        abstract = True
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        instance._loaded_status = getattr(instance, "status_id", None)
+        return instance
+
+    def validate_status(self) -> None:
+        """Only fires on create, and only when the caller supplied nothing."""
+        if not self._state.adding or self.status_id:
+            return
+
+        status_model = registry.get_model(self.status_model_name)
+        if status_model._default_manager.filter(pk=self.default_status).exists():
+            self.status_id = self.default_status
+            return
+
+        first_open = (
+            status_model._default_manager.filter(type="Open")
+            .order_by("name")
+            .values_list("pk", flat=True)
+            .first()
+        )
+        if first_open:
+            self.status_id = first_open
+
+    def _status_type(self, status) -> str:
+        if not status:
+            return ""
+        status_model = registry.get_model(self.status_model_name)
+        return (
+            status_model._default_manager.filter(pk=status)
+            .values_list("type", flat=True)
+            .first()
+            or ""
+        )
+
+    def add_status_change_log(self, *, created: bool) -> None:
+        """``crm_status_change_log.py:45-83``.
+
+        Each row records a *period spent in* a status: ``from`` is the status held and
+        ``from_date`` when it began; ``to`` and ``to_date`` are filled in when the record
+        leaves it. So a transition closes the open row and opens a new one.
+
+        **Deliberate divergence.** Upstream resolves the status type against
+        ``"CRM Deal Status"`` unconditionally (``crm_status_change_log.py:46,51``) even
+        though ``crm_lead.py:92`` calls it for leads, whose statuses live in
+        ``CRM Lead Status``. Every lead log therefore gets an empty ``from_type`` and
+        ``to_type`` upstream. We resolve against the right table per doctype. Nothing
+        reads these fields today - not the frontend, not the backend - so the divergence
+        is invisible, and writing the correct value costs nothing.
+        """
+        from frappe_core import children
+
+        spec = children.discover_child_tables(type(self))["status_change_log"]
+        rows = children.read_children(self, spec)
+        now = timezone.now()
+        user = get_current_user()
+        to_status_type = self._status_type(self.status_id)
+
+        payload = [
+            {
+                "from": getattr(row, "from"),
+                "from_type": row.from_type,
+                "to": getattr(row, "to"),
+                "to_type": row.to_type,
+                "from_date": row.from_date,
+                "to_date": row.to_date,
+                "duration": row.duration,
+                "log_owner_id": row.log_owner_id,
+            }
+            for row in rows
+        ]
+
+        if not created:
+            previous = getattr(self, "_loaded_status", None)
+            if not payload and previous:
+                # Backfill an opening row dated a minute earlier, so the record that was
+                # already in a status before logging began still shows one.
+                payload.append(
+                    {
+                        "from": previous,
+                        "from_type": self._status_type(previous),
+                        "to": "",
+                        "to_type": "",
+                        "from_date": now - timedelta(minutes=1),
+                        "to_date": None,
+                        "duration": None,
+                        "log_owner_id": user,
+                    }
+                )
+            if payload:
+                last = payload[-1]
+                last["to"] = self.status_id or ""
+                last["to_type"] = to_status_type
+                last["to_date"] = now
+                last["log_owner_id"] = user
+                if last["from_date"]:
+                    last["duration"] = int((now - last["from_date"]).total_seconds())
+
+        payload.append(
+            {
+                "from": self.status_id or "",
+                "from_type": to_status_type,
+                "to": "",
+                "to_type": "",
+                "from_date": now,
+                "to_date": None,
+                "duration": None,
+                "log_owner_id": user,
+            }
+        )
+
+        children.replace_children(self, "status_change_log", spec, payload)
+
+    def sync_status_change_log(self, *, created: bool) -> None:
+        """Log only when the status actually moved - upstream's ``has_value_changed``."""
+        if not created and self.status_id == getattr(self, "_loaded_status", None):
+            return
+        self.add_status_change_log(created=created)
+
+
 class OwnerAssignmentMixin(models.Model):
     """Assign the record to its owner, as ``CRM Lead`` and ``CRM Deal`` both do.
 
@@ -262,8 +402,10 @@ class OwnerAssignmentMixin(models.Model):
 
 
 @register_doctype("CRM Lead")
-class CRMLead(OwnerAssignmentMixin, SLAFieldsMixin, BaseDocument):
+class CRMLead(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDocument):
     owner_field = "lead_owner"
+    status_model_name = "CRM Lead Status"
+    default_status = "New"
 
     naming_series = models.CharField(max_length=140, blank=True, default="CRM-LEAD-.YYYY.-")
     salutation = models.CharField(max_length=140, blank=True, default="")
@@ -410,10 +552,15 @@ class CRMLead(OwnerAssignmentMixin, SLAFieldsMixin, BaseDocument):
         self.run_validate()
 
     def save(self, *args, **kwargs):
+        self.validate_status()
         self.run_validate(ignore_mandatory=kwargs.pop("ignore_mandatory", False))
         self.apply_sla()
         creating = self._state.adding
+        status_moved = creating or self.status_id != getattr(self, "_loaded_status", None)
         result = super().save(*args, **kwargs)
+        if status_moved:
+            self.add_status_change_log(created=creating)
+        self._loaded_status = self.status_id
         # After the insert, because assignment references self.name.
         self.sync_owner_assignment(created=creating)
         self._loaded_owner = self._owner_value()
@@ -453,8 +600,10 @@ class CRMLead(OwnerAssignmentMixin, SLAFieldsMixin, BaseDocument):
 
 
 @register_doctype("CRM Deal")
-class CRMDeal(OwnerAssignmentMixin, SLAFieldsMixin, BaseDocument):
+class CRMDeal(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDocument):
     owner_field = "deal_owner"
+    status_model_name = "CRM Deal Status"
+    default_status = "Qualification"
 
     naming_series = models.CharField(max_length=140, blank=True, default="CRM-DEAL-.YYYY.-")
     organization = models.ForeignKey(
@@ -569,10 +718,15 @@ class CRMDeal(OwnerAssignmentMixin, SLAFieldsMixin, BaseDocument):
         self.validate_lost_reason()
 
     def save(self, *args, **kwargs):
+        self.validate_status()
         self.validate_lost_reason()
         self.apply_sla()
         creating = self._state.adding
+        status_moved = creating or self.status_id != getattr(self, "_loaded_status", None)
         result = super().save(*args, **kwargs)
+        if status_moved:
+            self.add_status_change_log(created=creating)
+        self._loaded_status = self.status_id
         self.sync_owner_assignment(created=creating)
         self._loaded_owner = self._owner_value()
         return result
