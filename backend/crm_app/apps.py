@@ -12,3 +12,14 @@ class CrmAppConfig(AppConfig):
         from crm_app.permissions import register
 
         register()
+
+        # C8: the three polymorphic child tables have no FK, so nothing cascades when
+        # their parent is deleted (frappe/model/delete_doc.py:207-227 does this
+        # explicitly upstream). Wire the equivalent onto every model that declares one.
+        from django.apps import apps as django_apps
+
+        from frappe_core.children import connect_cascade
+
+        for model in django_apps.get_app_config("crm_app").get_models():
+            if getattr(model, "POLYMORPHIC_CHILD_TABLES", None):
+                connect_cascade(model)

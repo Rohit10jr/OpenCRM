@@ -104,3 +104,48 @@ def replace_children(instance, fieldname: str, spec: dict, rows: list[dict]) -> 
         payload.setdefault("parentfield", fieldname)
         payload["idx"] = index
         child_model._default_manager.create(**payload)
+
+
+def delete_polymorphic_children(instance) -> int:
+    """C8 - delete a parent's polymorphic child rows.
+
+    Port of ``frappe/model/delete_doc.py:207-227``, which deletes every child table's
+    rows by ``{parenttype, parent}`` when a document is deleted.
+
+    Child tables with a real foreign key are already handled by Django's ``CASCADE``.
+    The three polymorphic ones (``CRM Products``, ``CRM Status Change Log``,
+    ``CRM Rolling Response Time``) cannot have one - each is embedded by *both* CRM Lead
+    and CRM Deal - so ``parent`` is a plain string and nothing cascades. Deleting a lead
+    left its product and status-log rows behind, keyed to an id that no longer resolves.
+
+    Returns the number of rows removed.
+    """
+    parent_doctype = type(instance).get_doctype()
+    removed = 0
+
+    for spec in discover_child_tables(type(instance)).values():
+        if not spec["polymorphic"]:
+            continue
+        count, _ = (
+            spec["model"]
+            ._default_manager.filter(parenttype=parent_doctype, parent=str(instance.pk))
+            .delete()
+        )
+        removed += count
+
+    return removed
+
+
+def _on_parent_delete(sender, instance, **kwargs):
+    delete_polymorphic_children(instance)
+
+
+def connect_cascade(model) -> None:
+    """Wire :func:`delete_polymorphic_children` to a parent model's ``post_delete``."""
+    from django.db.models.signals import post_delete
+
+    post_delete.connect(
+        _on_parent_delete,
+        sender=model,
+        dispatch_uid=f"frappe_core.children.cascade.{model._meta.label}",
+    )
