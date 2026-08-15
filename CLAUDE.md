@@ -41,21 +41,27 @@ django-treebeard (nested-set trees). Python 3.13.
 
 ---
 
-# Collaborating with Codex
+# Reviewer policy — three tiers
 
-Codex CLI is installed and I want you to use it as a second opinion.
+You write the code; something that does **not** share your blind spots reviews it.
+Try these in order, stop at the first that genuinely works, and always tell me which
+tier you used.
 
-**Setup**
-- codex-cli 0.147.0, on PATH as `codex`. Windows/PowerShell. Auth already configured.
+| Tier | Reviewer | Notes |
+|---|---|---|
+| **1** | Codex via PowerShell 7 | Preferred — different model, reads the repo itself |
+| **2** | Codex via PowerShell 5.1 | Same reviewer, fallback shell |
+| **3** | Claude subagent | **Degraded** — same model, correlated blind spots |
+
+Full procedure, including the per-phase prompts: `RUNBOOK.md` §3.
+
+## Tier 1 — Codex (default)
+
+- codex-cli 0.147.0, on PATH as `codex`. Auth already configured.
 - The interactive TUI needs a live terminal, so you **cannot** drive it. Use
   `codex exec` — headless: prompt in, report to stdout.
-- Codex reads the repo itself. Don't paste code into the prompt; point it at paths and
-  run from the repo root.
+- Codex reads the repo itself. Point it at paths; don't paste code in.
 
-**Division of labor:** you write the code, Codex reviews it. Second opinion, not a
-second editor.
-
-**Commands**
 ```powershell
 codex exec -s read-only "<review request>"   # review, cannot touch files
 codex exec review                            # built-in review subcommand
@@ -63,7 +69,22 @@ codex exec resume --last "<follow-up>"       # continue the same Codex session
 codex exec --approve-for-me "<task>"         # only if I ask Codex to make edits
 ```
 
-**Caveats**
+## Never trust the exit code
+
+**`codex exec` exits 0 even when it ran nothing.** If the output contains
+`CreateProcessAsUserW failed`, `windows sandbox: runner failed`, `SpawnChild`, or Codex
+asks you to paste files — the review **did not happen**. Escalate a tier; do not accept
+it. Phases 0–2 were reviewed blind this way.
+
+## Tier 3 — Claude subagent
+
+Spawn a **fresh** subagent, not a `fork` — a fork inherits the context that produced the
+bug, which is the opposite of a second opinion. Prefer a subagent over `claude -p`: no
+process startup, parallelisable, harness-managed. Use `claude -p` only if you are
+yourself a subagent and cannot spawn one.
+
+## Always
+
 - Blocking, ~1-2 min per call. Batch reviews rather than pinging after every edit.
 - Each `codex exec` is fresh context — use `resume --last` for iterative rounds.
-- Report Codex's findings to me, including where you disagree. Don't auto-apply them.
+- Report findings to me, including where you disagree. Don't auto-apply them.

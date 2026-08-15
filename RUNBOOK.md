@@ -115,9 +115,28 @@ python manage.py migrate
 `pytest-django` builds and drops `test_opencrm` each run, proving migrations apply from
 empty. If it doesn't, fix that before proceeding.
 
-### 3. Codex review — independent second opinion
+### 3. Independent review — three tiers, tried in order
 
-Run from the repo root, read-only so Codex cannot touch your files.
+The point of this step is a reviewer that **does not share your blind spots**. Try the
+tiers in order and stop at the first that genuinely works. **Record which tier you used
+in `PROGRESS.md`** — a phase reviewed at tier 3 has had a weaker check than one reviewed
+at tier 1, and the reader must be able to tell.
+
+| Tier | Reviewer | Strength |
+|---|---|---|
+| **1** | Codex via PowerShell 7 | **Preferred** — different model, reads the repo itself |
+| **2** | Codex via PowerShell 5.1 | Same reviewer, fallback shell |
+| **3** | Claude subagent | **Degraded** — same model, correlated blind spots |
+
+**Tier 3 is a real fallback, not an equivalent one.** A Claude subagent reviewing
+Claude's code shares the writer's assumptions; across phases 0–2 Codex found 20 real
+defects precisely because it did not. If you land on tier 3, say so plainly in
+`PROGRESS.md` and treat the phase as less verified, not equally verified.
+
+#### Tier 1 — Codex on PowerShell 7 (default)
+
+`pwsh` resolves to `C:\Users\New\pwsh7\pwsh.exe`. Run from the repo root, read-only so
+Codex cannot touch your files. Use the per-phase prompts below.
 
 **Phase 0:**
 ```powershell
@@ -144,8 +163,57 @@ codex exec -s read-only "Review the metadata layer in backend/ against specs/PHA
 codex exec -s read-only "Review the API endpoints in backend/ against crm/api/*.py at D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm and specs/PHASE_3_ENDPOINTS.md. Verify every dotted path and parameter name matches source exactly, responses are wrapped in {'message': ...}, frappe.throw messages are preserved verbatim, and no endpoint bypasses the phase-2 permission layer. Pay special attention to bulk operations being permission-checked per item. Report file:line."
 ```
 
+#### Detecting a failed review — do not trust the exit code
+
+**`codex exec` exits 0 even when it ran nothing.** A spawn failure is reported to the
+model, not to the process. Any check on `$LASTEXITCODE` alone will record a review that
+never happened — this is exactly how phases 0–2 were reviewed blind.
+
+Treat the review as **FAILED** if the output contains any of:
+
+```
+CreateProcessAsUserW failed
+windows sandbox: runner failed
+SpawnChild
+I couldn't complete the review
+```
+
+or if Codex asks you to paste files in. A review where Codex could not read the repo is
+not a review. Escalate to the next tier rather than accepting it.
+
+#### Tier 2 — Codex on PowerShell 5.1
+
+If tier 1 fails, retry the identical prompt with `pwsh` hidden, so Codex falls back to
+`powershell.exe`:
+
+```powershell
+$orig = $env:PATH
+$env:PATH = ($orig -split ';' | Where-Object { $_ -notlike '*WindowsApps*' -and $_ -notlike '*pwsh7*' }) -join ';'
+codex exec -s read-only "<same prompt>"
+$env:PATH = $orig
+```
+
+Apply the same failure detection. If it also fails, go to tier 3.
+
+#### Tier 3 — Claude subagent (degraded)
+
+Spawn a **fresh subagent** with the same per-phase prompt. Prefer this over
+`claude -p`: no process startup, parallelisable, and the harness notifies on completion
+rather than blocking on a call that might hang.
+
+- **Never use a `fork` subagent for review.** A fork inherits the writer's full context
+  — including the reasoning that produced the bug. Use a fresh agent with no
+  conversation context.
+- Give it the phase prompt verbatim, plus the repo path and the Frappe source path.
+- Use `claude -p "<prompt>"` **only** if you are yourself a subagent and cannot spawn
+  one, or if you want a hard context boundary. Verified working: Claude Code 2.1.232.
+
+Because tier 3 shares your blind spots, add one instruction the other tiers don't need:
+*"Assume the author was competent and the obvious things are right. Look for what a
+reader who shares the author's assumptions would skip."*
+
 **Act on the findings.** Fix real defects. Where you disagree, record the disagreement
-and your reasoning in `PROGRESS.md` — never silently ignore it.
+and your reasoning in `PROGRESS.md` — never silently ignore it. **State the tier used.**
 
 ### 4. Commit
 
@@ -181,7 +249,9 @@ Started: <time>   Finished: <time>   Commit: <sha>
 
 **Tests:** <count> passing. Any acceptance criterion NOT covered by a test, named.
 
-**Codex findings:** what it raised, what you fixed, what you disputed and why.
+**Review — tier <1 | 2 | 3>:** which reviewer actually ran, and why that tier (if not 1,
+what failed). Then: what it raised, what you fixed, what you disputed and why. If tier 3,
+say plainly that this phase had a weaker check than a Codex-reviewed one.
 
 **Decisions made without you:** every judgment call taken in the user's absence —
 especially the two open spec questions (SLA compute timing, error-envelope shape).
