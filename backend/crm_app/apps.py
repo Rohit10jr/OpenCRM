@@ -27,3 +27,9 @@ class CrmAppConfig(AppConfig):
         # Phase 3: importing the package runs the @whitelist decorators, which is what
         # makes each dotted path resolvable. Without this the method map is empty.
         from crm_app import api  # noqa: F401
+
+        # Phase 4: wire get_data's saved-view seam. Registered after the api import so
+        # every doctype is in the registry by the time we enumerate it.
+        from crm_app import metadata_hooks
+
+        metadata_hooks.register()

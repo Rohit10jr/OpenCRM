@@ -1,9 +1,18 @@
 # Phase 4 — Metadata Layer
 
-> **PROVISIONAL** — flip this header to Authoritative when your gate passes.
+> **BUILT** — phase 4 landed on `phase-4-metadata`, 1003 tests passing, reviewed.
+> See `PROGRESS_PHASE_4.md` for what was built and what is still open, and
+> `specs/AS_BUILT.md` for the helpers it added.
 >
-> **Read `specs/AS_BUILT.md` first.** It lists what phases 0-2 actually built; where it
-> and this spec disagree, it wins.
+> **C7 is closed** and **C6 is closed**. The allowlists below (§3) are now keyed on the
+> Frappe fieldtype, read from generated DocType metadata, so they are transcriptions of
+> the source rather than translations of it. The kanban gaps §2a listed — manual
+> ordering and the badge counts — are implemented.
+>
+> One thing this spec did not anticipate: the whole phase needed a **field-metadata
+> layer** first (`frappe_core.field_meta`), because the Frappe fieldtype and the form
+> layout order are both unrecoverable from the Django models. It is generated from the
+> DocType JSON and committed.
 
 **Fan out.** Runs *after* phase 3, not before it — phase 0 already built `get_data`'s
 four-step resolution and left `_load_saved_view` as a registered provider, so phase 3's

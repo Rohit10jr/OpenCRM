@@ -756,14 +756,37 @@ def test_a_user_with_no_hierarchy_row_has_no_subtree(users):
 # ---------------------------------------------------------------------------
 
 
-def test_only_the_three_upstream_doctypes_have_row_rules():
-    """``crm/hooks.py:134-144`` registers exactly these three."""
+def test_exactly_the_intended_doctypes_have_row_rules():
+    """The registered set, stated explicitly so an accidental addition is caught.
+
+    ``crm/hooks.py:134-144`` registers three. **Phase 4 deliberately added three more**,
+    after a review found them reachable through the generic ``/api/resource/`` route:
+    upstream protects them with DocType role permissions, which this port does not
+    model, so with no hook they were world-readable and world-writable. See
+    ``crm_app/permissions/metadata_docs.py``.
+    """
     with_rules = {
         dt
         for dt in registry.all_doctypes()
         if registry.get_entry(dt).permission_query_conditions is not None
     }
-    assert with_rules == {"CRM Lead", "CRM Deal", "CRM Notification"}
+    upstream = {"CRM Lead", "CRM Deal", "CRM Notification"}
+    added_by_phase_4 = {"CRM View Settings", "CRM Form Script", "CRM Fields Layout"}
+    assert with_rules == upstream | added_by_phase_4
+
+
+def test_the_upstream_three_still_use_the_org_hierarchy_rule():
+    """The phase-4 additions must not have displaced the originals."""
+    from crm_app.permissions import org_hierarchy
+
+    assert (
+        registry.get_entry("CRM Lead").permission_query_conditions
+        is org_hierarchy.get_lead_permission_query_conditions
+    )
+    assert (
+        registry.get_entry("CRM Deal").permission_query_conditions
+        is org_hierarchy.get_deal_permission_query_conditions
+    )
 
 
 def test_other_doctypes_are_unrestricted(records, users):

@@ -288,6 +288,10 @@ _DIRECT_ACCESS_ALLOWED = {
     "settings.py",
     "views.py",
     "dashboard.py",
+    # Phase 4. Saved views are fetched by primary key and then gated by
+    # `check_permission`, which is CRM View Settings' own model (owner / public+Sales
+    # Manager / System Manager) rather than the phase-2 row rule.
+    "view_settings.py",
 }
 
 
@@ -331,6 +335,7 @@ def test_the_permission_bypass_allowlist_is_justified():
                 "only_for",
                 "_roles(",
                 "sales_user_only",
+                "check_permission",
             )
         ):
             unchecked.append(name)

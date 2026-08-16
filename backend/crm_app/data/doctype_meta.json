@@ -1,0 +1,3020 @@
+{
+ "CRM Call Log": {
+  "autoname": "field:id",
+  "fields": [
+   {
+    "fieldname": "id",
+    "fieldtype": "Data",
+    "label": "ID"
+   },
+   {
+    "fieldname": "from",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "From Number",
+    "reqd": 1
+   },
+   {
+    "fieldname": "status",
+    "fieldtype": "Select",
+    "in_standard_filter": 1,
+    "label": "Status",
+    "options": "Initiated\nRinging\nIn Progress\nCompleted\nFailed\nBusy\nNo Answer\nQueued\nCanceled",
+    "reqd": 1
+   },
+   {
+    "fieldname": "start_time",
+    "fieldtype": "Datetime",
+    "label": "Start Time"
+   },
+   {
+    "fieldname": "medium",
+    "fieldtype": "Data",
+    "label": "Medium"
+   },
+   {
+    "fieldname": "column_break_ufnp",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "type",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Type",
+    "options": "Incoming\nOutgoing",
+    "reqd": 1
+   },
+   {
+    "fieldname": "to",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "To Number",
+    "reqd": 1
+   },
+   {
+    "fieldname": "duration",
+    "fieldtype": "Duration",
+    "in_list_view": 1,
+    "label": "Duration"
+   },
+   {
+    "fieldname": "recording_url",
+    "fieldtype": "Small Text",
+    "label": "Recording URL"
+   },
+   {
+    "fieldname": "end_time",
+    "fieldtype": "Datetime",
+    "label": "End Time"
+   },
+   {
+    "fieldname": "note",
+    "fieldtype": "Link",
+    "label": "Note",
+    "options": "FCRM Note"
+   },
+   {
+    "fieldname": "receiver",
+    "fieldtype": "Link",
+    "label": "Call Received By",
+    "options": "User"
+   },
+   {
+    "fieldname": "caller",
+    "fieldtype": "Link",
+    "label": "Caller",
+    "options": "User"
+   },
+   {
+    "default": "CRM Lead",
+    "fieldname": "reference_doctype",
+    "fieldtype": "Link",
+    "label": "Reference Document Type",
+    "options": "DocType"
+   },
+   {
+    "fieldname": "reference_docname",
+    "fieldtype": "Dynamic Link",
+    "label": "Reference Name",
+    "options": "reference_doctype"
+   },
+   {
+    "fieldname": "section_break_kebz",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "links",
+    "fieldtype": "Table",
+    "label": "Links",
+    "options": "Dynamic Link"
+   },
+   {
+    "fieldname": "telephony_medium",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Telephony Medium",
+    "options": "\nManual\nTwilio\nExotel",
+    "read_only": 1
+   },
+   {
+    "fieldname": "section_break_gyqe",
+    "fieldtype": "Section Break"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM Communication Status": {
+  "autoname": "field:status",
+  "fields": [
+   {
+    "fieldname": "status",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Status",
+    "reqd": 1
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM Contacts": {
+  "autoname": null,
+  "fields": [
+   {
+    "fieldname": "contact",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "Contact",
+    "options": "Contact"
+   },
+   {
+    "fieldname": "full_name",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Full Name",
+    "read_only": 1
+   },
+   {
+    "fieldname": "email",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Email",
+    "read_only": 1
+   },
+   {
+    "fieldname": "column_break_uvny",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "mobile_no",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Mobile No.",
+    "options": "Phone",
+    "read_only": 1
+   },
+   {
+    "fieldname": "phone",
+    "fieldtype": "Data",
+    "label": "Phone",
+    "options": "Phone",
+    "read_only": 1
+   },
+   {
+    "fieldname": "gender",
+    "fieldtype": "Link",
+    "label": "Gender",
+    "options": "Gender",
+    "read_only": 1
+   },
+   {
+    "default": "0",
+    "fieldname": "is_primary",
+    "fieldtype": "Check",
+    "in_list_view": 1,
+    "label": "Is Primary"
+   }
+  ],
+  "issingle": 0,
+  "istable": 1,
+  "title_field": null
+ },
+ "CRM Dashboard": {
+  "autoname": "field:title",
+  "fields": [
+   {
+    "fieldname": "column_break_exbw",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "section_break_hfza",
+    "fieldtype": "Section Break"
+   },
+   {
+    "default": "[]",
+    "fieldname": "layout",
+    "fieldtype": "Code",
+    "label": "Layout",
+    "options": "JSON"
+   },
+   {
+    "fieldname": "title",
+    "fieldtype": "Data",
+    "label": "Name"
+   },
+   {
+    "fieldname": "user",
+    "fieldtype": "Link",
+    "label": "User",
+    "options": "User"
+   },
+   {
+    "default": "0",
+    "fieldname": "private",
+    "fieldtype": "Check",
+    "label": "Private"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": "title"
+ },
+ "CRM Deal": {
+  "autoname": "naming_series:",
+  "fields": [
+   {
+    "fieldname": "organization",
+    "fieldtype": "Link",
+    "in_standard_filter": 1,
+    "label": "Organization",
+    "options": "CRM Organization"
+   },
+   {
+    "fieldname": "probability",
+    "fieldtype": "Percent",
+    "label": "Probability"
+   },
+   {
+    "fieldname": "annual_revenue",
+    "fieldtype": "Currency",
+    "label": "Annual Revenue",
+    "options": "currency"
+   },
+   {
+    "fieldname": "website",
+    "fieldtype": "Data",
+    "label": "Website"
+   },
+   {
+    "fieldname": "next_step",
+    "fieldtype": "Data",
+    "label": "Next Step"
+   },
+   {
+    "fieldname": "lead",
+    "fieldtype": "Link",
+    "label": "Lead",
+    "options": "CRM Lead"
+   },
+   {
+    "fieldname": "deal_owner",
+    "fieldtype": "Link",
+    "label": "Deal Owner",
+    "options": "User"
+   },
+   {
+    "default": "CRM-DEAL-.YYYY.-",
+    "fieldname": "naming_series",
+    "fieldtype": "Select",
+    "label": "Naming Series",
+    "options": "CRM-DEAL-.YYYY.-"
+   },
+   {
+    "fieldname": "contacts_tab",
+    "fieldtype": "Tab Break",
+    "label": "Contacts"
+   },
+   {
+    "fieldname": "email",
+    "fieldtype": "Data",
+    "in_standard_filter": 1,
+    "label": "Primary email",
+    "options": "Email"
+   },
+   {
+    "fieldname": "mobile_no",
+    "fieldtype": "Data",
+    "label": "Primary mobile no",
+    "options": "Phone"
+   },
+   {
+    "fieldname": "status",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Status",
+    "options": "CRM Deal Status",
+    "reqd": 1
+   },
+   {
+    "fieldname": "contacts",
+    "fieldtype": "Table",
+    "label": "Contacts",
+    "options": "CRM Contacts"
+   },
+   {
+    "fieldname": "organization_tab",
+    "fieldtype": "Tab Break",
+    "label": "Organization"
+   },
+   {
+    "fieldname": "sla_tab",
+    "fieldtype": "Tab Break",
+    "label": "SLA",
+    "read_only": 1
+   },
+   {
+    "fieldname": "sla",
+    "fieldtype": "Link",
+    "label": "SLA",
+    "options": "CRM Service Level Agreement"
+   },
+   {
+    "fieldname": "response_by",
+    "fieldtype": "Datetime",
+    "label": "Response By",
+    "read_only": 1
+   },
+   {
+    "fieldname": "column_break_pfvq",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "sla_status",
+    "fieldtype": "Select",
+    "label": "SLA Status",
+    "options": "\nFirst Response Due\nRolling Response Due\nFailed\nFulfilled",
+    "read_only": 1
+   },
+   {
+    "fieldname": "sla_creation",
+    "fieldtype": "Datetime",
+    "label": "SLA Creation",
+    "read_only": 1
+   },
+   {
+    "fieldname": "response_details_section",
+    "fieldtype": "Section Break",
+    "label": "Response Details"
+   },
+   {
+    "fieldname": "column_break_hpvj",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "first_response_time",
+    "fieldtype": "Duration",
+    "label": "First Response Time",
+    "read_only": 1
+   },
+   {
+    "fieldname": "first_responded_on",
+    "fieldtype": "Datetime",
+    "label": "First Responded On",
+    "read_only": 1
+   },
+   {
+    "default": "Open",
+    "fieldname": "communication_status",
+    "fieldtype": "Link",
+    "label": "Communication Status",
+    "options": "CRM Communication Status"
+   },
+   {
+    "fieldname": "territory",
+    "fieldtype": "Link",
+    "label": "Territory",
+    "options": "CRM Territory"
+   },
+   {
+    "fieldname": "source",
+    "fieldtype": "Link",
+    "label": "Source",
+    "options": "CRM Lead Source"
+   },
+   {
+    "fieldname": "no_of_employees",
+    "fieldtype": "Select",
+    "label": "No. of Employees",
+    "options": "1-10\n11-50\n51-200\n201-500\n501-1000\n1000+"
+   },
+   {
+    "fieldname": "job_title",
+    "fieldtype": "Data",
+    "label": "Job Title"
+   },
+   {
+    "fieldname": "phone",
+    "fieldtype": "Data",
+    "label": "Primary phone",
+    "options": "Phone"
+   },
+   {
+    "fieldname": "log_tab",
+    "fieldtype": "Tab Break",
+    "label": "Log",
+    "read_only": 1
+   },
+   {
+    "fieldname": "status_change_log",
+    "fieldtype": "Table",
+    "label": "Status Change Log",
+    "options": "CRM Status Change Log"
+   },
+   {
+    "fieldname": "lead_name",
+    "fieldtype": "Data",
+    "label": "Lead Name"
+   },
+   {
+    "fieldname": "column_break_ijan",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "lead_details_tab",
+    "fieldtype": "Tab Break",
+    "label": "Lead Details"
+   },
+   {
+    "fieldname": "column_break_wsde",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "organization_details_section",
+    "fieldtype": "Section Break",
+    "label": "Organization Details"
+   },
+   {
+    "fieldname": "organization_name",
+    "fieldtype": "Data",
+    "label": "Organization Name"
+   },
+   {
+    "fieldname": "column_break_xbyf",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "industry",
+    "fieldtype": "Link",
+    "label": "Industry",
+    "options": "CRM Industry"
+   },
+   {
+    "fieldname": "person_section",
+    "fieldtype": "Section Break",
+    "label": "Person"
+   },
+   {
+    "fieldname": "salutation",
+    "fieldtype": "Link",
+    "label": "Salutation",
+    "options": "Salutation"
+   },
+   {
+    "fieldname": "first_name",
+    "fieldtype": "Data",
+    "label": "First name"
+   },
+   {
+    "fieldname": "last_name",
+    "fieldtype": "Data",
+    "label": "Last name"
+   },
+   {
+    "fieldname": "column_break_xjmy",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "gender",
+    "fieldtype": "Link",
+    "label": "Gender",
+    "options": "Gender"
+   },
+   {
+    "fieldname": "contact",
+    "fieldtype": "Link",
+    "label": "Contact",
+    "options": "Contact"
+   },
+   {
+    "fieldname": "currency",
+    "fieldtype": "Link",
+    "label": "Currency",
+    "options": "Currency"
+   },
+   {
+    "fieldname": "products_tab",
+    "fieldtype": "Tab Break",
+    "label": "Products"
+   },
+   {
+    "fieldname": "products",
+    "fieldtype": "Table",
+    "label": "Products",
+    "options": "CRM Products"
+   },
+   {
+    "fieldname": "section_break_ccbj",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "column_break_udbq",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "total",
+    "fieldtype": "Currency",
+    "label": "Total",
+    "options": "currency",
+    "read_only": 1
+   },
+   {
+    "fieldname": "net_total",
+    "fieldtype": "Currency",
+    "label": "Net Total",
+    "options": "currency",
+    "read_only": 1
+   },
+   {
+    "fieldname": "section_break_jgpm",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "deal_value",
+    "fieldtype": "Currency",
+    "label": "Deal Value",
+    "options": "currency"
+   },
+   {
+    "fieldname": "column_break_kpxa",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "lost_reason",
+    "fieldtype": "Link",
+    "label": "Lost Reason",
+    "options": "CRM Lost Reason"
+   },
+   {
+    "fieldname": "lost_notes",
+    "fieldtype": "Text",
+    "label": "Lost Notes"
+   },
+   {
+    "default": "1",
+    "fieldname": "exchange_rate",
+    "fieldtype": "Float",
+    "label": "Exchange Rate"
+   },
+   {
+    "fieldname": "expected_deal_value",
+    "fieldtype": "Currency",
+    "label": "Expected Deal Value",
+    "options": "currency"
+   },
+   {
+    "fieldname": "expected_closure_date",
+    "fieldtype": "Date",
+    "label": "Expected Closure Date"
+   },
+   {
+    "fieldname": "closed_date",
+    "fieldtype": "Date",
+    "label": "Closed Date"
+   },
+   {
+    "fieldname": "section_break_mwvg",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "rolling_responses",
+    "fieldtype": "Table",
+    "label": "Rolling Responses",
+    "options": "CRM Rolling Response Time"
+   },
+   {
+    "fieldname": "section_break_jgdr",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "last_response_time",
+    "fieldtype": "Duration",
+    "label": "Last Response Time",
+    "read_only": 1
+   },
+   {
+    "fieldname": "column_break_evzj",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "last_responded_on",
+    "fieldtype": "Datetime",
+    "label": "Last Responded On",
+    "read_only": 1
+   },
+   {
+    "fieldname": "lost_details_tab",
+    "fieldtype": "Tab Break",
+    "label": "Lost Details"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": "organization"
+ },
+ "CRM Deal Status": {
+  "autoname": "field:deal_status",
+  "fields": [
+   {
+    "default": "gray",
+    "fieldname": "color",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "label": "Color",
+    "options": "black\ngray\nblue\ngreen\nred\npink\norange\namber\nyellow\ncyan\nteal\nviolet\npurple"
+   },
+   {
+    "fieldname": "deal_status",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Status",
+    "reqd": 1
+   },
+   {
+    "fieldname": "position",
+    "fieldtype": "Int",
+    "in_list_view": 1,
+    "label": "Position"
+   },
+   {
+    "fieldname": "probability",
+    "fieldtype": "Percent",
+    "in_list_view": 1,
+    "label": "Probability"
+   },
+   {
+    "default": "Open",
+    "fieldname": "type",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "label": "Type",
+    "options": "Open\nOngoing\nOn Hold\nWon\nLost"
+   },
+   {
+    "fieldname": "column_break_ojiu",
+    "fieldtype": "Column Break"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM Dropdown Item": {
+  "autoname": null,
+  "fields": [
+   {
+    "fieldname": "label",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Label"
+   },
+   {
+    "fieldname": "type",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "label": "Type",
+    "options": "Route\nSeparator"
+   },
+   {
+    "fieldname": "route",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Route"
+   },
+   {
+    "default": "0",
+    "fieldname": "hidden",
+    "fieldtype": "Check",
+    "in_list_view": 1,
+    "label": "Hidden"
+   },
+   {
+    "default": "0",
+    "fieldname": "is_standard",
+    "fieldtype": "Check",
+    "label": "Is Standard",
+    "read_only": 1
+   },
+   {
+    "fieldname": "column_break_mvbq",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "icon",
+    "fieldtype": "Code",
+    "label": "Icon"
+   },
+   {
+    "default": "1",
+    "fieldname": "open_in_new_window",
+    "fieldtype": "Check",
+    "label": "Open in new window"
+   },
+   {
+    "fieldname": "name1",
+    "fieldtype": "Data",
+    "label": "Name",
+    "read_only": 1
+   }
+  ],
+  "issingle": 0,
+  "istable": 1,
+  "title_field": null
+ },
+ "CRM Exotel Settings": {
+  "autoname": null,
+  "fields": [
+   {
+    "default": "0",
+    "fieldname": "enabled",
+    "fieldtype": "Check",
+    "label": "Enabled"
+   },
+   {
+    "fieldname": "section_break_kfez",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "account_sid",
+    "fieldtype": "Data",
+    "label": "Account SID"
+   },
+   {
+    "fieldname": "section_break_iuct",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "column_break_hyen",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "api_key",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "API Key"
+   },
+   {
+    "fieldname": "column_break_uxtz",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "api_token",
+    "fieldtype": "Password",
+    "in_list_view": 1,
+    "label": "API Token"
+   },
+   {
+    "default": "0",
+    "fieldname": "record_call",
+    "fieldtype": "Check",
+    "label": "Record Outgoing Calls"
+   },
+   {
+    "fieldname": "column_break_qwfn",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "webhook_verify_token",
+    "fieldtype": "Data",
+    "label": "Webhook Verify Token"
+   },
+   {
+    "fieldname": "subdomain",
+    "fieldtype": "Data",
+    "label": "Subdomain"
+   }
+  ],
+  "issingle": 1,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM Fields Layout": {
+  "autoname": "format:{dt}-{type}",
+  "fields": [
+   {
+    "fieldname": "dt",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Document Type",
+    "options": "DocType"
+   },
+   {
+    "fieldname": "type",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Type",
+    "options": "Quick Entry\nSide Panel\nData Fields\nGrid Row\nRequired Fields"
+   },
+   {
+    "fieldname": "section_break_ttpm",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "layout",
+    "fieldtype": "Code",
+    "label": "Layout",
+    "options": "JSON"
+   },
+   {
+    "fieldname": "column_break_post",
+    "fieldtype": "Column Break"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM Form Script": {
+  "autoname": "prompt",
+  "fields": [
+   {
+    "fieldname": "column_break_gboh",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "section_break_xeox",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "dt",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "DocType",
+    "options": "DocType",
+    "reqd": 1
+   },
+   {
+    "default": "0",
+    "fieldname": "enabled",
+    "fieldtype": "Check",
+    "hidden": 1,
+    "label": "Enabled"
+   },
+   {
+    "default": "function setupForm({ doc }) {\n    return {\n        actions: [],\n    }\n}",
+    "fieldname": "script",
+    "fieldtype": "Code",
+    "label": "Script",
+    "options": "JS"
+   },
+   {
+    "default": "Form",
+    "fieldname": "view",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "label": "Apply To",
+    "options": "Form\nList"
+   },
+   {
+    "default": "0",
+    "fieldname": "is_standard",
+    "fieldtype": "Check",
+    "label": "Is Standard"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM Global Settings": {
+  "autoname": "hash",
+  "fields": [
+   {
+    "default": "DocType",
+    "fieldname": "dt",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "DocType",
+    "options": "DocType",
+    "reqd": 1
+   },
+   {
+    "fieldname": "column_break_kipp",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "type",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "label": "Type",
+    "options": "Quick Filters\nSidebar Items",
+    "reqd": 1
+   },
+   {
+    "fieldname": "section_break_vass",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "json",
+    "fieldtype": "JSON",
+    "label": "JSON"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM Holiday": {
+  "autoname": null,
+  "fields": [
+   {
+    "fieldname": "date",
+    "fieldtype": "Date",
+    "in_list_view": 1,
+    "label": "Date",
+    "reqd": 1
+   },
+   {
+    "fieldname": "column_break_xzyo",
+    "fieldtype": "Column Break"
+   },
+   {
+    "default": "0",
+    "fieldname": "weekly_off",
+    "fieldtype": "Check",
+    "label": "Weekly Off"
+   },
+   {
+    "fieldname": "section_break_zenz",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "description",
+    "fieldtype": "Text Editor",
+    "in_list_view": 1,
+    "label": "Description",
+    "reqd": 1
+   }
+  ],
+  "issingle": 0,
+  "istable": 1,
+  "title_field": null
+ },
+ "CRM Holiday List": {
+  "autoname": "field:holiday_list_name",
+  "fields": [
+   {
+    "fieldname": "holiday_list_name",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Holiday List Name",
+    "reqd": 1
+   },
+   {
+    "fieldname": "from_date",
+    "fieldtype": "Date",
+    "in_list_view": 1,
+    "label": "From Date",
+    "reqd": 1
+   },
+   {
+    "fieldname": "to_date",
+    "fieldtype": "Date",
+    "in_list_view": 1,
+    "label": "To Date",
+    "reqd": 1
+   },
+   {
+    "fieldname": "column_break_qwqc",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "total_holidays",
+    "fieldtype": "Int",
+    "label": "Total Holidays"
+   },
+   {
+    "fieldname": "add_weekly_holidays_section",
+    "fieldtype": "Section Break",
+    "label": "Add Weekly Holidays"
+   },
+   {
+    "fieldname": "weekly_off",
+    "fieldtype": "Select",
+    "label": "Weekly Off",
+    "options": "\nMonday\nTuesday\nWednesday\nThursday\nFriday\nSaturday\nSunday"
+   },
+   {
+    "fieldname": "add_to_holidays",
+    "fieldtype": "Button",
+    "label": "Add to Holidays",
+    "options": "add_to_holidays"
+   },
+   {
+    "fieldname": "holidays_section",
+    "fieldtype": "Section Break",
+    "label": "Holidays"
+   },
+   {
+    "fieldname": "clear_table",
+    "fieldtype": "Button",
+    "label": "Clear Table",
+    "options": "clear_table"
+   },
+   {
+    "fieldname": "holidays",
+    "fieldtype": "Table",
+    "label": "Holidays",
+    "options": "CRM Holiday"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM Industry": {
+  "autoname": "field:industry",
+  "fields": [
+   {
+    "fieldname": "industry",
+    "fieldtype": "Data",
+    "label": "Industry"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM Invitation": {
+  "autoname": null,
+  "fields": [
+   {
+    "fieldname": "email",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Email",
+    "reqd": 1
+   },
+   {
+    "fieldname": "role",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "label": "Role",
+    "options": "\nSales User\nSales Manager\nSystem Manager",
+    "reqd": 1
+   },
+   {
+    "fieldname": "key",
+    "fieldtype": "Data",
+    "label": "Key"
+   },
+   {
+    "fieldname": "invited_by",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "Invited By",
+    "options": "User"
+   },
+   {
+    "fieldname": "column_break_dsuz",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "status",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "label": "Status",
+    "options": "\nPending\nAccepted\nExpired"
+   },
+   {
+    "fieldname": "email_sent_at",
+    "fieldtype": "Datetime",
+    "label": "Email Sent At"
+   },
+   {
+    "fieldname": "accepted_at",
+    "fieldtype": "Datetime",
+    "label": "Accepted At"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM Lead": {
+  "autoname": "naming_series:",
+  "fields": [
+   {
+    "default": "CRM-LEAD-.YYYY.-",
+    "fieldname": "naming_series",
+    "fieldtype": "Select",
+    "label": "Series",
+    "options": "CRM-LEAD-.YYYY.-"
+   },
+   {
+    "fieldname": "salutation",
+    "fieldtype": "Link",
+    "label": "Salutation",
+    "options": "Salutation"
+   },
+   {
+    "fieldname": "first_name",
+    "fieldtype": "Data",
+    "label": "First Name",
+    "reqd": 1
+   },
+   {
+    "fieldname": "middle_name",
+    "fieldtype": "Data",
+    "label": "Middle Name"
+   },
+   {
+    "fieldname": "last_name",
+    "fieldtype": "Data",
+    "label": "Last Name"
+   },
+   {
+    "fieldname": "gender",
+    "fieldtype": "Link",
+    "label": "Gender",
+    "options": "Gender"
+   },
+   {
+    "fieldname": "status",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Status",
+    "options": "CRM Lead Status",
+    "reqd": 1
+   },
+   {
+    "fieldname": "email",
+    "fieldtype": "Data",
+    "in_standard_filter": 1,
+    "label": "Email",
+    "options": "Email"
+   },
+   {
+    "fieldname": "website",
+    "fieldtype": "Data",
+    "label": "Website"
+   },
+   {
+    "fieldname": "mobile_no",
+    "fieldtype": "Data",
+    "label": "Mobile No.",
+    "options": "Phone"
+   },
+   {
+    "fieldname": "phone",
+    "fieldtype": "Data",
+    "label": "Phone",
+    "options": "Phone"
+   },
+   {
+    "fieldname": "section_break_uixv",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "column_break_dbsv",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "no_of_employees",
+    "fieldtype": "Select",
+    "label": "No. of Employees",
+    "options": "1-10\n11-50\n51-200\n201-500\n501-1000\n1000+"
+   },
+   {
+    "fieldname": "annual_revenue",
+    "fieldtype": "Currency",
+    "label": "Annual Revenue"
+   },
+   {
+    "fieldname": "lead_owner",
+    "fieldtype": "Link",
+    "label": "Lead Owner",
+    "options": "User"
+   },
+   {
+    "fieldname": "source",
+    "fieldtype": "Link",
+    "label": "Source",
+    "options": "CRM Lead Source"
+   },
+   {
+    "fieldname": "industry",
+    "fieldtype": "Link",
+    "label": "Industry",
+    "options": "CRM Industry"
+   },
+   {
+    "fieldname": "image",
+    "fieldtype": "Attach Image",
+    "hidden": 1,
+    "label": "Image"
+   },
+   {
+    "fieldname": "lead_name",
+    "fieldtype": "Data",
+    "in_standard_filter": 1,
+    "label": "Full Name"
+   },
+   {
+    "fieldname": "job_title",
+    "fieldtype": "Data",
+    "label": "Job Title"
+   },
+   {
+    "fieldname": "organization_tab",
+    "fieldtype": "Tab Break",
+    "label": "Others",
+    "read_only": 1
+   },
+   {
+    "fieldname": "organization",
+    "fieldtype": "Data",
+    "in_standard_filter": 1,
+    "label": "Organization"
+   },
+   {
+    "default": "0",
+    "fieldname": "converted",
+    "fieldtype": "Check",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Converted"
+   },
+   {
+    "fieldname": "person_tab",
+    "fieldtype": "Tab Break",
+    "label": "Person"
+   },
+   {
+    "fieldname": "details",
+    "fieldtype": "Tab Break",
+    "label": "Details"
+   },
+   {
+    "fieldname": "sla_tab",
+    "fieldtype": "Tab Break",
+    "label": "SLA",
+    "read_only": 1
+   },
+   {
+    "fieldname": "sla",
+    "fieldtype": "Link",
+    "label": "SLA",
+    "options": "CRM Service Level Agreement"
+   },
+   {
+    "fieldname": "sla_creation",
+    "fieldtype": "Datetime",
+    "label": "SLA Creation",
+    "read_only": 1
+   },
+   {
+    "fieldname": "column_break_ffnp",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "sla_status",
+    "fieldtype": "Select",
+    "label": "SLA Status",
+    "options": "\nFirst Response Due\nRolling Response Due\nFailed\nFulfilled",
+    "read_only": 1
+   },
+   {
+    "fieldname": "response_details_section",
+    "fieldtype": "Section Break",
+    "label": "Response Details"
+   },
+   {
+    "fieldname": "response_by",
+    "fieldtype": "Datetime",
+    "label": "Response By",
+    "read_only": 1
+   },
+   {
+    "fieldname": "column_break_pweh",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "first_response_time",
+    "fieldtype": "Duration",
+    "label": "First Response Time",
+    "read_only": 1
+   },
+   {
+    "fieldname": "first_responded_on",
+    "fieldtype": "Datetime",
+    "label": "First Responded On",
+    "read_only": 1
+   },
+   {
+    "default": "Open",
+    "fieldname": "communication_status",
+    "fieldtype": "Link",
+    "label": "Communication Status",
+    "options": "CRM Communication Status"
+   },
+   {
+    "fieldname": "territory",
+    "fieldtype": "Link",
+    "label": "Territory",
+    "options": "CRM Territory"
+   },
+   {
+    "fieldname": "log_tab",
+    "fieldtype": "Tab Break",
+    "label": "Log",
+    "read_only": 1
+   },
+   {
+    "fieldname": "status_change_log",
+    "fieldtype": "Table",
+    "label": "Status Change Log",
+    "options": "CRM Status Change Log"
+   },
+   {
+    "fieldname": "products_tab",
+    "fieldtype": "Tab Break",
+    "label": "Products"
+   },
+   {
+    "fieldname": "products",
+    "fieldtype": "Table",
+    "label": "Products",
+    "options": "CRM Products"
+   },
+   {
+    "fieldname": "section_break_ggwh",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "total",
+    "fieldtype": "Currency",
+    "label": "Total",
+    "options": "currency",
+    "read_only": 1
+   },
+   {
+    "fieldname": "column_break_uisv",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "net_total",
+    "fieldtype": "Currency",
+    "label": "Net Total",
+    "options": "currency",
+    "read_only": 1
+   },
+   {
+    "fieldname": "syncing_tab",
+    "fieldtype": "Tab Break",
+    "label": "Syncing"
+   },
+   {
+    "fieldname": "facebook_lead_id",
+    "fieldtype": "Data",
+    "label": "Facebook Lead ID"
+   },
+   {
+    "fieldname": "column_break_ixmu",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "facebook_form_id",
+    "fieldtype": "Data",
+    "label": "Facebook Form ID"
+   },
+   {
+    "fieldname": "section_break_kikl",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "rolling_responses",
+    "fieldtype": "Table",
+    "label": "Rolling Responses",
+    "options": "CRM Rolling Response Time"
+   },
+   {
+    "fieldname": "section_break_xnpz",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "last_response_time",
+    "fieldtype": "Duration",
+    "label": "Last Response Time",
+    "read_only": 1
+   },
+   {
+    "fieldname": "column_break_tcqb",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "last_responded_on",
+    "fieldtype": "Datetime",
+    "label": "Last Responded On",
+    "read_only": 1
+   },
+   {
+    "fieldname": "column_break_ygds",
+    "fieldtype": "Column Break",
+    "read_only": 1
+   },
+   {
+    "fieldname": "lost_details_tab",
+    "fieldtype": "Tab Break",
+    "label": "Lost Details"
+   },
+   {
+    "fieldname": "lost_reason",
+    "fieldtype": "Link",
+    "label": "Lost Reason",
+    "options": "CRM Lost Reason"
+   },
+   {
+    "fieldname": "lost_notes",
+    "fieldtype": "Text",
+    "label": "Lost Notes"
+   },
+   {
+    "fieldname": "column_break_opsm",
+    "fieldtype": "Column Break"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": "lead_name"
+ },
+ "CRM Lead Source": {
+  "autoname": "field:source_name",
+  "fields": [
+   {
+    "fieldname": "source_name",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Source Name",
+    "reqd": 1
+   },
+   {
+    "fieldname": "details",
+    "fieldtype": "Text Editor",
+    "label": "Details"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM Lead Status": {
+  "autoname": "field:lead_status",
+  "fields": [
+   {
+    "default": "gray",
+    "fieldname": "color",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "label": "Color",
+    "options": "black\ngray\nblue\ngreen\nred\npink\norange\namber\nyellow\ncyan\nteal\nviolet\npurple"
+   },
+   {
+    "fieldname": "lead_status",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Status",
+    "reqd": 1
+   },
+   {
+    "default": "1",
+    "fieldname": "position",
+    "fieldtype": "Int",
+    "in_list_view": 1,
+    "label": "Position"
+   },
+   {
+    "default": "Open",
+    "fieldname": "type",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "label": "Type",
+    "options": "Open\nOngoing\nOn Hold\nWon\nLost"
+   },
+   {
+    "fieldname": "column_break_qwtp",
+    "fieldtype": "Column Break"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM Lost Reason": {
+  "autoname": "field:lost_reason",
+  "fields": [
+   {
+    "fieldname": "lost_reason",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Lost Reason",
+    "reqd": 1
+   },
+   {
+    "fieldname": "description",
+    "fieldtype": "Text Editor",
+    "label": "Description"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM Notification": {
+  "autoname": null,
+  "fields": [
+   {
+    "fieldname": "from_user",
+    "fieldtype": "Link",
+    "label": "From User",
+    "options": "User"
+   },
+   {
+    "fieldname": "type",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "label": "Type",
+    "options": "Mention\nTask\nAssignment\nWhatsApp",
+    "reqd": 1
+   },
+   {
+    "fieldname": "column_break_dduu",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "to_user",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "To User",
+    "options": "User",
+    "reqd": 1
+   },
+   {
+    "fieldname": "comment",
+    "fieldtype": "Link",
+    "hidden": 1,
+    "label": "Comment",
+    "options": "Comment"
+   },
+   {
+    "default": "0",
+    "fieldname": "read",
+    "fieldtype": "Check",
+    "label": "Read"
+   },
+   {
+    "fieldname": "section_break_vpwa",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "message",
+    "fieldtype": "HTML Editor",
+    "in_list_view": 1,
+    "label": "Message"
+   },
+   {
+    "fieldname": "reference_name",
+    "fieldtype": "Dynamic Link",
+    "label": "Reference Doc",
+    "options": "reference_doctype"
+   },
+   {
+    "fieldname": "reference_doctype",
+    "fieldtype": "Link",
+    "label": "Reference Doctype",
+    "options": "DocType"
+   },
+   {
+    "fieldname": "section_break_pbvx",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "column_break_eant",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "notification_type_doctype",
+    "fieldtype": "Link",
+    "label": "Notification Type Doctype",
+    "options": "DocType"
+   },
+   {
+    "fieldname": "notification_type_doc",
+    "fieldtype": "Dynamic Link",
+    "label": "Notification Type Doc",
+    "options": "notification_type_doctype"
+   },
+   {
+    "fieldname": "notification_text",
+    "fieldtype": "Text",
+    "label": "Notification Text"
+   },
+   {
+    "fieldname": "section_break_hace",
+    "fieldtype": "Section Break"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM Organization": {
+  "autoname": "field:organization_name",
+  "fields": [
+   {
+    "fieldname": "organization_name",
+    "fieldtype": "Data",
+    "in_standard_filter": 1,
+    "label": "Organization Name"
+   },
+   {
+    "fieldname": "website",
+    "fieldtype": "Data",
+    "label": "Website"
+   },
+   {
+    "fieldname": "organization_logo",
+    "fieldtype": "Attach Image",
+    "label": "Organization Logo"
+   },
+   {
+    "fieldname": "no_of_employees",
+    "fieldtype": "Select",
+    "in_standard_filter": 1,
+    "label": "No. of Employees",
+    "options": "1-10\n11-50\n51-200\n201-500\n501-1000\n1000+"
+   },
+   {
+    "fieldname": "column_break_pnpp",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "annual_revenue",
+    "fieldtype": "Currency",
+    "label": "Annual Revenue",
+    "options": "currency"
+   },
+   {
+    "fieldname": "industry",
+    "fieldtype": "Link",
+    "in_standard_filter": 1,
+    "label": "Industry",
+    "options": "CRM Industry"
+   },
+   {
+    "fieldname": "territory",
+    "fieldtype": "Link",
+    "in_standard_filter": 1,
+    "label": "Territory",
+    "options": "CRM Territory"
+   },
+   {
+    "fieldname": "currency",
+    "fieldtype": "Link",
+    "label": "Currency",
+    "options": "Currency"
+   },
+   {
+    "fieldname": "address",
+    "fieldtype": "Link",
+    "label": "Address",
+    "options": "Address"
+   },
+   {
+    "fieldname": "exchange_rate",
+    "fieldtype": "Float",
+    "label": "Exchange Rate"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM Product": {
+  "autoname": "field:product_code",
+  "fields": [
+   {
+    "fieldname": "naming_series",
+    "fieldtype": "Select",
+    "label": "Naming Series",
+    "options": "CRM-PROD-.YYYY.-"
+   },
+   {
+    "fieldname": "product_code",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Product Code",
+    "reqd": 1
+   },
+   {
+    "fieldname": "product_name",
+    "fieldtype": "Data",
+    "label": "Product Name"
+   },
+   {
+    "fieldname": "column_break_bpdj",
+    "fieldtype": "Column Break"
+   },
+   {
+    "default": "0",
+    "fieldname": "disabled",
+    "fieldtype": "Check",
+    "label": "Disabled"
+   },
+   {
+    "fieldname": "image",
+    "fieldtype": "Attach Image",
+    "label": "Image"
+   },
+   {
+    "fieldname": "section_break_rtwm",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "description",
+    "fieldtype": "Text Editor",
+    "label": "Description"
+   },
+   {
+    "fieldname": "standard_rate",
+    "fieldtype": "Currency",
+    "label": "Standard Selling Rate"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": "product_name"
+ },
+ "CRM Product Sync Issue": {
+  "autoname": "autoincrement",
+  "fields": [
+   {
+    "fieldname": "product",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "Product",
+    "options": "CRM Product",
+    "read_only": 1
+   },
+   {
+    "fieldname": "kind",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "label": "Kind",
+    "options": "unlinked_orphan",
+    "read_only": 1
+   },
+   {
+    "fieldname": "detail",
+    "fieldtype": "Small Text",
+    "label": "Detail",
+    "read_only": 1
+   },
+   {
+    "default": "now",
+    "fieldname": "detected_on",
+    "fieldtype": "Datetime",
+    "label": "Detected On",
+    "read_only": 1
+   },
+   {
+    "default": "0",
+    "fieldname": "dismissed",
+    "fieldtype": "Check",
+    "label": "Dismissed"
+   }
+  ],
+  "issingle": 0,
+  "istable": 1,
+  "title_field": null
+ },
+ "CRM Products": {
+  "autoname": null,
+  "fields": [
+   {
+    "fieldname": "column_break_gvbc",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "product_name",
+    "fieldtype": "Data",
+    "label": "Product Name",
+    "reqd": 1
+   },
+   {
+    "fieldname": "section_break_fnvf",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "section_break_olqb",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "discount_percentage",
+    "fieldtype": "Percent",
+    "label": "Discount %"
+   },
+   {
+    "fieldname": "discount_amount",
+    "fieldtype": "Currency",
+    "label": "Discount Amount",
+    "options": "currency",
+    "read_only": 1
+   },
+   {
+    "fieldname": "section_break_cnpb",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "column_break_pozr",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "rate",
+    "fieldtype": "Currency",
+    "in_list_view": 1,
+    "label": "Rate",
+    "options": "currency",
+    "reqd": 1
+   },
+   {
+    "fieldname": "amount",
+    "fieldtype": "Currency",
+    "label": "Amount",
+    "options": "currency",
+    "read_only": 1
+   },
+   {
+    "fieldname": "net_amount",
+    "fieldtype": "Currency",
+    "label": "Net Amount",
+    "options": "currency",
+    "read_only": 1
+   },
+   {
+    "fieldname": "product_code",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "Product",
+    "options": "CRM Product"
+   },
+   {
+    "default": "1",
+    "fieldname": "qty",
+    "fieldtype": "Float",
+    "label": "Quantity"
+   },
+   {
+    "fieldname": "column_break_ajac",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "column_break_uvra",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "column_break_ejqw",
+    "fieldtype": "Column Break"
+   }
+  ],
+  "issingle": 0,
+  "istable": 1,
+  "title_field": null
+ },
+ "CRM Rolling Response Time": {
+  "autoname": null,
+  "fields": [
+   {
+    "fieldname": "response_time",
+    "fieldtype": "Duration",
+    "in_list_view": 1,
+    "label": "Response Time",
+    "read_only": 1
+   },
+   {
+    "fieldname": "responded_on",
+    "fieldtype": "Datetime",
+    "in_list_view": 1,
+    "label": "Responded On",
+    "read_only": 1
+   },
+   {
+    "fieldname": "status",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "label": "Status",
+    "options": "Fulfilled\nFailed",
+    "read_only": 1
+   }
+  ],
+  "issingle": 0,
+  "istable": 1,
+  "title_field": null
+ },
+ "CRM Sales Hierarchy": {
+  "autoname": "hash",
+  "fields": [
+   {
+    "fieldname": "full_name",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Full Name",
+    "read_only": 1
+   },
+   {
+    "fieldname": "column_break_1",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "user",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "User",
+    "options": "User",
+    "reqd": 1
+   },
+   {
+    "fieldname": "section_break_1",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "old_parent",
+    "fieldtype": "Link",
+    "hidden": 1,
+    "label": "Old Parent",
+    "options": "CRM Sales Hierarchy"
+   },
+   {
+    "fieldname": "reports_to",
+    "fieldtype": "Link",
+    "label": "Reports To",
+    "options": "CRM Sales Hierarchy"
+   },
+   {
+    "fieldname": "column_break_2",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "lft",
+    "fieldtype": "Int",
+    "hidden": 1,
+    "label": "Left",
+    "read_only": 1
+   },
+   {
+    "fieldname": "rgt",
+    "fieldtype": "Int",
+    "hidden": 1,
+    "label": "Right",
+    "read_only": 1
+   },
+   {
+    "default": "0",
+    "fieldname": "is_group",
+    "fieldtype": "Check",
+    "label": "Is Group"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": "full_name"
+ },
+ "CRM Service Day": {
+  "autoname": null,
+  "fields": [
+   {
+    "fieldname": "workday",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "label": "Workday",
+    "options": "Monday\nTuesday\nWednesday\nThursday\nFriday\nSaturday\nSunday",
+    "reqd": 1
+   },
+   {
+    "fieldname": "section_break_uegc",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "start_time",
+    "fieldtype": "Time",
+    "in_list_view": 1,
+    "label": "Start Time",
+    "reqd": 1
+   },
+   {
+    "fieldname": "column_break_maie",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "end_time",
+    "fieldtype": "Time",
+    "in_list_view": 1,
+    "label": "End Time",
+    "reqd": 1
+   }
+  ],
+  "issingle": 0,
+  "istable": 1,
+  "title_field": null
+ },
+ "CRM Service Level Agreement": {
+  "autoname": "field:sla_name",
+  "fields": [
+   {
+    "fieldname": "sla_name",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "SLA Name",
+    "reqd": 1
+   },
+   {
+    "default": "0",
+    "fieldname": "enabled",
+    "fieldtype": "Check",
+    "label": "Enabled"
+   },
+   {
+    "default": "0",
+    "fieldname": "default",
+    "fieldtype": "Check",
+    "label": "Default"
+   },
+   {
+    "fieldname": "column_break_uxua",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "condition",
+    "fieldtype": "Code",
+    "label": "Condition",
+    "options": "Python"
+   },
+   {
+    "fieldname": "apply_on",
+    "fieldtype": "Link",
+    "label": "Apply On",
+    "options": "DocType",
+    "reqd": 1
+   },
+   {
+    "fieldname": "section_break_ufaf",
+    "fieldtype": "Section Break",
+    "label": "Response & Follow Up"
+   },
+   {
+    "fieldname": "priorities",
+    "fieldtype": "Table",
+    "label": "Priorities",
+    "options": "CRM Service Level Priority",
+    "reqd": 1
+   },
+   {
+    "fieldname": "section_break_rmgo",
+    "fieldtype": "Section Break",
+    "label": "Working Hours"
+   },
+   {
+    "fieldname": "working_hours",
+    "fieldtype": "Table",
+    "label": "Working Hours",
+    "options": "CRM Service Day",
+    "reqd": 1
+   },
+   {
+    "fieldname": "section_break_nevd",
+    "fieldtype": "Section Break",
+    "label": "Validity"
+   },
+   {
+    "fieldname": "start_date",
+    "fieldtype": "Date",
+    "label": "Start Date"
+   },
+   {
+    "fieldname": "column_break_pzjg",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "end_date",
+    "fieldtype": "Date",
+    "label": "End Date"
+   },
+   {
+    "fieldname": "holiday_list",
+    "fieldtype": "Link",
+    "label": "Holiday List",
+    "options": "CRM Holiday List"
+   },
+   {
+    "default": "0",
+    "fieldname": "rolling_responses",
+    "fieldtype": "Check",
+    "label": "Rolling Responses"
+   },
+   {
+    "fieldname": "condition_json",
+    "fieldtype": "Code",
+    "label": "Condition"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM Service Level Priority": {
+  "autoname": null,
+  "fields": [
+   {
+    "default": "0",
+    "fieldname": "default_priority",
+    "fieldtype": "Check",
+    "in_list_view": 1,
+    "label": "Default Priority"
+   },
+   {
+    "fieldname": "priority",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "Priority",
+    "options": "CRM Communication Status",
+    "reqd": 1
+   },
+   {
+    "fieldname": "first_response_time",
+    "fieldtype": "Duration",
+    "in_list_view": 1,
+    "label": "First Response TIme",
+    "reqd": 1
+   },
+   {
+    "fieldname": "column_break_grod",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "section_break_anyl",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "column_break_bwgs",
+    "fieldtype": "Column Break"
+   }
+  ],
+  "issingle": 0,
+  "istable": 1,
+  "title_field": null
+ },
+ "CRM Status Change Log": {
+  "autoname": null,
+  "fields": [
+   {
+    "fieldname": "from",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "From"
+   },
+   {
+    "fieldname": "from_date",
+    "fieldtype": "Datetime",
+    "in_list_view": 1,
+    "label": "From Date"
+   },
+   {
+    "fieldname": "duration",
+    "fieldtype": "Duration",
+    "in_list_view": 1,
+    "label": "Duration"
+   },
+   {
+    "fieldname": "column_break_mwmz",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "to",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "To"
+   },
+   {
+    "fieldname": "to_date",
+    "fieldtype": "Datetime",
+    "in_list_view": 1,
+    "label": "To Date"
+   },
+   {
+    "fieldname": "last_status_change_log",
+    "fieldtype": "Link",
+    "label": "Last Status Change Log",
+    "options": "CRM Status Change Log"
+   },
+   {
+    "fieldname": "log_owner",
+    "fieldtype": "Link",
+    "label": "Owner",
+    "options": "User"
+   },
+   {
+    "fieldname": "from_type",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "From Type"
+   },
+   {
+    "fieldname": "to_type",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "To Type"
+   }
+  ],
+  "issingle": 0,
+  "istable": 1,
+  "title_field": null
+ },
+ "CRM Task": {
+  "autoname": "autoincrement",
+  "fields": [
+   {
+    "fieldname": "title",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Title",
+    "reqd": 1
+   },
+   {
+    "fieldname": "priority",
+    "fieldtype": "Select",
+    "in_standard_filter": 1,
+    "label": "Priority",
+    "options": "Low\nMedium\nHigh"
+   },
+   {
+    "fieldname": "start_date",
+    "fieldtype": "Date",
+    "label": "Start Date"
+   },
+   {
+    "fieldname": "column_break_cqua",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "assigned_to",
+    "fieldtype": "Link",
+    "in_standard_filter": 1,
+    "label": "Assigned To",
+    "options": "User"
+   },
+   {
+    "fieldname": "status",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Status",
+    "options": "Backlog\nTodo\nIn Progress\nDone\nCanceled"
+   },
+   {
+    "fieldname": "due_date",
+    "fieldtype": "Datetime",
+    "in_standard_filter": 1,
+    "label": "Due Date"
+   },
+   {
+    "fieldname": "section_break_bzhd",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "description",
+    "fieldtype": "Text Editor",
+    "label": "Description"
+   },
+   {
+    "fieldname": "reference_doctype",
+    "fieldtype": "Link",
+    "label": "Reference Document Type",
+    "options": "DocType"
+   },
+   {
+    "fieldname": "reference_docname",
+    "fieldtype": "Dynamic Link",
+    "label": "Reference Doc",
+    "options": "reference_doctype"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM Telephony Agent": {
+  "autoname": "field:user",
+  "fields": [
+   {
+    "fieldname": "user",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "User",
+    "options": "User",
+    "reqd": 1
+   },
+   {
+    "fieldname": "column_break_hdec",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "mobile_no",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Mobile No.",
+    "read_only": 1
+   },
+   {
+    "fieldname": "user_name",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "User Name"
+   },
+   {
+    "fieldname": "exotel_number",
+    "fieldtype": "Data",
+    "label": "Exotel Number"
+   },
+   {
+    "fieldname": "section_break_phlq",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "section_break_ozjn",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "column_break_aydj",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "twilio_number",
+    "fieldtype": "Data",
+    "label": "Twilio Number"
+   },
+   {
+    "fieldname": "phone_nos",
+    "fieldtype": "Table",
+    "label": "Phone Numbers",
+    "options": "CRM Telephony Phone"
+   },
+   {
+    "fieldname": "default_medium",
+    "fieldtype": "Select",
+    "label": "Default Medium",
+    "options": "\nTwilio\nExotel"
+   },
+   {
+    "default": "Computer",
+    "fieldname": "call_receiving_device",
+    "fieldtype": "Select",
+    "label": "Device",
+    "options": "Computer\nPhone"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": "user_name"
+ },
+ "CRM Telephony Phone": {
+  "autoname": null,
+  "fields": [
+   {
+    "fieldname": "number",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Number",
+    "reqd": 1
+   },
+   {
+    "default": "0",
+    "fieldname": "is_primary",
+    "fieldtype": "Check",
+    "in_list_view": 1,
+    "label": "Is Primary"
+   }
+  ],
+  "issingle": 0,
+  "istable": 1,
+  "title_field": null
+ },
+ "CRM Territory": {
+  "autoname": "field:territory_name",
+  "fields": [
+   {
+    "fieldname": "territory_name",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Territory Name",
+    "reqd": 1
+   },
+   {
+    "fieldname": "column_break_pypy",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "territory_manager",
+    "fieldtype": "Link",
+    "label": "Territory Manager",
+    "options": "User"
+   },
+   {
+    "fieldname": "lft",
+    "fieldtype": "Int",
+    "hidden": 1,
+    "label": "Left",
+    "read_only": 1
+   },
+   {
+    "fieldname": "rgt",
+    "fieldtype": "Int",
+    "hidden": 1,
+    "label": "Right",
+    "read_only": 1
+   },
+   {
+    "default": "0",
+    "fieldname": "is_group",
+    "fieldtype": "Check",
+    "label": "Is Group"
+   },
+   {
+    "fieldname": "old_parent",
+    "fieldtype": "Link",
+    "label": "Old Parent",
+    "options": "CRM Territory"
+   },
+   {
+    "fieldname": "parent_crm_territory",
+    "fieldtype": "Link",
+    "label": "Parent CRM Territory",
+    "options": "CRM Territory"
+   },
+   {
+    "fieldname": "column_break_mckp",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "section_break_qhaf",
+    "fieldtype": "Section Break"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM Twilio Settings": {
+  "autoname": null,
+  "fields": [
+   {
+    "fieldname": "account_sid",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Account SID"
+   },
+   {
+    "fieldname": "api_key",
+    "fieldtype": "Data",
+    "label": "API Key",
+    "permlevel": 1,
+    "read_only": 1
+   },
+   {
+    "fieldname": "api_secret",
+    "fieldtype": "Password",
+    "label": "API Secret",
+    "permlevel": 1,
+    "read_only": 1
+   },
+   {
+    "fieldname": "column_break_idds",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "auth_token",
+    "fieldtype": "Password",
+    "in_list_view": 1,
+    "label": "Auth Token"
+   },
+   {
+    "fieldname": "twiml_sid",
+    "fieldtype": "Data",
+    "label": "TwiML SID",
+    "permlevel": 1
+   },
+   {
+    "fieldname": "section_break_ssqj",
+    "fieldtype": "Section Break"
+   },
+   {
+    "default": "0",
+    "fieldname": "record_calls",
+    "fieldtype": "Check",
+    "label": "Record Calls"
+   },
+   {
+    "fieldname": "column_break_avmt",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "section_break_malx",
+    "fieldtype": "Section Break"
+   },
+   {
+    "default": "0",
+    "fieldname": "enabled",
+    "fieldtype": "Check",
+    "label": "Enabled"
+   },
+   {
+    "fieldname": "section_break_eklq",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "column_break_yqvr",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "app_name",
+    "fieldtype": "Data",
+    "label": "App Name"
+   },
+   {
+    "fieldname": "section_break_cghd",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "twilio_apps",
+    "fieldtype": "Data",
+    "hidden": 1,
+    "label": "Twilio Apps"
+   }
+  ],
+  "issingle": 1,
+  "istable": 0,
+  "title_field": null
+ },
+ "CRM View Settings": {
+  "autoname": "autoincrement",
+  "fields": [
+   {
+    "fieldname": "columns",
+    "fieldtype": "Code",
+    "label": "Columns"
+   },
+   {
+    "fieldname": "user",
+    "fieldtype": "Link",
+    "label": "User",
+    "options": "User"
+   },
+   {
+    "fieldname": "rows",
+    "fieldtype": "Code",
+    "label": "Rows"
+   },
+   {
+    "fieldname": "filters",
+    "fieldtype": "Code",
+    "label": "Filters"
+   },
+   {
+    "fieldname": "filters_tab",
+    "fieldtype": "Tab Break",
+    "label": "Filters"
+   },
+   {
+    "fieldname": "label",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Label"
+   },
+   {
+    "fieldname": "column_break_zacm",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "dt",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "DocType",
+    "options": "DocType"
+   },
+   {
+    "fieldname": "order_by_tab",
+    "fieldtype": "Tab Break",
+    "label": "Order By"
+   },
+   {
+    "fieldname": "order_by",
+    "fieldtype": "Code",
+    "label": "Order By"
+   },
+   {
+    "default": "0",
+    "fieldname": "pinned",
+    "fieldtype": "Check",
+    "label": "Pinned"
+   },
+   {
+    "fieldname": "route_name",
+    "fieldtype": "Data",
+    "label": "Route Name"
+   },
+   {
+    "default": "0",
+    "fieldname": "load_default_columns",
+    "fieldtype": "Check",
+    "label": "Load Default Columns"
+   },
+   {
+    "default": "0",
+    "fieldname": "public",
+    "fieldtype": "Check",
+    "label": "Public"
+   },
+   {
+    "fieldname": "icon",
+    "fieldtype": "Data",
+    "label": "Icon"
+   },
+   {
+    "default": "list",
+    "fieldname": "type",
+    "fieldtype": "Select",
+    "label": "Type",
+    "options": "list\ngroup_by\nkanban"
+   },
+   {
+    "fieldname": "group_by_tab",
+    "fieldtype": "Tab Break",
+    "label": "Group By"
+   },
+   {
+    "fieldname": "group_by_field",
+    "fieldtype": "Data",
+    "label": "Group By Field"
+   },
+   {
+    "fieldname": "list_section",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "kanban_section",
+    "fieldtype": "Section Break"
+   },
+   {
+    "fieldname": "column_field",
+    "fieldtype": "Data",
+    "label": "Column Field"
+   },
+   {
+    "fieldname": "list_tab",
+    "fieldtype": "Tab Break",
+    "label": "List"
+   },
+   {
+    "fieldname": "kanban_tab",
+    "fieldtype": "Tab Break",
+    "label": "Kanban"
+   },
+   {
+    "fieldname": "kanban_columns",
+    "fieldtype": "Code",
+    "label": "Kanban Columns"
+   },
+   {
+    "fieldname": "kanban_fields",
+    "fieldtype": "Code",
+    "label": "Kanban Fields"
+   },
+   {
+    "fieldname": "title_field",
+    "fieldtype": "Data",
+    "label": "Title Field"
+   },
+   {
+    "default": "0",
+    "fieldname": "is_standard",
+    "fieldtype": "Check",
+    "label": "Is Standard"
+   },
+   {
+    "default": "0",
+    "fieldname": "is_default",
+    "fieldtype": "Check",
+    "label": "Is Default"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": "label"
+ },
+ "ERPNext CRM Settings": {
+  "autoname": null,
+  "fields": [
+   {
+    "fieldname": "api_key",
+    "fieldtype": "Data",
+    "label": "API Key"
+   },
+   {
+    "fieldname": "api_secret",
+    "fieldtype": "Password",
+    "label": "API Secret"
+   },
+   {
+    "fieldname": "section_break_oubd",
+    "fieldtype": "Section Break",
+    "label": "ERPNext Site API's"
+   },
+   {
+    "fieldname": "column_break_fllx",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "erpnext_site_url",
+    "fieldtype": "Data",
+    "label": "ERPNext Site URL"
+   },
+   {
+    "fieldname": "erpnext_company",
+    "fieldtype": "Data",
+    "label": "Company in ERPNext site"
+   },
+   {
+    "fieldname": "column_break_vfru",
+    "fieldtype": "Column Break"
+   },
+   {
+    "default": "0",
+    "fieldname": "enabled",
+    "fieldtype": "Check",
+    "label": "Enabled"
+   },
+   {
+    "fieldname": "sync_issues",
+    "fieldtype": "Table",
+    "label": "Product Sync Issues",
+    "options": "CRM Product Sync Issue",
+    "read_only": 1
+   },
+   {
+    "default": "0",
+    "fieldname": "is_erpnext_in_different_site",
+    "fieldtype": "Check",
+    "label": "Is ERPNext installed on a different site?"
+   },
+   {
+    "default": "1",
+    "fieldname": "sync_products",
+    "fieldtype": "Check",
+    "label": "Bidirectional Product Sync"
+   },
+   {
+    "fieldname": "section_break_jnbn",
+    "fieldtype": "Section Break"
+   },
+   {
+    "default": "0",
+    "fieldname": "create_customer_on_status_change",
+    "fieldtype": "Check",
+    "label": "Create customer on status change"
+   },
+   {
+    "fieldname": "column_break_kbhw",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "deal_status",
+    "fieldtype": "Link",
+    "label": "Deal Status",
+    "options": "CRM Deal Status"
+   }
+  ],
+  "issingle": 1,
+  "istable": 0,
+  "title_field": null
+ },
+ "FCRM Note": {
+  "autoname": null,
+  "fields": [
+   {
+    "fieldname": "title",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Title",
+    "reqd": 1
+   },
+   {
+    "fieldname": "content",
+    "fieldtype": "Text Editor",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Content"
+   },
+   {
+    "default": "CRM Lead",
+    "fieldname": "reference_doctype",
+    "fieldtype": "Link",
+    "label": "Reference Document Type",
+    "options": "DocType"
+   },
+   {
+    "fieldname": "reference_docname",
+    "fieldtype": "Dynamic Link",
+    "label": "Reference Doc",
+    "options": "reference_doctype"
+   }
+  ],
+  "issingle": 0,
+  "istable": 0,
+  "title_field": "title"
+ },
+ "FCRM Settings": {
+  "autoname": null,
+  "fields": [
+   {
+    "fieldname": "restore_defaults",
+    "fieldtype": "Button",
+    "label": "Restore Defaults"
+   },
+   {
+    "fieldname": "dropdown_items",
+    "fieldtype": "Table",
+    "options": "CRM Dropdown Item"
+   },
+   {
+    "fieldname": "defaults_tab",
+    "fieldtype": "Tab Break",
+    "label": "Settings"
+   },
+   {
+    "fieldname": "branding_tab",
+    "fieldtype": "Tab Break",
+    "label": "Branding"
+   },
+   {
+    "fieldname": "brand_logo",
+    "fieldtype": "Attach",
+    "label": "Logo"
+   },
+   {
+    "fieldname": "dropdown_items_tab",
+    "fieldtype": "Tab Break",
+    "label": "Dropdown items"
+   },
+   {
+    "fieldname": "brand_name",
+    "fieldtype": "Data",
+    "label": "Name"
+   },
+   {
+    "fieldname": "favicon",
+    "fieldtype": "Attach",
+    "label": "Favicon"
+   },
+   {
+    "default": "0",
+    "fieldname": "enable_forecasting",
+    "fieldtype": "Check",
+    "label": "Enable Forecasting"
+   },
+   {
+    "default": "0",
+    "fieldname": "enable_sales_hierarchy",
+    "fieldtype": "Check",
+    "label": "Enable Sales Hierarchy Permissions"
+   },
+   {
+    "fieldname": "currency",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "Currency",
+    "options": "Currency"
+   },
+   {
+    "fieldname": "currency_tab",
+    "fieldtype": "Tab Break",
+    "label": "Currency"
+   },
+   {
+    "fieldname": "exchange_rate_provider_section",
+    "fieldtype": "Section Break",
+    "label": "Exchange Rate Provider"
+   },
+   {
+    "default": "frankfurter.app",
+    "fieldname": "service_provider",
+    "fieldtype": "Select",
+    "label": "Service Provider",
+    "options": "frankfurter.app\nfawazahmed-exchange-api\nexchangerate.host\nexchangerate-api"
+   },
+   {
+    "fieldname": "access_key",
+    "fieldtype": "Data",
+    "label": "Access Key"
+   },
+   {
+    "fieldname": "column_break_vqck",
+    "fieldtype": "Column Break"
+   },
+   {
+    "default": "1",
+    "fieldname": "auto_update_expected_deal_value",
+    "fieldtype": "Check",
+    "label": "Auto update Expected Deal Value"
+   },
+   {
+    "default": "1",
+    "fieldname": "update_timestamp_on_new_communication",
+    "fieldtype": "Check",
+    "label": "Update timestamp on new communication"
+   },
+   {
+    "default": "0",
+    "fieldname": "auto_mark_replied_on_response",
+    "fieldtype": "Check",
+    "label": "Mark lead/deal as replied on response"
+   },
+   {
+    "default": "0",
+    "fieldname": "auto_reopen_on_new_communication",
+    "fieldtype": "Check",
+    "label": "Reopen lead/deal on new communication"
+   },
+   {
+    "fieldname": "restore_demo_data",
+    "fieldtype": "Button",
+    "label": "Restore Demo Data"
+   },
+   {
+    "fieldname": "activity_timeline_section",
+    "fieldtype": "Section Break",
+    "label": "Activity Timeline"
+   },
+   {
+    "default": "Relative",
+    "fieldname": "crm_timeline_timestamp_format",
+    "fieldtype": "Select",
+    "label": "Timeline Timestamp Format",
+    "options": "Relative\nExact"
+   },
+   {
+    "default": "Oldest First",
+    "fieldname": "crm_timeline_sort_order",
+    "fieldtype": "Select",
+    "label": "Timeline Sort Order",
+    "options": "Oldest First\nNewest First"
+   },
+   {
+    "default": "0",
+    "fieldname": "persona_captured",
+    "fieldtype": "Check",
+    "hidden": 1,
+    "label": "Persona Captured"
+   }
+  ],
+  "issingle": 1,
+  "istable": 0,
+  "title_field": null
+ }
+}

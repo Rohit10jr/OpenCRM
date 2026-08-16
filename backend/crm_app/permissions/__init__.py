@@ -11,7 +11,7 @@ falls back to plain role permissions.
 
 from frappe_core.registry import register_permission_hooks
 
-from crm_app.permissions import notification, org_hierarchy, tree
+from crm_app.permissions import metadata_docs, notification, org_hierarchy, tree
 
 
 def register() -> None:
@@ -31,6 +31,27 @@ def register() -> None:
         "CRM Notification",
         permission_query_conditions=notification.get_permission_query_conditions,
         has_permission=notification.has_permission,
+    )
+
+    # Phase 4. Upstream registers no hook for these three - it relies on the DocType's
+    # role permissions, which this port does not model. Without a rule here they are
+    # world-readable *and* world-writable through the generic /api/resource/ route:
+    # private saved views leak, and CRM Form Script is an XSS vector because every
+    # client executes what it serves. See crm_app/permissions/metadata_docs.py.
+    register_permission_hooks(
+        "CRM View Settings",
+        permission_query_conditions=metadata_docs.view_settings_query_conditions,
+        has_permission=metadata_docs.view_settings_has_permission,
+    )
+    register_permission_hooks(
+        "CRM Form Script",
+        permission_query_conditions=metadata_docs.form_script_query_conditions,
+        has_permission=metadata_docs.form_script_has_permission,
+    )
+    register_permission_hooks(
+        "CRM Fields Layout",
+        permission_query_conditions=metadata_docs.fields_layout_query_conditions,
+        has_permission=metadata_docs.fields_layout_has_permission,
     )
 
 

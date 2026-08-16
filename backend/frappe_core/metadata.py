@@ -1,57 +1,59 @@
-"""Phase-4 extension points, with working phase-0 defaults.
+"""Field metadata — filterable, group-by and list columns.
 
-PHASE_0_FOUNDATION.md section 8. Phase 4 replaces the bodies by registering providers
-through :func:`frappe_core.registry.register_metadata_hooks`; the call sites here and in
-``api/doc.py`` stay put.
+**C7 is closed here.** Phase 0 keyed both allowlists on the *Django internal type*,
+which is lossy: `Long Text`/`Small Text`/`Text Editor` all collapse to `TextField`, and
+`Duration`/`Rating` are indistinguishable from `IntegerField`/`FloatField`. So `Duration`
+was group-by-able only by accident and `Rating` was filterable only by accident.
 
-The defaults below are deliberately derived from the model rather than stubbed to
-``None``, so ``get_data`` returns a correct payload before phase 4 lands - the response
-*shape* is final now (spec section 6b).
+Phase 4 keys them on the **Frappe fieldtype**, read from
+:mod:`frappe_core.field_meta`, which is generated from the DocType JSON. The lists below
+are now transcriptions of the source rather than translations of it, so
+`test_allowlists_match_the_source` can compare them to `crm/api/doc.py` directly.
+
+The phase-0 extension points (`registry.register_metadata_hooks`) are unchanged; phase 4
+registers providers through them rather than editing the call sites.
 """
 
 from __future__ import annotations
 
 from django.db.models.fields.related import ForeignKey, OneToOneField
 
-from frappe_core import registry
+from frappe_core import field_meta, registry
 from frappe_core.session import get_current_user
 
-#: Fieldtype allowlist from ``crm/api/doc.py:get_filterable_fields:56-73``, expressed as
-#: Django internal types. Phase 4 owns the Frappe-fieldtype version of this list.
-FILTERABLE_INTERNAL_TYPES = {
-    "BooleanField",
-    "CharField",
-    "TextField",
-    "EmailField",
-    "URLField",
-    "SlugField",
-    "IntegerField",
-    "BigIntegerField",
-    "SmallIntegerField",
-    "PositiveIntegerField",
-    "FloatField",
-    "DecimalField",
-    "DateField",
-    "DateTimeField",
-    "ForeignKey",
-    "OneToOneField",
+#: ``crm/api/doc.py:get_filterable_fields:56-73`` — verbatim, as Frappe fieldtypes.
+FILTERABLE_FIELDTYPES = {
+    "Check",
+    "Data",
+    "Float",
+    "Int",
+    "Currency",
+    "Dynamic Link",
+    "Link",
+    "Long Text",
+    "Select",
+    "Small Text",
+    "Text Editor",
+    "Text",
+    "Duration",
+    "Rating",
+    "Date",
+    "Datetime",
 }
 
-#: ``crm/api/doc.py:get_group_by_fields:114-126`` - narrower than the filter list; no
-#: free-text types.
-GROUP_BY_INTERNAL_TYPES = {
-    "BooleanField",
-    "CharField",
-    "IntegerField",
-    "BigIntegerField",
-    "SmallIntegerField",
-    "PositiveIntegerField",
-    "FloatField",
-    "DecimalField",
-    "DateField",
-    "DateTimeField",
-    "ForeignKey",
-    "OneToOneField",
+#: ``crm/api/doc.py:get_group_by_fields:114-126`` — narrower; no free text.
+GROUP_BY_FIELDTYPES = {
+    "Check",
+    "Data",
+    "Float",
+    "Int",
+    "Currency",
+    "Dynamic Link",
+    "Link",
+    "Select",
+    "Duration",
+    "Date",
+    "Datetime",
 }
 
 #: Appended by upstream to every filterable-field list, in this order.
@@ -72,6 +74,20 @@ STANDARD_FILTER_FIELDS = [
     {"fieldname": "modified", "fieldtype": "Datetime", "label": "Last Updated On"},
 ]
 
+#: ``crm/api/doc.py:143-154`` — appended to every group-by list. Upstream lists
+#: ``Created On`` and ``Modified On`` twice over; the duplicates are dropped here
+#: because a repeated entry in a dropdown is a rendering bug nothing depends on.
+GROUP_BY_STANDARD_FIELDS = [
+    {"fieldname": "name", "label": "Name"},
+    {"fieldname": "creation", "label": "Created On"},
+    {"fieldname": "modified", "label": "Last Modified"},
+    {"fieldname": "modified_by", "label": "Modified By"},
+    {"fieldname": "owner", "label": "Owner"},
+    {"fieldname": "_liked_by", "label": "Like"},
+    {"fieldname": "_assign", "label": "Assigned To"},
+    {"fieldname": "_comments", "label": "Comments"},
+]
+
 
 def get_list_columns(doctype: str, user: str | None = None, view_type: str = "list") -> list:
     """Saved-view columns for ``doctype``, or the controller default.
@@ -83,15 +99,20 @@ def get_list_columns(doctype: str, user: str | None = None, view_type: str = "li
     user = user or get_current_user()
     entry = registry.get_entry(doctype)
     if entry.list_columns_provider is not None:
-        return entry.list_columns_provider(doctype, user, view_type)
+        provided = entry.list_columns_provider(doctype, user, view_type)
+        # `None` is the provider's fall-through signal - the same contract `get_data`
+        # uses. Returning it here would hand the caller "no columns" where upstream's
+        # `elif` would have used the controller default.
+        if provided is not None:
+            return provided
     return entry.default_list_data().get("columns", [])
 
 
 def get_filterable_fields(doctype: str) -> list:
-    """Fields the client may filter on.
+    """Fields the client may filter on. ``crm/api/doc.py:54-109``.
 
-    Honours ``get_non_filterable_fields()`` on the controller, as upstream does at
-    ``crm/api/doc.py:75-78``.
+    Honours ``get_non_filterable_fields()`` on the controller, as upstream does
+    (``crm/api/doc.py:75-78``).
     """
     entry = registry.get_entry(doctype)
     if entry.filterable_fields_provider is not None:
@@ -103,22 +124,20 @@ def get_filterable_fields(doctype: str) -> list:
         if descriptor["fieldname"] not in restricted:
             fields.append({**descriptor, "value": descriptor["fieldname"]})
 
-    for field in entry.model._meta.get_fields():
-        if not getattr(field, "concrete", False):
-            continue
-        fieldname = field.name
-        if fieldname in restricted or fieldname == "name":
+    for field in field_meta.get_fields(doctype):
+        fieldname = field.get("fieldname")
+        if not fieldname or fieldname in restricted or fieldname == "name":
             continue
         if any(f["fieldname"] == fieldname for f in fields):
             continue
-        if field.get_internal_type() not in FILTERABLE_INTERNAL_TYPES:
+        if field.get("fieldtype") not in FILTERABLE_FIELDTYPES:
             continue
         fields.append(
             {
                 "fieldname": fieldname,
-                "label": getattr(field, "verbose_name", fieldname),
-                "fieldtype": _frappe_fieldtype(field),
-                "options": _link_target(field),
+                "label": field.get("label") or fieldname,
+                "fieldtype": field.get("fieldtype"),
+                "options": field.get("options"),
                 "value": fieldname,
             }
         )
@@ -126,17 +145,30 @@ def get_filterable_fields(doctype: str) -> list:
 
 
 def get_group_by_fields(doctype: str) -> list:
+    """``crm/api/doc.py:112-160``.
+
+    Upstream appends its own standard fields after the doctype's own, including
+    ``_liked_by`` / ``_assign`` / ``_comments``, which are not group-by-able by
+    fieldtype but are listed anyway (lines 143-158).
+    """
     entry = registry.get_entry(doctype)
     restricted = set(entry.non_filterable_fields())
+
     fields = []
-    for field in entry.model._meta.get_fields():
-        if not getattr(field, "concrete", False):
+    for field in field_meta.get_fields(doctype):
+        fieldname = field.get("fieldname")
+        if not fieldname or fieldname in restricted:
             continue
-        if field.name in restricted:
+        if field.get("fieldtype") not in GROUP_BY_FIELDTYPES:
             continue
-        if field.get_internal_type() not in GROUP_BY_INTERNAL_TYPES:
+        fields.append({"fieldname": fieldname, "label": field.get("label") or fieldname})
+
+    for descriptor in GROUP_BY_STANDARD_FIELDS:
+        if descriptor["fieldname"] in restricted:
             continue
-        fields.append({"fieldname": field.name, "label": getattr(field, "verbose_name", field.name)})
+        if any(f["fieldname"] == descriptor["fieldname"] for f in fields):
+            continue
+        fields.append(dict(descriptor))
     return fields
 
 

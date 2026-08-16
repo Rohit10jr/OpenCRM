@@ -114,6 +114,44 @@ the doctype-controller methods (`PHASE_3_ENDPOINTS.md` §3), and `crm.demo.*`.
 the signature, Frappe Mail and IMAP/SMTP columns `create_email_account` writes.
 `Email Account.api_secret` joins `password` in `SENSITIVE_FIELDS`.
 
+### Added by phase 4
+
+**`frappe_core.field_meta` is the port's `frappe.get_meta(doctype).fields`.** Use it
+whenever you need a field's **Frappe** fieldtype, label, options, `reqd` or `hidden` —
+the Django model cannot tell you any of those faithfully.
+
+| Need | Call |
+|---|---|
+| All fields, declaration order, **layout breaks included** | `field_meta.get_fields(doctype)` |
+| Value fields only (no Section/Column/Tab Break, no Table) | `field_meta.get_value_fields(doctype)` |
+| One field / its Frappe fieldtype | `field_meta.get_field(doctype, name)`, `get_fieldtype(...)` |
+| A Select's options as a list | `field_meta.select_options(field)` |
+| Form layout, expanded | `crm_app.api.fields_layout.get_fields_layout(doctype, type)` |
+| Default layout from the breaks | `crm_app.api.fields_layout.get_default_layout(doctype)` |
+| A doctype's client-side script | `crm_app.api.form_script.get_form_script(dt, view)` |
+| Saved-view columns for a user | `crm_app.metadata_hooks.saved_view_columns(doctype, user, view_type)` |
+| Kanban manual ordering | `frappe_core.api.doc.get_records_based_on_order(...)` |
+| Kanban badge counts | `frappe_core.api.doc.get_counts(row, doctype)` |
+
+The data behind it is **generated**: `backend/crm_app/data/doctype_meta.json`, produced by
+`python scripts/generate_field_meta.py` from the DocType JSON and committed.
+`test_generated_field_meta_is_current` regenerates and diffs, so it cannot go stale
+silently. **Re-run the generator if you change anything in `crm/fcrm/doctype/`.**
+
+**C7 is closed.** `metadata.FILTERABLE_FIELDTYPES` / `GROUP_BY_FIELDTYPES` are now
+transcriptions of `crm/api/doc.py`'s lists, keyed on the Frappe fieldtype. The old
+`FILTERABLE_INTERNAL_TYPES` / `GROUP_BY_INTERNAL_TYPES` are gone, and so is phase 3's
+`_resolved_fieldtype` plaster.
+
+**`get_data`'s stubs are filled in, not rewritten.** `_load_saved_view` resolves through
+the registered provider, `_get_views` and `_get_form_script` delegate to `crm_app`. The
+four-step order and every response key are unchanged.
+
+**Saved views are per user.** The lookup key is
+`{dt, type, is_standard: 1, user}` — one person's columns are invisible to everyone else.
+A provider returning `None` means "fall through to the controller default"; returning an
+empty dict would render a column-less list.
+
 ---
 
 ## 3. Behaviours you can rely on
