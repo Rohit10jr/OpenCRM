@@ -11,6 +11,7 @@ from frappe_core.exceptions import AuthenticationError
 from frappe_core.exceptions import PermissionError as FrappePermissionError
 from frappe_core.exceptions import ValidationError, throw
 from frappe_core.query import parse_json_param
+from frappe_core.security import LoginAttemptTracker, rate_limit
 from frappe_core.session import GUEST_USER, get_current_user
 from frappe_core.whitelist import whitelist
 
@@ -51,17 +52,22 @@ def _remove_roles(user_obj, *roles: str) -> None:
 
 
 @whitelist("crm.api.user.change_password")
+@rate_limit(limit=5, seconds=300)
 def change_password(old_password: str, new_password: str):
     """``crm/api/user.py:9-48``. Messages verbatim.
 
-    Upstream's ``LoginAttemptTracker`` lockout and ``rate_limit`` decorator are **not**
-    ported - both are framework infrastructure with no analogue here. That is a real
-    weakening of brute-force resistance and is logged in PROGRESS_PHASE_3.md rather than
-    passed over.
+    Both of upstream's protections are now ported (they were the open concern in
+    PROGRESS_PHASE_3.md), and they answer different questions:
 
-    Strength checking goes through Django's configured
-    ``AUTH_PASSWORD_VALIDATORS`` instead of Frappe's zxcvbn wrapper, which is the
-    spec's instruction (PHASE_3_ENDPOINTS.md section 2, Group B).
+    * ``@rate_limit(5, 300)`` matches ``crm/api/user.py:9`` - a flat cap on calls to this
+      endpoint from one address, regardless of whether they succeed.
+    * :class:`LoginAttemptTracker` counts **wrong-password** attempts against this
+      account and locks it, resetting on success. Keyed on the account rather than the
+      IP: the caller is already authenticated, so the account is the thing under attack.
+
+    Strength checking goes through Django's configured ``AUTH_PASSWORD_VALIDATORS``
+    instead of Frappe's zxcvbn wrapper, which is the spec's instruction
+    (PHASE_3_ENDPOINTS.md section 2, Group B).
     """
     from django.contrib.auth.password_validation import validate_password
     from django.core.exceptions import ValidationError as DjangoValidationError
@@ -72,6 +78,11 @@ def change_password(old_password: str, new_password: str):
     if user == GUEST_USER:
         raise AuthenticationError("You must be logged in to change your password")
 
+    tracker = LoginAttemptTracker(user)
+    if not tracker.is_user_allowed():
+        # Upstream's wording (crm/api/user.py:21).
+        throw("Too many failed attempts. Please try again after some time.")
+
     if old_password == new_password:
         throw(
             "New password cannot be the same as current password. "
@@ -80,7 +91,10 @@ def change_password(old_password: str, new_password: str):
 
     obj = User._default_manager.filter(pk=user).first()
     if obj is None or not obj.check_password(old_password):
+        tracker.add_failure_attempt()
         throw("Incorrect current password. Please try again.")
+
+    tracker.add_success_attempt()
 
     try:
         validate_password(new_password, user=obj)

@@ -7,6 +7,22 @@ from frappe_platform.models import User
 
 
 @pytest.fixture(autouse=True)
+def clear_cache():
+    """Empty the cache around every test.
+
+    Rate-limit and lockout counters live there (``frappe_core/security.py``). A count
+    surviving into the next test makes the suite order-dependent: whichever test happens
+    to run after five failed logins would see a locked account and fail for a reason that
+    has nothing to do with what it is testing.
+    """
+    from django.core.cache import cache
+
+    cache.clear()
+    yield
+    cache.clear()
+
+
+@pytest.fixture(autouse=True)
 def builtin_users(request):
     """Guarantee Frappe's two built-in User rows exist.
 

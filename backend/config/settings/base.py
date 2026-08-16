@@ -60,6 +60,9 @@ MIDDLEWARE = [
     # Binds the ambient "current user", the equivalent of frappe.session.user.
     # DRF views re-bind it after JWT auth; this covers everything else.
     "frappe_core.session.CurrentUserMiddleware",
+    # Binds the client IP so the rate limiter can see it. Endpoints are called with
+    # only their own kwargs, so a decorator cannot reach the request any other way.
+    "frappe_core.security.ClientIPMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -154,6 +157,32 @@ CORS_ALLOW_CREDENTIALS = True
 SITE_URL = env("SITE_URL", default="http://localhost:8000")
 
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
+
+# Redis, not the per-process default. Rate-limit and lockout counters live here, and a
+# LocMemCache would give each worker its own count - a "10 attempts" limit becomes 10 per
+# worker, and a restart clears it. DB 3: Celery uses 0 and 1, Channels 2.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        # 127.0.0.1, not localhost: on Windows the name resolves to ::1 first and the
+        # IPv6 attempt has to time out before it falls back, costing ~2.6s on the first
+        # connection of every process. Measured 2633ms via localhost, 746ms via the
+        # literal address. The server here is Memurai, which speaks the Redis protocol.
+        "LOCATION": env("CACHE_URL", default="redis://127.0.0.1:6379/3"),
+    }
+}
+
+# Brute-force protection (frappe_core/security.py). Upstream reads these from the
+# System Settings doctype, which this port does not model - the values match its
+# defaults (allow_consecutive_login_attempts=10, allow_login_after_fail=60).
+LOGIN_MAX_CONSECUTIVE_ATTEMPTS = env.int("LOGIN_MAX_CONSECUTIVE_ATTEMPTS", default=10)
+LOGIN_LOCK_INTERVAL_SECONDS = env.int("LOGIN_LOCK_INTERVAL_SECONDS", default=60)
+
+# Proxies in front of this app. 0 means X-Forwarded-For is ignored entirely, which is
+# correct when nothing fronts it: a client can forge that header and would otherwise
+# choose its own rate-limit bucket. Set it to the real hop count behind a load balancer,
+# or every user shares one bucket and one attacker locks out the office.
+TRUSTED_PROXY_COUNT = env.int("TRUSTED_PROXY_COUNT", default=0)
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default=REDIS_URL)
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default=REDIS_URL)
 

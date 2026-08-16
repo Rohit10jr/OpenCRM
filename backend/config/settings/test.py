@@ -25,5 +25,18 @@ EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 # is all `WebsocketCommunicator` needs: publisher and consumer are the same process.
 CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
+# Likewise the cache. Production points this at Redis so rate-limit and lockout counters
+# are shared across workers (frappe_core/security.py); the test run is single-process, so
+# local memory gives identical semantics with no service to depend on.
+#
+# It must be per-test-isolated, though: a counter surviving between tests would make them
+# order-dependent. `conftest.clear_cache` flushes it.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "frappe-test-cache",
+    }
+}
+
 # Fast hashing - these tests create a lot of users.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
