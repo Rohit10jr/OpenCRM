@@ -1,5 +1,5 @@
 # Phase 4 — PASS   [branch: phase-4-metadata]
-Started: 2026-08-16   Finished: 2026-08-16   Commit: `1a7e5b6`
+Started: 2026-08-16   Finished: 2026-08-16   Commit: `169cfc4` (this file amended after)
 
 **Built:** The metadata layer. A generated **field-metadata source of truth**
 (`frappe_core.field_meta`), which closed **C7**; the saved-view provider that fills
