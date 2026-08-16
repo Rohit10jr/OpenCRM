@@ -1,5 +1,6 @@
 # Phase 3 — PASS   [branch: phase-3-endpoints]
-Started: 2026-08-16   Finished: 2026-08-16   Commit: `a3bcc8a`
+Started: 2026-08-16   Finished: 2026-08-16   Commit: `762b0ac`
+(`a3bcc8a` was recorded here originally; the commit was amended and that SHA is orphaned.)
 
 **Built:** The endpoint layer — 58 dotted paths registered, up from 5. All of
 `PHASE_3_ENDPOINTS.md` groups A–D, plus the `frappe.client.*` / `frappe.desk.*`
