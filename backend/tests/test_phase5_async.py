@@ -668,23 +668,66 @@ def test_product_reconciliation_is_a_no_op_behind_the_flag(settings):
     assert "skipped" in run_product_reconciliation()
 
 
-def test_product_reconciliation_publishes_its_completion_event(settings, monkeypatch, alice):
-    """``reconcile_job.py:35`` — `PHASE_6_REALTIME.md` §2 lists this event as in scope,
-    so phase 6 needs a real emitter even though the reconciliation itself is phase 7."""
+def test_a_skipped_reconciliation_does_not_announce_itself(settings, monkeypatch, alice):
+    """``reconcile_job.py:24-25`` returns *before* the publish.
+
+    Phase 5 published unconditionally so phase 6 would have an emitter to wire up. A
+    phase-6 review caught it: announcing a sync that never ran is not a smaller version
+    of the right behaviour.
+    """
     import crm_app.tasks as tasks
 
     settings.ENABLE_ERPNEXT = False
     published = []
     monkeypatch.setattr(
         "crm_app.realtime.publish",
-        lambda event, user=None, message=None: published.append((event, user)) or True,
+        lambda event, message=None, user=None: published.append((event, user)) or True,
     )
     tasks.run_product_reconciliation(user=alice.name)
+    assert published == []
+
+
+def test_product_reconciliation_publishes_its_completion_event(settings, monkeypatch, alice):
+    """``reconcile_job.py:35`` — `PHASE_6_REALTIME.md` §2 lists this event as in scope.
+
+    The reconciliation body is phase 7, so it is stubbed here; everything around it —
+    the gate, the publish, the summary — is this phase's and is what is under test.
+    """
+    import crm_app.tasks as tasks
+
+    settings.ENABLE_ERPNEXT = True
+    monkeypatch.setattr(tasks, "_reconcile_products", lambda: {"created_in_crm": 0})
+    published = []
+    monkeypatch.setattr(
+        "crm_app.realtime.publish",
+        lambda event, message=None, user=None: published.append((event, user)) or True,
+    )
+
+    assert tasks.run_product_reconciliation(user=alice.name) == {"created_in_crm": 0}
     assert published == [("crm_product_sync_complete", alice.name)]
 
 
-def test_publishing_is_never_load_bearing():
-    """`PHASE_6_REALTIME.md` §4 — nothing may break when Channels is switched off."""
-    from crm_app.realtime import publish
+def test_reconciliation_still_refuses_to_run_without_a_provider(settings):
+    """The flag being on with nothing behind it is a config error, not a silent success."""
+    from crm_app.tasks import run_product_reconciliation
 
-    assert publish("anything", user="nobody@example.com") is False
+    settings.ENABLE_ERPNEXT = True
+    with pytest.raises(NotImplementedError):
+        run_product_reconciliation()
+
+
+def test_publishing_is_never_load_bearing(monkeypatch):
+    """`PHASE_6_REALTIME.md` §4 — nothing may break when Channels is switched off.
+
+    This asserted ``publish(...) is False`` while phase 5's stub had no transport at all.
+    Phase 6 supplied one, so that assertion was about the stub rather than the property.
+    The property itself is unchanged and is what is checked here: with no channel layer,
+    publishing degrades to False and never raises. ``test_phase6_realtime.py`` covers the
+    same ground from the other side — a *broken* layer, and a write that still succeeds
+    with realtime off.
+    """
+    from crm_app import realtime
+
+    monkeypatch.setattr(realtime, "get_channel_layer", lambda: None)
+    assert realtime.publish("anything", user="nobody@example.com") is False
+    assert realtime.publish_to_doc("CRM Lead", "x", "anything") is False

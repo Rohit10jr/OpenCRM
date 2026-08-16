@@ -14,6 +14,7 @@ from django.db import models
 from frappe_core.models import AutoIncrementDocument, BaseDocument
 from frappe_core.naming import FieldValue, Format, Hash, Prompt
 from frappe_core.registry import register_doctype
+from crm_app import realtime
 from crm_app.models.telephony import SingletonMixin
 
 VIEW_TYPE_CHOICES = [("list", "list"), ("group_by", "group_by"), ("kanban", "kanban")]
@@ -202,14 +203,18 @@ class CRMNotification(BaseDocument):
         name_strategy = Hash()
 
     def on_update(self):
-        """PHASE 6 seam.
+        """``crm_notification.py:30-32`` - filled in by phase 6.
 
-        ``crm_notification.py:30-32`` publishes the ``crm_notification`` realtime event
-        to ``to_user`` here. Channels is phase 6 (PHASE_6_REALTIME.md section 2 lists
-        this as one of only two in-scope events), so this is a named no-op rather than a
-        silent omission - phase 6 fills in the body and the call site already exists.
+        Note the guard is upstream's: no ``to_user``, no event. The column is NOT NULL
+        here, so it cannot fire on a saved row, but the check stays because deleting it
+        would be a silent divergence from the source rather than a visible one.
+
+        The publish is deliberately unguarded by any try/except of its own -
+        ``realtime.publish`` never raises, and never returning False here would be
+        indistinguishable from succeeding.
         """
-        return None
+        if self.to_user_id:
+            realtime.publish("crm_notification", user=self.to_user_id)
 
     def save(self, *args, **kwargs):
         result = super().save(*args, **kwargs)

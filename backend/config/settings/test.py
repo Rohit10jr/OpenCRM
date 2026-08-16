@@ -21,5 +21,9 @@ CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
+# No Redis either (RUNBOOK.md, same section). The in-memory layer is process-local, which
+# is all `WebsocketCommunicator` needs: publisher and consumer are the same process.
+CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
 # Fast hashing - these tests create a lot of users.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]

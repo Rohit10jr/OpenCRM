@@ -187,6 +187,50 @@ keeps naming the last person who actually edited the document, not the worker.
 **SLA has no scheduled job and must not acquire one** — it is computed on write. See
 `PHASE_5_ASYNC.md` §4 and `test_no_sla_job_exists_in_the_beat_schedule`.
 
+### Added by phase 6
+
+| Need | Call |
+|---|---|
+| Publish to one user, or broadcast | `crm_app.realtime.publish(event, message=None, user=...)` |
+| Publish to everyone watching a document | `crm_app.realtime.publish_to_doc(doctype, name, event, message=...)` |
+| The same, from inside a coroutine | `realtime.apublish(...)` / `realtime.apublish_to_doc(...)` |
+| Group names | `realtime.user_group(user)`, `realtime.doc_group(doctype, name)` |
+| The WebSocket endpoint | `GET /ws/realtime?token=<access token>` → `crm_app.consumers.RealtimeConsumer` |
+
+**The argument order is `frappe.publish_realtime`'s: `(event, message, user=...)`.** Not a
+style choice — the publish sites still to be ported pass the payload positionally
+(`crm/api/whatsapp.py:50`, `crm/integrations/exotel/handler.py:41`), and under any other
+order `publish("exotel_call", payload)` would hash the payload into a group name nobody is
+in and return True.
+
+**A missing message body goes out as `{}`, never `null`**, matching
+`frappe.publish_realtime`. Frontend handlers destructure their argument
+(`Activities.vue:590`), and destructuring `null` throws.
+
+**`whatsapp_message` is a broadcast, not a doc-room event** — `crm/api/whatsapp.py:49-56`
+sends `{reference_doctype, reference_name}` with no room and the client filters. Phase 7
+should call `publish`, not `publish_to_doc`.
+
+**Group names are hashes.** Channels restricts them to `[-\w.]` under 100 characters, and
+both halves of a real key break that: `o'brien+crm@example.co.uk` is a legal user PK and
+every doctype name has a space. Always go through `user_group` / `doc_group`; the
+publisher and the consumer compute them independently, and a mismatch is not an error, it
+is silence.
+
+**Realtime is switched off in one place — `ENABLE_REALTIME`.** It drops the WebSocket
+route in `config/asgi.py` *and* makes `get_channel_layer()` return `None`. Both halves are
+needed: routing alone would leave every publisher opening a Redis connection and waiting
+for it to time out, which turns "realtime is off" into "every comment write pauses".
+
+**Nothing may branch on a publish result.** Every path returns a bool and swallows its
+failures; a caller that treats `False` as "the write did not happen" has reintroduced the
+dependency `PHASE_6_REALTIME.md` §4 forbids.
+
+**A `doc_subscribe` is permission-checked, not trusted.** `consumers._may_read` applies
+the list filter *and* the object rule, the same pair the HTTP detail route uses. Any new
+client event that names a document must do the same, or realtime becomes a permission
+bypass with a pleasant API.
+
 ---
 
 ## 3. Behaviours you can rely on

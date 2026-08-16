@@ -1,8 +1,13 @@
 # Phase 6 — Realtime (Django Channels)
 
-> **PROVISIONAL** — flip this header to Authoritative when your gate passes.
+> **BUILT** — phase 6 landed on `phase-6-realtime`, 1106 tests passing, reviewed.
+> See `PROGRESS_PHASE_6.md` for what was built and what is still open.
 >
-> **Read `specs/AS_BUILT.md` first.** It lists what phases 0-2 actually built; where it
+> **The frontend socket rewrite is documented in `frontend/JWT_PATCH.md`**, alongside the
+> JWT interceptor — those two are the only sanctioned frontend deviations, and they now
+> live in one place so an upgrade cannot silently revert either.
+>
+> **Read `specs/AS_BUILT.md` first.** It lists what phases 0-5 actually built; where it
 > and this spec disagree, it wins.
 
 **Fan out.** Needs phase 5. Not blocking — the app is usable without it.

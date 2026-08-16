@@ -21,6 +21,12 @@ DEBUG = env.bool("DJANGO_DEBUG", default=False)
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
 INSTALLED_APPS = [
+    # Phase 6. Both must precede `django.contrib.staticfiles`: daphne replaces
+    # `runserver` with the ASGI one, and staticfiles replaces it with its own, so
+    # whichever is listed later wins. WSGI cannot carry a WebSocket, so it has to be
+    # daphne.
+    "daphne",
+    "channels",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -166,6 +172,22 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_ENABLE_UTC = True
 # A task that outlives its result is just noise in Redis.
 CELERY_RESULT_EXPIRES = 60 * 60 * 24
+
+# Realtime (phase 6). Off switches the WebSocket route out of the ASGI application and
+# makes `realtime.publish` a no-op; nothing else changes, because publishing is never
+# load-bearing (PHASE_6_REALTIME.md section 4).
+ENABLE_REALTIME = env.bool("ENABLE_REALTIME", default=True)
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        # The same Redis Celery already needs, so realtime adds no infrastructure
+        # (PORT_PLAN.md section 10). A Celery worker publishing an event reaches the same
+        # layer the web process serves from, which is what makes
+        # `run_product_reconciliation` able to notify a browser at all.
+        "CONFIG": {"hosts": [env("CHANNEL_LAYER_URL", default=REDIS_URL)]},
+    }
+}
 
 # Integration feature flags (specs/PHASE_7_INTEGRATIONS.md) - all off.
 ENABLE_ERPNEXT = env.bool("ENABLE_ERPNEXT", default=False)

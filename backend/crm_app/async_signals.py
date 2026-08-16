@@ -11,7 +11,11 @@ the top of a list when someone comments on it.
 
 from __future__ import annotations
 
+import logging
+
 from django.db.models.signals import post_save
+
+logger = logging.getLogger(__name__)
 
 #: ``crm/utils/__init__.py:165`` — only these two ever bump.
 TIMESTAMP_DOCTYPES = ("CRM Lead", "CRM Deal")
@@ -49,11 +53,70 @@ def _enqueue_touch(reference_doctype: str, reference_name: str) -> None:
         update_modified_background.delay(reference_doctype, str(reference_name))
 
 
+#: ``comment.py``'s ``comment_type`` -> docinfo key map. Only ``comments`` is consumed by
+#: this frontend (``Activities.vue:591`` returns early on anything else), but the mapping
+#: is the source's and the extra keys cost nothing.
+DOCINFO_KEYS = {
+    "Comment": "comments",
+    "Like": "like_logs",
+    "Assignment": "assignments",
+    "Attachment": "attachments",
+}
+
+
+def _notify_watchers(doc, key: str, action: str = "add") -> None:
+    """Tell whoever has the document open that its activity feed changed.
+
+    Phase 6. This is what makes `PHASE_6_REALTIME.md` §3's per-document groups do
+    something — without it ``doc_subscribe`` joins a group nothing ever sends to. The
+    event name and payload are Frappe's own, so ``Activities.vue`` needs no new handler:
+    it destructures ``{doc, key}`` and matches ``doc.reference_doctype`` /
+    ``doc.reference_name`` against the document it is showing (``Activities.vue:590-596``).
+
+    ``doc`` is sent as a small dict rather than the full serialised document. The handler
+    reads three fields, and a signal that serialises an entire Comment on every write —
+    including its attachment queries — would be paying for a payload nobody opens.
+
+    The whole body is exception-safe. A signal that raised here would fail the *write*,
+    which is precisely the dependency §4's last criterion forbids.
+    """
+    reference_doctype = getattr(doc, "reference_doctype", None)
+    reference_name = getattr(doc, "reference_name", None)
+    if not (reference_doctype and reference_name and key):
+        return
+
+    try:
+        from crm_app import realtime
+
+        realtime.publish_to_doc(
+            reference_doctype,
+            str(reference_name),
+            "docinfo_update",
+            message={
+                "doc": {
+                    "name": str(doc.pk),
+                    "reference_doctype": reference_doctype,
+                    "reference_name": str(reference_name),
+                },
+                "key": key,
+                "action": action,
+            },
+        )
+    except Exception:  # pragma: no cover - publish_to_doc already swallows its own
+        logger.warning("realtime: docinfo_update could not be prepared", exc_info=True)
+
+
 def on_comment_insert(sender, instance, created, **kwargs):
     """``crm/utils/__init__.py:238-249``. Only ``comment_type == "Comment"``."""
-    if not created or instance.comment_type != "Comment":
-        return
-    _enqueue_touch(instance.reference_doctype, instance.reference_name)
+    if created and instance.comment_type == "Comment":
+        _enqueue_touch(instance.reference_doctype, instance.reference_name)
+
+    # The realtime notice is *not* limited to comments, and not to inserts: a like or an
+    # attachment changes the same activity feed, and an edited comment changes what is
+    # shown. `comment.py`'s own notify_change fires on both write and delete.
+    key = DOCINFO_KEYS.get(instance.comment_type)
+    if key:
+        _notify_watchers(instance, key, "add" if created else "update")
 
 
 def on_communication_write(sender, instance, created, **kwargs):
@@ -63,6 +126,7 @@ def on_communication_write(sender, instance, created, **kwargs):
     existing thread is what should reorder the list.
     """
     _enqueue_touch(instance.reference_doctype, instance.reference_name)
+    _notify_watchers(instance, "communications", "add" if created else "update")
 
 
 def on_invitation_insert(sender, instance, created, **kwargs):

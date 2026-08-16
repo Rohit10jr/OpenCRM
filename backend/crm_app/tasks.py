@@ -258,27 +258,42 @@ def delete_bulk_docs_task(doctype: str, items: list, delete_linked: bool = False
     return "success"
 
 
+def _reconcile_products() -> dict:
+    """The ERPNext Item <-> CRM Product sync itself — phase 7.
+
+    A named seam rather than an inline ``raise``, so the surrounding control flow (skip,
+    reconcile, publish, return) can be tested against upstream's without a provider.
+    """
+    raise NotImplementedError(
+        "Product reconciliation is phase 7; the flag is on but no provider exists"
+    )
+
+
 @shared_task(name="crm.run_product_reconciliation")
 def run_product_reconciliation(user: str | None = None) -> dict:
     """``crm/fcrm/doctype/crm_product/reconcile_job.py:21-37``.
 
     The reconciliation itself is an **ERPNext integration** — it reads
-    ``ERPNext CRM Settings`` and syncs Item <-> CRM Product, both phase-7 deferred. So
-    the body is a flag-gated no-op.
+    ``ERPNext CRM Settings`` and syncs Item <-> CRM Product, both phase-7 deferred. What
+    is *not* deferred is the completion event, which `PHASE_6_REALTIME.md` §2 lists as one
+    of the two events phase 6 consumes.
 
-    What is *not* deferred is the completion event: upstream ends with
-    ``frappe.publish_realtime("crm_product_sync_complete", user=...)`` and
-    `PHASE_6_REALTIME.md` §2 lists it as one of the events phase 6 consumes. The publish
-    call is made unconditionally so phase 6 has a real emitter to wire up.
+    **The skip path returns before publishing**, exactly as ``reconcile_job.py:24-25``
+    does. Phase 5 published unconditionally, so that phase 6 would have an emitter to wire
+    up; that was backwards — it announced a sync that had not happened. Here the flag gate
+    is upstream's ``_get_skip_reason`` and it short-circuits the same way.
+
+    ``user`` is resolved rather than defaulted to ``None``: upstream publishes to
+    ``frappe.session.user``, and in this port a ``None`` user means *broadcast*. Telling
+    every connected browser that somebody else's ERPNext sync finished is not a smaller
+    version of the right behaviour, it is a different one.
     """
     from crm_app.realtime import publish
+    from frappe_core.session import get_current_user
 
     if not getattr(settings, "ENABLE_ERPNEXT", False):
-        summary = {"skipped": "ENABLE_ERPNEXT is off"}
-    else:  # pragma: no cover - phase 7
-        raise NotImplementedError(
-            "Product reconciliation is phase 7; the flag is on but no provider exists"
-        )
+        return {"skipped": "ENABLE_ERPNEXT is off"}
 
-    publish("crm_product_sync_complete", user=user)
+    summary = _reconcile_products()
+    publish("crm_product_sync_complete", user=user or get_current_user())
     return summary

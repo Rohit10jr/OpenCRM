@@ -14,8 +14,13 @@ celery==5.4.0
 redis==5.2.1
 channels==4.2.0
 channels-redis==4.2.1
+# The ASGI server. WSGI cannot carry a WebSocket, so `runserver` and the deployed
+# process both have to speak ASGI once phase 6 is on.
+daphne==4.1.2
 
 # Testing
 pytest==8.3.4
 pytest-django==4.9.0
 pytest-cov==6.0.0
+# WebsocketCommunicator is a coroutine; without this its tests silently do not run.
+pytest-asyncio==0.25.2
