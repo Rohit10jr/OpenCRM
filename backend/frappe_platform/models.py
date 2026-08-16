@@ -85,6 +85,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     time_zone = models.CharField(max_length=100, blank=True, default="")
     mobile_no = models.CharField(max_length=140, blank=True, default="")
     phone = models.CharField(max_length=140, blank=True, default="")
+    #: Phase 3: read by ``crm.api.session.get_users`` (``crm/api/session.py:29``) and
+    #: ``crm.api.get_translations`` (``crm/api/__init__.py:14``).
+    language = models.CharField(max_length=20, blank=True, default="")
+    #: Phase 3: the first source ``crm.api.get_user_signature`` checks
+    #: (``crm/api/__init__.py:25-30``).
+    email_signature = models.TextField(blank=True, default="")
 
     # Django admin plumbing.
     is_staff = models.BooleanField(default=False)
@@ -564,9 +570,31 @@ class EmailAccount(BaseDocument):
     # Frappe stores this encrypted; phase 7 owns real credential handling.
     password = models.CharField(max_length=280, blank=True, default="")
     no_smtp_authentication = models.BooleanField(default=False)
+    #: Phase 3: the fallback source for ``crm.api.get_user_signature``
+    #: (``crm/api/__init__.py:32-36``).
+    add_signature = models.BooleanField(default=False)
+    signature = models.TextField(blank=True, default="")
+    #: Phase 3: written by ``crm.api.settings.create_email_account``
+    #: (``crm/api/settings.py:12-52`` and its ``email_service_config`` table).
+    api_key = models.CharField(max_length=280, blank=True, default="")
+    api_secret = models.CharField(max_length=280, blank=True, default="")
+    frappe_mail_site = models.CharField(max_length=280, blank=True, default="")
+    append_to = models.CharField(max_length=140, blank=True, default="")
+    domain = models.CharField(max_length=140, blank=True, default="")
+    login_id = models.CharField(max_length=140, blank=True, default="")
+    login_id_is_different = models.BooleanField(default=False)
+    awaiting_password = models.BooleanField(default=False)
+    ascii_encode_password = models.BooleanField(default=False)
+    use_ssl = models.BooleanField(default=False)
+    use_ssl_for_outgoing = models.BooleanField(default=False)
+    use_starttls = models.BooleanField(default=False)
+    validate_ssl_certificate = models.BooleanField(default=False)
+    incoming_port = models.IntegerField(null=True, blank=True)
+    always_use_account_email_id_as_sender = models.BooleanField(default=False)
 
     #: Never serialised, never selectable. frappe_core.field_security.
-    SENSITIVE_FIELDS = ("password",)
+    #: ``api_secret`` joins ``password``: it is the Frappe Mail credential.
+    SENSITIVE_FIELDS = ("password", "api_secret")
 
     class Meta:
         ordering = ["-modified"]
@@ -577,6 +605,43 @@ class EmailAccount(BaseDocument):
 # (frappe_core/assignment.py); this is the single call that switches it on now that the
 # real ToDo model exists.
 register_todo_model(ToDo)
+
+
+@register_doctype("Dynamic Link", is_child_table=True)
+class DynamicLink(BaseDocument):
+    """Frappe's generic "this document points at that one" child table.
+
+    Phase 3, carried-over item **C5**. Schema from the framework
+    (``frappe/core/doctype/dynamic_link/dynamic_link.json``): ``link_doctype`` (Link to
+    DocType), ``link_name`` (Dynamic Link), ``link_title`` (Read Only).
+
+    Polymorphic on **both** ends - it is embedded by several doctypes *and* points at
+    several - so it carries ``parent``/``parenttype`` rather than a FK, like the three
+    CRM child tables in the same position.
+
+    Unblocks two things upstream depends on:
+
+    * ``CRM Call Log.links`` - attaching notes/tasks/leads/deals to a call, which
+      ``crm/api/activities.py:get_linked_calls`` reads.
+    * ``Contact.links`` - which upstream's ``Contact.autoname`` consults for its
+      company suffix.
+    """
+
+    parenttype = models.CharField(max_length=140, blank=True, default="", db_index=True)
+    parentfield = models.CharField(max_length=140, blank=True, default="")
+    parent = models.CharField(max_length=140, blank=True, default="", db_index=True)
+
+    link_doctype = models.CharField(max_length=140, db_index=True)
+    link_name = models.CharField(max_length=140, db_index=True)
+    link_title = models.CharField(max_length=280, blank=True, default="")
+
+    class Meta:
+        ordering = ["idx"]
+        name_strategy = Hash()
+        indexes = [
+            models.Index(fields=["parenttype", "parent"], name="dynamic_link_parent_idx"),
+            models.Index(fields=["link_doctype", "link_name"], name="dynamic_link_target_idx"),
+        ]
 
 
 # Contact's denormalised email_id / mobile_no / phone follow its child rows. Upstream

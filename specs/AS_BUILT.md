@@ -78,13 +78,41 @@ Import the module from your app's `AppConfig.ready()` or it never resolves.
 
 ### Endpoints that already exist — do not rebuild
 
-```
-login                            token/refresh
-logout                           frappe.auth.get_logged_user
-crm.api.doc.get_data
-```
+**Phase 3 landed the endpoint layer.** 58 dotted paths are registered; list them with
+`frappe_core.whitelist.all_methods()`. They live in `crm_app/api/`, one module per
+source module — `crm.api.contact.*` in `crm_app/api/contact.py` — except the endpoints
+Frappe defines in `crm/api/__init__.py`, whose paths have no module segment
+(`crm.api.invite_by_email`) and which live in `crm_app/api/misc.py`.
 
-Everything else in `specs/PHASE_3_ENDPOINTS.md` is still to be written.
+Covered: all of `PHASE_3_ENDPOINTS.md` groups A–D, plus the `frappe.client.*` /
+`frappe.desk.*` built-ins the frontend needs (`PORT_PLAN.md` §3) in
+`crm_app/api/client.py`.
+
+`test_every_frontend_dotted_path_resolves` reads the frontend source and fails if it
+calls a path nothing serves — so that list stays honest without being maintained by hand.
+
+Still unported, deliberately: `crm.api.whatsapp.*` and `crm.integrations.*` (phase 7),
+the doctype-controller methods (`PHASE_3_ENDPOINTS.md` §3), and `crm.demo.*`.
+
+### Added by phase 3
+
+| Need | Call |
+|---|---|
+| **Cancel an assignment** | `assignment.cancel_assignment(doctype, name, users, status="Cancelled")` — flips the ToDo, never deletes it |
+| **Recompute product totals** | `crm_app.models.taxonomy.recalculate_parent_totals(parenttype, parent)` — fires automatically on `CRMProducts` save/delete |
+| Quick-filter defaults | `crm_app.api.doc.STANDARD_FILTER_FIELDS` — `in_standard_filter` per doctype, verified against the JSON by test |
+| Mention parsing | `crm_app.api.comment.extract_mentions(html)`, `notify_mentions(comment)` |
+| Activity timeline parts | `crm_app.api.activities.get_linked_calls / get_linked_notes / get_linked_tasks / get_attachments` |
+| Chart dispatch | `crm_app.api.dashboard.CHART_BUILDERS` — add a name here and both dashboard endpoints pick it up |
+| Role guard | `crm_app.api.user.only_for([roles])` — the port of `frappe.only_for` |
+
+**New model: `Dynamic Link`** (C5), in `frappe_platform`. Frappe's generic
+"this document points at that one" child table — polymorphic on both ends, so it carries
+`parent`/`parenttype` rather than a FK. Unblocks `CRM Call Log.links` and `Contact.links`.
+
+**New platform fields:** `User.language`, `User.email_signature`; `Email Account` gained
+the signature, Frappe Mail and IMAP/SMTP columns `create_email_account` writes.
+`Email Account.api_secret` joins `password` in `SENSITIVE_FIELDS`.
 
 ---
 

@@ -54,6 +54,15 @@ class DocumentSerializer(serializers.ModelSerializer):
         for name in READ_ONLY_FIELDS:
             if name in fields:
                 fields[name].read_only = True
+        # A field the model fills in on save must not be *required* on the way in.
+        # `CRMLead.status` is the case that surfaced this: phase 1 ported upstream's
+        # `validate_status`, which defaults it on create, but DRF validates before the
+        # model runs - so every API-created lead was rejected with "status is required"
+        # while direct ORM creates worked. Declaring it here keeps the two paths in step.
+        for name in getattr(self.Meta.model, "AUTO_DEFAULTED_FIELDS", ()) or ():
+            if name in fields:
+                fields[name].required = False
+                fields[name].allow_null = True
         for fieldname, spec in (self.child_table_spec or {}).items():
             fields[fieldname] = _build_child_field(spec)
         return fields

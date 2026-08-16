@@ -235,8 +235,92 @@ class CRMProducts(BaseDocument):
             models.Index(fields=["parenttype", "parent"], name="crm_products_parent_idx"),
         ]
 
+    # -- C4: the money columns, computed ------------------------------------------
+    #
+    # Upstream computes these in a **client-side form script**, not on the server -
+    # `crm/fcrm/doctype/crm_products/crm_products.py:112-195` builds the JS that
+    # `CRM Form Script` injects into the browser. So there is nothing server-side to
+    # port, and the values arrive from the client.
+    #
+    # Computing them here is a deliberate divergence, and it is the kind the project
+    # rule allows: for an honest client the numbers are identical, so nothing
+    # user-visible changes - but a hand-rolled request can no longer post
+    # `total = 0` on a deal worth 50,000. Money fields taken on trust from the wire
+    # is not a behaviour worth reproducing. Logged in UPSTREAM_BUGS.md.
+
+    def compute_amounts(self) -> None:
+        """Per-row arithmetic, from the ``qty`` / ``rate`` / ``discount_percentage``
+        handlers (``crm_products.py:168-190``)."""
+        from decimal import Decimal
+
+        qty = Decimal(str(self.qty or 0))
+        rate = Decimal(str(self.rate or 0))
+        self.amount = qty * rate
+
+        discount = Decimal(str(self.discount_percentage or 0))
+        if discount and self.amount:
+            self.discount_amount = (discount / Decimal("100")) * self.amount
+            self.net_amount = self.amount - self.discount_amount
+        else:
+            self.discount_amount = Decimal("0")
+            self.net_amount = self.amount
+
+    def save(self, *args, **kwargs):
+        self.compute_amounts()
+        result = super().save(*args, **kwargs)
+        recalculate_parent_totals(self.parenttype, self.parent)
+        return result
+
+    def delete(self, *args, **kwargs):
+        parenttype, parent = self.parenttype, self.parent
+        result = super().delete(*args, **kwargs)
+        recalculate_parent_totals(parenttype, parent)
+        return result
+
+
+def recalculate_parent_totals(parenttype: str, parent: str) -> None:
+    """``update_total()`` from the form script (``crm_products.py:118-141``).
+
+    The ``net_total`` rule is subtler than it looks and is ported exactly:
+
+    * ``net_total = sum(net_amount) or total`` - a zero sum falls back to the gross
+      total, which covers rows written before the amounts were ever computed.
+    * **unless** a discount was applied, in which case the zero is real and stands.
+      Without that second branch a 100%-discounted deal would report its full value.
+    """
+    from decimal import Decimal
+
+    from frappe_core import registry
+
+    if not parenttype or not parent or not registry.has_doctype(parenttype):
+        return
+    model = registry.get_model(parenttype)
+    names = {f.name for f in model._meta.get_fields() if getattr(f, "concrete", False)}
+    if "total" not in names or "net_total" not in names:
+        return
+
+    rows = CRMProducts._default_manager.filter(parenttype=parenttype, parent=str(parent))
+
+    total = Decimal("0")
+    net_total = Decimal("0")
+    discount_applied = False
+    for row in rows:
+        total += Decimal(str(row.amount or 0))
+        net_total += Decimal(str(row.net_amount or 0))
+        if (row.discount_percentage or 0) > 0:
+            discount_applied = True
+
+    resolved_net = net_total or total
+    if not net_total and discount_applied:
+        resolved_net = net_total
+
+    # update(), not save(): a totals refresh must not bump `modified` and re-order
+    # every list view (AS_BUILT.md section 4).
+    model._default_manager.filter(pk=parent).update(total=total, net_total=resolved_net)
+
 
 __all__ = [
+    "recalculate_parent_totals",
     "CRMLeadStatus",
     "CRMDealStatus",
     "CRMLeadSource",

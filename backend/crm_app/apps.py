@@ -23,3 +23,7 @@ class CrmAppConfig(AppConfig):
         for model in django_apps.get_app_config("crm_app").get_models():
             if getattr(model, "POLYMORPHIC_CHILD_TABLES", None):
                 connect_cascade(model)
+
+        # Phase 3: importing the package runs the @whitelist decorators, which is what
+        # makes each dotted path resolvable. Without this the method map is empty.
+        from crm_app import api  # noqa: F401

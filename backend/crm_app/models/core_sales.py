@@ -472,6 +472,10 @@ class CRMLead(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
         "rolling_responses": "CRM Rolling Response Time",
     }
 
+    #: Filled in by ``validate_status`` on create, so the serializer must not demand it
+    #: (frappe_core/serializers.py). Upstream's client omits it too.
+    AUTO_DEFAULTED_FIELDS = ("status",)
+
     #: ``image`` is hidden in the JSON; get_data drops hidden columns
     #: (``crm/api/doc.py:350-352``).
     @staticmethod
@@ -695,6 +699,9 @@ class CRMDeal(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
         "status_change_log": "CRM Status Change Log",
         "rolling_responses": "CRM Rolling Response Time",
     }
+
+    #: Filled in by ``validate_status`` on create - see the note on ``CRMLead``.
+    AUTO_DEFAULTED_FIELDS = ("status",)
 
     # -- lifecycle (crm_deal.py) --------------------------------------------------
 

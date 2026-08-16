@@ -1,10 +1,16 @@
 # Phase 3 — API Endpoints
 
-> **PROVISIONAL — revised by phase-0 agent, pending human review.**
-> The registry/serializer assumptions below now describe what phase 0 actually built
-> (see §1a). The revision is itself unreviewed, so the status stays PROVISIONAL per
-> `RUNBOOK.md`. Note this overrides `specs/README.md`, which told the phase-0 agent to
-> flip these to Authoritative — the runbook wins.
+> **BUILT** — phase 3 landed on `phase-3-endpoints`, 944 tests passing, reviewed.
+> See `PROGRESS_PHASE_3.md` for what was built, what diverged and what is still open,
+> and `specs/AS_BUILT.md` for the helpers it added.
+>
+> Two things this spec did not anticipate, both delivered:
+> the `frappe.client.*` / `frappe.desk.*` built-ins the frontend needs
+> (`PORT_PLAN.md` §3 lists them; §2 below does not), and the fact that **C4's totals are
+> a client-side form script upstream**, not server logic.
+>
+> Known gaps, named rather than hidden: six dashboard charts, and the `Version`-derived
+> field-change entries in `get_activities`. Both in `PROGRESS_PHASE_3.md`.
 
 **Fan out by module.** Needs phase 1. One agent per module group; never two agents in
 one file.

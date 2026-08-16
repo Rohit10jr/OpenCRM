@@ -199,6 +199,41 @@ def assign_to_user(doctype: str, name, user: str, *, description: str = "") -> b
     return True
 
 
+def cancel_assignment(doctype: str, name, users: list[str], status: str = "Cancelled") -> int:
+    """Port of ``frappe.desk.form.assign_to.set_status`` (framework
+    ``desk/form/assign_to.py:212-241``). Returns the number of ToDos updated.
+
+    **Cancels rather than deletes.** A cancelled ToDo grants no access
+    (PHASE_2_PERMISSIONS.md section 2) while preserving the audit trail, which is why
+    upstream flips the status instead of removing the row.
+
+    Upstream matches ``status != <target>`` rather than ``status == "Open"``, so a
+    Closed assignment is also cancellable - and that matters here, because a Closed
+    ToDo still grants access.
+
+    Not ported: the permission check (callers do their own), ``assigned_to`` field sync
+    (no CRM doctype declares it) and ``notify_assignment`` (phases 5-6).
+    """
+    if _TODO_MODEL is None or not users:
+        return 0
+
+    todos = _TODO_MODEL._default_manager.filter(
+        **{
+            _FIELDS["reference_type"]: doctype,
+            _FIELDS["reference_name"]: str(name),
+            f"{_FIELDS['allocated_to']}__in": list(users),
+        }
+    ).exclude(**{_FIELDS["status"]: status})
+
+    updated = 0
+    for todo in list(todos):
+        setattr(todo, _FIELDS["status"], status)
+        # save(), not update(): _on_todo_write must fire so `_assign` is rebuilt.
+        todo.save()
+        updated += 1
+    return updated
+
+
 def rebuild_assign_cache(doctype: str, name) -> list[str] | None:
     """Recompute one document's ``_assign`` from its ToDo rows."""
     if not registry.has_doctype(doctype):
