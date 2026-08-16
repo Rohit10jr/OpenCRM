@@ -152,6 +152,41 @@ four-step order and every response key are unchanged.
 A provider returning `None` means "fall through to the controller default"; returning an
 empty dict would render a column-less list.
 
+### Added by phase 5
+
+| Need | Call |
+|---|---|
+| Enqueue anything | `@shared_task` — `config.celery.app` is imported by `config/__init__.py`, so bare `shared_task` binds |
+| Scheduled work | `config.celery.app.conf.beat_schedule` — one entry per `crm/hooks.py:scheduler_events` row |
+| Emit a realtime event | `crm_app.realtime.publish(event, user=..., message=...)` |
+| Object rule for a whole batch | `frappe_core.permissions.filter_object_permitted(doctype, instances, ptype, user)` |
+| Bulk delete, split for the worker | `crm_app.api.doc.authorize_bulk_delete(...)` / `perform_bulk_delete(...)` |
+
+**`publish` is never load-bearing.** It returns a bool and swallows a missing transport —
+phase 6 fills in the Channels layer, and everything written against it already works with
+Channels switched off. Never branch on its return value to decide whether a write happened.
+
+**`filter_object_permitted` is the batched form of `check_object_permission`, and it is a
+cost optimisation only.** A doctype opts in by registering `has_permission_batch` (CRM
+Lead and CRM Deal do); everything else falls back to the per-object hook and gets the same
+answer more slowly. `test_the_batched_object_rule_agrees_with_the_single_object_one` pins
+the two together — if they ever disagree, the single-object answer is the one the rest of
+the app uses and therefore the one to trust.
+
+**A write path needs both `apply_permission_filter` and the object rule.** They are
+allowed to differ and for the metadata doctypes they deliberately do: a public
+`CRM View Settings` row is readable by everyone and deletable only by its owner. Phase 5's
+review found `delete_bulk_docs` authorizing from the list filter alone, which let it
+delete what `DELETE /api/resource/<dt>/<name>` refuses.
+
+**Commenting bumps `modified`; the cache write does not.** `update_modified_background`
+(`crm/utils/__init__.py:238-253`) is what makes a lead rise to the top of a
+`modified desc` list when someone comments. It is a bare `update()`, so `modified_by`
+keeps naming the last person who actually edited the document, not the worker.
+
+**SLA has no scheduled job and must not acquire one** — it is computed on write. See
+`PHASE_5_ASYNC.md` §4 and `test_no_sla_job_exists_in_the_beat_schedule`.
+
 ---
 
 ## 3. Behaviours you can rely on

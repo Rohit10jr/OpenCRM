@@ -49,6 +49,11 @@ class DocTypeEntry:
     #: Set by phase 2 via :func:`register_permission_hooks`.
     permission_query_conditions: Callable | None = None
     has_permission: Callable | None = None
+    #: Optional batched form of ``has_permission``, added in phase 5 for C9. Takes
+    #: ``(doctype, instances, ptype, user)`` and returns the subset of ``instances`` that
+    #: passes, in a bounded number of queries. Absent means "call ``has_permission`` per
+    #: object", which is correct but N round-trips.
+    has_permission_batch: Callable | None = None
     #: Set by phase 4 via :func:`register_metadata_hooks`.
     list_columns_provider: Callable | None = None
     filterable_fields_provider: Callable | None = None
@@ -189,16 +194,24 @@ def register_permission_hooks(
     *,
     permission_query_conditions: Callable | None = None,
     has_permission: Callable | None = None,
+    has_permission_batch: Callable | None = None,
 ) -> None:
     """Phase-2 entry point. Mirrors Frappe's ``hooks.py`` blocks.
 
     Upstream registers these for CRM Lead, CRM Deal and CRM Notification only.
+
+    ``has_permission_batch`` has no upstream counterpart; it exists because upstream's
+    per-object check is one query per object and phase 3's ``delete_bulk_docs`` has to
+    ask the question about a whole batch (C9). It is an optimisation only - omitting it
+    changes cost, never the answer.
     """
     entry = get_entry(doctype)
     if permission_query_conditions is not None:
         entry.permission_query_conditions = permission_query_conditions
     if has_permission is not None:
         entry.has_permission = has_permission
+    if has_permission_batch is not None:
+        entry.has_permission_batch = has_permission_batch
 
 
 def register_metadata_hooks(

@@ -33,3 +33,9 @@ class CrmAppConfig(AppConfig):
         from crm_app import metadata_hooks
 
         metadata_hooks.register()
+
+        # Phase 5: enqueue background work off model writes - the `modified` bump that
+        # reorders a list when someone comments, and the invitation email.
+        from crm_app import async_signals
+
+        async_signals.connect_signals()

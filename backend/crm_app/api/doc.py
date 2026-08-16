@@ -467,6 +467,70 @@ def remove_linked_doc_reference(
 BULK_DELETE_ENQUEUE_THRESHOLD = 10
 
 
+def authorize_bulk_delete(doctype: str, names: list[str], user: str) -> list[str]:
+    """Resolve ``names`` to the rows ``user`` may delete, or refuse the whole batch.
+
+    Split out of :func:`delete_bulk_docs` in phase 5 so the Celery task can run the same
+    check itself rather than trusting the caller (`PHASE_5_ASYNC.md` §5).
+
+    C9: the *visibility* half is batched into a single permission-filtered query rather
+    than N calls to ``has_permission``.
+
+    That batched query is a pre-filter, not the whole check. It is the **list** rule, and
+    for the two metadata doctypes the list rule is deliberately weaker than the write
+    rule — anyone may read a public ``CRM View Settings`` row, only its owner or an admin
+    may delete one (``permissions/metadata_docs.py``). Checking visibility alone would
+    have made this endpoint delete what ``DELETE /api/resource/<dt>/<name>`` refuses
+    (``frappe_core/views.py:133``), which is upstream's behaviour too: ``delete_bulk``
+    goes through ``frappe.delete_doc``, and that runs ``check_permission("delete")`` per
+    document. So the surviving rows get the object hook as well, on instances already
+    loaded — no extra query per item.
+    """
+    from frappe_core.query import base_queryset
+
+    entry = registry.get_entry(doctype)
+
+    permitted = set(
+        str(pk)
+        for pk in base_queryset(doctype, user).filter(pk__in=names).values_list("pk", flat=True)
+    )
+    instances = {
+        str(obj.pk): obj for obj in entry.model._default_manager.filter(pk__in=names)
+    }
+    existing = set(instances)
+
+    denied = sorted((existing - permitted))
+    # The object rule can be stricter than the list rule, so visibility alone is not
+    # enough. Batched (C9): one query for the whole batch, not one per item.
+    survivors = permissions.filter_object_permitted(
+        doctype, [instances[n] for n in sorted(existing & permitted)], "delete", user
+    )
+    denied += sorted((existing & permitted) - {str(doc.pk) for doc in survivors})
+    if denied:
+        raise FrappePermissionError(
+            f"No permission to delete {doctype} {denied[0]}", title="Not Permitted"
+        )
+
+    # Names that no longer exist are dropped, not an error: that is what makes a retried
+    # delivery of the Celery task a no-op instead of a failure.
+    return [n for n in names if n in existing]
+
+
+def perform_bulk_delete(doctype: str, targets: list[str], delete_linked: bool = False) -> None:
+    """The delete itself. Assumes :func:`authorize_bulk_delete` has already passed."""
+    entry = registry.get_entry(doctype)
+
+    with transaction.atomic():
+        # The link scan is batched the same way the permission check is: one query per
+        # *link source* for the whole batch, rather than one per source per item. Doing
+        # it per item made the query count grow ~14x per row, which is the same N+1 C9
+        # is about - just in the other half of the function.
+        for link in _linked_docs_for_batch(doctype, targets):
+            _clear_or_delete_link(link, remove_contact=(doctype == "Contact"), delete=delete_linked)
+
+        entry.model._default_manager.filter(pk__in=targets).delete()
+
+
 @whitelist("crm.api.doc.delete_bulk_docs")
 def delete_bulk_docs(doctype: str, items: str | list, delete_linked: bool = False):
     """``crm/api/doc.py:795-837``.
@@ -479,8 +543,10 @@ def delete_bulk_docs(doctype: str, items: str | list, delete_linked: bool = Fals
     * **The batch is one transaction.** Upstream deletes row by row and logs failures.
       A partially-applied bulk delete is worse than a rejected one.
 
-    C9: the per-item check is batched into a single permission-filtered query rather than
-    N calls to ``has_permission``.
+    Over :data:`BULK_DELETE_ENQUEUE_THRESHOLD` items it goes to Celery, matching
+    ``crm/api/doc.py:833``. The authorization runs here *and* again in the worker: here so
+    the caller gets a refusal instead of a silent background failure, and there because a
+    task must not trust its own arguments (`PHASE_5_ASYNC.md` §5).
     """
     if not doctype:
         throw("Doctype is required")
@@ -490,40 +556,17 @@ def delete_bulk_docs(doctype: str, items: str | list, delete_linked: bool = Fals
     if not isinstance(parsed, list):
         throw("Items must be a list")
 
-    entry = registry.get_entry(doctype)
     user = get_current_user()
     names = [str(i) for i in parsed]
+    targets = authorize_bulk_delete(doctype, names, user)
 
-    # C9 - one query for the whole batch instead of one has_permission call per item.
-    from frappe_core.query import base_queryset
+    if len(targets) > BULK_DELETE_ENQUEUE_THRESHOLD:
+        from crm_app.tasks import delete_bulk_docs_task
 
-    permitted = set(
-        str(pk)
-        for pk in base_queryset(doctype, user).filter(pk__in=names).values_list("pk", flat=True)
-    )
-    existing = set(
-        str(pk)
-        for pk in entry.model._default_manager.filter(pk__in=names).values_list("pk", flat=True)
-    )
+        delete_bulk_docs_task.delay(doctype, targets, delete_linked, user)
+        return "success"
 
-    denied = sorted((existing - permitted))
-    if denied:
-        raise FrappePermissionError(
-            f"No permission to delete {doctype} {denied[0]}", title="Not Permitted"
-        )
-
-    targets = [n for n in names if n in existing]
-
-    with transaction.atomic():
-        # The link scan is batched the same way the permission check is: one query per
-        # *link source* for the whole batch, rather than one per source per item. Doing
-        # it per item made the query count grow ~14x per row, which is the same N+1 C9
-        # is about - just in the other half of the function.
-        for link in _linked_docs_for_batch(doctype, targets):
-            _clear_or_delete_link(link, remove_contact=(doctype == "Contact"), delete=delete_linked)
-
-        entry.model._default_manager.filter(pk__in=targets).delete()
-
+    perform_bulk_delete(doctype, targets, delete_linked)
     return "success"
 
 

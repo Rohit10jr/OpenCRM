@@ -1,8 +1,14 @@
 # Phase 5 — Background Jobs
 
-> **PROVISIONAL** — flip this header to Authoritative when your gate passes.
+> **BUILT** — phase 5 landed on `phase-5-async`, 1073 tests passing, reviewed.
+> See `PROGRESS_PHASE_5.md` for what was built and what is still open, and
+> `specs/AS_BUILT.md` for the seam it added.
 >
-> **Read `specs/AS_BUILT.md` first.** It lists what phases 0-2 actually built; where it
+> **§4 is settled from source: SLA is computed on write and there is no beat entry for
+> it.** A test asserts the schedule contains nothing SLA-shaped, so adding one later is a
+> failing build rather than a silent divergence.
+>
+> **Read `specs/AS_BUILT.md` first.** It lists what phases 0-4 actually built; where it
 > and this spec disagree, it wins.
 
 **Fan out.** Needs phase 1. Celery + Redis (Redis is already required by phase 6).

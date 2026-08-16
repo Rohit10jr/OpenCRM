@@ -15,5 +15,11 @@ DEBUG = False
 # has to be proved against models of its own.
 INSTALLED_APPS = [*INSTALLED_APPS, "tests_support"]
 
+# No Celery worker and no SMTP server in the test run (RUNBOOK.md, "Tests that would
+# need external services"). Tasks execute inline and mail lands in django.core.mail.outbox.
+CELERY_TASK_ALWAYS_EAGER = True
+CELERY_TASK_EAGER_PROPAGATES = True
+EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+
 # Fast hashing - these tests create a lot of users.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]

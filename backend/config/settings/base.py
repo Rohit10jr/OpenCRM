@@ -137,14 +137,35 @@ SIMPLE_JWT = {
     "USER_ID_CLAIM": "user_id",
 }
 
-CORS_ALLOWED_ORIGINS = [env("FRONTEND_ORIGIN", default="http://localhost:8080")]
+FRONTEND_ORIGIN = env("FRONTEND_ORIGIN", default="http://localhost:8080")
+CORS_ALLOWED_ORIGINS = [FRONTEND_ORIGIN]
 CORS_ALLOW_CREDENTIALS = True
+
+# The backend's own public URL - the equivalent of ``frappe.utils.get_url()``. Upstream
+# serves the Vue app and the API from one origin, so it has only the one value; we are
+# split, and links that point at ``/api/method/...`` (the invitation accept link,
+# crm_invitation.py:38) have to resolve to the backend, not the frontend.
+SITE_URL = env("SITE_URL", default="http://localhost:8000")
 
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default=REDIS_URL)
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default=REDIS_URL)
 
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="crm@example.com")
+
+# Celery (phase 5). The queue names mirror upstream's RQ queues: short -> default,
+# long -> long (PHASE_5_ASYNC.md intro).
+CELERY_TASK_DEFAULT_QUEUE = "default"
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_ENABLE_UTC = True
+# A task that outlives its result is just noise in Redis.
+CELERY_RESULT_EXPIRES = 60 * 60 * 24
 
 # Integration feature flags (specs/PHASE_7_INTEGRATIONS.md) - all off.
 ENABLE_ERPNEXT = env.bool("ENABLE_ERPNEXT", default=False)

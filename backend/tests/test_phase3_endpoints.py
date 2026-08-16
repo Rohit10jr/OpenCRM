@@ -898,13 +898,24 @@ def test_delete_bulk_docs_refuses_the_whole_batch_if_one_item_is_denied(
     assert CRMLead.objects.filter(pk=theirs.name).exists()
 
 
-def test_delete_bulk_docs_permission_check_is_batched(auth_api, alice, administrator):
-    """C9 - one query for the batch, not one ``has_permission`` call per item."""
+def test_delete_bulk_docs_permission_check_is_batched(auth_api, alice, administrator, monkeypatch):
+    """C9 - one query for the batch, not one ``has_permission`` call per item.
+
+    The enqueue threshold is pinned above the sample so this measures **one** execution of
+    the delete. Phase 5 made batches over ten items go to Celery, and with
+    ``CELERY_TASK_ALWAYS_EAGER`` the worker's own re-authorization then runs in this same
+    process — doubling the count for a reason that has nothing to do with C9. That second
+    execution is deliberate (a task re-checks its arguments) and is measured on its own in
+    ``test_delete_bulk_docs_worker_path_is_batched_too``.
+    """
     from django.db import connection
     from django.test.utils import CaptureQueriesContext
 
+    from crm_app.api import doc as doc_api
     from crm_app.api.doc import delete_bulk_docs
     from crm_app.models import CRMLead, CRMLeadStatus
+
+    monkeypatch.setattr(doc_api, "BULK_DELETE_ENQUEUE_THRESHOLD", 1000)
 
     with session_user(administrator.name):
         status = CRMLeadStatus.objects.create(lead_status="New", type="Open")
@@ -925,6 +936,38 @@ def test_delete_bulk_docs_permission_check_is_batched(auth_api, alice, administr
     large = measure(12)
     # Linked-doc scanning is per item by nature; what C9 fixes is the permission check,
     # so the growth must be far below one-permission-query-per-item.
+    assert large < small * 3, f"query count grew steeply: {small} -> {large}"
+
+
+def test_delete_bulk_docs_worker_path_is_batched_too(auth_api, alice, administrator):
+    """The task re-authorizes its own arguments; that check has to be batched as well.
+
+    Phase 5 added the second check (a queued message is untrusted input). It would be an
+    odd place to reintroduce the N+1 C9 exists to prevent.
+    """
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    from crm_app.models import CRMLead, CRMLeadStatus
+    from crm_app.tasks import delete_bulk_docs_task
+
+    with session_user(administrator.name):
+        status = CRMLeadStatus.objects.create(lead_status="New", type="Open")
+
+    def measure(count: int) -> int:
+        with session_user(alice.name):
+            names = [
+                CRMLead.objects.create(
+                    first_name=f"L{i}", lead_owner=alice, status=status
+                ).name
+                for i in range(count)
+            ]
+        with CaptureQueriesContext(connection) as ctx:
+            delete_bulk_docs_task("CRM Lead", names, False, alice.name)
+        return len(ctx)
+
+    small = measure(2)
+    large = measure(12)
     assert large < small * 3, f"query count grew steeply: {small} -> {large}"
 
 

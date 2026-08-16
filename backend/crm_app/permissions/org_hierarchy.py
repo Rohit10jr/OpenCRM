@@ -237,3 +237,68 @@ def has_lead_permission(doc, ptype: str = "read", user: str | None = None):
 
 def has_deal_permission(doc, ptype: str = "read", user: str | None = None):
     return _has_permission(doc, ptype, user, "CRM Deal")
+
+
+def _has_permission_batch(doctype: str, instances, ptype: str, user: str | None):
+    """:func:`_has_permission` for a whole batch, in one query instead of N (C9).
+
+    The step order is the same as the single-object version and deliberately reads the
+    same way — the short-circuits are all row-independent, and the only row-dependent
+    step is the final one, which upstream runs as ``filter(pk=doc.pk).filter(conditions)``
+    per row. Here it is one ``pk__in`` over the batch.
+
+    It has to stay in step with :func:`_has_permission`; if the two ever disagree the
+    single-object answer is the one to trust, because that is the one the whole app uses.
+    """
+    from frappe_core.session import get_current_user
+
+    instances = list(instances)
+    if not instances:
+        return []
+    if not user:
+        user = get_current_user()
+
+    if user == ADMINISTRATOR:
+        return instances
+
+    roles = _get_roles(user)
+    if ROLE_SYSTEM_MANAGER in roles:
+        return instances
+
+    if ptype == "create":
+        return instances
+
+    # Unsaved rows always pass (line 84-85) and cannot be queried for.
+    unsaved = [doc for doc in instances if not getattr(doc, "pk", None)]
+    saved = [doc for doc in instances if getattr(doc, "pk", None)]
+    if not saved:
+        return unsaved
+
+    in_tree = hierarchy_enabled() and _in_hierarchy(user)
+    if ROLE_SALES_MANAGER in roles and not in_tree:
+        return instances
+
+    conditions = _permission_query_conditions(user, doctype)
+    if conditions is None:
+        return instances
+
+    model = type(saved[0])
+    permitted = set(
+        model._default_manager.filter(pk__in=[doc.pk for doc in saved])
+        .filter(conditions)
+        .values_list("pk", flat=True)
+    )
+    # Input order, so a caller can pair the result up with what it passed in.
+    return [
+        doc
+        for doc in instances
+        if not getattr(doc, "pk", None) or doc.pk in permitted
+    ]
+
+
+def has_lead_permission_batch(doctype, instances, ptype="read", user=None):
+    return _has_permission_batch("CRM Lead", instances, ptype, user)
+
+
+def has_deal_permission_batch(doctype, instances, ptype="read", user=None):
+    return _has_permission_batch("CRM Deal", instances, ptype, user)

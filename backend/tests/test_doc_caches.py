@@ -133,12 +133,25 @@ def test_the_cache_is_capped_at_one_hundred(alice, lead):
 
 
 def test_the_cache_write_does_not_bump_modified(alice, lead):
-    """A cache refresh is not a document edit (``tag.py:114``)."""
-    before = CRMLead.objects.values_list("modified", flat=True).get(pk=lead.pk)
+    """A cache refresh is not a document edit (``tag.py:114``).
+
+    Exercises ``rebuild_comment_cache`` **directly** rather than through a comment
+    insert. Phase 5 added ``update_modified_background``, which deliberately *does* bump
+    ``modified`` when someone comments — that is why a lead rises to the top of the list
+    (``crm/utils/__init__.py:238-253``). Triggering via a comment would therefore conflate
+    the two writes and this test would be asserting the opposite of upstream.
+
+    What it protects is unchanged: the cache write itself must not touch ``modified``.
+    The phase-5 behaviour has its own test,
+    ``test_phase5_async.py::test_commenting_bumps_modified_so_the_lead_rises``.
+    """
+    from frappe_core.doc_caches import rebuild_comment_cache
 
     with session_user(alice.name):
         _comment(lead, "Note")
 
+    before = CRMLead.objects.values_list("modified", flat=True).get(pk=lead.pk)
+    rebuild_comment_cache("CRM Lead", lead.pk)
     after = CRMLead.objects.values_list("modified", flat=True).get(pk=lead.pk)
     assert before == after
 

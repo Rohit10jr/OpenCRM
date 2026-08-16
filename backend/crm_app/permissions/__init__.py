@@ -21,11 +21,15 @@ def register() -> None:
         "CRM Lead",
         permission_query_conditions=org_hierarchy.get_lead_permission_query_conditions,
         has_permission=org_hierarchy.has_lead_permission,
+        # Phase 5, C9: the same rule asked about a whole batch in one query. Cost only -
+        # `filter_object_permitted` gets the identical answer without it.
+        has_permission_batch=org_hierarchy.has_lead_permission_batch,
     )
     register_permission_hooks(
         "CRM Deal",
         permission_query_conditions=org_hierarchy.get_deal_permission_query_conditions,
         has_permission=org_hierarchy.has_deal_permission,
+        has_permission_batch=org_hierarchy.has_deal_permission_batch,
     )
     register_permission_hooks(
         "CRM Notification",

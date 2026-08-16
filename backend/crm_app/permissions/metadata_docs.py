@@ -29,10 +29,22 @@ ADMIN_ROLES = {"System Manager", "Sales Manager"}
 
 
 def _roles(user: str) -> set[str]:
-    from frappe_platform.models import User
+    """Memoised per request, the way ``org_hierarchy._get_roles`` is.
 
-    obj = User._default_manager.filter(pk=user).first()
-    return obj.get_roles() if obj else set()
+    Every rule below is a role test, so an unmemoised lookup meant one query *per row* on
+    any batch path — the N+1 C9 is about. The rules themselves are row-independent, so
+    with the roles cached a whole batch costs one query.
+    """
+    from frappe_core.session import get_request_cache
+
+    cache = get_request_cache()
+    key = ("metadata_docs.roles", user)
+    if key not in cache:
+        from frappe_platform.models import User
+
+        obj = User._default_manager.filter(pk=user).first()
+        cache[key] = obj.get_roles() if obj else set()
+    return cache[key]
 
 
 def _is_admin(user: str) -> bool:
