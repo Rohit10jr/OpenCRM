@@ -407,6 +407,25 @@ class CRMLead(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
     status_model_name = "CRM Lead Status"
     default_status = "New"
 
+    #: Field edits recorded in the timeline (:mod:`frappe_core.versions`).
+    #:
+    #: **Upstream tracks every field, including description edits.** This list is a
+    #: product decision: it keeps the changes a manager would ask about - money,
+    #: ownership, dates - without an entry every time somebody corrects a typo. Widening
+    #: it is a one-line change; the mechanism is unchanged.
+    #:
+    #: ``status`` is deliberately absent: it already reaches the timeline through
+    #: ``CRM Status Change Log``, which also carries the duration spent in each status.
+    TRACKED_FIELDS = (
+        "lead_owner",
+        "organization",
+        "annual_revenue",
+        "territory",
+        "no_of_employees",
+        "industry",
+        "source",
+    )
+
     naming_series = models.CharField(max_length=140, blank=True, default="CRM-LEAD-.YYYY.-")
     salutation = models.CharField(max_length=140, blank=True, default="")
     first_name = models.CharField(max_length=140, blank=True, default="")
@@ -619,6 +638,20 @@ class CRMDeal(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
     owner_field = "deal_owner"
     status_model_name = "CRM Deal Status"
     default_status = "Qualification"
+
+    #: See :attr:`CRMLead.TRACKED_FIELDS`. The money fields matter most here - "who
+    #: raised this to 80k?" is the question this exists to answer.
+    TRACKED_FIELDS = (
+        "deal_owner",
+        "organization",
+        "deal_value",
+        "expected_deal_value",
+        "expected_closure_date",
+        "closed_date",
+        "probability",
+        "annual_revenue",
+        "territory",
+    )
 
     naming_series = models.CharField(max_length=140, blank=True, default="CRM-DEAL-.YYYY.-")
     organization = models.ForeignKey(

@@ -129,6 +129,23 @@ class BaseDocument(models.Model, metaclass=DocumentBase):
     #: model rather than derived, because we have no DocType metadata to read it from.
     FETCH_FROM: dict[str, tuple[str, str]] = {}
 
+    #: Fields whose edits are recorded in the timeline (:mod:`frappe_core.versions`).
+    #: Empty means no history is kept - the default, and correct for most doctypes.
+    #: Upstream records *every* field; this port records a declared list. See that
+    #: module for why.
+    TRACKED_FIELDS: tuple[str, ...] = ()
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        if cls.TRACKED_FIELDS:
+            from frappe_core.versions import capture_tracked_values
+
+            # Snapshot here rather than re-reading on save: the row is already in hand,
+            # so the history costs no extra query.
+            instance._tracked_snapshot = capture_tracked_values(instance)
+        return instance
+
     def apply_fetch_from(self) -> None:
         """Copy each declared ``FETCH_FROM`` value off its linked document."""
         for target, (link_field, source_field) in self.FETCH_FROM.items():
@@ -218,7 +235,19 @@ class BaseDocument(models.Model, metaclass=DocumentBase):
         if creating and not kwargs.get("update_fields") and not args:
             kwargs.setdefault("force_insert", True)
 
-        return super().save(*args, **kwargs)
+        result = super().save(*args, **kwargs)
+
+        if self.TRACKED_FIELDS:
+            from frappe_core.versions import capture_tracked_values, record_version
+
+            # None on create: the timeline already carries a "created" entry, and
+            # upstream's diff against a non-existent prior document is empty too.
+            record_version(self, None if creating else getattr(self, "_tracked_snapshot", None))
+            # Re-snapshot so a second save in the same request diffs against what was
+            # just written, not against the original load.
+            self._tracked_snapshot = capture_tracked_values(self)
+
+        return result
 
 
 class AutoIncrementDocument(BaseDocument):
@@ -233,3 +262,9 @@ class AutoIncrementDocument(BaseDocument):
     class Meta(BaseDocument.Meta):
         abstract = True
         name_strategy = naming_strategies.AutoIncrement()
+
+
+# Imported last, not at the top: `versions` subclasses BaseDocument, so the name has to
+# exist first. Django only discovers models reachable from a `models` module, and this is
+# what puts `Version` in front of the migration autodetector.
+from frappe_core.versions import Version  # noqa: E402,F401

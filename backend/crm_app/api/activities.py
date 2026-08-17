@@ -3,19 +3,22 @@
 Ported from ``crm/api/activities.py``. Returns a 5-tuple:
 ``(activities, calls, notes, tasks, attachments)``.
 
-### What is not ported, and why
+### Field-change entries - narrowed, not absent
 
-Upstream builds the ``changed`` / ``added`` / ``removed`` entries from the framework's
-**``Version``** doctype - a per-save audit row holding a JSON diff
-(``activities.py:66-113``). ``Version`` is not modelled in this port, and recording it
-would mean diffing every document on every save: a framework-wide change with a write
-cost on every table, well outside this phase.
+Upstream builds the ``changed`` / ``added`` entries from the framework's **``Version``**
+doctype, a per-save audit row holding a JSON diff (``activities.py:66-113``), and
+``track_changes=1`` on CRM Lead, CRM Deal and FCRM Note means it records **every** field
+- description edits included.
 
-So the field-change entries are absent, and the timeline contains creation, comments,
-communications, calls, notes, tasks and attachments. `PHASE_3_ENDPOINTS.md` describes
-this endpoint as merging *"Communication, Comment, ToDo and status-change history"* -
-which is what is delivered, using the ported ``CRM Status Change Log`` for the status
-history. Named in PROGRESS_PHASE_3.md as the gap it is.
+This port records a **declared list per model** instead
+(:mod:`frappe_core.versions`, :attr:`CRMLead.TRACKED_FIELDS`). Full parity would mean an
+extra INSERT on every save forever, with no cleanup, and a timeline entry each time
+somebody fixes a typo. The list keeps what a manager would ask about - money, ownership,
+dates - and that is a **product decision, not an unfinished port**.
+
+Status changes reach the timeline separately, through the ported ``CRM Status Change
+Log``, which also carries the duration spent in each status. They are deliberately left
+out of the tracked list so they are not recorded twice.
 
 Attachment-log entries are also absent: upstream derives them from Comments with
 ``comment_type`` in ``Attachment`` / ``Attachment Removed``, which nothing in this port
@@ -161,6 +164,54 @@ def get_linked_calls(name: str) -> dict:
     )
 
     return {"calls": calls, "notes": notes, "tasks": tasks}
+
+
+def _field_change_activities(doctype: str, name: str) -> list[dict]:
+    """Field edits, from :mod:`frappe_core.versions`.
+
+    Upstream builds these from the framework's ``Version`` doctype
+    (``crm/api/activities.py:68-95``) and records **every** field. This port records a
+    declared list per model - money, ownership and dates - so a manager can answer "who
+    raised this to 80k?" without a timeline entry for every corrected typo. The
+    difference is deliberate and documented on ``CRMLead.TRACKED_FIELDS``.
+
+    Emits the same shape as :func:`_status_change_activities`, including upstream's
+    ``added`` variant when a field goes from empty to set.
+    """
+    from frappe_core.versions import versions_for
+
+    entry = registry.get_entry(doctype)
+    activities = []
+
+    for version in versions_for(doctype, name):
+        for fieldname, old_value, value in version.changes():
+            try:
+                field = entry.model._meta.get_field(fieldname)
+                label = str(getattr(field, "verbose_name", fieldname))
+            except Exception:  # pragma: no cover - field renamed since the row was written
+                label = fieldname
+
+            activity_type = "changed"
+            data = {
+                "field": fieldname,
+                "field_label": label,
+                "old_value": old_value,
+                "value": value,
+            }
+            if not old_value and value:
+                activity_type = "added"
+                data = {"field": fieldname, "field_label": label, "value": value}
+
+            activities.append(
+                {
+                    "activity_type": activity_type,
+                    "creation": version.creation,
+                    "owner": version.owner_id,
+                    "data": data,
+                }
+            )
+
+    return activities
 
 
 def _status_change_activities(doctype: str, name: str, is_lead: bool) -> list[dict]:
@@ -333,6 +384,7 @@ def get_lead_activities(name: str):
         }
     ]
     activities += _status_change_activities("CRM Lead", name, is_lead=True)
+    activities += _field_change_activities("CRM Lead", name)
     activities += _comment_activities("CRM Lead", name, is_lead=True)
     activities += _communication_activities("CRM Lead", name, is_lead=True)
 
@@ -383,6 +435,7 @@ def get_deal_activities(name: str):
         }
     )
     activities += _status_change_activities("CRM Deal", name, is_lead=False)
+    activities += _field_change_activities("CRM Deal", name)
     activities += _comment_activities("CRM Deal", name, is_lead=False)
     activities += _communication_activities("CRM Deal", name, is_lead=False)
 
