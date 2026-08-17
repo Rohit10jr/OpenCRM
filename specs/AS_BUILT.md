@@ -261,6 +261,34 @@ Each of these cost real time this session.
 creates a lead and leaves `lead_owner` blank **cannot see it afterwards**. Any endpoint
 creating a lead or deal must set the owner field, or the record vanishes for its author.
 
+> ### There is no server-side default, and that is deliberate
+>
+> **Verified against source.** `crm_lead.json` declares no `default` and no `reqd` for
+> `lead_owner`; nothing in `crm_lead.py` fills it. The **browser** does, before the
+> request is sent — `frontend/src/components/Modals/LeadModal.vue:187-189`:
+>
+> ```javascript
+> if (!lead.doc?.lead_owner) {
+>   lead.doc.lead_owner = getUser().name
+> }
+> ```
+>
+> Upstream gets away with this because the browser is realistically its only client. Ours
+> has an API as a first-class interface, so the gap is reachable:
+>
+> **A bulk import that omits `lead_owner` creates records nobody can see.** No error, no
+> warning — the rows exist, and only a manager or System Manager will ever find them.
+>
+> **A server-side default was considered and rejected.** Stamping the caller as owner
+> would silently claim every imported record for whoever ran the script, which is wrong
+> for any workflow that assigns afterwards — and unrecoverable once the data exists.
+> Inventing that semantic is a bigger risk than the documented gap.
+>
+> **So: any caller creating a lead or deal is responsible for setting the owner.** That
+> includes integrations, imports and scripts, not just endpoints in this repo.
+> `frappe.client.insert` is a generic passthrough and deliberately does not fill it in.
+> Pinned by tests that fail if someone adds a default without justifying it.
+
 **Names are verbatim and may contain slashes.** `field:` PKs are stored unchanged — no
 slugification. `validate_name` forbids only `<` and `>`. The URL pattern accepts path-style
 names, so `R/GA` is a legal, addressable record.

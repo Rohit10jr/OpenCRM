@@ -170,3 +170,72 @@ exercise: nothing before this phase created a lead through an endpoint.
   month-length ranges: upstream uses `date_diff` in days, which I reproduced, so a
   31-day month compares against 31 days rather than the previous calendar month. That is
   upstream's behaviour, but it is odd enough to be worth a second look.
+
+---
+
+# REVIEW RESOLUTION — human pass over the phase 3 concerns
+
+Everything above was written by the unattended run. This section records what happened
+when those concerns were worked through afterwards.
+
+## Fixed
+
+**`change_password` brute-force protection — the top concern.** Commit `3eaf43c`.
+
+Reading the source found the same gap on **`login`**, which matters more and this report
+did not mention: `change_password` needs a session, `login` needs nothing. Both are now
+protected, as upstream does it — `LoginAttemptTracker` on login keyed to **IP and
+account**, both mechanisms on `change_password`.
+
+Two things that decide whether it works, neither obvious: the counters need shared
+storage (Django's default cache is per-process, so four workers turn a 10-attempt limit
+into 40), and the client IP must be the real client (`TRUSTED_PROXY_COUNT` defaults to 0,
+ignoring `X-Forwarded-For`, because a forged header would otherwise let an attacker pick
+a fresh bucket per request).
+
+Found while testing: Django's `authenticate()` rejects inactive users internally, so a
+disabled account and a wrong password arrived identically and were counted the same —
+which kept an account locked after an admin re-enabled it. Now distinguished.
+
+Suite 1106 → 1128.
+
+## Disputes — both upheld
+
+**`frappe.client.insert` does not set `lead_owner`.** Verified independently:
+`crm_lead.json` declares no default and no `reqd`; nothing in `crm_lead.py` fills it; the
+**browser** does, at `LeadModal.vue:187-189`. Upstream has exactly this behaviour.
+
+The dispute stands, and the reasoning was right — but the consequence is now written into
+`AS_BUILT.md` §4 rather than left in this file, because it is reachable in a way it is
+not upstream: **a bulk import omitting the field creates records nobody can see**, with no
+error. A server-side default was considered and rejected: stamping the caller as owner
+would silently claim every imported record, which is unrecoverable and wrong for any
+assign-later workflow.
+
+**`duplicate_assignment_rule` throws a non-upstream message.** Upheld without further
+work. `Assignment Rule` is not modelled, so the options were raise or fabricate a rule the
+UI would then display. Raising is the honest one.
+
+## Divergences — all six confirmed, keep
+
+Reviewed as a block. Each makes this port stricter than upstream, and none was reversed.
+
+| | Divergence | Note from the review |
+|---|---|---|
+| D1 | `remove_assignments` ignores `ignore_permissions` | The flag is ignored unconditionally and write permission always checked. Single-tenant, so the exposure is any employee against any lead — including unassigning a manager, which revokes their access |
+| D2 | Product totals computed server-side | Upstream sums them in browser JavaScript and stores what arrives. Same formula, different author. **Spot-check the arithmetic against real figures before go-live** |
+| D3 | `get_linked_deals` permission-filters | Upstream checks the contact then fetches every linked deal unchecked, so a shared contact exposes deal values from accounts the caller cannot open |
+| D4 | `search_link` respects permissions | Lower risk than first assessed: only Lead, Deal and Notification have row rules, so the dropdown only narrows when linking to those |
+| D5 | `create_email_account` restricted to managers | Otherwise any authenticated user could add an account and set it default outgoing, redirecting the system's mail. Matches least-privilege guidance for SMTP configuration |
+| D6 | Dashboard charts permission-filtered | **Not a divergence to apologise for.** Role-scoped dashboards are the documented norm — reps see their own pipeline, executives see the organisation. Upstream showing everyone company-wide totals is the unusual choice. If a company-wide figure is wanted later, a leaderboard widget is the accepted pattern |
+
+## Verified
+
+**B2** — the `lead_owner` claim, above. Closed.
+
+## Still open from this phase
+
+- **A2** `get_activities` has no field-change entries (needs the `Version` doctype)
+- **A3** six dashboard charts unported
+- **A4** `create_email_account` saves unvalidated credentials
+- **C11-C13** owned by phase 4, **C14** by phase 7/8
