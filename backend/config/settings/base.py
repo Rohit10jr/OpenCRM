@@ -187,6 +187,13 @@ CELERY_BROKER_URL = env("CELERY_BROKER_URL", default=REDIS_URL)
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default=REDIS_URL)
 
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
+
+# Seconds to wait for a mail server when validating an Email Account
+# (frappe_core/mail.py). Upstream passes no timeout, so an unreachable host blocks the
+# save until the OS gives up - 20 to 130 seconds, during which the user sees a spinner
+# rather than the error written for them. Raise this if a slow but working relay is
+# being reported as broken; do not remove it.
+MAIL_CONNECT_TIMEOUT = env.int("MAIL_CONNECT_TIMEOUT", default=10)
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="crm@example.com")
 
 # Celery (phase 5). The queue names mirror upstream's RQ queues: short -> default,

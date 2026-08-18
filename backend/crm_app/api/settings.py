@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from frappe_core.exceptions import throw
+from frappe_core.mail import validate_email_account
 from frappe_core.query import parse_json_param
 from frappe_core.whitelist import whitelist
 
@@ -68,16 +69,20 @@ COMMON_DEFAULTS = {
 def create_email_account(data: str | dict):
     """``crm/api/settings.py:5-53``.
 
-    Two upstream behaviours are deliberately **not** reproduced:
+    **Credentials are checked before saving**, as upstream does
+    (``email_account.py:156-168``): a live SMTP session for outgoing, a live IMAP login
+    for incoming. See :mod:`frappe_core.mail`.
 
-    * ``get_incoming_server()`` - upstream opens a live IMAP connection to validate the
-      credentials before saving. There is no mail layer in this port, so the account
-      saves unvalidated. That is a real behavioural gap, not an oversight: faking a
-      successful validation would be worse than saving and letting the first sync fail.
-    * The ``imap_folder`` child row. ``Email Account`` has no child tables in this port.
+    Phase 3 skipped this on the grounds that the port had no mail layer. It has one -
+    Django's SMTP backend - and the gap mattered: a mistyped password saved cleanly and
+    the first anyone knew was that invitations never arrived. ``EmailAdd.vue:149``
+    already holds the error message for the loud version.
 
-    Both are logged in PROGRESS_PHASE_3.md. The early return string
-    ``"Service not supported"`` is upstream's, and the frontend displays it as-is.
+    One upstream behaviour is still **not** reproduced: the ``imap_folder`` child row.
+    ``Email Account`` has no child tables in this port.
+
+    The early return string ``"Service not supported"`` is upstream's, and the frontend
+    displays it as-is.
     """
     from crm_app.api.user import only_for
     from frappe_platform.models import EmailAccount
@@ -126,6 +131,10 @@ def create_email_account(data: str | dict):
 
     if not fields["email_account_name"]:
         throw("Email account name is required")
+
+    # Validate before the row exists, so a rejected account leaves nothing behind.
+    # Upstream checks inside validate(), which is the same point in its lifecycle.
+    validate_email_account(EmailAccount(**fields))
 
     account = EmailAccount._default_manager.create(**fields)
     return account.name
