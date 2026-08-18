@@ -110,12 +110,51 @@ def _delta(current: float, previous: float) -> float:
 
 
 def _period_before(from_date, to_date) -> tuple[datetime.date, datetime.date]:
-    """``dashboard.py:95-99`` - the immediately preceding window of equal length.
+    """The preceding window, of **genuinely** equal length.
 
-    ``diff == 0`` is forced to 1 upstream so a single-day range still has a baseline.
+    ### Deliberate divergence - upstream's baseline is one day short
+
+    ``dashboard.py:95-99`` computes it as::
+
+        diff = date_diff(to_date, from_date)     # Mar 1 -> Mar 31 == 30
+        prev_from_date = add_days(from_date, -diff)
+
+    ``date_diff`` returns the **gap** between two dates, not the number of days in the
+    range. March 1st to March 31st is a gap of 30, but March is a 31-day month - so the
+    baseline window is always one day shorter than the period it is compared against:
+
+        viewing March    (31 days)  ->  baseline Jan 30 - Feb 28  (30 days)
+        viewing February (28 days)  ->  baseline Jan  5 - Jan 31  (27 days)
+        viewing August   (31 days)  ->  baseline Jul  2 - Jul 31  (30 days)
+
+    Every percentage on the dashboard is therefore inflated by roughly 3%, purely from
+    the shorter baseline, before anything has actually changed. Eight months in twelve
+    are affected.
+
+    **Fixed here rather than reproduced**, which is a departure from the usual rule of
+    reproducing user-visible upstream behaviour. That rule exists to avoid overriding
+    decisions people rely on - and nobody relies on an inflation they cannot see. This is
+    not a design choice being overruled; it is a sum that is wrong, and a manager reads
+    it to judge whether the month went well. Recorded in ``UPSTREAM_BUGS.md``.
+
+    ### What is *not* fixed: calendar alignment
+
+    Even corrected, the baseline is "the previous N days", not "the previous calendar
+    month" - so March still compares against a window reaching into late January.
+
+    That one **is** a design choice, and upstream's is defensible: a dashboard may
+    legitimately mean "the last 31 days". Changing it to compare whole calendar months is
+    a product decision, not a bug fix. It is a small change if wanted - take the first
+    and last day of the preceding month instead of counting back - and it is recorded as
+    option C in ``UPSTREAM_BUGS.md``.
+
+    ``diff == 0`` is forced to 1, as upstream does, so a single-day range still has a
+    baseline rather than comparing against nothing.
     """
-    diff = (to_date - from_date).days or 1
-    return from_date - datetime.timedelta(days=diff), from_date
+    # +1 where upstream has none: the range is inclusive of both ends, so a 31-day month
+    # is 31 days, not the 30-day gap between its first and last dates.
+    length = (to_date - from_date).days + 1 or 1
+    return from_date - datetime.timedelta(days=length), from_date
 
 
 # ---------------------------------------------------------------------------
