@@ -46,6 +46,14 @@ class DocTypeEntry:
     model: type[models.Model]
     is_child_table: bool = False
     is_single: bool = False
+    #: Whether ``/api/resource/<doctype>`` exists for this doctype.
+    #:
+    #: Defaults to True: registering a model publishes it. Set ``routable=False`` for a
+    #: doctype the frontend never addresses directly and whose rows are security-relevant
+    #: - the route is then absent rather than merely guarded, which is a smaller surface
+    #: than any rule can be. See ``specs/UNROUTED_DOCTYPES.md`` for the standing list and
+    #: the reasoning per doctype.
+    routable: bool = True
     #: Set by phase 2 via :func:`register_permission_hooks`.
     permission_query_conditions: Callable | None = None
     has_permission: Callable | None = None
@@ -122,12 +130,18 @@ def register_doctype(
     *,
     is_child_table: bool | None = None,
     is_single: bool | None = None,
+    routable: bool | None = None,
     serializer_class: type | None = None,
 ):
     """Class decorator registering a model under its Frappe DocType string.
 
     ``is_child_table`` / ``is_single`` default to whatever the model declared in its
     ``Meta``, so a phase-1 agent can set them in either place.
+
+    ``routable=False`` withholds the generic ``/api/resource/`` route. Registration is
+    otherwise unchanged - the model, its permissions and every internal caller work
+    normally; only the HTTP route is absent. Read ``specs/UNROUTED_DOCTYPES.md`` before
+    adding one, and before removing one.
     """
 
     def decorator(model_cls):
@@ -142,6 +156,9 @@ def register_doctype(
             ),
             is_single=(
                 doc_meta.get("is_single", False) if is_single is None else is_single
+            ),
+            routable=(
+                doc_meta.get("routable", True) if routable is None else routable
             ),
             serializer_class=serializer_class,
         )
@@ -185,8 +202,12 @@ def routable_doctypes() -> list[str]:
 
     Child tables are excluded - PHASE_1_MODELS.md section 3: they are reached through
     the parent and serialised inline.
+
+    ``routable=False`` doctypes are excluded too, and for a different reason: they have
+    a standalone identity, they are simply not published. ``specs/UNROUTED_DOCTYPES.md``
+    says which and why.
     """
-    return sorted(dt for dt, e in _REGISTRY.items() if not e.is_child_table)
+    return sorted(dt for dt, e in _REGISTRY.items() if e.routable and not e.is_child_table)
 
 
 def register_permission_hooks(

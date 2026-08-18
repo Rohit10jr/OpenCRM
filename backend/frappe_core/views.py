@@ -65,13 +65,16 @@ class FrappeAPIView(APIView):
 
 
 def _resolve_routable_entry(doctype: str):
-    """Registry lookup that refuses child tables and unknown doctypes alike."""
+    """Registry lookup that refuses child tables, unrouted doctypes and unknown ones."""
     if not registry.has_doctype(doctype):
         raise DoesNotExistError(f"DocType {doctype} not found")
     entry = registry.get_entry(doctype)
-    if entry.is_child_table:
-        # Same error a client sees for a doctype that does not exist: a child table has
-        # no standalone identity on the wire.
+    if entry.is_child_table or not entry.routable:
+        # Same error a client sees for a doctype that does not exist. A child table has
+        # no standalone identity on the wire; an unrouted doctype has one but is
+        # deliberately unpublished (specs/UNROUTED_DOCTYPES.md). Both are "no such route"
+        # from outside, and saying so tells an unauthenticated prober nothing about
+        # which doctypes exist.
         raise DoesNotExistError(f"DocType {doctype} not found")
     return entry
 

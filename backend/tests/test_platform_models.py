@@ -51,8 +51,19 @@ pytestmark = pytest.mark.django_db
     ],
 )
 def test_platform_doctype_is_registered(doctype, model):
+    """Registration and routability are two things, and `ToDo` is why.
+
+    It is registered - the permission engine queries it on every Lead and Deal read - but
+    deliberately unpublished, because a writable ``/api/resource/ToDo`` let any user
+    assign themselves to any document and thereby read it. See
+    ``specs/UNROUTED_DOCTYPES.md``; the unrouted set is pinned in
+    ``tests/test_unrouted_doctypes.py``.
+    """
     assert registry.get_model(doctype) is model
-    assert doctype in registry.routable_doctypes()
+    if registry.get_entry(doctype).routable:
+        assert doctype in registry.routable_doctypes()
+    else:
+        assert doctype not in registry.routable_doctypes()
 
 
 @pytest.mark.parametrize("doctype", ["Contact Email", "Contact Phone"])

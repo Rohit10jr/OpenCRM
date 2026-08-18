@@ -334,7 +334,14 @@ class ContactPhone(BaseDocument):
         name_strategy = Hash()
 
 
-@register_doctype("ToDo")
+# Unrouted deliberately. `org_hierarchy` grants access to a record when a ToDo row says
+# you are assigned to it, so a writable /api/resource/ToDo let any user create that row
+# for any document and read it - the permission check then *passes*, on data the caller
+# supplied. Nothing calls this route: the frontend assigns through
+# `frappe.desk.form.assign_to.add`, which checks write permission on the document first.
+# Full reasoning, the upstream comparison and the permission-rule alternative:
+# specs/UNROUTED_DOCTYPES.md.
+@register_doctype("ToDo", routable=False)
 class ToDo(BaseDocument):
     """**Assignment lives here**, not in ``_assign``.
 
