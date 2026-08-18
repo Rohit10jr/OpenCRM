@@ -132,6 +132,11 @@ exercise: nothing before this phase created a lead through an endpoint.
 
 ## Not ported — named, not hidden
 
+> **Four of the five below were ported afterwards** — see *Fixed* and *Also fixed in the
+> review pass*, which supersede this list. Only the six dashboard charts remain. Left
+> unedited because the reasoning is the record of what the unattended run believed at the
+> time, and two of those beliefs turned out to be wrong.
+
 - **Six dashboard charts**: `sales_trend`, `forecasted_revenue`, `funnel_conversion`,
   `average_time_to_close_a_lead`, `average_time_to_close_a_deal`,
   `deal_status_change_counts`. All time-series or duration arithmetic. They resolve to
@@ -155,6 +160,11 @@ exercise: nothing before this phase created a lead through an endpoint.
   addressing before production.
 
 ## Concerns
+
+> Of these six, four are resolved below and two carry into phase 4
+> (`_resolved_fieldtype`, `search_link`'s missing title field). The last one —
+> `_period_before` — was right to flag and wrong about the cause: it is not upstream's
+> behaviour faithfully reproduced, it is an upstream arithmetic bug. See B1.
 
 - **`change_password` brute-force protection is the one I would fix first.** It is a
   genuine security regression against upstream, not a cosmetic gap.
@@ -292,5 +302,17 @@ first — that is the part worth getting right once.
 
 ## Still open from this phase
 
-- **A3 / C16** six dashboard charts — deferred, see above
-- **C11-C13** owned by phase 4, **C14** by phase 7/8
+- **Six dashboard charts** — deferred, see above. The only item from this phase's own
+  scope still outstanding.
+
+Carried to later phases, not gaps in this one:
+
+- **`_resolved_fieldtype`** is a plaster and will be wrong for any fieldtype distinction
+  beyond Select-vs-Data → **phase 4**, which builds the metadata layer that removes the
+  need for it.
+- **`search_link` returns no title field**, so link autocompletes look bare → **phase 4**,
+  same reason: it needs a per-doctype title field from metadata.
+- **`oauth_providers` and `get_assignment_rules_list` return `[]`** — both need framework
+  doctypes (`Social Login Key`, `Assignment Rule`) outside the ported surface → **phase
+  7/8**. Empty is what upstream returns when none are configured, so this is only visible
+  once those integrations exist.
