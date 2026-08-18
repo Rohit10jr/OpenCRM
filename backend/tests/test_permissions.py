@@ -759,11 +759,11 @@ def test_a_user_with_no_hierarchy_row_has_no_subtree(users):
 def test_exactly_the_intended_doctypes_have_row_rules():
     """The registered set, stated explicitly so an accidental addition is caught.
 
-    ``crm/hooks.py:134-144`` registers three. **Phase 4 deliberately added three more**,
+    ``crm/hooks.py:134-144`` registers three. **Phase 4 deliberately added four more**,
     after a review found them reachable through the generic ``/api/resource/`` route:
     upstream protects them with DocType role permissions, which this port does not
     model, so with no hook they were world-readable and world-writable. See
-    ``crm_app/permissions/metadata_docs.py``.
+    ``crm_app/permissions/metadata_docs.py`` and ``platform_docs.py``.
     """
     with_rules = {
         dt
@@ -771,7 +771,15 @@ def test_exactly_the_intended_doctypes_have_row_rules():
         if registry.get_entry(dt).permission_query_conditions is not None
     }
     upstream = {"CRM Lead", "CRM Deal", "CRM Notification"}
-    added_by_phase_4 = {"CRM View Settings", "CRM Form Script", "CRM Fields Layout"}
+    added_by_phase_4 = {
+        "CRM View Settings",
+        "CRM Form Script",
+        "CRM Fields Layout",
+        # A2: routable since phase 1 with no rule, so any caller could rename or disable
+        # any colleague. Writes are now self-only; reads stay open (kanban builds a column
+        # per user, and upstream enumerates them with permission-ignoring `frappe.get_all`).
+        "User",
+    }
     assert with_rules == upstream | added_by_phase_4
 
 

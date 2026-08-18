@@ -103,6 +103,37 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     objects = UserManager()
 
+    #: Never on the wire. These four **are** the privilege escalation: `groups` is the
+    #: role set our permission layer reads through `get_roles()`, and `is_staff` plus
+    #: `is_superuser` together open Django admin at /admin/, which bypasses that layer
+    #: entirely. A Sales User could set all of them on their own row - the self-only rule
+    #: in `crm_app/permissions/platform_docs.py` permits writing your own document, so
+    #: that rule alone does not close this.
+    #:
+    #: Nothing needs them here: the frontend reads roles from `crm.api.session.get_users`,
+    #: and roles are changed through `crm_app.api.user.update_user_role`, which checks who
+    #: is asking. Internal ORM use is unaffected - this covers the wire only.
+    SENSITIVE_FIELDS = ("groups", "user_permissions", "is_superuser", "is_staff")
+
+    #: Readable, never writable through the generic route.
+    #:
+    #: `enabled` has to stay visible - the Users settings screen has an Enabled column -
+    #: but must not be settable by its own subject.
+    #:
+    #: Note what this does *not* do: a disabled account cannot re-enable itself even
+    #: without this, because SimpleJWT rejects its token at authentication
+    #: (`is_active` maps to `enabled`), so the request never reaches a serializer - 401,
+    #: verified. This is the second layer, not the first. It earns its place because the
+    #: first is a single `is_active` check in a library, and because without it a user can
+    #: switch their own account off with one PUT, which is a support ticket rather than an
+    #: attack but is nobody's intention.
+    #:
+    #: `user_type` gates nothing in this port yet (it is stored and returned by the
+    #: session endpoints, and nothing branches on it). Upstream treats it as privileged -
+    #: System User versus Website User - so it is locked here as cheap precaution before
+    #: phase 8 gives it meaning, not because it is currently exploitable.
+    READONLY_FIELDS = ("enabled", "user_type")
+
     class Meta:
         db_table = "tabUser"
         verbose_name = "User"

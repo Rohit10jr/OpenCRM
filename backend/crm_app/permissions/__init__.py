@@ -11,7 +11,13 @@ falls back to plain role permissions.
 
 from frappe_core.registry import register_permission_hooks
 
-from crm_app.permissions import metadata_docs, notification, org_hierarchy, tree
+from crm_app.permissions import (
+    metadata_docs,
+    notification,
+    org_hierarchy,
+    platform_docs,
+    tree,
+)
 
 
 def register() -> None:
@@ -56,6 +62,19 @@ def register() -> None:
         "CRM Fields Layout",
         permission_query_conditions=metadata_docs.fields_layout_query_conditions,
         has_permission=metadata_docs.fields_layout_has_permission,
+    )
+
+    # Phase 4 review, A2. `User` has been routable since phase 1 with no rule behind it,
+    # so any authenticated caller could list every account, and rename or disable anyone.
+    # Upstream gives `User` to System Manager alone; we are deliberately more permissive,
+    # because the Vue profile screens edit the session user's own document through this
+    # route. Self-escalation (`groups`, `is_superuser`) is closed separately by
+    # `User.SENSITIVE_FIELDS` - a self-only rule cannot close it, since writing your own
+    # roles on your own document is what self-only permits.
+    register_permission_hooks(
+        "User",
+        permission_query_conditions=platform_docs.user_query_conditions,
+        has_permission=platform_docs.user_has_permission,
     )
 
 

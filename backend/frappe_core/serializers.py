@@ -14,7 +14,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from frappe_core import children, registry
-from frappe_core.field_security import sensitive_fields
+from frappe_core.field_security import readonly_fields, sensitive_fields
 
 #: Standard fields the client may never set directly; the model stamps them.
 #: Audit columns the server stamps, plus the four underscore caches.
@@ -142,6 +142,14 @@ def build_serializer_class(model) -> type[DocumentSerializer]:
         meta_attrs["exclude"] = tuple(blocked)
     else:
         meta_attrs["fields"] = "__all__"
+
+    # Readable, never writable - see `field_security.readonly_fields`. Subtracting
+    # `blocked` matters: DRF raises if `extra_kwargs` names a field the serializer does
+    # not have, and a field can legitimately be listed in both attributes on a model
+    # whose author wanted "hidden, and definitely not writable".
+    read_only = sorted((readonly_fields(model) & concrete) - set(blocked))
+    if read_only:
+        meta_attrs["extra_kwargs"] = {name: {"read_only": True} for name in read_only}
 
     attrs: dict = {
         "Meta": type("Meta", (), meta_attrs),

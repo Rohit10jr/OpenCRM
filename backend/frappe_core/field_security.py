@@ -43,3 +43,26 @@ def sensitive_fields(model) -> set[str]:
 
 def is_sensitive(model, fieldname: str) -> bool:
     return fieldname in sensitive_fields(model)
+
+
+def readonly_fields(model) -> set[str]:
+    """Fieldnames a client may **read but never write** through the generic route.
+
+    The middle ground between "fully exposed" and :data:`SENSITIVE_FIELDS`, which hides a
+    field from reads as well. Some fields have to be visible and must still not be
+    settable by the person they describe - ``User.enabled`` is the case that forced this::
+
+        class User(...):
+            READONLY_FIELDS = ("enabled", "user_type")
+
+    ``enabled`` appears in the Users settings screen, so hiding it breaks that screen. But
+    a disabled account still holds a valid refresh token for its remaining lifetime, so if
+    the field were writable the account you just disabled could switch itself back on.
+
+    Applied only to :func:`frappe_core.serializers.build_serializer_class`, not to
+    ``query.resolve_fields``: reading is exactly what these fields are for. Whatever
+    legitimately changes them does so through an endpoint that checks who is asking -
+    ``crm_app.api.user.update_user_role`` for roles, for instance.
+    """
+    declared = getattr(model, "READONLY_FIELDS", ()) or ()
+    return set(declared)
