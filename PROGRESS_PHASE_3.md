@@ -233,9 +233,64 @@ Reviewed as a block. Each makes this port stricter than upstream, and none was r
 
 **B2** — the `lead_owner` claim, above. Closed.
 
+## Also fixed in the review pass
+
+**A2 — field-change history in the timeline.** Commit `70dd970`. Ports Frappe's
+`Version` doctype, narrowed: upstream records **every** field including description
+edits, this records a declared list per model (money, ownership, dates). Full parity
+would mean an extra INSERT on every save forever and a timeline entry for every corrected
+typo. Status is excluded because `CRM Status Change Log` already carries it, with a
+duration per transition. Widening `TRACKED_FIELDS` is one line per model.
+
+**B1 — the dashboard's comparison baseline.** Upstream derives it with `date_diff`, which
+returns the *gap* between two dates rather than the number of days in the range, so the
+baseline was always one day shorter than the period it was compared against and **every
+percentage was inflated ~3%**. Eight months in twelve affected. Fixed. Calendar alignment
+was deliberately *not* changed — that part is a design choice, recorded as option C in
+`UPSTREAM_BUGS_PHASE_3-6.md` #13.
+
+**B3 — the `remove_assignments` upstream hole.** Verified independently. `assign_to.py:215`
+holds the permission check, `crm/api/doc.py:603` lets the caller switch it off. The claim
+was accurate and the divergence stands.
+
+**A4 — email credentials validated before saving.** The phase-3 note said this port had
+no mail layer; it has one — Django's SMTP backend wraps `smtplib`, and `imaplib` is
+standard library. All three of upstream's escape hatches ported (`awaiting_password`, the
+localhost bypass, `no_smtp_authentication`). `EmailAdd.vue:149` has held the error string
+`"Failed to create email account: invalid credentials"` since the frontend was written;
+it was unreachable until now.
+
+One divergence: upstream passes **no connection timeout**, so an unreachable host blocks
+the save for 20–130 seconds while the user watches a spinner. We pass 10 seconds
+(`MAIL_CONNECT_TIMEOUT`). A genuinely slow but working relay could exceed that and be
+reported as broken — **raise the setting, do not remove it.**
+`UPSTREAM_BUGS_PHASE_3-6.md` #15.
+
+## Deferred — A3 / C16, six dashboard charts
+
+**Not done, deliberately parked.** Revisit when the dashboard has users.
+
+`sales_trend`, `forecasted_revenue`, `funnel_conversion`,
+`average_time_to_close_a_lead`, `average_time_to_close_a_deal`,
+`deal_status_change_counts`.
+
+All six resolve to `None`, which is what upstream returns for an unknown chart name — so
+the tiles render **empty rather than broken**, and nothing errors.
+
+**Why they are grouped:** every one needs arithmetic across *time* — bucket counts by
+month, or average the number of days between two dates. The charts already ported are
+plain counts and sums. So this is one body of work, not six unrelated ones, and doing any
+of them builds the machinery for the rest.
+
+**Where they live:** listed in `dashboard.UNPORTED_CHARTS`, so the set is discoverable
+from the code rather than only from this file.
+
+**What to weigh when picking it up:** `forecasted_revenue` and `funnel_conversion` are
+often the reason a sales director opens a dashboard at all. If nobody has asked for them,
+empty tiles are honest. If they are wanted, budget for the shared time-bucketing helper
+first — that is the part worth getting right once.
+
 ## Still open from this phase
 
-- **A2** `get_activities` has no field-change entries (needs the `Version` doctype)
-- **A3** six dashboard charts unported
-- **A4** `create_email_account` saves unvalidated credentials
+- **A3 / C16** six dashboard charts — deferred, see above
 - **C11-C13** owned by phase 4, **C14** by phase 7/8
