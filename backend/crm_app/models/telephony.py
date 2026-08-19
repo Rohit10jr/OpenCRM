@@ -4,8 +4,16 @@ PHASE_1_MODELS.md section 5: "Models now, provider logic in phase 7."
 
 The two settings singletons carry ``Password`` fieldtypes. Those are registered in
 ``SENSITIVE_FIELDS`` so they are never serialised or selectable - see
-``frappe_core.field_security``. Without that they would be readable through the generic
-``/api/resource/`` endpoint the moment they are registered.
+``frappe_core.field_security`` - and in ``ENCRYPTED_FIELDS`` so the stored value is
+ciphertext, which is what upstream gets for free by keeping ``Password`` fields out of the
+document table altogether (``frappe/utils/password.py:52``).
+
+Read a credential with ``settings.get_password("auth_token")``. The attribute itself
+holds ciphertext once saved.
+
+Access is manager-only (``crm_app/permissions/platform_docs.py``), matching upstream,
+which grants these to System Manager and Sales Manager at every permlevel and to nobody
+else.
 """
 
 from django.db import models
@@ -13,6 +21,7 @@ from django.db import models
 from frappe_core.models import BaseDocument
 from frappe_core.naming import FieldValue, Hash
 from frappe_core.registry import register_doctype
+from frappe_core.secrets import EncryptedFieldsMixin
 
 CALL_STATUS_CHOICES = [
     (c, c)
@@ -179,7 +188,7 @@ class CRMTelephonyPhone(BaseDocument):
 
 
 @register_doctype("CRM Twilio Settings", is_single=True)
-class CRMTwilioSettings(SingletonMixin, BaseDocument):
+class CRMTwilioSettings(EncryptedFieldsMixin, SingletonMixin, BaseDocument):
     enabled = models.BooleanField(default=False)
     account_sid = models.CharField(max_length=280, blank=True, default="")
     api_key = models.CharField(max_length=280, blank=True, default="")
@@ -193,12 +202,27 @@ class CRMTwilioSettings(SingletonMixin, BaseDocument):
     #: `Password` fieldtype in the JSON - never serialised, never selectable.
     SENSITIVE_FIELDS = ("api_secret", "auth_token")
 
+    #: Upstream keeps `Password` fieldtypes out of the document table entirely, in the
+    #: encrypted `__Auth` table (`frappe/utils/password.py:52`). We keep the column and
+    #: encrypt its contents, which reaches the same property - the plaintext is not in the
+    #: database - with a data-only migration. See frappe_core/secrets.py.
+    ENCRYPTED_FIELDS = ("api_secret", "auth_token")
+
+    #: `permlevel: 1` in the JSON, which is upstream restricting these to the roles that
+    #: hold permlevel-1 read. Both roles that can read this doctype hold it, so upstream's
+    #: restriction and ours are currently the same audience and this is **inert today**.
+    #:
+    #: Kept because it stops being inert the moment reads are widened - which is exactly
+    #: what we did to `Email Account` to keep a Profile screen working. A credential field
+    #: that is only protected by the row rule is one product decision away from exposure.
+    RESTRICTED_FIELDS = ("api_key", "twiml_sid")
+
     class Meta:
         verbose_name = "CRM Twilio Settings"
 
 
 @register_doctype("CRM Exotel Settings", is_single=True)
-class CRMExotelSettings(SingletonMixin, BaseDocument):
+class CRMExotelSettings(EncryptedFieldsMixin, SingletonMixin, BaseDocument):
     enabled = models.BooleanField(default=False)
     account_sid = models.CharField(max_length=280, blank=True, default="")
     api_key = models.CharField(max_length=280, blank=True, default="")
@@ -209,6 +233,18 @@ class CRMExotelSettings(SingletonMixin, BaseDocument):
 
     #: `Password` fieldtype in the JSON.
     SENSITIVE_FIELDS = ("api_token",)
+
+    #: Encrypted at rest, as upstream's `__Auth` table does for a `Password` field.
+    ENCRYPTED_FIELDS = ("api_token",)
+
+    #: **Stricter than upstream.** `webhook_verify_token` is plain `Data` there, protected
+    #: only by the role on the doctype - but it is what proves an inbound webhook really
+    #: came from Exotel. Anyone holding it can forge call events. `api_key` and
+    #: `account_sid` join it as the rest of the credential material.
+    #:
+    #: Inert while reads are manager-only, for the reason given on
+    #: :class:`CRMTwilioSettings`, and cheap insurance against that changing.
+    RESTRICTED_FIELDS = ("webhook_verify_token", "api_key", "account_sid")
 
     class Meta:
         verbose_name = "CRM Exotel Settings"

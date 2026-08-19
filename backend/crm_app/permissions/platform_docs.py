@@ -184,3 +184,72 @@ def email_account_has_permission(doc, ptype: str = "read", user: str | None = No
     if ptype == "read":
         return True
     return bool(_roles(user) & MAIL_ADMIN_ROLES)
+
+
+# ---------------------------------------------------------------------------
+# Integration settings singles - A4
+# ---------------------------------------------------------------------------
+#
+# `CRM Twilio Settings` and `CRM Exotel Settings` hold the credentials for the telephony
+# integrations. Upstream grants both to **System Manager and Sales Manager only**, at
+# every permlevel; no Sales User sees them at all. This port had no rule, so any
+# authenticated caller could read *and rewrite* them - including pointing the integration
+# at an account they control.
+#
+# Reads are closed here, unlike `Email Account`, and the difference is the nature of the
+# screen rather than an inconsistency:
+#
+# * the Email Account *list* feeds a user-facing feature - "which address do I send
+#   from?" - on a Profile page meant for everyone, so it has to be readable;
+# * Telephony is an **administration screen**. Its entire purpose is manager-only.
+#
+# Opening credentials so that an admin screen renders for non-admins would be backwards.
+# Upstream's own Settings.vue omits the `isManager()` condition on the Telephony entry
+# that eleven of its siblings carry, so a Sales User can reach a screen whose data they
+# cannot read - it errors. That is upstream bug #19, a cosmetic UI defect, and we
+# reproduce the behaviour rather than weakening the permission to paper over it.
+
+
+def telephony_settings_query_conditions(doctype: str, user: str | None = None):
+    """Managers only. Deny-all for everyone else.
+
+    ``None`` here would mean "no restriction", so the *list* route would hand back the
+    row even though :func:`telephony_settings_has_permission` refuses the document. Both
+    hooks have to agree; a rule that guards one route and not the other is the shape of
+    every finding in this phase.
+    """
+    user = user or get_current_user()
+    if user == "Administrator" or _roles(user) & MAIL_ADMIN_ROLES:
+        return None
+    return Q(pk__in=[])
+
+
+def telephony_settings_has_permission(doc, ptype: str = "read", user: str | None = None):
+    user = user or get_current_user()
+    if user == "Administrator":
+        return True
+    return bool(_roles(user) & MAIL_ADMIN_ROLES)
+
+
+# `FCRM Settings` is different, and upstream says so: **Sales User holds read** on it.
+# It has to - `stores/settings.js` loads it as a document resource and the activity
+# timeline reads `crm_timeline_timestamp_format` from it on every screen in the product.
+#
+# Which is exactly why `access_key` has no business being on it in the clear. See
+# `FCRMSettings.RESTRICTED_FIELDS`.
+
+
+def app_settings_query_conditions(doctype: str, user: str | None = None):
+    """Everyone reads it; the timeline needs it on every screen."""
+    return None
+
+
+def app_settings_has_permission(doc, ptype: str = "read", user: str | None = None):
+    """Read for all, write for managers - upstream's own split
+    (``fcrm_settings.json``: Sales User ``read: 1``, ``write: 0``)."""
+    user = user or get_current_user()
+    if user == "Administrator":
+        return True
+    if ptype == "read":
+        return True
+    return bool(_roles(user) & MAIL_ADMIN_ROLES)

@@ -323,10 +323,13 @@ class FCRMSettings(SingletonMixin, BaseDocument):
     service_provider = models.CharField(
         max_length=40, choices=SERVICE_PROVIDER_CHOICES, blank=True, default="frankfurter.app"
     )
-    # An FX-provider credential, but the JSON declares it `Data`, not `Password`, and it
-    # is not hidden - upstream shows it in the settings UI, so the settings screen reads
-    # it back. Blocking it here would have broken that screen for a security improvement
-    # the source does not make. Flagged in PROGRESS.md rather than diverging silently.
+    # An FX-provider credential, declared `Data` rather than `Password` in the JSON and
+    # carrying no `permlevel`. Phase 1 flagged it and declined to hide it, because the
+    # settings screen reads it back and `SENSITIVE_FIELDS` is all-or-nothing: hiding it
+    # would have broken that screen to make an improvement the source does not make.
+    #
+    # That was the right call with the tools of the time. `RESTRICTED_FIELDS` is the tool
+    # it needed - see the declaration below.
     access_key = models.CharField(max_length=280, blank=True, default="")
     auto_update_expected_deal_value = models.BooleanField(default=True)
     update_timestamp_on_new_communication = models.BooleanField(default=True)
@@ -339,6 +342,20 @@ class FCRMSettings(SingletonMixin, BaseDocument):
         max_length=20, choices=TIMELINE_SORT_CHOICES, default="Oldest First"
     )
     persona_captured = models.BooleanField(default=False)
+
+    #: **Stricter than upstream, and the one place in A4 where that matters.**
+    #:
+    #: This record is read by *every* screen in the product - `stores/settings.js` loads
+    #: it and the activity timeline takes `crm_timeline_timestamp_format` from it - so it
+    #: is world-readable by necessity, and upstream agrees (`fcrm_settings.json` grants
+    #: Sales User `read: 1`). The exchange-rate provider credential is sitting on it in
+    #: the clear, with no `permlevel`.
+    #:
+    #: Upstream's own authors used `permlevel: 1` on `CRM Twilio Settings.api_key` for
+    #: exactly this, so the omission reads as an oversight rather than a decision -
+    #: recorded as upstream bug #20. Managers still see it, which is all the settings
+    #: screen needs.
+    RESTRICTED_FIELDS = ("access_key",)
 
     class Meta:
         verbose_name = "FCRM Settings"

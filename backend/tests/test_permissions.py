@@ -784,6 +784,14 @@ def test_exactly_the_intended_doctypes_have_row_rules():
         # "send from" picker. Its query_conditions returns None on purpose: the decision
         # to leave reads open is recorded in code rather than left as an omission.
         "Email Account",
+        # A4: the integration credentials. Upstream gives the telephony pair to System
+        # Manager and Sales Manager only, at every permlevel; reads are closed here to
+        # match, because these back an administration screen rather than a user feature.
+        "CRM Twilio Settings",
+        "CRM Exotel Settings",
+        # A4: read for all (every screen reads its timestamp format), write for managers -
+        # upstream's own split. The credential on it is narrowed by RESTRICTED_FIELDS.
+        "FCRM Settings",
     }
     assert with_rules == upstream | added_by_phase_4
 

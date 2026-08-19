@@ -118,6 +118,44 @@ auditing every path that enumerates users through the permission layer.
 
 ---
 
+## Integration settings — `Twilio`, `Exotel`, `FCRM Settings`, `Global Settings`
+
+| Doctype | Upstream read | Upstream write | Before | Now |
+|---|---|---|---|---|
+| `CRM Twilio Settings` | SysMgr + SalesMgr | SysMgr + SalesMgr | anyone | **managers** — match |
+| `CRM Exotel Settings` | SysMgr + SalesMgr | SysMgr + SalesMgr | anyone | **managers** — match |
+| `FCRM Settings` | **+ Sales User** | SysMgr + SalesMgr | anyone | **all read, managers write** — match |
+| `CRM Global Settings` | all three roles | all three roles | anyone | unchanged — match (no secrets) |
+
+### Where the credentials live
+
+| Field | Upstream | Before | Now |
+|---|---|---|---|
+| `Twilio.api_secret`, `auth_token` | `Password` → `__Auth`, encrypted | hidden, **plaintext in row** | hidden, **encrypted** |
+| `Exotel.api_token` | `Password` → `__Auth`, encrypted | hidden, **plaintext in row** | hidden, **encrypted** |
+| `Twilio.api_key`, `twiml_sid` | `permlevel 1` | **exposed** | restricted |
+| `Exotel.webhook_verify_token` | plain `Data` | **exposed** | restricted — **stricter** |
+| **`FCRM.access_key`** | plain `Data`, **Sales User reads it** | **exposed** | restricted — **stricter**, bug #20 |
+
+### Two decisions worth keeping straight
+
+**Reads are closed here and open for `Email Account` — deliberately.** The Email Account
+*list* feeds a user-facing feature ("which address do I send from?") on a Profile page
+meant for everyone. Telephony is an **administration screen**; its whole purpose is
+manager-only. Opening credentials so an admin screen renders for non-admins would be
+backwards. Upstream's Telephony entry is missing the `isManager()` condition eleven of its
+siblings carry (bug #19) — that is a UI defect, and we reproduce the behaviour rather than
+weaken the permission to hide it.
+
+**`FCRM Settings` is where A4's field work actually bites.** Everything else here is
+manager-only anyway, so `RESTRICTED_FIELDS` on Twilio and Exotel is currently **inert** —
+kept because it stops being inert the moment reads widen, which is exactly what happened
+to `Email Account`. `FCRM Settings` cannot be closed (the timeline reads it on every
+screen), so restricting `access_key` is the only thing standing between an FX credential
+and every user.
+
+---
+
 ## `ToDo`
 
 | | Upstream | Before | Now |
@@ -143,6 +181,10 @@ write-up in `specs/UNROUTED_DOCTYPES.md`.
 | 5 | Non-managers may read `User` | **looser** | Kanban builds a column per user; `get_users` serves the same data anyway. |
 | 6 | `/api/resource/ToDo` withheld | **stricter** | Upstream ships the escalation. Bug #16. |
 | 7 | 10-second mail timeout | **stricter** | Bug #15 — upstream hangs the save. |
+| 8 | `FCRM.access_key` restricted to managers | **stricter** | Upstream leaves an FX credential on a record every user reads. Bug #20. |
+| 9 | `Exotel.webhook_verify_token` restricted | **stricter** | Plain `Data` upstream; it authenticates inbound webhooks, so holding it means forging call events. |
+| 10 | Telephony reads stay manager-only | **match** | Upstream's screen errors for non-managers (bug #19). Reproduced — the defect is a missing UI condition, not the permission. |
+| 11 | Telephony credentials encrypted at rest | **match the property** | Upstream keeps `Password` fields in `__Auth`; we keep the column and encrypt it. |
 
 ---
 

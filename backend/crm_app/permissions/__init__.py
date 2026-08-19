@@ -87,5 +87,26 @@ def register() -> None:
         has_permission=platform_docs.email_account_has_permission,
     )
 
+    # A4. Telephony credentials. Upstream gives these to System Manager and Sales Manager
+    # only, at every permlevel - no Sales User sees them. Here they were readable *and
+    # rewritable* by any authenticated caller, which means pointing the integration at an
+    # account the caller controls.
+    for doctype in ("CRM Twilio Settings", "CRM Exotel Settings"):
+        register_permission_hooks(
+            doctype,
+            permission_query_conditions=platform_docs.telephony_settings_query_conditions,
+            has_permission=platform_docs.telephony_settings_has_permission,
+        )
+
+    # A4. `FCRM Settings` is read by every screen in the product - the activity timeline
+    # takes its timestamp format from it - so upstream grants Sales User read and withholds
+    # write. Same split here; the credential that should never have been on a
+    # world-readable record is handled by `FCRMSettings.RESTRICTED_FIELDS`.
+    register_permission_hooks(
+        "FCRM Settings",
+        permission_query_conditions=platform_docs.app_settings_query_conditions,
+        has_permission=platform_docs.app_settings_has_permission,
+    )
+
 
 __all__ = ["register", "org_hierarchy", "notification"]
