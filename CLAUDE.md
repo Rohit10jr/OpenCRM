@@ -11,6 +11,8 @@ existing Vue frontend.
 | `PORT_PLAN.md` | Source inventory, frontend contract, settled architecture decisions |
 | `specs/README.md` | Index of per-phase specs and their status |
 | `specs/PHASE_<N>_*.md` | Your phase's spec |
+| **`specs/SECURITY_MODEL.md`** | **Required before touching any permission rule or field-visibility declaration.** Per-doctype comparison with upstream, the four field tools and when each applies |
+| `specs/UNROUTED_DOCTYPES.md` | Doctypes withheld from `/api/resource/`, and why |
 
 **Do not start work without reading `PORT_PLAN.md` and your phase spec.** They encode
 decisions that are already settled — re-deciding them creates divergence.
@@ -32,9 +34,16 @@ Read them whenever behaviour is unclear. **Never invent semantics** — match th
 or flag the ambiguity in your report. If something looks impossible, suspect a missing
 framework mechanism before suspecting your own code.
 
-**When upstream is wrong** — and it sometimes is; nine cases are in `UPSTREAM_BUGS.md` —
-diverge only on bugs nothing can observe, and reproduce user-visible ones. Check whether
-anything actually reads the field before deciding, and record the choice.
+**When upstream is wrong** — and it sometimes is; **18 cases** are recorded across the
+`UPSTREAM_BUGS_PHASE_*.md` files (1–9 from phases 0–2, 10–18 from phases 3–6) — diverge
+only on bugs nothing can observe, and reproduce user-visible ones. Check whether anything
+actually reads the field before deciding, and record the choice.
+
+**Security is the standing exception to that rule.** Upstream protects most doctypes with
+DocType role permissions, a layer this port does not model, so "upstream registers no
+hook" means "upstream had protection we do not". Five findings across four phases came
+from reading a missing hook as a missing requirement. `specs/SECURITY_MODEL.md` has the
+per-doctype detail and the two questions that settle each case.
 
 ## Hard rules
 
