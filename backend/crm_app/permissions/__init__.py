@@ -108,5 +108,17 @@ def register() -> None:
         has_permission=platform_docs.app_settings_has_permission,
     )
 
+    # The org tree is an *input to this very engine* - `org_hierarchy` resolves "owned by
+    # anyone in my subtree" against it on every Lead and Deal read. Unruled, a Sales User
+    # could add themselves and reparent a colleague underneath, taking that colleague's
+    # whole pipeline in one call. System Manager only, as upstream has it; deliberately
+    # tighter than the manager pair used elsewhere, because the chart is what decides what
+    # a Sales Manager can see.
+    register_permission_hooks(
+        "CRM Sales Hierarchy",
+        permission_query_conditions=platform_docs.sales_hierarchy_query_conditions,
+        has_permission=platform_docs.sales_hierarchy_has_permission,
+    )
+
 
 __all__ = ["register", "org_hierarchy", "notification"]

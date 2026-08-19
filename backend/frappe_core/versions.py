@@ -45,7 +45,25 @@ from frappe_core.registry import register_doctype
 from frappe_core.session import get_current_user
 
 
-@register_doctype("Version")
+# Unrouted deliberately, and this was a regression of my own: A2 added this doctype
+# without asking whether it needed a rule, which made every tracked field change readable
+# by anyone. A `Version` row carries the old and new values, so a deal a caller cannot open
+# still leaked its money through the audit trail:
+#
+#     GET /api/resource/CRM Deal/CRM-DEAL-2026-00001   -> 403
+#     GET /api/resource/Version                        -> {"changed": [["deal_value", 100, 8888888]]}
+#
+# Nothing calls the route: the timeline reads field changes through
+# `crm.api.activities.get_activities`, which checks read on the referenced document first
+# (`_require_readable`) and then queries `versions_for` over the ORM.
+#
+# Upstream is stricter still - System Manager gets **read only**, Administrator read and
+# delete, and `in_create: 1` means it is never created through the API at all
+# (`frappe/core/doctype/version/version.json`). Withholding the route is the closest thing
+# this port has to that, and is a smaller surface than any rule.
+#
+# See specs/UNROUTED_DOCTYPES.md.
+@register_doctype("Version", routable=False)
 class Version(BaseDocument):
     """``frappe/core/doctype/version/version.json``.
 

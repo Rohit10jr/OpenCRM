@@ -22,7 +22,7 @@ from crm_app.models import CRMDeal, CRMDealStatus
 from frappe_core import registry
 from frappe_core.session import session_user
 
-UNROUTED = ["ToDo"]
+UNROUTED = ["ToDo", "Version"]
 
 
 def _client(user):
@@ -40,16 +40,51 @@ def test_the_unrouted_set_is_exactly_what_we_intend():
     assert actual == set(UNROUTED)
 
 
+@pytest.mark.django_db
+def test_a_version_row_cannot_be_read_over_http(alice, bob, administrator, api_as):
+    """A2's regression, closed. A `Version` row carries the old and new values, so the
+    audit trail leaked the money on a deal the caller is refused."""
+    from crm_app.models import CRMDeal, CRMDealStatus
+
+    with session_user(administrator.name):
+        status = CRMDealStatus.objects.create(deal_status="Qualification", type="Open")
+        deal = CRMDeal.objects.create(status=status, deal_owner=bob, deal_value=100)
+        deal.deal_value = 8888888
+        deal.save()
+
+    client = api_as(alice)
+    assert client.get(f"/api/resource/CRM Deal/{deal.name}").status_code == 403
+    assert client.get("/api/resource/Version").status_code == 404
+
+
+@pytest.mark.django_db
+def test_the_timeline_still_gets_field_changes(bob, administrator, api_as):
+    """The legitimate path. `get_activities` checks read on the referenced document and
+    then queries `versions_for` over the ORM, so un-routing costs the feature nothing."""
+    from crm_app.models import CRMDeal, CRMDealStatus
+    from frappe_core.versions import versions_for
+
+    with session_user(administrator.name):
+        status = CRMDealStatus.objects.create(deal_status="Qualification", type="Open")
+        deal = CRMDeal.objects.create(status=status, deal_owner=bob, deal_value=100)
+        deal.deal_value = 8888888
+        deal.save()
+
+        assert versions_for("CRM Deal", deal.name), "the audit trail must still be recorded"
+
+
 def test_registration_still_works_for_an_unrouted_doctype():
     """`routable=False` withholds a route, nothing else. The doctype is still registered,
     still has a model, and every internal caller still resolves it."""
-    entry = registry.get_entry("ToDo")
-    assert entry.model.__name__ == "ToDo"
-    assert entry.model.get_doctype() == "ToDo"
+    for doctype in UNROUTED:
+        entry = registry.get_entry(doctype)
+        assert entry.model.__name__ == doctype
+        assert entry.model.get_doctype() == doctype
 
 
-def test_an_unrouted_doctype_is_absent_from_routable_doctypes():
-    assert "ToDo" not in registry.routable_doctypes()
+@pytest.mark.parametrize("doctype", UNROUTED)
+def test_an_unrouted_doctype_is_absent_from_routable_doctypes(doctype):
+    assert doctype not in registry.routable_doctypes()
 
 
 # --- the route is gone ------------------------------------------------------------------

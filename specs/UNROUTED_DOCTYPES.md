@@ -10,6 +10,7 @@ removing one.
 | Doctype | Since | Why | Anything call it? |
 |---|---|---|---|
 | `ToDo` | phase 4 review | Assignment rows grant record access; a writable route let any user grant themselves | No — frontend uses `assign_to.add` |
+| `Version` | phase 4 review | Audit rows carry old and new values, so the trail leaked the money on records the caller is refused | No — timeline uses `get_activities` |
 
 Enforced by `tests/test_unrouted_doctypes.py::test_the_unrouted_set_is_exactly_what_we_intend`,
 so the table above and the code cannot drift apart.
@@ -189,6 +190,40 @@ Two things to get right, both easy to miss:
 
 ---
 
+# `Version` — the audit trail
+
+## Short version
+
+`Version` records one row per tracked field change, holding the **old and new values**.
+Nothing reads it over HTTP — the timeline gets field changes from
+`crm.api.activities.get_activities`, which checks read on the referenced document first
+(`_require_readable`) and then queries `versions_for` over the ORM. So the route is
+withheld.
+
+## This one was mine
+
+A2 added the doctype and did not ask whether it needed a rule — the exact mistake this
+file exists to catalogue, made by the person cataloguing it. The result:
+
+```
+GET /api/resource/CRM Deal/CRM-DEAL-2026-00001   → 403
+GET /api/resource/Version                        → {"changed": [["deal_value", 100, 8888888]]}
+```
+
+A deal the caller is refused, with its value in the audit trail. Worth stating plainly:
+**adding a doctype is adding a public CRUD surface**, and knowing that is not the same as
+remembering it at the moment you write `@register_doctype`. That is why A6 is a test and
+not a convention.
+
+## Upstream is stricter still
+
+`frappe/core/doctype/version/version.json`: System Manager gets **read only**,
+Administrator read and delete, and `in_create: 1` means it is never created through the
+API at all. Nobody else has any access. Withholding the route is the closest equivalent
+this port has, and a smaller surface than a rule.
+
+---
+
 # The wider surface
 
 `ToDo` was found while auditing phase 4, and it is not the only one. At the time of
@@ -205,11 +240,25 @@ The triage question is the cheap one:
   `Email Account`, `User`, `File`, `Comment`, `Email Template`, `CRM Invitation`,
   `FCRM Settings`, `CRM Telephony Agent`).
 
-Findings still open, with `User` and `Email Account` the most severe — a Sales User could
-set `is_superuser` on their own account, and repoint or delete the outgoing mail server.
-Tracked in `PROGRESS_PHASE_4.md` as A2–A7.
+A1–A5 are now closed: `ToDo` and `Version` un-routed, and rules on `User`,
+`Email Account`, the settings singles and `CRM Sales Hierarchy`. The hierarchy was the
+worst of them — the org tree is an *input to the permission engine*, so a Sales User could
+add themselves and reparent a colleague underneath, taking that colleague's whole pipeline
+in one call.
 
-**The standing test** — enumerate every routable doctype and assert each is either ruled
-or *deliberately* world-readable — remains unwritten, and is the thing that stops a
-thirty-third instance. Four phases have now shipped the same shape of bug: an endpoint
-carefully gated, and the generic route left open beside it.
+**The standing test now exists** — `tests/test_route_surface.py`. It does not decide
+whether a doctype is safe; it makes the *absence of a decision* fail. Registering a new
+doctype breaks the build until somebody records which of three things it is: ruled,
+reviewed-and-open with a reason, or not-yet-reviewed with the question.
+
+The current split, printed on every run:
+
+```
+route surface: 36 routable | 12 ruled | 10 reviewed-open | 14 awaiting review (A7)
+```
+
+Those 14 are A7, and each carries the question rather than a guess — a reason nobody
+checked would defeat the point of writing them down. The test also asserts one invariant
+outright, with no exceptions list: **a doctype declaring secrets must have a rule.** Hiding
+a field from responses was never the same as stopping the record being rewritten, which is
+exactly what A3 turned out to be.

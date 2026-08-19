@@ -156,6 +156,56 @@ and every user.
 
 ---
 
+## `CRM Sales Hierarchy` — the worst of the phase-4 findings
+
+**The org tree is an input to the permission engine, so writing it is writing your own
+permissions.** `org_hierarchy` resolves "records owned by anyone in my subtree" against
+this table on every Lead and Deal read.
+
+| | Upstream | Before | Now |
+|---|---|---|---|
+| Read | all three roles | anyone | **anyone** — match |
+| Create / write / delete | **System Manager only** | **anyone** | **System Manager only** — match |
+
+Observed end to end as a plain Sales User:
+
+```
+GET  /api/resource/CRM Deal/<bob's deal>     → 403
+POST /api/resource/CRM Sales Hierarchy       → 201   (alice adds herself)
+PUT  .../CRM Sales Hierarchy/<bob's node>    → 200   (reports_to = alice)
+GET  /api/resource/CRM Deal/<bob's deal>     → 200   deal_value: 777777
+```
+
+Worse than the `ToDo` escalation it resembles: that took one named record at a time, this
+takes a **whole subtree in one call**, and the nested-set maintenance rebuilds `lft`/`rgt`
+for the attacker on the way through. Nothing errors — it reads as an ordinary org-chart
+edit.
+
+**Only the feature flag kept it from being live.** `enable_sales_hierarchy` is off by
+default and `org_hierarchy` skips the tree entirely when it is; any organisation using the
+feature was exposed. A4 had already made that flag manager-writable, so it could not be
+turned on by the caller.
+
+**Note the tighter role set.** System Manager only — not the manager pair used elsewhere
+in this port. A Sales Manager may not restructure the chart, because the chart is what
+decides what a Sales Manager can see. Upstream agrees.
+
+---
+
+## `Version` — un-routed
+
+| | Upstream | Before | Now |
+|---|---|---|---|
+| Read | System Manager only | **anyone** | route withheld |
+| Create | `in_create: 1` — never via API | anyone | route withheld |
+| Delete | Administrator | anyone | route withheld |
+
+Rows carry the old and new values, so the audit trail leaked the money on records the
+caller is refused. Introduced by A2 and closed by A5 — full write-up in
+`specs/UNROUTED_DOCTYPES.md`.
+
+---
+
 ## `ToDo`
 
 | | Upstream | Before | Now |
@@ -209,5 +259,34 @@ Two questions settle each case, and they are cheaper than designing a rule:
 `ToDo` answered no to (1) → withheld. `Email Account` answered yes to (2) → rule.
 **Deciding by pattern rather than by evidence would have got both wrong.**
 
-**Still unwritten:** the standing test that enumerates every routable doctype and asserts
-each is either ruled or *deliberately* world-readable. It is what stops the next one.
+**The standing test now exists** — `tests/test_route_surface.py`. It does not decide
+whether a doctype is safe; it makes the *absence of a decision* fail:
+
+```
+route surface: 36 routable | 12 ruled | 10 reviewed-open | 14 awaiting review (A7)
+```
+
+Registering a doctype breaks the build until somebody records which of three things it is:
+ruled, reviewed-and-open with the reason, or not-yet-reviewed with the question. The third
+list is allowed to be non-empty on purpose — a test demanding 24 rules on the day it was
+written would have been suppressed by the next person in a hurry; one demanding a
+*sentence* gets kept, and the sentences are what turn "audit the route surface" into a
+finite list of named work.
+
+It also asserts one invariant with no exceptions list: **a doctype declaring secrets must
+have a rule.** That one would have caught A3 and A4 on the day they were written.
+
+---
+
+## Known gap: `accept_invitation` is not implemented
+
+`crm_app/tasks.py:214` emails an invitation link pointing at
+`/api/method/crm.api.accept_invitation`. **Nothing implements that endpoint** — upstream
+has it at `crm/api/__init__.py:83`. So invitations send a link that 404s, and the flow is
+broken end to end.
+
+It is also latent security. `CRM Invitation` holds `role` and `key` and is currently
+world-writable (it is on the A7 list). Forging an invitation that grants System Manager is
+possible today but cannot be redeemed, because there is nothing to redeem it with. **That
+becomes critical the moment the endpoint is implemented** — so whoever builds it must give
+`CRM Invitation` a rule in the same change.

@@ -792,6 +792,12 @@ def test_exactly_the_intended_doctypes_have_row_rules():
         # A4: read for all (every screen reads its timestamp format), write for managers -
         # upstream's own split. The credential on it is narrowed by RESTRICTED_FIELDS.
         "FCRM Settings",
+        # The org tree is an input to this engine, so writing it is writing your own
+        # permissions: a Sales User could add themselves and reparent a colleague
+        # underneath, taking that colleague's pipeline in one call. System Manager only,
+        # as upstream has it - tighter than the manager pair used elsewhere, because the
+        # chart is what decides what a Sales Manager can see.
+        "CRM Sales Hierarchy",
     }
     assert with_rules == upstream | added_by_phase_4
 

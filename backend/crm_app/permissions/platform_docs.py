@@ -253,3 +253,49 @@ def app_settings_has_permission(doc, ptype: str = "read", user: str | None = Non
     if ptype == "read":
         return True
     return bool(_roles(user) & MAIL_ADMIN_ROLES)
+
+
+# ---------------------------------------------------------------------------
+# CRM Sales Hierarchy
+# ---------------------------------------------------------------------------
+#
+# **The org tree is an input to the permission engine, so writing to it is writing your
+# own permissions.** `org_hierarchy` resolves "records owned by anyone in my subtree"
+# against this table on every Lead and Deal read.
+#
+# With no rule, a Sales User could add themselves as a node and reparent a colleague
+# underneath - observed end to end:
+#
+#     GET  /api/resource/CRM Deal/<bob's deal>      -> 403
+#     POST /api/resource/CRM Sales Hierarchy        -> 201   (alice adds herself)
+#     PUT  .../CRM Sales Hierarchy/<bob's node>     -> 200   (reports_to = alice)
+#     GET  /api/resource/CRM Deal/<bob's deal>      -> 200
+#
+# One call takes a whole subtree, not one record, and the nested-set maintenance rebuilds
+# `lft`/`rgt` for the attacker on the way through. It reads as an ordinary org-chart edit.
+#
+# Only `FCRM Settings.enable_sales_hierarchy` being off by default kept it from being
+# live; any organisation using the feature was exposed. That flag became manager-writable
+# in A4, so it could not itself be flipped by the caller.
+#
+# Upstream: System Manager creates, writes and deletes; **Sales Manager and Sales User
+# read only** (`crm_sales_hierarchy.json`). Reproduced exactly - and note the tighter role
+# set than `MAIL_ADMIN_ROLES`: a Sales Manager may not restructure the org chart, which is
+# right, since the chart is what decides what a Sales Manager can see.
+
+HIERARCHY_ADMIN_ROLES = {"System Manager"}
+
+
+def sales_hierarchy_query_conditions(doctype: str, user: str | None = None):
+    """Everyone reads the chart - upstream grants Sales User ``read: 1``, and the
+    Hierarchy settings screen renders it."""
+    return None
+
+
+def sales_hierarchy_has_permission(doc, ptype: str = "read", user: str | None = None):
+    user = user or get_current_user()
+    if user == "Administrator":
+        return True
+    if ptype == "read":
+        return True
+    return bool(_roles(user) & HIERARCHY_ADMIN_ROLES)
