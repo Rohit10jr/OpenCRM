@@ -116,3 +116,22 @@ def as_user():
     from frappe_core.session import session_user
 
     return session_user
+
+
+@pytest.fixture
+def api_as():
+    """``api_as(user)`` -> an APIClient carrying that user's bearer token.
+
+    ``auth_api`` is the same thing fixed to ``alice``. Permission tests need two users at
+    once - the one doing something and the one it is being done to - so they need this
+    form. A real JWT rather than ``force_authenticate``, for the reason ``auth_api``
+    gives: the token path is part of what is under test.
+    """
+
+    def _client(user):
+        client = APIClient()
+        token = RefreshToken.for_user(user).access_token
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+        return client
+
+    return _client

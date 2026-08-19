@@ -77,5 +77,15 @@ def register() -> None:
         has_permission=platform_docs.user_has_permission,
     )
 
+    # A3. Same shape: routable since phase 1 with no rule, so any caller could repoint
+    # `smtp_server` at a host they control - every message the system sends, invitation
+    # links included, then flows through it - or simply delete the account. Managers
+    # write, everyone reads (the Profile screen's "send from" picker needs the list).
+    register_permission_hooks(
+        "Email Account",
+        permission_query_conditions=platform_docs.email_account_query_conditions,
+        has_permission=platform_docs.email_account_has_permission,
+    )
+
 
 __all__ = ["register", "org_hierarchy", "notification"]

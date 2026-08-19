@@ -194,6 +194,19 @@ EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.
 # rather than the error written for them. Raise this if a slow but working relay is
 # being reported as broken; do not remove it.
 MAIL_CONNECT_TIMEOUT = env.int("MAIL_CONNECT_TIMEOUT", default=10)
+
+# Encrypts credential columns at rest (frappe_core/secrets.py) - currently the Email
+# Account password and Frappe Mail api_secret.
+#
+# Deliberately NOT derived from SECRET_KEY. Rotating SECRET_KEY is a routine Django
+# operation that invalidates sessions and signed cookies, both disposable; if credentials
+# hung off it, that routine act would silently destroy every stored mail password and
+# surface days later as "invitations stopped arriving".
+#
+# Losing this key means stored credentials must be re-entered. That is what "encrypted at
+# rest" means, and is the correct failure. Generate one with:
+#     python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+FIELD_ENCRYPTION_KEY = env("FIELD_ENCRYPTION_KEY", default="")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="crm@example.com")
 
 # Celery (phase 5). The queue names mirror upstream's RQ queues: short -> default,

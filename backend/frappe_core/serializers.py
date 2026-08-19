@@ -14,7 +14,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from frappe_core import children, registry
-from frappe_core.field_security import readonly_fields, sensitive_fields
+from frappe_core.field_security import hidden_from, readonly_fields, restricted_fields, sensitive_fields
 
 #: Standard fields the client may never set directly; the model stamps them.
 #: Audit columns the server stamps, plus the four underscore caches.
@@ -69,6 +69,15 @@ class DocumentSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
+        # Restricted fields are dropped here rather than excluded when the class is
+        # built, because the class is built once per model and cached on the registry
+        # entry - it cannot know who is asking. `hidden_from` re-checks the sensitive set
+        # too, which is redundant (those are already excluded from Meta) and costs a set
+        # union; keeping it means one function answers "may this user see this field?"
+        # instead of two that can drift.
+        if restricted_fields(self.Meta.model):
+            for fieldname in hidden_from(self.Meta.model):
+                data.pop(fieldname, None)
         for fieldname, spec in (self.child_table_spec or {}).items():
             child_serializer = registry.get_entry(spec["doctype"]).get_serializer_class()
             data[fieldname] = child_serializer(

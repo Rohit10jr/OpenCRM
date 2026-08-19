@@ -21,6 +21,7 @@ from frappe_core.assignment import register_todo_model
 from frappe_core.models import BaseDocument
 from frappe_core.naming import FieldValue, Hash, Prompt, append_number_if_name_exists
 from frappe_core.registry import register_doctype
+from frappe_core.secrets import EncryptedFieldsMixin
 
 #: The four roles seeded as Django Groups. PHASE_2_PERMISSIONS.md section 5.
 ROLE_ADMINISTRATOR = "Administrator"
@@ -579,7 +580,7 @@ class Tag(BaseDocument):
 
 
 @register_doctype("Email Account")
-class EmailAccount(BaseDocument):
+class EmailAccount(EncryptedFieldsMixin, BaseDocument):
     """Outbound/inbound email config.
 
     Fields verbatim from ``crm/api/settings.py:14-29``, which is the only place the CRM
@@ -633,6 +634,36 @@ class EmailAccount(BaseDocument):
     #: Never serialised, never selectable. frappe_core.field_security.
     #: ``api_secret`` joins ``password``: it is the Frappe Mail credential.
     SENSITIVE_FIELDS = ("password", "api_secret")
+
+    #: Encrypted at rest (``frappe_core.secrets``). The attribute holds **ciphertext**
+    #: once saved - read the credential with ``account.get_password("password")``, never
+    #: ``account.password``. Upstream keeps these out of the document table entirely, in
+    #: the ``__Auth`` table; we keep the column and encrypt its contents, which reaches
+    #: the same property with a data-only migration.
+    ENCRYPTED_FIELDS = ("password", "api_secret")
+
+    #: Managers only. Upstream needs no equivalent because it withholds the whole record
+    #: from anyone below System Manager - and in doing so leaves its own Profile screen's
+    #: "send from" picker empty for ordinary users, since that screen carries no role
+    #: condition. We keep the picker working, which means the record is readable, which
+    #: means the infrastructure on it has to be narrowed instead.
+    #:
+    #: What stays visible is exactly what that picker reads: ``name``, ``email_id`` and
+    #: ``enable_outgoing``. Everything below describes *how* mail is sent, which is a
+    #: manager's business and an attacker's reconnaissance.
+    RESTRICTED_FIELDS = (
+        "smtp_server",
+        "smtp_port",
+        "email_server",
+        "incoming_port",
+        "login_id",
+        "domain",
+        "api_key",
+        "frappe_mail_site",
+        "signature",
+        "no_smtp_authentication",
+        "awaiting_password",
+    )
 
     class Meta:
         ordering = ["-modified"]

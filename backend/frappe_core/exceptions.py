@@ -146,6 +146,20 @@ def frappe_exception_handler(exc, context):
         body = build_error_body("DuplicateEntryError", [str(exc)], "Duplicate")
         return Response(body, status=409)
 
+    # `FilterError` has promised a 400 in its own docstring since phase 0 and nothing
+    # delivered one, so every malformed filter has been answering 500 - including, once
+    # the field-security guard landed, a deliberate refusal to filter on a secret. A
+    # security decision that presents as a crash reads as a bug to whoever is on call,
+    # and tells the caller nothing about what to send instead.
+    #
+    # Imported here rather than at module scope: `filters` imports `field_security`,
+    # which is imported by `serializers`, which imports this module.
+    from frappe_core.filters import FilterError
+
+    if isinstance(exc, FilterError):
+        body = build_error_body("ValidationError", [str(exc)], "Invalid Filter")
+        return Response(body, status=400)
+
     if isinstance(exc, drf_exceptions.APIException):
         exc_type = {
             drf_exceptions.NotFound: "DoesNotExistError",

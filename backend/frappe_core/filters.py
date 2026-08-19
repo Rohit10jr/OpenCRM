@@ -26,6 +26,7 @@ from django.db.models import Q
 from django.db.models.fields.json import JSONField
 from django.db.models.fields.related import ForeignKey, OneToOneField
 
+from frappe_core.field_security import is_hidden
 from frappe_core.session import get_current_user
 
 ME_TOKEN = "@me"
@@ -395,6 +396,13 @@ def build_q(
                 f"Supported: {', '.join(SUPPORTED_OPERATORS)}"
             )
         value = resolve_me_tokens(raw_value, user)
+        # A field hidden from output must be hidden from *questions about it* too.
+        # Hiding it from the response only stops the value being handed over; a filter
+        # turns the row count into an oracle, and `like` narrows one character at a time.
+        # Recovered a real SMTP password this way before this guard existed - see
+        # `tests/test_field_security.py::test_a_secret_cannot_be_recovered_by_probing`.
+        if is_hidden(model, fieldname, user):
+            raise FilterError(f"Cannot filter on {fieldname!r}")
         path = resolve_field_path(model, fieldname)
         q = handler(model, path, fieldname, value)
         if result is None:

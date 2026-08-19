@@ -779,6 +779,11 @@ def test_exactly_the_intended_doctypes_have_row_rules():
         # any colleague. Writes are now self-only; reads stay open (kanban builds a column
         # per user, and upstream enumerates them with permission-ignoring `frappe.get_all`).
         "User",
+        # A3: same, and worse - any caller could repoint the outgoing mail server or
+        # delete the account. Managers write; reads stay open for the Profile screen's
+        # "send from" picker. Its query_conditions returns None on purpose: the decision
+        # to leave reads open is recorded in code rather than left as an omission.
+        "Email Account",
     }
     assert with_rules == upstream | added_by_phase_4
 

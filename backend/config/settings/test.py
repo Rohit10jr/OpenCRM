@@ -40,3 +40,9 @@ CACHES = {
 
 # Fast hashing - these tests create a lot of users.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+# A fixed key, so credential encryption is *on* under test rather than skipped. Running
+# the tests with encryption disabled would leave the whole of `frappe_core.secrets`
+# unexercised while every test still passed - which is the failure mode the setting's
+# "absent means off" default is otherwise designed to allow in production.
+FIELD_ENCRYPTION_KEY = "test-only-field-encryption-key-not-for-any-real-deployment"

@@ -41,7 +41,16 @@ from frappe_core.session import get_current_user
 #: list a normal user can produce.
 STANDARD_USERS = ("Administrator", "Guest")
 
+#: Who may administer *users*. System Manager alone, matching upstream - `update_user_role`
+#: lets a Sales Manager promote someone to Sales User, but the User doctype itself is
+#: System Manager's (`user.json` permissions).
 ADMIN_ROLES = {"System Manager"}
+
+#: Who may administer *email accounts*. Wider than :data:`ADMIN_ROLES`, and deliberately:
+#: it matches `crm_app.api.settings.create_email_account`, gated to this pair by phase 3's
+#: decision D5. Narrowing it to System Manager would leave a Sales Manager able to create
+#: an account but not correct a typo in it.
+MAIL_ADMIN_ROLES = {"System Manager", "Sales Manager"}
 
 
 def _roles(user: str) -> set[str]:
@@ -125,3 +134,53 @@ def user_has_permission(doc, ptype: str = "read", user: str | None = None):
     # write / delete / anything else: your own row, and `delete` is excluded because
     # removing your own account orphans everything that references you.
     return ptype == "write" and str(name) == str(user)
+
+
+# ---------------------------------------------------------------------------
+# Email Account
+# ---------------------------------------------------------------------------
+#
+# Upstream gives `Email Account` to **System Manager** alone
+# (`email_account.json` permissions). `Inbox User` also holds read there, but Frappe CRM
+# never grants that role - zero references in the repo - so in practice nobody below
+# System Manager sees an email account at all.
+#
+# This port had no rule, so any authenticated caller could rewrite or delete one. The
+# damage is not credential theft (the password is not served): it is **redirecting the
+# mail**. Point `smtp_server` at a host you control and every message the system sends
+# passes through it, invitation links included. Observed at 200, as was DELETE.
+#
+# One rule covers every door. `/api/resource/` and the `frappe.client.*` endpoints -
+# `set_value`, `delete`, `rename_doc` - all resolve through `_get_checked`, so un-routing
+# would have fixed neither.
+
+
+def email_account_query_conditions(doctype: str, user: str | None = None):
+    """No row restriction. **Reads are open by decision, not by omission.**
+
+    Upstream shows a non-manager nothing here - which means its own
+    `UserEmailSettings.vue` account picker ("which address do I send from?") comes back
+    **empty for every non-manager**, since that screen sits under Profile and Profile
+    carries no role condition. The feature is quietly broken upstream.
+
+    We keep the frontend contract working instead. The cost is that ordinary users can
+    read `smtp_server`, `login_id`, `domain` and `api_key`, which upstream would not show
+    them - information disclosure rather than takeover, and narrowed by
+    ``EmailAccount.RESTRICTED_FIELDS``.
+    """
+    return None
+
+
+def email_account_has_permission(doc, ptype: str = "read", user: str | None = None):
+    """Read for anyone; create, write and delete for managers.
+
+    The role pair matches ``crm_app.api.settings.create_email_account``, gated that way by
+    phase 3's decision D5. Without this rule the two disagreed: you could not *create* an
+    account without being a manager, but you could edit or delete one as anybody.
+    """
+    user = user or get_current_user()
+    if user == "Administrator":
+        return True
+    if ptype == "read":
+        return True
+    return bool(_roles(user) & MAIL_ADMIN_ROLES)

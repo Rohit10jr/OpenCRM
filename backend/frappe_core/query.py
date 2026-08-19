@@ -19,7 +19,7 @@ from typing import Any
 
 from frappe_core import permissions, registry
 from frappe_core.exceptions import ValidationError
-from frappe_core.field_security import sensitive_fields
+from frappe_core.field_security import hidden_from, is_hidden
 from frappe_core.filters import apply_filters
 from frappe_core.session import get_current_user
 
@@ -61,8 +61,14 @@ def resolve_fields(model, fields: Any) -> list[str]:
     ``["*"]`` - see :mod:`frappe_core.field_security`. ``User`` and ``Email Account``
     are routable doctypes, so without this a list request would hand out password
     hashes.
+
+    ``hidden_from`` rather than ``sensitive_fields``: it adds the model's restricted
+    fields when the caller holds none of the privileged roles. The list path needs its
+    own check because it does not build a serializer - ``EmailAccountList.vue`` asks for
+    ``fields=['*']``, and without this the fields the serializer drops would come straight
+    back through the list.
     """
-    blocked = sensitive_fields(model)
+    blocked = hidden_from(model)
     allowed = concrete_field_names(model) - blocked
     default = [
         f.name
@@ -116,6 +122,10 @@ def resolve_order_by(model, order_by: Any) -> list[str]:
     if isinstance(order_by, (list, tuple)):
         order_by = ",".join(str(o) for o in order_by)
 
+    # Hidden fields are rejected per clause by `is_hidden` below, for the same reason
+    # `resolve_group_by` rejects them and filters now do: ordering by a hidden column
+    # leaks its ordering, and a caller who can sort by a secret can bisect it across
+    # requests. `allowed` therefore only has to answer "is this a real column?".
     allowed = concrete_field_names(model)
     resolved: list[str] = []
     for clause in str(order_by).split(","):
@@ -127,7 +137,7 @@ def resolve_order_by(model, order_by: Any) -> list[str]:
             raise ValidationError(f"Cannot parse sort clause {clause!r}")
         field = match.group("field")
         direction = (match.group("direction") or "asc").lower()
-        if field in sensitive_fields(model):
+        if is_hidden(model, field):
             raise ValidationError(f"Cannot order by {field!r}")
         if field not in allowed:
             raise ValidationError(f"Cannot order by unknown field {field!r}")
@@ -141,7 +151,7 @@ def resolve_group_by(model, group_by: Any) -> str | None:
     field = str(group_by).strip()
     if "." in field:
         field = field.rsplit(".", 1)[-1].strip("`\"")
-    if field in sensitive_fields(model):
+    if is_hidden(model, field):
         raise ValidationError(f"Cannot group by {field!r}")
     if field not in concrete_field_names(model):
         raise ValidationError(f"Cannot group by unknown field {field!r}")

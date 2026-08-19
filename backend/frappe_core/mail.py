@@ -46,6 +46,7 @@ import socket
 from django.conf import settings
 
 from frappe_core.exceptions import ValidationError
+from frappe_core.secrets import decrypt
 
 #: Seconds to wait for a mail server before calling it unreachable. Upstream passes no
 #: timeout at all - see the module docstring for why we do.
@@ -152,7 +153,12 @@ def validate_email_account(account) -> None:
     if getattr(account, "awaiting_password", False):
         return
 
-    has_credentials = bool(account.password) or account.smtp_server in ("127.0.0.1", "localhost")
+    # `decrypt` passes an unprefixed value straight through, which is what makes this
+    # correct on both paths: validation normally runs on an *unsaved* instance whose
+    # password is still plaintext, but re-validating a stored account hands us
+    # ciphertext. See frappe_core/secrets.py.
+    password = decrypt(account.password)
+    has_credentials = bool(password) or account.smtp_server in ("127.0.0.1", "localhost")
     if not has_credentials:
         if account.enable_incoming or (
             account.enable_outgoing and not account.no_smtp_authentication
@@ -166,7 +172,7 @@ def validate_email_account(account) -> None:
             account.smtp_server,
             account.smtp_port,
             username=account.email_id,
-            password=account.password,
+            password=password,
             use_tls=account.use_tls,
             authenticate=not account.no_smtp_authentication,
         )
@@ -176,5 +182,5 @@ def validate_email_account(account) -> None:
             getattr(account, "email_server", "") or account.smtp_server,
             getattr(account, "incoming_port", None),
             username=account.email_id,
-            password=account.password,
+            password=password,
         )
