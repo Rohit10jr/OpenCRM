@@ -121,18 +121,24 @@ a writing artefact — had been masking it, since add and split agreed with each
 
 ## Still open
 
-* **The frontend test suite has not been executed here.** `frontend/node_modules` does not
-  exist and there is no network to install it, so `vitest` cannot run.
-  `tests/unit/socket.test.js` is written and committed but **unrun**. To compensate, the
+* ~~**The frontend test suite has not been executed here.**~~ **Run, and passing.** The
+  recorded blocker - "there is no network to install it" - had stopped being true. **8
+  files, 152 tests, all green**, and the socket file has 23 tests rather than the 22
+  claimed below. A mutation check confirms they bite: removing the re-subscribe replay
+  loop fails exactly one test, the criterion §4 names. Installing needs a workaround for
+  upstream's `link:../../frappe/ui` line - `specs/KNOWN_ISSUES.md` #5.
+
+  The original note follows, because its compensating measure was the right instinct: To compensate, the
   same 22 cases were executed against the real `src/socket.js` through a standalone Node
   harness (`backend/scratch/socket_check.mjs`, gitignored) that stubs the two imports and
   drives a fake WebSocket: **22 passed**, and a mutation check confirmed the
   re-subscribe case fails when the replay loop is removed. That is verification of the
   logic, not of the test file. **Run `yarn test:run` before trusting it.**
-* **No Redis and no ASGI server in the test run.** `InMemoryChannelLayer` plus
-  `WebsocketCommunicator`, per RUNBOOK.md. Nothing here has been exercised against
-  `channels_redis` or daphne, so cross-process delivery — a Celery worker publishing to a
-  browser held by the web process — is proven only in-process.
+* **No ASGI server in the test run**, and `InMemoryChannelLayer` per RUNBOOK.md - but
+  **cross-process delivery is now proven**. A subscriber in one process and a publisher in
+  another, over real `channels_redis` on Memurai, using the real `publish()`:
+  `specs/KNOWN_ISSUES.md` #5. daphne and a real browser socket remain untested, and no
+  Celery *task* publishes today - the only one that would is gated behind phase 7.
 * **Phase-6 tests run `transaction=True`** and are therefore slow (~2 min of the suite's
   ~3¾). `database_sync_to_async` uses a second connection, which cannot see an
   uncommitted transaction. `conftest.builtin_users` already existed to re-seed

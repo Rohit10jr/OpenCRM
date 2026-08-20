@@ -12,6 +12,7 @@ and anything a future agent would otherwise rediscover the hard way.
 | 2 | `crm.api.accept_invitation` is not implemented; invitation links 404 | **Open** — phase 8; the security half is disarmed |
 | 3 | `Communication`, `File` and `Comment` leak content from records the caller cannot open | ✅ **Fixed** — see below for what it took |
 | 4 | The async stack had never run against a real broker, worker or scheduler | ✅ **Smoke-tested** — passed; see below for what is still untested |
+| 5 | The frontend test suite had never been executed; the realtime layer had never run on real Redis | ✅ **Both run** — 152 frontend tests pass, cross-process delivery confirmed |
 
 ---
 
@@ -278,3 +279,79 @@ literal return value (`crm/api/doc.py:837`), not a count.
   routing.
 * **A real schedule boundary.** The daily entries were never observed firing; only the
   `*/5` and `*/15` ones came round during the window.
+
+---
+
+## 5. Phase 6 verified: the frontend suite runs, and realtime works across processes
+
+**Phase 6 A1/A2, resolved.** Both had been recorded as blocked, and one of the blockers
+had quietly stopped being true.
+
+### A1 — the frontend suite had never executed
+
+`PROGRESS_PHASE_6.md` recorded: *"`frontend/node_modules` does not exist and there is no
+network to install it, so `vitest` cannot run."* **Node 22.13 and network access are both
+available now**, so the constraint was stale rather than real.
+
+Result: **8 files, 152 tests, all passing.** Not just the socket tests — *nothing* in
+`frontend/tests` had ever been run in this repo. The socket file has **23** tests, not the
+22 the progress file claimed.
+
+A mutation check confirms they are not vacuous: deleting the re-subscribe replay loop from
+`src/socket.js` fails exactly one test —
+`re-subscribes to open documents on reconnect` — and nothing else. That is the criterion
+`PHASE_6_REALTIME.md` §4 names and the one whose absence is hardest to notice in
+production, because a reconnected client looks live and receives nothing.
+
+**Installing it needs a workaround, and this is the part worth knowing.** `package.json`
+carries `"@framework/ui": "link:../../frappe/ui"` — upstream's own line, which assumes a
+Frappe bench layout (`apps/crm/frontend` alongside `apps/frappe/ui`). This repo is not
+laid out that way, so the link target does not exist:
+
+* `yarn install` cannot resolve it;
+* `npm install` rejects the `link:` protocol outright (`EUNSUPPORTEDPROTOCOL`).
+
+The tests do not need it. `socket.test.js` mocks both of `socket.js`'s imports, so only
+`vitest`, `happy-dom` and `frappe-ui` are actually required. They were installed into
+`backend/scratch/vitest-install` (which has no `link:` line) and `frontend/node_modules`
+was made a **directory junction** to it. Copying instead of junctioning was tried first and
+abandoned: ~358 packages of small files took over ten minutes on this filesystem without
+finishing.
+
+That junction is a local convenience, not a committed artefact — `frontend/node_modules`
+is gitignored. **Anyone wanting a real install should fix the layout or the link, not
+repeat this.**
+
+### A2 — realtime had only ever run in-process
+
+Tests use `InMemoryChannelLayer`, which cannot demonstrate the architecture's central
+claim (`config/settings/base.py`): *"A Celery worker publishing an event reaches the same
+layer the web process serves from."* In-memory means in-*this*-memory; publisher and
+subscriber were the same process.
+
+Run against real `channels_redis` on Memurai, with a subscriber in one process and a
+publisher in another:
+
+```
+subscriber: joined 'user_e299ab7f9873bd0cdac2a64182502fbc'
+publisher:  pid 12456, publish() returned True
+subscriber: RECEIVED {'type': 'realtime.event', 'event': 'smoke_event',
+                      'message': {'hello': 'from another process'}}
+```
+
+The publisher calls the real `crm_app.realtime.publish`, not a hand-built frame, so what is
+proven includes the flag gate, the layer lookup, the group hashing and the frame shape —
+each of which could be wrong independently of whether Redis relays bytes.
+
+### Still not exercised
+
+* **No task actually publishes.** The only publishing Celery task is
+  `run_product_reconciliation`, and it returns early unless `ENABLE_ERPNEXT` is on — and
+  with it on, it raises at the phase-7 `_reconcile_products` seam *before* the publish
+  line. So "a worker publishes to a browser" is architecturally proven (a worker is just
+  another process, and cross-process delivery works) but has **no live caller to
+  demonstrate it end to end** until phase 7.
+* **No daphne, no browser.** `WebsocketCommunicator` in tests, raw channel-layer calls
+  here. The actual ASGI server and a real browser socket remain untested.
+* **The frontend tests use a fake WebSocket.** Backoff and reconnect are verified as
+  logic, not against a server that really drops a connection.
