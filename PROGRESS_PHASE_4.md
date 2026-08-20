@@ -135,6 +135,15 @@ field on six doctypes is exercised against the real query layer.
 
 ## Concerns
 
+> **All three were acted on** — see the resolution section at the end of this file, which
+> supersedes this list. The first one, "the generic route is the recurring blind spot",
+> turned out to understate it considerably: the audit it prompted found eight further
+> holes, including three the phase-4 review never looked at. The standing test it asks for
+> now exists.
+>
+> Left unedited because the reasoning was right and the estimate was wrong, and that gap
+> is the useful part of the record.
+
 - **The generic route is the recurring blind spot.** Two of three findings were the same
   shape: an endpoint carefully gated, and the doctype reachable another way. Every
   registered doctype is a public read/write surface unless a hook says otherwise. It
@@ -150,3 +159,104 @@ field on six doctypes is exercised against the real query layer.
   algorithm and tested its shape, but "matches upstream" is asserted structurally
   (tabs/sections/columns nest correctly), not against a real rendered layout. A visual
   check against the running frontend would be worth more than another unit test.
+
+---
+
+# REVIEW RESOLUTION — human pass over the phase 4 concerns
+
+Everything above was written by the unattended run. This section records what happened
+when those concerns were worked through afterwards, and **where each item stands.**
+
+The tables below were originally built in conversation. They are written down here because
+phase 3 taught the lesson: its resolution referenced items "C11–C13" that existed only in
+a chat transcript, so the reference pointed at nothing a week later.
+
+Route surface at the close of this pass:
+
+```
+36 routable | 16 ruled | 10 reviewed-open | 10 awaiting review
+```
+
+## A — Items needing a decision
+
+| # | Item | Status | Where |
+|---|---|---|---|
+| A1 | `ToDo` writable → self-grant access to any record | ✅ **Done** — route withheld | `10e58f3` |
+| A2 | `User` writable → self-escalate to superuser | ✅ **Done** — 3 mechanisms | `14afd9b` |
+| A3 | `Email Account` readable/writable/deletable by anyone | ✅ **Done** — 4 stages | `75ae36b` |
+| A4 | Settings singles unprotected — Twilio, Exotel, FCRM, Global | ✅ **Done** — rules + encryption | `30740d0` |
+| A5 | `Version` leaks change history of invisible records | ✅ **Done** — route withheld | `9ef46ee` |
+| A6 | The standing test — every routable doctype accounted for | ✅ **Done** | `9ef46ee` |
+| A7 | Triage the remaining ~26 doctypes | 🟡 **16 of 26** — 10 left, all reference data | `34f48a1` |
+| A8 | `_resolved_fieldtype` still live in 3 endpoints | ❌ **Open** — 2 uses in `crm_app/api/doc.py` | — |
+| A9 | `handle_perm_level_restrictions` unported | 🟡 **Effect covered** by `RESTRICTED_FIELDS`; the false justification is corrected | `7bc6b98` |
+
+### Found during the work, absent from the original table
+
+Every one of these was discovered while resolving something else, which is the argument
+for the standing test rather than another round of manual audit.
+
+| Item | Severity | Status |
+|---|---|---|
+| `CRM Sales Hierarchy` writable → take a colleague's whole pipeline | **Worst of the phase** | ✅ **Done** — System Manager only |
+| `CRM Invitation` readable → read the key, become the invited admin | **Critical**, upstream bug #21 | ✅ **Done** — gated, key off the wire |
+| Filters bypassed `SENSITIVE_FIELDS` → recovered a real SMTP password | **Critical**, every doctype | ✅ **Done** — all four field-naming parameters guarded |
+| `Comment` / `Communication` / `File` leaked content and accepted forgeries | **High** | ✅ **Done** — defer to parent |
+| Create checked an *empty* instance → rules waved every create through | **High** | ✅ **Done** — both create doors |
+| Update could move a row onto an invisible parent | **High** | ✅ **Done** — opt-in destination re-check |
+| SMTP password stored in plaintext | **High** | ✅ **Done** — encrypted at rest |
+| `FilterError` answered 500 since phase 0 | Low | ✅ **Done** — 400 |
+
+## B — Verify / research
+
+| # | Item | Status |
+|---|---|---|
+| B1 | Which frontend-used doctypes need write vs read-only | 🟡 **Answered for the 16 ruled**; open for the rest |
+| B2 | Comment / Communication content leak, untested with real data | ✅ **Done** — tested, confirmed, fixed |
+| B3 | `get_default_layout` has no upstream fixture to diff against | ❌ **Open** — wants a visual check against the running frontend |
+| B4 | `field_meta` falls back to introspection for 9 platform doctypes | ❌ **Open** |
+| B5 | `get_counts` deliberately unfiltered | ❌ **Open** |
+
+## C — Unfinished work
+
+| # | Item | Status |
+|---|---|---|
+| C1 | The standing test | ✅ **Done** (= A6) |
+| C2 | `clear_old_versions` | ❌ **Open** — phase 5. `Version` now exists, so the blocker is gone |
+| C3 | `CRM Dashboard` layout editing — no endpoint | ❌ **Open** |
+| C4 | `STANDARD_FILTER_FIELDS` still hand-kept | ❌ **Open** — a test does verify it against the JSON |
+| C5 | Six dashboard charts (from phase 3) | ❌ **Deferred** — see `PROGRESS_PHASE_3.md` |
+
+## D — Divergences
+
+| # | Divergence | Status |
+|---|---|---|
+| D1 | Doctypes gained rules upstream does not register | ✅ **Keep** — grown from 3 to 16. `specs/SECURITY_MODEL.md` now carries 11 numbered divergences; this row had outgrown itself |
+| D2 | `GROUP_BY_STANDARD_FIELDS` drops upstream's duplicated entries | ✅ **Keep** |
+| D3 | Kanban ordering permission-filtered | ✅ **Not a divergence** — upstream's `frappe.get_list` filters too |
+| D4 | Field metadata generated and committed | ✅ **Keep** |
+
+## What is left, and how risky it is
+
+**A7's remaining 10** are reference and CRM data with no known leak:
+
+`Contact` · `CRM Organization` · `CRM Task` · `FCRM Note` · `Tag` · `CRM Call Log` ·
+`CRM Telephony Agent` · `CRM Service Level Agreement` · `CRM Product` · `Email Template`
+
+`CRM Task` and `FCRM Note` are the two worth doing first: they reference Leads and Deals,
+so they want the same defer-to-parent rule `crm_app/permissions/attachments.py` already
+implements. That is close to free now it exists.
+
+**A8, C3, C4** are code tidiness with no security weight. **B3–B5** are verification.
+
+None of it blocks phases 5 and 6, and the standing test means none of it can be silently
+forgotten.
+
+## Where the detail lives
+
+| File | What it holds |
+|---|---|
+| `specs/SECURITY_MODEL.md` | Per-doctype comparison with upstream, the four field tools, 11 divergences |
+| `specs/UNROUTED_DOCTYPES.md` | `ToDo` and `Version`, why, and the rule we would write instead |
+| `specs/KNOWN_ISSUES.md` | The flaky WebSocket test, the missing `accept_invitation` endpoint |
+| `UPSTREAM_BUGS_PHASE_3-6.md` | Bugs 10–21, six of them found in this pass |
