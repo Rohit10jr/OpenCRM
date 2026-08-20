@@ -24,12 +24,17 @@ section 4, which establishes that upstream computes them on write, not on a sche
 :meth:`CRMLead.apply_sla` / :meth:`CRMDeal.apply_sla` are the named seams.
 """
 
-from django.db import models
+from datetime import timedelta
 
+from django.db import models
+from django.utils import timezone
+
+from frappe_core import assignment, registry
 from frappe_core.exceptions import MandatoryError, ValidationError
 from frappe_core.models import AutoIncrementDocument, BaseDocument
 from frappe_core.naming import FieldValue, Hash, NamingSeries
 from frappe_core.registry import register_doctype
+from frappe_core.session import get_current_user
 
 EMPLOYEE_COUNT_CHOICES = [
     (c, c) for c in ("1-10", "11-50", "51-200", "201-500", "501-1000", "1000+")
@@ -167,8 +172,260 @@ class SLAFieldsMixin(models.Model):
         return None
 
 
+class StatusLifecycleMixin(models.Model):
+    """Default the status on create, and log every status transition.
+
+    Ports ``validate_status`` (``crm_lead.py:103-108``, ``crm_deal.py:107-112``) and
+    ``add_status_change_log`` (``crm_status_change_log.py:45-83``). Subclasses set
+    :attr:`status_model_name` and :attr:`default_status`.
+    """
+
+    #: ``"CRM Lead Status"`` or ``"CRM Deal Status"``.
+    status_model_name: str = ""
+    #: ``"New"`` for a lead, ``"Qualification"`` for a deal.
+    default_status: str = ""
+
+    class Meta:
+        abstract = True
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        instance._loaded_status = getattr(instance, "status_id", None)
+        return instance
+
+    def validate_status(self) -> None:
+        """Only fires on create, and only when the caller supplied nothing."""
+        if not self._state.adding or self.status_id:
+            return
+
+        status_model = registry.get_model(self.status_model_name)
+        if status_model._default_manager.filter(pk=self.default_status).exists():
+            self.status_id = self.default_status
+            return
+
+        first_open = (
+            status_model._default_manager.filter(type="Open")
+            .order_by("name")
+            .values_list("pk", flat=True)
+            .first()
+        )
+        if first_open:
+            self.status_id = first_open
+
+    def _status_type(self, status) -> str:
+        if not status:
+            return ""
+        status_model = registry.get_model(self.status_model_name)
+        return (
+            status_model._default_manager.filter(pk=status)
+            .values_list("type", flat=True)
+            .first()
+            or ""
+        )
+
+    def add_status_change_log(self, *, created: bool) -> None:
+        """``crm_status_change_log.py:45-83``.
+
+        Each row records a *period spent in* a status: ``from`` is the status held and
+        ``from_date`` when it began; ``to`` and ``to_date`` are filled in when the record
+        leaves it. So a transition closes the open row and opens a new one.
+
+        **Deliberate divergence.** Upstream resolves the status type against
+        ``"CRM Deal Status"`` unconditionally (``crm_status_change_log.py:46,51``) even
+        though ``crm_lead.py:92`` calls it for leads, whose statuses live in
+        ``CRM Lead Status``. Every lead log therefore gets an empty ``from_type`` and
+        ``to_type`` upstream. We resolve against the right table per doctype. Nothing
+        reads these fields today - not the frontend, not the backend - so the divergence
+        is invisible, and writing the correct value costs nothing.
+        """
+        from frappe_core import children
+
+        spec = children.discover_child_tables(type(self))["status_change_log"]
+        rows = children.read_children(self, spec)
+        now = timezone.now()
+        user = get_current_user()
+        to_status_type = self._status_type(self.status_id)
+
+        payload = [
+            {
+                "from": getattr(row, "from"),
+                "from_type": row.from_type,
+                "to": getattr(row, "to"),
+                "to_type": row.to_type,
+                "from_date": row.from_date,
+                "to_date": row.to_date,
+                "duration": row.duration,
+                "log_owner_id": row.log_owner_id,
+            }
+            for row in rows
+        ]
+
+        if not created:
+            previous = getattr(self, "_loaded_status", None)
+            if not payload and previous:
+                # Backfill an opening row dated a minute earlier, so the record that was
+                # already in a status before logging began still shows one.
+                payload.append(
+                    {
+                        "from": previous,
+                        "from_type": self._status_type(previous),
+                        "to": "",
+                        "to_type": "",
+                        "from_date": now - timedelta(minutes=1),
+                        "to_date": None,
+                        "duration": None,
+                        "log_owner_id": user,
+                    }
+                )
+            if payload:
+                last = payload[-1]
+                last["to"] = self.status_id or ""
+                last["to_type"] = to_status_type
+                last["to_date"] = now
+                last["log_owner_id"] = user
+                if last["from_date"]:
+                    last["duration"] = int((now - last["from_date"]).total_seconds())
+
+        payload.append(
+            {
+                "from": self.status_id or "",
+                "from_type": to_status_type,
+                "to": "",
+                "to_type": "",
+                "from_date": now,
+                "to_date": None,
+                "duration": None,
+                "log_owner_id": user,
+            }
+        )
+
+        children.replace_children(self, "status_change_log", spec, payload)
+
+    def sync_status_change_log(self, *, created: bool) -> None:
+        """Log only when the status actually moved - upstream's ``has_value_changed``."""
+        if not created and self.status_id == getattr(self, "_loaded_status", None):
+            return
+        self.add_status_change_log(created=created)
+
+
+class OwnerAssignmentMixin(models.Model):
+    """Assign the record to its owner, as ``CRM Lead`` and ``CRM Deal`` both do.
+
+    Upstream (``crm_lead.py:86-88,94-98``, ``crm_deal.py:86-88,98-102``)::
+
+        def validate(self):
+            if not self.is_new() and self.has_value_changed("<x>_owner") and self.<x>_owner:
+                self.share_with_agent(self.<x>_owner)
+                self.assign_agent(self.<x>_owner)
+
+        def after_insert(self):
+            if self.<x>_owner:
+                if self.<x>_owner != frappe.session.user:
+                    self.share_with_agent(self.<x>_owner)
+                self.assign_agent(self.<x>_owner)
+
+    Subclasses set :attr:`owner_field`.
+
+    Note this assigns the record to its **own owner**, who already satisfies the
+    permission rule's ``<x>_owner == user`` clause (``PHASE_2_PERMISSIONS.md`` section 2).
+    So the ``ToDo`` written here does not grant access - it drives the assignee chip the
+    list views render from ``_assign``. The ``ToDo`` path matters for *access* when
+    someone other than the owner is assigned, which happens through the phase-3
+    assignment endpoints.
+    """
+
+    #: ``"lead_owner"`` or ``"deal_owner"``.
+    owner_field: str = ""
+
+    class Meta:
+        abstract = True
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        # Frappe compares against the stored document in has_value_changed(); stash the
+        # loaded value so the same check costs no extra query.
+        instance._loaded_owner = getattr(instance, f"{cls.owner_field}_id", None)
+        return instance
+
+    def _owner_value(self):
+        return getattr(self, f"{self.owner_field}_id", None)
+
+    def assign_agent(self, agent) -> None:
+        """``crm_lead.py:158-169``. Skips silently when already assigned."""
+        if not agent:
+            return
+        if agent in assignment.get_assigned_users(self.get_doctype(), self.pk):
+            return
+        assignment.assign_to_user(self.get_doctype(), self.pk, agent)
+
+    def share_with_agent(self, agent) -> None:
+        """``crm_lead.py:171-201`` - **deliberate no-op seam.**
+
+        Upstream writes ``DocShare`` rows: it adds one for the new owner and removes
+        every other share on the document. We do not port that yet, because nothing in
+        this port would read the result.
+
+        Frappe folds shares into a list query as
+        ``(user_permission_conditions OR shared) AND permission_query_conditions``
+        (``frappe/model/db_query.py:856-865`` then ``:881``). Two consequences: sharing
+        never overrides the org-hierarchy rule even upstream, and we have neither a
+        ``DocShare`` model nor a user-permissions layer for it to widen. Porting it alone
+        would write rows no query consults.
+
+        To finish it: port ``DocShare`` as a tenth platform doctype, add the shared-docs
+        clause to ``frappe_core.query``, then implement this method. The call sites are
+        already faithful, so nothing else moves.
+        """
+        return None
+
+    def sync_owner_assignment(self, *, created: bool) -> None:
+        """Run the owner-change side effects. Call *after* the row exists.
+
+        Upstream splits this across ``validate`` and ``after_insert``; both need
+        ``self.name``, and on create it only exists post-insert.
+        """
+        owner = self._owner_value()
+        if not owner:
+            return
+
+        if created:
+            if owner != get_current_user():
+                self.share_with_agent(owner)
+            self.assign_agent(owner)
+            return
+
+        if owner != getattr(self, "_loaded_owner", None):
+            self.share_with_agent(owner)
+            self.assign_agent(owner)
+
+
 @register_doctype("CRM Lead")
-class CRMLead(SLAFieldsMixin, BaseDocument):
+class CRMLead(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDocument):
+    owner_field = "lead_owner"
+    status_model_name = "CRM Lead Status"
+    default_status = "New"
+
+    #: Field edits recorded in the timeline (:mod:`frappe_core.versions`).
+    #:
+    #: **Upstream tracks every field, including description edits.** This list is a
+    #: product decision: it keeps the changes a manager would ask about - money,
+    #: ownership, dates - without an entry every time somebody corrects a typo. Widening
+    #: it is a one-line change; the mechanism is unchanged.
+    #:
+    #: ``status`` is deliberately absent: it already reaches the timeline through
+    #: ``CRM Status Change Log``, which also carries the duration spent in each status.
+    TRACKED_FIELDS = (
+        "lead_owner",
+        "organization",
+        "annual_revenue",
+        "territory",
+        "no_of_employees",
+        "industry",
+        "source",
+    )
+
     naming_series = models.CharField(max_length=140, blank=True, default="CRM-LEAD-.YYYY.-")
     salutation = models.CharField(max_length=140, blank=True, default="")
     first_name = models.CharField(max_length=140, blank=True, default="")
@@ -233,6 +490,10 @@ class CRMLead(SLAFieldsMixin, BaseDocument):
         "status_change_log": "CRM Status Change Log",
         "rolling_responses": "CRM Rolling Response Time",
     }
+
+    #: Filled in by ``validate_status`` on create, so the serializer must not demand it
+    #: (frappe_core/serializers.py). Upstream's client omits it too.
+    AUTO_DEFAULTED_FIELDS = ("status",)
 
     #: ``image`` is hidden in the JSON; get_data drops hidden columns
     #: (``crm/api/doc.py:350-352``).
@@ -314,9 +575,30 @@ class CRMLead(SLAFieldsMixin, BaseDocument):
         self.run_validate()
 
     def save(self, *args, **kwargs):
+        self.validate_status()
         self.run_validate(ignore_mandatory=kwargs.pop("ignore_mandatory", False))
         self.apply_sla()
-        return super().save(*args, **kwargs)
+        creating = self._state.adding
+        status_moved = creating or self.status_id != getattr(self, "_loaded_status", None)
+        result = super().save(*args, **kwargs)
+        if status_moved:
+            self.add_status_change_log(created=creating)
+        self._loaded_status = self.status_id
+        # After the insert, because assignment references self.name.
+        self.sync_owner_assignment(created=creating)
+        self._loaded_owner = self._owner_value()
+        return result
+
+    def convert_to_deal(self, deal: dict | None = None, **kwargs):
+        """``crm_lead.py:405-406`` - delegates to :mod:`crm_app.conversion`."""
+        from crm_app.conversion import convert_to_deal
+
+        return convert_to_deal(self, deal=deal, **kwargs)
+
+    @staticmethod
+    def get_non_filterable_fields():
+        """``crm_lead.py:409-410``."""
+        return ["converted"]
 
     @staticmethod
     def default_list_data():
@@ -352,7 +634,25 @@ class CRMLead(SLAFieldsMixin, BaseDocument):
 
 
 @register_doctype("CRM Deal")
-class CRMDeal(SLAFieldsMixin, BaseDocument):
+class CRMDeal(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDocument):
+    owner_field = "deal_owner"
+    status_model_name = "CRM Deal Status"
+    default_status = "Qualification"
+
+    #: See :attr:`CRMLead.TRACKED_FIELDS`. The money fields matter most here - "who
+    #: raised this to 80k?" is the question this exists to answer.
+    TRACKED_FIELDS = (
+        "deal_owner",
+        "organization",
+        "deal_value",
+        "expected_deal_value",
+        "expected_closure_date",
+        "closed_date",
+        "probability",
+        "annual_revenue",
+        "territory",
+    )
+
     naming_series = models.CharField(max_length=140, blank=True, default="CRM-DEAL-.YYYY.-")
     organization = models.ForeignKey(
         CRMOrganization, on_delete=models.PROTECT, null=True, blank=True, related_name="deals"
@@ -433,6 +733,9 @@ class CRMDeal(SLAFieldsMixin, BaseDocument):
         "rolling_responses": "CRM Rolling Response Time",
     }
 
+    #: Filled in by ``validate_status`` on create - see the note on ``CRMLead``.
+    AUTO_DEFAULTED_FIELDS = ("status",)
+
     # -- lifecycle (crm_deal.py) --------------------------------------------------
 
     def validate_lost_reason(self):
@@ -446,15 +749,20 @@ class CRMDeal(SLAFieldsMixin, BaseDocument):
         if self.lost_reason_id == "Other" and not self.lost_notes:
             raise ValidationError("Please specify the reason for losing the deal.")
 
-    def validate_forecasting(self, forecasting_enabled: bool):
+    def validate_forecasting(self, forecasting_enabled: bool | None = None):
         """``crm_deal.py:249-253``.
 
-        Upstream reads ``FCRM Settings.enable_forecasting`` (a singleton, cluster 6).
-        The flag is a parameter here so the rule is testable before that model lands and
-        so the caller owns the settings lookup. Note upstream raises ``MandatoryError``,
-        not ``ValidationError`` - the frontend branches on ``exc_type == 'MandatoryError'``
-        (``src/data/document.js:61``), so the class matters.
+        Upstream reads ``FCRM Settings.enable_forecasting`` inline. We now do the same
+        when the caller passes nothing - phase 1 made it a required parameter, which left
+        the rule silently inert because nothing passed it. The override is kept so a test
+        can exercise both branches without touching the singleton.
+
+        Upstream raises ``MandatoryError``, not ``ValidationError`` - the frontend
+        branches on ``exc_type == 'MandatoryError'`` (``src/data/document.js:61``), so the
+        class matters.
         """
+        if forecasting_enabled is None:
+            forecasting_enabled = self._settings_flag("enable_forecasting")
         if not forecasting_enabled:
             return
         if not self.expected_deal_value:
@@ -462,13 +770,142 @@ class CRMDeal(SLAFieldsMixin, BaseDocument):
         if not self.expected_closure_date:
             raise MandatoryError("Expected closure date is required.")
 
+    @staticmethod
+    def _settings_flag(name: str) -> bool:
+        from crm_app.models.metadata import FCRMSettings
+
+        return bool(getattr(FCRMSettings.load(), name, False))
+
+    def update_closed_date(self) -> None:
+        """``crm_deal.py:220-225``.
+
+        Note this compares the status **name** to the literal ``"Won"``, while
+        :meth:`save` separately sets ``closed_date`` when the status *type* is ``Won``.
+        Both are upstream, and they are not equivalent: rename the Won status and only
+        the type check still fires. Ported as-is - the type check is the one that
+        actually covers the case, and this one is harmless.
+        """
+        if self.status_id == "Won" and not self.closed_date:
+            self.closed_date = timezone.now().date()
+
+    def update_default_probability(self) -> None:
+        """``crm_deal.py:227-232`` - inherit the status's probability when unset."""
+        if self.probability:
+            return
+        self.probability = (
+            registry.get_model("CRM Deal Status")
+            ._default_manager.filter(pk=self.status_id)
+            .values_list("probability", flat=True)
+            .first()
+            or 0
+        )
+
+    def update_expected_deal_value(self) -> None:
+        """``crm_deal.py:234-243``.
+
+        The guard reads oddly and is faithful: upstream requires ``expected_deal_value``
+        to be **already set** before it will overwrite it from the product total. So this
+        never populates an empty value - it only keeps a non-empty one in step. A deal
+        with products but no expected value is left alone, and then
+        ``validate_forecasting`` raises for it when forecasting is on. Reproduced rather
+        than corrected, because the behaviour is user-visible either way.
+        """
+        if not self._settings_flag("auto_update_expected_deal_value"):
+            return
+        total = self.net_total or self.total
+        if total and self.expected_deal_value:
+            self.expected_deal_value = total
+
+    def validate_forecasting_fields(self) -> None:
+        """``crm_deal.py:245-253`` - the three updates, then the mandatory checks."""
+        self.update_closed_date()
+        self.update_default_probability()
+        self.update_expected_deal_value()
+        self.validate_forecasting()
+
+    def set_primary_contact(self, contact=None) -> None:
+        """``crm_deal.py:114-125``.
+
+        With exactly one contact and no explicit choice, that contact becomes primary.
+        Naming an explicit contact makes it primary and demotes the rest.
+        """
+        rows = list(self.contacts.all())
+        if not rows:
+            return
+
+        if not contact and len(rows) == 1:
+            rows[0].is_primary = True
+            rows[0].save(update_fields=["is_primary"])
+            return
+
+        if contact:
+            for row in rows:
+                row.is_primary = row.contact_id == contact
+                row.save(update_fields=["is_primary"])
+
+    def set_primary_email_mobile_no(self) -> None:
+        """``crm_deal.py:127-149`` - denormalise the primary contact's details.
+
+        With no contacts, or none flagged primary, the three fields are **cleared**;
+        upstream does the same rather than leaving stale values behind.
+        """
+        rows = list(self.contacts.all())
+        if not rows:
+            self.email = self.mobile_no = self.phone = ""
+            return
+
+        primaries = [row for row in rows if row.is_primary]
+        if len(primaries) > 1:
+            raise ValidationError("Only one Contact can be set as primary.")
+
+        if not primaries:
+            self.email = self.mobile_no = self.phone = ""
+            return
+
+        primary = primaries[0]
+        self.email = (primary.email or "").strip()
+        self.mobile_no = (primary.mobile_no or "").strip()
+        self.phone = (primary.phone or "").strip()
+
     def clean(self):
         self.validate_lost_reason()
 
     def save(self, *args, **kwargs):
+        self.validate_status()
+        # Child rows only exist once the parent does, so the contact-derived fields are
+        # resolved post-insert on create (see below) and inline on update.
+        if not self._state.adding:
+            self.set_primary_contact()
+            self.set_primary_email_mobile_no()
+        self.validate_forecasting_fields()
         self.validate_lost_reason()
         self.apply_sla()
-        return super().save(*args, **kwargs)
+        creating = self._state.adding
+        status_moved = creating or self.status_id != getattr(self, "_loaded_status", None)
+        won = status_moved and getattr(self.status, "type", None) == "Won"
+        if won:
+            # crm_deal.py:91-93 - the *type* check, distinct from update_closed_date's
+            # name check, and it overwrites rather than only filling a blank.
+            self.closed_date = timezone.now().date()
+        result = super().save(*args, **kwargs)
+        if status_moved:
+            self.add_status_change_log(created=creating)
+        self._loaded_status = self.status_id
+        self.sync_owner_assignment(created=creating)
+        self._loaded_owner = self._owner_value()
+        return result
+
+    def sync_contact_fields(self) -> None:
+        """Re-derive the contact-linked fields and persist them.
+
+        Callers that add or change child contacts run this; ``save()`` cannot, because on
+        create the rows do not exist until the parent is inserted.
+        """
+        self.set_primary_contact()
+        self.set_primary_email_mobile_no()
+        type(self)._default_manager.filter(pk=self.pk).update(
+            email=self.email, mobile_no=self.mobile_no, phone=self.phone
+        )
 
     @staticmethod
     def default_list_data():
@@ -512,6 +949,17 @@ class CRMContacts(BaseDocument):
     )
     parenttype = models.CharField(max_length=140, default="CRM Deal")
     parentfield = models.CharField(max_length=140, default="contacts")
+
+    #: ``fetch_from`` in ``crm_contacts.json`` - these five mirror the linked Contact
+    #: on every save. Without them, converting a lead produced a deal with a contact
+    #: attached but no email or phone, because the child row was never populated.
+    FETCH_FROM = {
+        "full_name": ("contact", "full_name"),
+        "email": ("contact", "email_id"),
+        "mobile_no": ("contact", "mobile_no"),
+        "phone": ("contact", "phone"),
+        "gender": ("contact", "gender"),
+    }
 
     contact = models.ForeignKey(
         "frappe_platform.Contact", on_delete=models.CASCADE, null=True, blank=True, related_name="+"

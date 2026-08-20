@@ -2,9 +2,31 @@
 
 Source analysis and architecture brief for agents working on this port.
 
-> **Per-phase specs live in [`specs/`](specs/).** Read this document first for context
-> and settled decisions, then your phase spec. Start at
-> [`specs/PHASE_0_FOUNDATION.md`](specs/PHASE_0_FOUNDATION.md) — it blocks everything.
+> **Start at [`specs/AS_BUILT.md`](specs/AS_BUILT.md)** — what phases 0-2 actually built.
+> Then this document for context and settled decisions, then your phase spec.
+
+## Where this stands
+
+| | |
+|---|---|
+| **Shipped** | Phases 0, 1, 2 — foundation, 46 models, row-level permissions |
+| **Tests** | 813 passing, 31 skipped, 0 failing |
+| **Branch** | `phase-0-foundation` |
+| **Next** | Phase 3 (~50 endpoints), then 4, 5, 6 |
+| **Deferred** | Phase 7 (integrations, flagged off) |
+| **Parked** | Phase 8 (auth UI and the Desk — ports nothing, needs a scope decision) |
+
+Phases 0-2 were reviewed afterwards and every concern resolved, reproduced with reasoning,
+or assigned to a later phase — see the **Review Resolution** section at the end of
+`PROGRESS.md`. Nine upstream bugs found along the way are catalogued in `UPSTREAM_BUGS.md`
+(local, gitignored).
+
+Both source repositories are now readable, which they were not during phases 0-2:
+
+```
+CRM app    D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm    (main)
+framework  D:\02_Personal\01_OpenSource\02_FrameWorks\frappe           (version-15)
+```
 
 | | |
 |---|---|
@@ -230,6 +252,18 @@ contract.
 | **5** | Celery: email queue, SLA timers, notifications, assignment rules | Fan out | Needs 1 |
 | **6** | Channels realtime: notifications, live refresh | Fan out | Needs 5 |
 | **7** | ERPNext / Exotel / Twilio / Facebook integrations | Fan out | **Deferred** — feature-flag off |
+| **8** | Auth UI and the rest of the Desk | — | **Parked** — see below |
+
+### Phase 8 is not a port
+
+Frappe ships a **Desk** — auth screens and a generic admin UI — alongside the CRM app.
+This port replaces the app and drops the Desk, but the CRM assumes the Desk is present:
+`router.js:222` sends logged-out users to `/login`, and accepting an invitation redirects
+to a Desk-hosted set-password page. **So there is no way to onboard a second user today.**
+
+That work is real and wanted, but it is new product rather than a port — there is no
+upstream to be faithful to — so it is recorded in `specs/PHASE_8_AUTH_AND_DESK.md` and
+deliberately parked until phases 0–7 are complete.
 
 **Phases 0 and 2 must be single-agent.** Both define contracts that everything else
 depends on; splitting them produces divergent designs that then need reconciling.

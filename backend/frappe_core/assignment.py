@@ -43,7 +43,22 @@ from django.db.models.signals import post_delete, post_save, pre_save
 
 from frappe_core import registry
 
-#: Statuses that keep a ToDo out of the ``_assign`` cache (``api/doc.py:615``).
+# The two definitions of "assigned" differ, deliberately. VERIFIED against three
+# independent sources (this was previously inferred, and rated Medium confidence):
+#
+#   display     ("Closed", "Cancelled")  crm/api/doc.py:614
+#                                        frappe/desk/form/assign_to.py:37,163
+#   permission  ("Cancelled",)           crm/permissions/org_hierarchy.py:47,58
+#
+# So a **Closed** ToDo still grants access while no longer appearing in ``_assign``.
+# That is the whole reason the permission layer must query ToDo rather than read the
+# cache - the cache is deliberately narrower than the access rule.
+#
+# There is no third definition to reconcile: Frappe's own permission layer never reads
+# ToDo at all (it uses DocShare and User Permissions), so ToDo-based access is entirely
+# the CRM's org_hierarchy rule.
+
+#: Statuses that keep a ToDo out of the ``_assign`` cache.
 INACTIVE_FOR_DISPLAY = ("Closed", "Cancelled")
 
 #: Statuses that revoke access (PHASE_2_PERMISSIONS.md section 2). Phase 2 imports this
@@ -132,6 +147,91 @@ def get_assigned_users(doctype: str, name, *, for_permission: bool = False) -> l
     )
     # dict.fromkeys rather than set(): assignment order is stable in the UI.
     return [u for u in dict.fromkeys(rows) if u]
+
+
+def assign_to_user(doctype: str, name, user: str, *, description: str = "") -> bool:
+    """Port of ``frappe.desk.form.assign_to._add`` (``frappe/desk/form/assign_to.py:58``).
+
+    Creates the ``ToDo`` row that *is* the assignment. Returns True if one was created,
+    False if the user already had an open assignment on this document - upstream's
+    ``users_with_duplicate_todo`` branch, which skips silently rather than erroring.
+
+    The ``_assign`` cache updates itself: :func:`_on_todo_write` fires on the insert.
+
+    Not ported from upstream's ``_add``:
+
+    * the permission check - every caller here passes ``ignore_permissions=True``
+    * ``assigned_to`` field sync - no CRM doctype declares that field
+    * the share-on-missing-permission fallback, which needs ``DocShare`` (see
+      ``CRMLead.share_with_agent``)
+    * follow/notification side effects, which belong to phases 5 and 6
+    """
+    if _TODO_MODEL is None:
+        return False
+
+    existing = _TODO_MODEL._default_manager.filter(
+        **{
+            _FIELDS["reference_type"]: doctype,
+            _FIELDS["reference_name"]: name,
+            _FIELDS["status"]: "Open",
+            _FIELDS["allocated_to"]: user,
+        }
+    ).exists()
+    if existing:
+        return False
+
+    from django.utils import timezone
+
+    from frappe_core.session import get_current_user
+
+    _TODO_MODEL._default_manager.create(
+        **{
+            _FIELDS["allocated_to"] + "_id": user,
+            _FIELDS["reference_type"]: doctype,
+            _FIELDS["reference_name"]: str(name),
+            _FIELDS["status"]: "Open",
+            "description": description or f"Assignment for {doctype} {name}",
+            "priority": "Medium",
+            "date": timezone.now().date(),
+            "assigned_by_id": get_current_user(),
+        }
+    )
+    return True
+
+
+def cancel_assignment(doctype: str, name, users: list[str], status: str = "Cancelled") -> int:
+    """Port of ``frappe.desk.form.assign_to.set_status`` (framework
+    ``desk/form/assign_to.py:212-241``). Returns the number of ToDos updated.
+
+    **Cancels rather than deletes.** A cancelled ToDo grants no access
+    (PHASE_2_PERMISSIONS.md section 2) while preserving the audit trail, which is why
+    upstream flips the status instead of removing the row.
+
+    Upstream matches ``status != <target>`` rather than ``status == "Open"``, so a
+    Closed assignment is also cancellable - and that matters here, because a Closed
+    ToDo still grants access.
+
+    Not ported: the permission check (callers do their own), ``assigned_to`` field sync
+    (no CRM doctype declares it) and ``notify_assignment`` (phases 5-6).
+    """
+    if _TODO_MODEL is None or not users:
+        return 0
+
+    todos = _TODO_MODEL._default_manager.filter(
+        **{
+            _FIELDS["reference_type"]: doctype,
+            _FIELDS["reference_name"]: str(name),
+            f"{_FIELDS['allocated_to']}__in": list(users),
+        }
+    ).exclude(**{_FIELDS["status"]: status})
+
+    updated = 0
+    for todo in list(todos):
+        setattr(todo, _FIELDS["status"], status)
+        # save(), not update(): _on_todo_write must fire so `_assign` is rebuilt.
+        todo.save()
+        updated += 1
+    return updated
 
 
 def rebuild_assign_cache(doctype: str, name) -> list[str] | None:

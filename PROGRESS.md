@@ -838,3 +838,75 @@ In priority order:
    authenticated user. Faithful to upstream, but worth confirming it is intended.
 7. **`FCRM Settings.access_key` is readable by any authenticated user** — faithful
    (`Data`, unhidden) but it is an API key.
+
+---
+
+# REVIEW RESOLUTION — human pass over the phase 0–2 concerns
+
+Everything above was written by the unattended run. This section records what happened
+when those concerns were worked through afterwards, so a reader of the Concerns sections
+knows they are not still open.
+
+The concerns were sorted into three tables: **A** needing a decision, **B** needing
+verification, **C** unfinished work.
+
+## A — decisions: 10/10 closed
+
+| # | Item | Outcome | Commit |
+|---|---|---|---|
+| A1 | `to_user` blank asymmetry | **Fixed** — diverge, deny; upstream contradicts itself | `da6d322` |
+| A2 | treebeard vs nested-set rebuild | **Fixed** — kept the rebuild, added an advisory lock | `da6d322` |
+| A3 | `field:` verbatim vs slugified | **Verified** verbatim from framework source; also ported `validate_name` and path-style names | `3e05d47` |
+| A4 | `Contact` naming | **Resolved** from source — the guess was wrong three ways; also fixed `User` email lowercasing | `df27aa1` |
+| A5 | Row rules on only 3 doctypes | **Kept**, recorded in `PHASE_2_PERMISSIONS.md` §4a | `a9bc99f` |
+| A6 | `access_key` readable | **Kept** — the settings screen reads it back; recorded in `PHASE_1_MODELS.md` §5a | `a9bc99f` |
+| A7 | 403 vs 404 existence oracle | **Kept** — matches upstream; the frontend branches on `exc_type` | `a9bc99f` |
+| A8 | No login page | **Parked** as phase 8 — it is the Desk, not the CRM app | `7a8d5c1` |
+| A9 | `logout` could not revoke | **Fixed** — blacklist installed, rotation added, access token cut to 5 min | `a9bc99f`, `58cce8d` |
+| A10 | `_assign` writable by clients | **Fixed** — all four underscore fields read-only | `a9bc99f` |
+
+## B — verification: 4/5 done
+
+| # | Item | State |
+|---|---|---|
+| B1 | Two definitions of "assigned" | ✅ **Verified** against three sources; no third definition exists (`129a474`) |
+| B2 | Framework source unreadable | ✅ Cloned at `version-15`, the branch CRM `main` targets |
+| B3 | Platform doctype `autoname` | ✅ All nine read from source, not inferred |
+| B4 | JWT frontend patch untested | ❌ **Open** — needs a frontend test runner, which does not exist yet |
+| B5 | Docker oracle never stood up | ❌ **Open** — the only item outside any phase |
+
+## C — unfinished work: 5/10 done, 5 owned by later phases
+
+| # | Item | State |
+|---|---|---|
+| C1 | Lifecycle hooks unported | ✅ **Done** — a/b/c/d (`23f0d49`, `fe4875d`, `2951d52`, `114eb4e`) |
+| C2 | Hierarchy rebuild not concurrency-safe | ✅ **Done** — advisory lock (`da6d322`) |
+| C3 | `_comments` / `_user_tags` had no writer | ✅ **Done** (`bfadb53`) |
+| C8 | Polymorphic children not cascaded on delete | ✅ **Done** (`bfadb53`) |
+| C10 | `_selectable` should raise once phase 1 landed | ✅ **Done** — expiry honoured (`129a474`) |
+| C4 | `crm_products` totals not computed | → **phase 3** |
+| C5 | `CRM Call Log.links` / `Dynamic Link` | → **phase 3** |
+| C9 | `has_permission` N queries on bulk ops | → **phase 3** |
+| C6 | Kanban ordering + badge counts | → **phase 4** |
+| C7 | Allowlists keyed on Django types | → **phase 4** |
+
+**Nothing is unowned.** Every open C item has a phase that will pick it up.
+
+## Found during the resolution, not in the original tables
+
+Five defects that no review round had surfaced:
+
+| Found | State |
+|---|---|
+| `validate_status` never ported — status was effectively mandatory | ✅ Fixed (C1b) |
+| `fetch_from` never implemented — converted deals had a contact with no details | ✅ Fixed (C1d) |
+| `replace_children` silently dropped FKs passed by PK, writing NULL | ✅ Fixed (C1d) |
+| `validate_forecasting` took a parameter nobody passed — the rule was inert | ✅ Fixed (C1c) |
+| `token_blacklist` growth needs a `flushexpiredtokens` beat job | 📝 Recorded in `PHASE_5_ASYNC.md` §2a |
+
+Two upstream bugs were also recorded (`UPSTREAM_BUGS.md` #8 lead status type looked up in
+the deal table, #9 three malformed `fetch_from` values on CRM Deal), bringing that list to
+nine. The working rule throughout: **diverge on bugs nothing can observe, reproduce ones
+that are user-visible.**
+
+Test suite over the resolution: **666 → 813 passing**, 31 skipped, 0 failing.

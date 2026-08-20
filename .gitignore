@@ -46,5 +46,14 @@ Thumbs.db
 
 # Agent scratch
 .agents/
+/backend/scratch/
 *.orig
 *.rej
+
+
+quick_recap.md
+
+# Local working notes. Glob, not an exact name: the file was split per phase
+# (UPSTREAM_BUGS_PHASE_0-2, _PHASE_3-6) and the exact-match rule silently stopped
+# covering them, so `git add -A` would have committed both.
+UPSTREAM_BUGS*.md

@@ -14,10 +14,29 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from frappe_core import children, registry
-from frappe_core.field_security import sensitive_fields
+from frappe_core.field_security import hidden_from, readonly_fields, restricted_fields, sensitive_fields
 
 #: Standard fields the client may never set directly; the model stamps them.
-READ_ONLY_FIELDS = ("owner", "modified_by", "creation", "modified")
+#: Audit columns the server stamps, plus the four underscore caches.
+#:
+#: The underscore fields are **projections of other tables**, not user input
+#: (PHASE_0_FOUNDATION.md section 3): ``_assign`` mirrors ``ToDo`` rows, ``_comments``
+#: mirrors ``Comment``, ``_user_tags`` mirrors tag links, and ``_liked_by`` is toggled
+#: through its own endpoint upstream. Leaving them writable let any client with write
+#: access set them directly - not an access-control hole, because the permission layer
+#: reads ``ToDo`` rather than ``_assign``, but a client could still make a document
+#: advertise assignees it does not have, and the next rebuild would silently overwrite
+#: the value. The maintainers write them with bare UPDATEs, which bypass the serializer.
+READ_ONLY_FIELDS = (
+    "owner",
+    "modified_by",
+    "creation",
+    "modified",
+    "_assign",
+    "_liked_by",
+    "_comments",
+    "_user_tags",
+)
 
 
 class DocumentSerializer(serializers.ModelSerializer):
@@ -35,12 +54,30 @@ class DocumentSerializer(serializers.ModelSerializer):
         for name in READ_ONLY_FIELDS:
             if name in fields:
                 fields[name].read_only = True
+        # A field the model fills in on save must not be *required* on the way in.
+        # `CRMLead.status` is the case that surfaced this: phase 1 ported upstream's
+        # `validate_status`, which defaults it on create, but DRF validates before the
+        # model runs - so every API-created lead was rejected with "status is required"
+        # while direct ORM creates worked. Declaring it here keeps the two paths in step.
+        for name in getattr(self.Meta.model, "AUTO_DEFAULTED_FIELDS", ()) or ():
+            if name in fields:
+                fields[name].required = False
+                fields[name].allow_null = True
         for fieldname, spec in (self.child_table_spec or {}).items():
             fields[fieldname] = _build_child_field(spec)
         return fields
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
+        # Restricted fields are dropped here rather than excluded when the class is
+        # built, because the class is built once per model and cached on the registry
+        # entry - it cannot know who is asking. `hidden_from` re-checks the sensitive set
+        # too, which is redundant (those are already excluded from Meta) and costs a set
+        # union; keeping it means one function answers "may this user see this field?"
+        # instead of two that can drift.
+        if restricted_fields(self.Meta.model):
+            for fieldname in hidden_from(self.Meta.model):
+                data.pop(fieldname, None)
         for fieldname, spec in (self.child_table_spec or {}).items():
             child_serializer = registry.get_entry(spec["doctype"]).get_serializer_class()
             data[fieldname] = child_serializer(
@@ -114,6 +151,14 @@ def build_serializer_class(model) -> type[DocumentSerializer]:
         meta_attrs["exclude"] = tuple(blocked)
     else:
         meta_attrs["fields"] = "__all__"
+
+    # Readable, never writable - see `field_security.readonly_fields`. Subtracting
+    # `blocked` matters: DRF raises if `extra_kwargs` names a field the serializer does
+    # not have, and a field can legitimately be listed in both attributes on a model
+    # whose author wanted "hidden, and definitely not writable".
+    read_only = sorted((readonly_fields(model) & concrete) - set(blocked))
+    if read_only:
+        meta_attrs["extra_kwargs"] = {name: {"read_only": True} for name in read_only}
 
     attrs: dict = {
         "Meta": type("Meta", (), meta_attrs),

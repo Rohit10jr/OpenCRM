@@ -484,20 +484,52 @@ def test_list_and_object_agree_for_every_real_notification(notifications, users)
             ), f"{actor} disagrees on {notification.name}"
 
 
-def test_notification_without_a_recipient_is_readable(users):
-    """``crm_notification.py:55-56`` - the ``if not doc.to_user`` guard.
+def test_notification_without_a_recipient_is_denied(users):
+    """Deliberate divergence from ``crm_notification.py:55-56``, which returns True.
 
-    Exercised against a stand-in rather than a row: ``to_user`` is ``reqd=1`` in the
-    JSON, so this port makes the column NOT NULL and the branch is **unreachable through
-    the database**. It is ported anyway because the source has it, but pretending a real
-    row can reach it would mean loosening a constraint the schema is right to have.
+    Upstream contradicts itself: the list rule emits ``to_user = <user>``, which a blank
+    never matches, so such a row is hidden from every list yet readable directly by
+    anyone. We deny instead, so the two rules agree.
+
+    Nothing observable changes against upstream. ``to_user`` is a ``ForeignKey`` with no
+    ``null=True`` here - NOT NULL at the database level - so no *saved* row can reach
+    this branch. (Upstream's ``reqd: 1`` is document-level validation only, so its own
+    branch is not quite dead.) The path that *is* reachable is an unsaved instance, and
+    there granting a read was the wrong default.
+
+    Exercised against a stand-in rather than a row, because constructing a real one would
+    mean loosening a constraint the schema is right to have.
     """
     from crm_app.permissions.notification import has_permission
 
     class _Recipientless:
         to_user_id = None
 
-    assert has_permission(_Recipientless(), "read", users["outsider"].name) is True
+    assert has_permission(_Recipientless(), "read", users["outsider"].name) is False
+
+
+def test_notification_list_and_object_rules_agree_on_a_blank_recipient(users):
+    """The asymmetry itself - this is what tripped the phase-2 gate.
+
+    The list rule filters ``to_user=<user>``, so a blank recipient matches nobody. The
+    object rule must reach the same verdict, or a row is invisible in lists but readable
+    by URL.
+    """
+    from crm_app.permissions.notification import (
+        get_permission_query_conditions,
+        has_permission,
+    )
+
+    class _Recipientless:
+        to_user_id = None
+
+    user = users["outsider"].name
+    condition = get_permission_query_conditions(user)
+
+    # The list rule cannot match a NULL/blank to_user ...
+    assert "to_user" in str(condition)
+    # ... and the object rule now agrees.
+    assert has_permission(_Recipientless(), "read", user) is False
 
 
 # ---------------------------------------------------------------------------
@@ -724,14 +756,75 @@ def test_a_user_with_no_hierarchy_row_has_no_subtree(users):
 # ---------------------------------------------------------------------------
 
 
-def test_only_the_three_upstream_doctypes_have_row_rules():
-    """``crm/hooks.py:134-144`` registers exactly these three."""
+def test_exactly_the_intended_doctypes_have_row_rules():
+    """The registered set, stated explicitly so an accidental addition is caught.
+
+    ``crm/hooks.py:134-144`` registers three. **Phase 4 deliberately added four more**,
+    after a review found them reachable through the generic ``/api/resource/`` route:
+    upstream protects them with DocType role permissions, which this port does not
+    model, so with no hook they were world-readable and world-writable. See
+    ``crm_app/permissions/metadata_docs.py`` and ``platform_docs.py``.
+    """
     with_rules = {
         dt
         for dt in registry.all_doctypes()
         if registry.get_entry(dt).permission_query_conditions is not None
     }
-    assert with_rules == {"CRM Lead", "CRM Deal", "CRM Notification"}
+    upstream = {"CRM Lead", "CRM Deal", "CRM Notification"}
+    added_by_phase_4 = {
+        "CRM View Settings",
+        "CRM Form Script",
+        "CRM Fields Layout",
+        # A2: routable since phase 1 with no rule, so any caller could rename or disable
+        # any colleague. Writes are now self-only; reads stay open (kanban builds a column
+        # per user, and upstream enumerates them with permission-ignoring `frappe.get_all`).
+        "User",
+        # A3: same, and worse - any caller could repoint the outgoing mail server or
+        # delete the account. Managers write; reads stay open for the Profile screen's
+        # "send from" picker. Its query_conditions returns None on purpose: the decision
+        # to leave reads open is recorded in code rather than left as an omission.
+        "Email Account",
+        # A4: the integration credentials. Upstream gives the telephony pair to System
+        # Manager and Sales Manager only, at every permlevel; reads are closed here to
+        # match, because these back an administration screen rather than a user feature.
+        "CRM Twilio Settings",
+        "CRM Exotel Settings",
+        # A4: read for all (every screen reads its timestamp format), write for managers -
+        # upstream's own split. The credential on it is narrowed by RESTRICTED_FIELDS.
+        "FCRM Settings",
+        # The org tree is an input to this engine, so writing it is writing your own
+        # permissions: a Sales User could add themselves and reparent a colleague
+        # underneath, taking that colleague's pipeline in one call. System Manager only,
+        # as upstream has it - tighter than the manager pair used elsewhere, because the
+        # chart is what decides what a Sales Manager can see.
+        "CRM Sales Hierarchy",
+        # An invitation holds the role granted and the key that redeems it. Managers only,
+        # and the key never reaches the wire. Disarmed ahead of phase 8 implementing
+        # `accept_invitation`, at which point this rule is what stands between any user
+        # and an admin account.
+        "CRM Invitation",
+        # Rows that hang off another document. Each leaked what the record itself refused -
+        # email bodies, private file URLs, internal remarks - and a comment could be forged
+        # onto a record the author cannot see. One rule: defer to the referenced document.
+        "Comment",
+        "Communication",
+        "File",
+    }
+    assert with_rules == upstream | added_by_phase_4
+
+
+def test_the_upstream_three_still_use_the_org_hierarchy_rule():
+    """The phase-4 additions must not have displaced the originals."""
+    from crm_app.permissions import org_hierarchy
+
+    assert (
+        registry.get_entry("CRM Lead").permission_query_conditions
+        is org_hierarchy.get_lead_permission_query_conditions
+    )
+    assert (
+        registry.get_entry("CRM Deal").permission_query_conditions
+        is org_hierarchy.get_deal_permission_query_conditions
+    )
 
 
 def test_other_doctypes_are_unrestricted(records, users):

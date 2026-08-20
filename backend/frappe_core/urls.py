@@ -9,10 +9,15 @@ from django.urls import re_path
 from frappe_core.method_views import MethodView
 from frappe_core.views import ResourceDetailView, ResourceListView
 
-# A doctype is anything up to the next slash; a document name likewise. Both arrive
-# percent-encoded and Django has already decoded them by this point.
+# A doctype is anything up to the next slash. A document name is a *path* - it may
+# itself contain slashes, because Frappe permits them: ``validate_name`` rejects only
+# ``<`` and ``>`` (version-15 naming.py:498-501), so an organization literally called
+# "R/GA" is a legal record. Upstream routes these with a path converter,
+# ``Rule("/resource/<doctype>/<path:name>/")`` (frappe/api/v1.py:148-151); ``[^/]+``
+# here would make such records unreachable. Percent-encoding does not save us either:
+# WSGI decodes ``%2F`` to ``/`` in PATH_INFO before Django resolves the URL.
 _DOCTYPE = r"(?P<doctype>[^/]+)"
-_NAME = r"(?P<name>[^/]+)"
+_NAME = r"(?P<name>.+?)"
 _METHOD = r"(?P<method_path>[\w./-]+)"
 
 urlpatterns = [

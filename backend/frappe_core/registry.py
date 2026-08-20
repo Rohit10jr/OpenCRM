@@ -46,9 +46,31 @@ class DocTypeEntry:
     model: type[models.Model]
     is_child_table: bool = False
     is_single: bool = False
+    #: Whether ``/api/resource/<doctype>`` exists for this doctype.
+    #:
+    #: Defaults to True: registering a model publishes it. Set ``routable=False`` for a
+    #: doctype the frontend never addresses directly and whose rows are security-relevant
+    #: - the route is then absent rather than merely guarded, which is a smaller surface
+    #: than any rule can be. See ``specs/UNROUTED_DOCTYPES.md`` for the standing list and
+    #: the reasoning per doctype.
+    routable: bool = True
+    #: Fields naming the document this row hangs off, e.g. ``("reference_doctype",
+    #: "reference_name")``. Set for the doctypes whose permission rule *defers to another
+    #: document* - `Comment`, `Communication`, `File`.
+    #:
+    #: It exists so an update that **moves** such a row is re-checked against where it is
+    #: going, not only where it has been. That re-check costs a second `has_permission`
+    #: call, so it is opt-in rather than universal: making every write in the product pay
+    #: it to close a hole in three doctypes would be the wrong trade.
+    reference_fields: tuple[str, ...] = ()
     #: Set by phase 2 via :func:`register_permission_hooks`.
     permission_query_conditions: Callable | None = None
     has_permission: Callable | None = None
+    #: Optional batched form of ``has_permission``, added in phase 5 for C9. Takes
+    #: ``(doctype, instances, ptype, user)`` and returns the subset of ``instances`` that
+    #: passes, in a bounded number of queries. Absent means "call ``has_permission`` per
+    #: object", which is correct but N round-trips.
+    has_permission_batch: Callable | None = None
     #: Set by phase 4 via :func:`register_metadata_hooks`.
     list_columns_provider: Callable | None = None
     filterable_fields_provider: Callable | None = None
@@ -117,12 +139,18 @@ def register_doctype(
     *,
     is_child_table: bool | None = None,
     is_single: bool | None = None,
+    routable: bool | None = None,
     serializer_class: type | None = None,
 ):
     """Class decorator registering a model under its Frappe DocType string.
 
     ``is_child_table`` / ``is_single`` default to whatever the model declared in its
     ``Meta``, so a phase-1 agent can set them in either place.
+
+    ``routable=False`` withholds the generic ``/api/resource/`` route. Registration is
+    otherwise unchanged - the model, its permissions and every internal caller work
+    normally; only the HTTP route is absent. Read ``specs/UNROUTED_DOCTYPES.md`` before
+    adding one, and before removing one.
     """
 
     def decorator(model_cls):
@@ -137,6 +165,9 @@ def register_doctype(
             ),
             is_single=(
                 doc_meta.get("is_single", False) if is_single is None else is_single
+            ),
+            routable=(
+                doc_meta.get("routable", True) if routable is None else routable
             ),
             serializer_class=serializer_class,
         )
@@ -180,8 +211,12 @@ def routable_doctypes() -> list[str]:
 
     Child tables are excluded - PHASE_1_MODELS.md section 3: they are reached through
     the parent and serialised inline.
+
+    ``routable=False`` doctypes are excluded too, and for a different reason: they have
+    a standalone identity, they are simply not published. ``specs/UNROUTED_DOCTYPES.md``
+    says which and why.
     """
-    return sorted(dt for dt, e in _REGISTRY.items() if not e.is_child_table)
+    return sorted(dt for dt, e in _REGISTRY.items() if e.routable and not e.is_child_table)
 
 
 def register_permission_hooks(
@@ -189,16 +224,31 @@ def register_permission_hooks(
     *,
     permission_query_conditions: Callable | None = None,
     has_permission: Callable | None = None,
+    has_permission_batch: Callable | None = None,
+    reference_fields: tuple[str, ...] | None = None,
 ) -> None:
     """Phase-2 entry point. Mirrors Frappe's ``hooks.py`` blocks.
 
     Upstream registers these for CRM Lead, CRM Deal and CRM Notification only.
+
+    ``reference_fields`` names the columns identifying the document this row hangs off,
+    for the rules that defer to another document. It makes an update that *moves* the row
+    get re-checked against its destination. See :attr:`DocTypeEntry.reference_fields`.
+
+    ``has_permission_batch`` has no upstream counterpart; it exists because upstream's
+    per-object check is one query per object and phase 3's ``delete_bulk_docs`` has to
+    ask the question about a whole batch (C9). It is an optimisation only - omitting it
+    changes cost, never the answer.
     """
     entry = get_entry(doctype)
     if permission_query_conditions is not None:
         entry.permission_query_conditions = permission_query_conditions
     if has_permission is not None:
         entry.has_permission = has_permission
+    if has_permission_batch is not None:
+        entry.has_permission_batch = has_permission_batch
+    if reference_fields is not None:
+        entry.reference_fields = tuple(reference_fields)
 
 
 def register_metadata_hooks(

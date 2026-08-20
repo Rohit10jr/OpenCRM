@@ -14,6 +14,7 @@ from django.db import models
 from frappe_core.models import AutoIncrementDocument, BaseDocument
 from frappe_core.naming import FieldValue, Format, Hash, Prompt
 from frappe_core.registry import register_doctype
+from crm_app import realtime
 from crm_app.models.telephony import SingletonMixin
 
 VIEW_TYPE_CHOICES = [("list", "list"), ("group_by", "group_by"), ("kanban", "kanban")]
@@ -202,14 +203,18 @@ class CRMNotification(BaseDocument):
         name_strategy = Hash()
 
     def on_update(self):
-        """PHASE 6 seam.
+        """``crm_notification.py:30-32`` - filled in by phase 6.
 
-        ``crm_notification.py:30-32`` publishes the ``crm_notification`` realtime event
-        to ``to_user`` here. Channels is phase 6 (PHASE_6_REALTIME.md section 2 lists
-        this as one of only two in-scope events), so this is a named no-op rather than a
-        silent omission - phase 6 fills in the body and the call site already exists.
+        Note the guard is upstream's: no ``to_user``, no event. The column is NOT NULL
+        here, so it cannot fire on a saved row, but the check stays because deleting it
+        would be a silent divergence from the source rather than a visible one.
+
+        The publish is deliberately unguarded by any try/except of its own -
+        ``realtime.publish`` never raises, and never returning False here would be
+        indistinguishable from succeeding.
         """
-        return None
+        if self.to_user_id:
+            realtime.publish("crm_notification", user=self.to_user_id)
 
     def save(self, *args, **kwargs):
         result = super().save(*args, **kwargs)
@@ -235,6 +240,15 @@ class CRMInvitation(BaseDocument):
     email_sent_at = models.DateTimeField(null=True, blank=True)
     accepted_at = models.DateTimeField(null=True, blank=True)
 
+    #: `key` is a **bearer token**: whoever holds it redeems the invitation, and with it
+    #: the role the invitation grants. The only thing that ever needs it is the email in
+    #: `tasks.py`, which reads the attribute directly. Nothing should receive it over the
+    #: wire - `InviteUserPage.vue`, the sole consumer, asks for `name`, `email` and `role`.
+    #:
+    #: Upstream leaves it a plain `Data` field readable by every Sales User, which is what
+    #: makes `accept_invitation` redeemable by the wrong person (bug #21).
+    SENSITIVE_FIELDS = ("key",)
+
     class Meta:
         ordering = ["-creation"]
         name_strategy = Hash()
@@ -254,6 +268,9 @@ class CRMSalesHierarchy(BaseDocument):
     code that depends on its performance. ``lft`` and ``rgt`` are indexed for the
     range scan either way.
     """
+    #: ``fetch_from`` in ``crm_sales_hierarchy.json``.
+    FETCH_FROM = {"full_name": ("user", "full_name")}
+
 
     full_name = models.CharField(max_length=280, blank=True, default="")
     user = models.ForeignKey(
@@ -315,10 +332,13 @@ class FCRMSettings(SingletonMixin, BaseDocument):
     service_provider = models.CharField(
         max_length=40, choices=SERVICE_PROVIDER_CHOICES, blank=True, default="frankfurter.app"
     )
-    # An FX-provider credential, but the JSON declares it `Data`, not `Password`, and it
-    # is not hidden - upstream shows it in the settings UI, so the settings screen reads
-    # it back. Blocking it here would have broken that screen for a security improvement
-    # the source does not make. Flagged in PROGRESS.md rather than diverging silently.
+    # An FX-provider credential, declared `Data` rather than `Password` in the JSON and
+    # carrying no `permlevel`. Phase 1 flagged it and declined to hide it, because the
+    # settings screen reads it back and `SENSITIVE_FIELDS` is all-or-nothing: hiding it
+    # would have broken that screen to make an improvement the source does not make.
+    #
+    # That was the right call with the tools of the time. `RESTRICTED_FIELDS` is the tool
+    # it needed - see the declaration below.
     access_key = models.CharField(max_length=280, blank=True, default="")
     auto_update_expected_deal_value = models.BooleanField(default=True)
     update_timestamp_on_new_communication = models.BooleanField(default=True)
@@ -331,6 +351,20 @@ class FCRMSettings(SingletonMixin, BaseDocument):
         max_length=20, choices=TIMELINE_SORT_CHOICES, default="Oldest First"
     )
     persona_captured = models.BooleanField(default=False)
+
+    #: **Stricter than upstream, and the one place in A4 where that matters.**
+    #:
+    #: This record is read by *every* screen in the product - `stores/settings.js` loads
+    #: it and the activity timeline takes `crm_timeline_timestamp_format` from it - so it
+    #: is world-readable by necessity, and upstream agrees (`fcrm_settings.json` grants
+    #: Sales User `read: 1`). The exchange-rate provider credential is sitting on it in
+    #: the clear, with no `permlevel`.
+    #:
+    #: Upstream's own authors used `permlevel: 1` on `CRM Twilio Settings.api_key` for
+    #: exactly this, so the omission reads as an oversight rather than a decision -
+    #: recorded as upstream bug #20. Managers still see it, which is all the settings
+    #: screen needs.
+    RESTRICTED_FIELDS = ("access_key",)
 
     class Meta:
         verbose_name = "FCRM Settings"

@@ -15,22 +15,68 @@ the subtree clause would have matched nothing. This fills that in.
    query is a single range scan either way. Treebeard would have added a second
    representation to keep in sync with the one the wire format already fixes.
 
+Confirmed against the framework since: Frappe maintains ``lft``/``rgt`` **incrementally**
+(``frappe/utils/nestedset.py:update_add_node`` / ``update_move_node``) and reserves
+``rebuild_tree`` for repair. That approach locks the *parent row* -
+``for_update=True`` at ``nestedset.py:77``, ``.for_update()`` at ``:110`` and ``:138`` -
+because each write only disturbs one subtree region. It is a third write path, matching
+neither treebeard nor our generic ``/api/resource/`` endpoint, which reinforces the
+choice above rather than undermining it.
+
 The rebuild is O(n) over the whole tree on every hierarchy write. Sales hierarchies are
 small (one row per user) and change rarely, whereas the *read* path runs on every list
 request - so the cost is deliberately pushed to the write side. Reads stay one indexed
 range scan.
+
+**Concurrency.** A rebuild rewrites every bound, so Frappe's parent-row lock is the wrong
+shape here - two writers must not interleave at all. The hazard is concurrent *inserts*:
+rebuilding a fixed node set twice is harmless, because the walk derives bounds from
+``reports_to`` alone and both writers reach the same answer. The damage happens when one
+transaction walks ``n`` nodes while another walks ``n+1`` - each writes only the rows it
+read, so the newcomer keeps bounds from one walk while its siblings keep bounds from the
+other. That is not merely a malformed tree: ``lft``/``rgt`` decide **which rows a user can
+see**, so overlapping bounds are a permission defect.
+
+``select_for_update()`` does **not** fix this, which is worth stating because it is the
+obvious first answer. A row lock only covers rows the query already matched; the second
+writer blocks, then re-reads *those* rows and still cannot see the row the first writer
+inserted - the classic phantom. It walks ``n`` nodes regardless and the bounds still
+collide. Verified by test before and after.
+
+The serialisation therefore has to be taken **before the read**, over the operation rather
+than over any row set: a transaction-scoped advisory lock. It is released automatically at
+commit or rollback, takes no table lock, and blocks a second rebuild until the first has
+committed - at which point that rebuild reads a set that includes the new row.
 """
 
 from __future__ import annotations
 
+from django.db import connection, transaction
 from django.db.models.signals import post_delete, post_save
+
+#: Arbitrary but stable key for ``pg_advisory_xact_lock``. Any other advisory lock in
+#: this codebase must use a different one.
+_HIERARCHY_LOCK_KEY = 8_724_100_1
 
 
 def rebuild_sales_hierarchy() -> None:
-    """Recompute every ``lft``/``rgt`` from ``reports_to`` by depth-first walk."""
+    """Recompute every ``lft``/``rgt`` from ``reports_to`` by depth-first walk.
+
+    Serialised by a transaction-scoped advisory lock taken before the read. See the
+    module docstring for why the lock has to precede the read rather than accompany it.
+    """
     from crm_app.models import CRMSalesHierarchy
 
-    nodes = list(CRMSalesHierarchy._default_manager.all().order_by("name"))
+    with transaction.atomic():
+        if connection.vendor == "postgresql":
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT pg_advisory_xact_lock(%s)", [_HIERARCHY_LOCK_KEY])
+        _rebuild_locked(CRMSalesHierarchy)
+
+
+def _rebuild_locked(CRMSalesHierarchy) -> None:
+    """Caller must hold the advisory lock."""
+    nodes = list(CRMSalesHierarchy._default_manager.order_by("name"))
     if not nodes:
         return
 

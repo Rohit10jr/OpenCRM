@@ -19,8 +19,9 @@ from django.utils import timezone
 
 from frappe_core.assignment import register_todo_model
 from frappe_core.models import BaseDocument
-from frappe_core.naming import FieldValue, Hash, Prompt
+from frappe_core.naming import FieldValue, Hash, Prompt, append_number_if_name_exists
 from frappe_core.registry import register_doctype
+from frappe_core.secrets import EncryptedFieldsMixin
 
 #: The four roles seeded as Django Groups. PHASE_2_PERMISSIONS.md section 5.
 ROLE_ADMINISTRATOR = "Administrator"
@@ -85,6 +86,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     time_zone = models.CharField(max_length=100, blank=True, default="")
     mobile_no = models.CharField(max_length=140, blank=True, default="")
     phone = models.CharField(max_length=140, blank=True, default="")
+    #: Phase 3: read by ``crm.api.session.get_users`` (``crm/api/session.py:29``) and
+    #: ``crm.api.get_translations`` (``crm/api/__init__.py:14``).
+    language = models.CharField(max_length=20, blank=True, default="")
+    #: Phase 3: the first source ``crm.api.get_user_signature`` checks
+    #: (``crm/api/__init__.py:25-30``).
+    email_signature = models.TextField(blank=True, default="")
 
     # Django admin plumbing.
     is_staff = models.BooleanField(default=False)
@@ -97,6 +104,37 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     objects = UserManager()
 
+    #: Never on the wire. These four **are** the privilege escalation: `groups` is the
+    #: role set our permission layer reads through `get_roles()`, and `is_staff` plus
+    #: `is_superuser` together open Django admin at /admin/, which bypasses that layer
+    #: entirely. A Sales User could set all of them on their own row - the self-only rule
+    #: in `crm_app/permissions/platform_docs.py` permits writing your own document, so
+    #: that rule alone does not close this.
+    #:
+    #: Nothing needs them here: the frontend reads roles from `crm.api.session.get_users`,
+    #: and roles are changed through `crm_app.api.user.update_user_role`, which checks who
+    #: is asking. Internal ORM use is unaffected - this covers the wire only.
+    SENSITIVE_FIELDS = ("groups", "user_permissions", "is_superuser", "is_staff")
+
+    #: Readable, never writable through the generic route.
+    #:
+    #: `enabled` has to stay visible - the Users settings screen has an Enabled column -
+    #: but must not be settable by its own subject.
+    #:
+    #: Note what this does *not* do: a disabled account cannot re-enable itself even
+    #: without this, because SimpleJWT rejects its token at authentication
+    #: (`is_active` maps to `enabled`), so the request never reaches a serializer - 401,
+    #: verified. This is the second layer, not the first. It earns its place because the
+    #: first is a single `is_active` check in a library, and because without it a user can
+    #: switch their own account off with one PUT, which is a support ticket rather than an
+    #: attack but is nobody's intention.
+    #:
+    #: `user_type` gates nothing in this port yet (it is stored and returned by the
+    #: session endpoints, and nothing branches on it). Upstream treats it as privileged -
+    #: System User versus Website User - so it is locked here as cheap precaution before
+    #: phase 8 gives it meaning, not because it is currently exploitable.
+    READONLY_FIELDS = ("enabled", "user_type")
+
     class Meta:
         db_table = "tabUser"
         verbose_name = "User"
@@ -104,9 +142,26 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self) -> str:
         return str(self.name)
 
+    #: Frappe's two built-ins are named from ``first_name``, not from an email
+    #: (``frappe/core/doctype/user/user.py:152-153``), which is why they are literally
+    #: "Administrator" and "Guest" rather than addresses.
+    BUILTIN_NAMES = frozenset({"Administrator", "Guest"})
+
     def save(self, *args, **kwargs):
         if not self.full_name:
             self.full_name = " ".join(p for p in (self.first_name, self.last_name) if p)
+
+        # Port of ``User.autoname`` (frappe/core/doctype/user/user.py:150-156): the PK is
+        # the email, **lowercased and stripped**. Without this, "John@Example.com" and
+        # "john@example.com" are two different users - and because ``owner``,
+        # ``ToDo.allocated_to``, ``_assign`` entries and every ``@me`` filter compare
+        # this value as a string, the mismatch surfaces as silently missing rows rather
+        # than an error.
+        if self.name and str(self.name) not in self.BUILTIN_NAMES:
+            self.name = str(self.name).strip().lower()
+            if self.email:
+                self.email = str(self.email).strip().lower()
+
         return super().save(*args, **kwargs)
 
     @property
@@ -153,11 +208,15 @@ class Contact(BaseDocument):
     upstream recomputes them on validate from whichever row is flagged primary. Same
     here, in :meth:`sync_primary_values`.
 
-    > **NAMING - LOW CONFIDENCE.** Frappe names a Contact from its full name, with a
-    > numeric suffix on collision, but the exact template is not visible from this repo.
-    > Implemented as ``full name`` (+ ``-<company>`` when set), deduplicated with a
-    > numeric suffix. Flagged in PROGRESS.md; the frontend routes on this value
-    > (``/contacts/:contactId``), so confirm before shipping data.
+    **NAMING - RESOLVED** against ``frappe`` ``version-15``, the branch CRM ``main``
+    targets. Contact declares no ``autoname``; naming is a controller method
+    (``frappe/contacts/doctype/contact/contact.py:54-63``) - a seventh strategy beyond
+    the six in ``PHASE_0_FOUNDATION.md`` section 2. See :meth:`_assign_name`.
+
+    The earlier guess was wrong in three ways, all corrected: ``company_name`` is a
+    *fallback* rather than a suffix (``contact.py:463-473``), the first collision suffix
+    is ``-1`` rather than ``-2``, and an empty name raises instead of falling back to
+    the email address.
     """
 
     first_name = models.CharField(max_length=140, blank=True, default="")
@@ -203,22 +262,49 @@ class Contact(BaseDocument):
         }
 
     def build_full_name(self) -> str:
+        """Port of ``get_full_name`` (``frappe/contacts/doctype/contact/contact.py:463``).
+
+        ``company_name`` is a **fallback** used only when first/middle/last are all
+        empty - it is never a suffix.
+        """
         parts = [self.first_name, self.middle_name, self.last_name]
-        return " ".join(p.strip() for p in parts if p and p.strip())
+        full_name = " ".join(p.strip() for p in parts if p and p.strip())
+        if not full_name and self.company_name:
+            full_name = self.company_name
+        return full_name
+
+    def name_links_suffix(self) -> str:
+        """The ``-<first Dynamic Link>`` fragment upstream appends (contact.py:57-60).
+
+        Upstream iterates ``self.links`` and ``break``s, so only the *first* row counts.
+
+        ``Dynamic Link`` is a platform doctype outside phase 1 cluster 1, so there is
+        nothing to read yet and this returns "". Every CRM path that creates a Contact
+        (``crm_lead.py:213``, ``crm_deal.py:427``, ``install.py``, ``demo/``) sets
+        ``company_name`` but never appends to ``links``, so upstream's suffix does not
+        fire for CRM-created contacts either - the two agree today. **When Dynamic Link
+        is ported (it is also needed for ``CRM Call Log.links``), implement this method
+        and the naming becomes faithful with no other change.**
+        """
+        return ""
 
     def _assign_name(self) -> bool:
-        """Contact naming - see the class docstring's confidence note."""
+        """Port of ``Contact.autoname`` (contact.py:54-63).
+
+        Frappe declares no ``autoname`` in ``contact.json``; naming lives in a
+        controller method, which is a seventh strategy beyond the six in
+        ``PHASE_0_FOUNDATION.md`` section 2. ``crm/overrides/contact.py`` overrides only
+        ``default_list_data``, so this algorithm applies unchanged under the CRM app.
+
+        An empty name is deliberately **not** given a fallback: upstream reaches
+        ``validate_name`` with "" and raises "No Name Specified for Contact". CRM always
+        supplies one (``crm_lead.py:214`` uses ``first_name or lead_name``, and
+        ``lead_name`` itself falls back to the email local part), so raising is safe.
+        """
         if self.pk:
             return False
-        base = self.build_full_name() or self.email_id or "Contact"
-        if self.company_name:
-            base = f"{base}-{self.company_name}"
-        candidate = base
-        suffix = 1
-        while type(self)._default_manager.filter(pk=candidate).exists():
-            suffix += 1
-            candidate = f"{base}-{suffix}"
-        self.pk = candidate
+        base = self.build_full_name() + self.name_links_suffix()
+        self.pk = append_number_if_name_exists(type(self), base)
         return True
 
     def sync_primary_values(self) -> None:
@@ -280,7 +366,14 @@ class ContactPhone(BaseDocument):
         name_strategy = Hash()
 
 
-@register_doctype("ToDo")
+# Unrouted deliberately. `org_hierarchy` grants access to a record when a ToDo row says
+# you are assigned to it, so a writable /api/resource/ToDo let any user create that row
+# for any document and read it - the permission check then *passes*, on data the caller
+# supplied. Nothing calls this route: the frontend assigns through
+# `frappe.desk.form.assign_to.add`, which checks write permission on the document first.
+# Full reasoning, the upstream comparison and the permission-rule alternative:
+# specs/UNROUTED_DOCTYPES.md.
+@register_doctype("ToDo", routable=False)
 class ToDo(BaseDocument):
     """**Assignment lives here**, not in ``_assign``.
 
@@ -487,7 +580,7 @@ class Tag(BaseDocument):
 
 
 @register_doctype("Email Account")
-class EmailAccount(BaseDocument):
+class EmailAccount(EncryptedFieldsMixin, BaseDocument):
     """Outbound/inbound email config.
 
     Fields verbatim from ``crm/api/settings.py:14-29``, which is the only place the CRM
@@ -516,9 +609,61 @@ class EmailAccount(BaseDocument):
     # Frappe stores this encrypted; phase 7 owns real credential handling.
     password = models.CharField(max_length=280, blank=True, default="")
     no_smtp_authentication = models.BooleanField(default=False)
+    #: Phase 3: the fallback source for ``crm.api.get_user_signature``
+    #: (``crm/api/__init__.py:32-36``).
+    add_signature = models.BooleanField(default=False)
+    signature = models.TextField(blank=True, default="")
+    #: Phase 3: written by ``crm.api.settings.create_email_account``
+    #: (``crm/api/settings.py:12-52`` and its ``email_service_config`` table).
+    api_key = models.CharField(max_length=280, blank=True, default="")
+    api_secret = models.CharField(max_length=280, blank=True, default="")
+    frappe_mail_site = models.CharField(max_length=280, blank=True, default="")
+    append_to = models.CharField(max_length=140, blank=True, default="")
+    domain = models.CharField(max_length=140, blank=True, default="")
+    login_id = models.CharField(max_length=140, blank=True, default="")
+    login_id_is_different = models.BooleanField(default=False)
+    awaiting_password = models.BooleanField(default=False)
+    ascii_encode_password = models.BooleanField(default=False)
+    use_ssl = models.BooleanField(default=False)
+    use_ssl_for_outgoing = models.BooleanField(default=False)
+    use_starttls = models.BooleanField(default=False)
+    validate_ssl_certificate = models.BooleanField(default=False)
+    incoming_port = models.IntegerField(null=True, blank=True)
+    always_use_account_email_id_as_sender = models.BooleanField(default=False)
 
     #: Never serialised, never selectable. frappe_core.field_security.
-    SENSITIVE_FIELDS = ("password",)
+    #: ``api_secret`` joins ``password``: it is the Frappe Mail credential.
+    SENSITIVE_FIELDS = ("password", "api_secret")
+
+    #: Encrypted at rest (``frappe_core.secrets``). The attribute holds **ciphertext**
+    #: once saved - read the credential with ``account.get_password("password")``, never
+    #: ``account.password``. Upstream keeps these out of the document table entirely, in
+    #: the ``__Auth`` table; we keep the column and encrypt its contents, which reaches
+    #: the same property with a data-only migration.
+    ENCRYPTED_FIELDS = ("password", "api_secret")
+
+    #: Managers only. Upstream needs no equivalent because it withholds the whole record
+    #: from anyone below System Manager - and in doing so leaves its own Profile screen's
+    #: "send from" picker empty for ordinary users, since that screen carries no role
+    #: condition. We keep the picker working, which means the record is readable, which
+    #: means the infrastructure on it has to be narrowed instead.
+    #:
+    #: What stays visible is exactly what that picker reads: ``name``, ``email_id`` and
+    #: ``enable_outgoing``. Everything below describes *how* mail is sent, which is a
+    #: manager's business and an attacker's reconnaissance.
+    RESTRICTED_FIELDS = (
+        "smtp_server",
+        "smtp_port",
+        "email_server",
+        "incoming_port",
+        "login_id",
+        "domain",
+        "api_key",
+        "frappe_mail_site",
+        "signature",
+        "no_smtp_authentication",
+        "awaiting_password",
+    )
 
     class Meta:
         ordering = ["-modified"]
@@ -529,6 +674,43 @@ class EmailAccount(BaseDocument):
 # (frappe_core/assignment.py); this is the single call that switches it on now that the
 # real ToDo model exists.
 register_todo_model(ToDo)
+
+
+@register_doctype("Dynamic Link", is_child_table=True)
+class DynamicLink(BaseDocument):
+    """Frappe's generic "this document points at that one" child table.
+
+    Phase 3, carried-over item **C5**. Schema from the framework
+    (``frappe/core/doctype/dynamic_link/dynamic_link.json``): ``link_doctype`` (Link to
+    DocType), ``link_name`` (Dynamic Link), ``link_title`` (Read Only).
+
+    Polymorphic on **both** ends - it is embedded by several doctypes *and* points at
+    several - so it carries ``parent``/``parenttype`` rather than a FK, like the three
+    CRM child tables in the same position.
+
+    Unblocks two things upstream depends on:
+
+    * ``CRM Call Log.links`` - attaching notes/tasks/leads/deals to a call, which
+      ``crm/api/activities.py:get_linked_calls`` reads.
+    * ``Contact.links`` - which upstream's ``Contact.autoname`` consults for its
+      company suffix.
+    """
+
+    parenttype = models.CharField(max_length=140, blank=True, default="", db_index=True)
+    parentfield = models.CharField(max_length=140, blank=True, default="")
+    parent = models.CharField(max_length=140, blank=True, default="", db_index=True)
+
+    link_doctype = models.CharField(max_length=140, db_index=True)
+    link_name = models.CharField(max_length=140, db_index=True)
+    link_title = models.CharField(max_length=280, blank=True, default="")
+
+    class Meta:
+        ordering = ["idx"]
+        name_strategy = Hash()
+        indexes = [
+            models.Index(fields=["parenttype", "parent"], name="dynamic_link_parent_idx"),
+            models.Index(fields=["link_doctype", "link_name"], name="dynamic_link_target_idx"),
+        ]
 
 
 # Contact's denormalised email_id / mobile_no / phone follow its child rows. Upstream

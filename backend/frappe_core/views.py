@@ -9,6 +9,8 @@ reached through their parent and serialised inline.
 
 from __future__ import annotations
 
+import copy
+
 from django.db import transaction
 from rest_framework import status
 from rest_framework.response import Response
@@ -65,15 +67,82 @@ class FrappeAPIView(APIView):
 
 
 def _resolve_routable_entry(doctype: str):
-    """Registry lookup that refuses child tables and unknown doctypes alike."""
+    """Registry lookup that refuses child tables, unrouted doctypes and unknown ones."""
     if not registry.has_doctype(doctype):
         raise DoesNotExistError(f"DocType {doctype} not found")
     entry = registry.get_entry(doctype)
-    if entry.is_child_table:
-        # Same error a client sees for a doctype that does not exist: a child table has
-        # no standalone identity on the wire.
+    if entry.is_child_table or not entry.routable:
+        # Same error a client sees for a doctype that does not exist. A child table has
+        # no standalone identity on the wire; an unrouted doctype has one but is
+        # deliberately unpublished (specs/UNROUTED_DOCTYPES.md). Both are "no such route"
+        # from outside, and saying so tells an unauthenticated prober nothing about
+        # which doctypes exist.
         raise DoesNotExistError(f"DocType {doctype} not found")
     return entry
+
+
+def _candidate_instance(entry, data):
+    """An unsaved instance carrying the payload's own fields, for the ``create`` check.
+
+    Relations are skipped deliberately: the payload holds raw keys (``"CRM-DEAL-0001"``),
+    and assigning one to a FK descriptor raises. The fields that decide a create rule -
+    ``reference_doctype``, ``attached_to_name`` and their kin - are plain columns, so
+    excluding relations costs nothing and avoids a class of error entirely.
+
+    Falls back to an empty instance if the payload will not construct one. A malformed
+    body is the serializer's business to reject with a 400; failing here would answer a
+    validation problem with a permission error.
+    """
+    model = entry.model
+    plain = {
+        field.name
+        for field in model._meta.get_fields()
+        if getattr(field, "concrete", False) and not field.is_relation
+    }
+    try:
+        return model(**{k: v for k, v in (data or {}).items() if k in plain})
+    except Exception:
+        return model()
+
+
+def check_destination(entry, instance, validated) -> None:
+    """Re-check write permission against the document **as the payload would leave it**.
+
+    ``_get_object`` checks the instance as it stands, which is the right question for most
+    edits and the wrong one for a row that names its own parent. A comment on a deal you
+    own passes that check; repointing it at a deal you cannot see then plants a comment
+    there - the same hole `create` was just closed against, entered through `update`.
+
+    **Opt-in, via `entry.reference_fields`.** Only doctypes that name their parent are
+    re-checked; everything else returns immediately. Running this for every doctype would
+    make every write in the product pay a second `has_permission` call - a real cost on
+    the org-hierarchy rules, which query - to close a hole that exists in three places.
+    """
+    watched = set(entry.reference_fields)
+    if not watched or not (watched & set(validated or {})):
+        return
+
+    plain = {
+        field.name
+        for field in entry.model._meta.get_fields()
+        if getattr(field, "concrete", False) and not field.is_relation
+    }
+    changed = {
+        name: value
+        for name, value in validated.items()
+        if name in plain and getattr(instance, name, None) != value
+    }
+    if not changed:
+        return
+
+    candidate = copy.copy(instance)
+    for name, value in changed.items():
+        setattr(candidate, name, value)
+
+    if not permissions.check_object_permission(candidate, "write", get_current_user()):
+        raise FrappePermissionError(
+            f"Not permitted to move {entry.doctype} there", title="Not Permitted"
+        )
 
 
 class ResourceListView(FrappeAPIView):
@@ -105,9 +174,17 @@ class ResourceListView(FrappeAPIView):
         # org-hierarchy rule returns True for `create` (an unsaved document always
         # passes), but CRM Notification's own rule returns *False* - a user may not mint
         # notifications for other people. Without this check that endpoint was open.
-        # An empty instance is enough: every registered rule decides `create` before it
-        # looks at any field.
-        if not permissions.check_object_permission(entry.model(), "create", get_current_user()):
+        #
+        # The candidate carries the payload's own fields, so a rule can see *what is
+        # being created*. This used to pass a bare `entry.model()` on the grounds that
+        # "every registered rule decides `create` before it looks at any field" - true
+        # when written, and false once `Comment`, `Communication` and `File` began
+        # deferring to the document they reference. An empty shell has no reference, so
+        # those rules waved every create through and a comment could be forged onto a
+        # record the author cannot see.
+        if not permissions.check_object_permission(
+            _candidate_instance(entry, request.data), "create", get_current_user()
+        ):
             raise FrappePermissionError(
                 f"Not permitted to create {doctype}", title="Not Permitted"
             )
@@ -146,6 +223,7 @@ class ResourceDetailView(FrappeAPIView):
         serializer_class = entry.get_serializer_class()
         serializer = serializer_class(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+        check_destination(entry, instance, serializer.validated_data)
         with transaction.atomic():
             instance = serializer.save()
         return self.envelope(serializer_class(instance).data)

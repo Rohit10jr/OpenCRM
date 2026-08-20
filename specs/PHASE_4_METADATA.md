@@ -1,11 +1,40 @@
 # Phase 4 — Metadata Layer
 
-> **PROVISIONAL — revised by phase-0 agent, pending human review.**
-> §2a and §3 now describe the seams phase 0 actually left. Status stays PROVISIONAL
-> per `RUNBOOK.md` (which overrides `specs/README.md` on this point) because the
-> revision is itself unreviewed.
+> **BUILT** — phase 4 landed on `phase-4-metadata`, 1003 tests passing, reviewed.
+> See `PROGRESS_PHASE_4.md` for what was built and what is still open, and
+> `specs/AS_BUILT.md` for the helpers it added.
+>
+> **C7 is closed** and **C6 is closed**. The allowlists below (§3) are now keyed on the
+> Frappe fieldtype, read from generated DocType metadata, so they are transcriptions of
+> the source rather than translations of it. The kanban gaps §2a listed — manual
+> ordering and the badge counts — are implemented.
+>
+> One thing this spec did not anticipate: the whole phase needed a **field-metadata
+> layer** first (`frappe_core.field_meta`), because the Frappe fieldtype and the form
+> layout order are both unrecoverable from the Django models. It is generated from the
+> DocType JSON and committed.
 
-**Fan out.** Needs phase 0 and phase 1 cluster 6.
+**Fan out.** Runs *after* phase 3, not before it — phase 0 already built `get_data`'s
+four-step resolution and left `_load_saved_view` as a registered provider, so phase 3's
+metadata endpoints read that seam without needing this phase filled in first.
+
+### This phase owns C7
+
+`frappe_core/metadata.py` keys its filterable and group-by allowlists on **Django
+internal types** (`FILTERABLE_INTERNAL_TYPES`, `GROUP_BY_INTERNAL_TYPES`), which is lossy
+both ways: `Long Text`/`Small Text`/`Text Editor` all collapse to `TextField`, and
+`Duration`/`Rating` are indistinguishable from `IntegerField`/`FloatField`. So `Duration`
+is currently group-by-able only by accident.
+
+Phase 1 records each field's original Frappe fieldtype — filter on **that** and delete the
+internal-type sets. `metadata._frappe_fieldtype` already exists as the resolver.
+
+### And C6, partly
+
+`get_data`'s kanban branch is structural: column resolution from a Link target or Select
+options works, but `get_records_based_on_order` (per-column manual ordering) and
+`getCounts` (the email/comment/task/note badge counts) are absent. The counts need the
+`Comment` and `ToDo` models, both of which are ported.
 
 Source: `crm_view_settings` (328 LOC, 8 endpoints), `crm_fields_layout` (259 LOC, 3),
 `crm_form_script`, `crm_dashboard`, and `api/doc.py:get_data`.

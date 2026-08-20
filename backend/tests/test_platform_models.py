@@ -51,8 +51,19 @@ pytestmark = pytest.mark.django_db
     ],
 )
 def test_platform_doctype_is_registered(doctype, model):
+    """Registration and routability are two things, and `ToDo` is why.
+
+    It is registered - the permission engine queries it on every Lead and Deal read - but
+    deliberately unpublished, because a writable ``/api/resource/ToDo`` let any user
+    assign themselves to any document and thereby read it. See
+    ``specs/UNROUTED_DOCTYPES.md``; the unrouted set is pinned in
+    ``tests/test_unrouted_doctypes.py``.
+    """
     assert registry.get_model(doctype) is model
-    assert doctype in registry.routable_doctypes()
+    if registry.get_entry(doctype).routable:
+        assert doctype in registry.routable_doctypes()
+    else:
+        assert doctype not in registry.routable_doctypes()
 
 
 @pytest.mark.parametrize("doctype", ["Contact Email", "Contact Phone"])
@@ -149,15 +160,27 @@ def test_contact_is_named_from_its_full_name(contact):
 
 
 def test_contact_name_collision_gets_a_numeric_suffix(alice, contact):
+    """First collision is ``-1``, not ``-2``.
+
+    Corrected against ``frappe/model/naming.py:506-530``, which uses ``count = "1"``
+    when no numbered sibling exists. Full coverage in ``test_contact_naming.py``.
+    """
     with session_user(alice.name):
         second = Contact.objects.create(first_name="Jane", last_name="Doe")
-    assert second.name == "Jane Doe-2"
+    assert second.name == "Jane Doe-1"
 
 
-def test_contact_name_includes_the_company(alice):
+def test_contact_name_does_not_include_the_company(alice):
+    """``company_name`` is a fallback, never a suffix.
+
+    This test previously asserted ``"Jane Doe-Acme"``, locking in phase 1's guess.
+    ``get_full_name`` (``frappe/contacts/doctype/contact/contact.py:463-473``) uses
+    company **only** when first/middle/last are all empty - see
+    ``test_company_is_used_when_there_is_no_person_name``.
+    """
     with session_user(alice.name):
         c = Contact.objects.create(first_name="Jane", last_name="Doe", company_name="Acme")
-    assert c.name == "Jane Doe-Acme"
+    assert c.name == "Jane Doe"
 
 
 def test_primary_email_is_denormalised_onto_the_contact(contact):

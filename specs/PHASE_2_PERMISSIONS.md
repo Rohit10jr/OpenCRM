@@ -69,6 +69,22 @@ name IN (SELECT reference_name FROM ToDo
 (`PHASE_0_FOUNDATION.md` §3) and must not be trusted for access control. The
 `status != 'Cancelled'` filter is required — cancelled assignments do not grant access.
 
+#### The two definitions of "assigned" differ — verified
+
+| | Excluded statuses | Source |
+|---|---|---|
+| **Display** (`_assign`) | `Closed`, `Cancelled` | `crm/api/doc.py:614`; `frappe/desk/form/assign_to.py:37,163` |
+| **Permission** | `Cancelled` only | `crm/permissions/org_hierarchy.py:47,58` |
+
+So a **`Closed` ToDo still grants access** while no longer appearing in `_assign`. That
+is precisely why the permission layer must query `ToDo` rather than read the cache — the
+cache is deliberately narrower than the access rule.
+
+Originally inferred from two source sites and rated Medium confidence; now confirmed
+against the framework as well. **No third definition exists** — Frappe's own permission
+layer never reads `ToDo` (it uses `DocShare` and User Permissions), so ToDo-based access
+is entirely the CRM's `org_hierarchy` rule.
+
 ---
 
 ## 3. `CRM Sales Hierarchy` is a nested-set tree
@@ -79,9 +95,40 @@ Upstream uses `lft`/`rgt` columns. Subtree membership is:
 Member.lft >= Mgr.lft AND Member.lft <= Mgr.rgt
 ```
 
-Use **`django-treebeard`** (`MP_Node` or `NS_Node`), not a self-referential FK — a
-plain FK forces recursive CTEs for every list query and will not perform. `crm_territory`
-is also a tree; check it for `lft`/`rgt` and give it the same treatment.
+**Superseded — do not use `django-treebeard`.** This section originally named it; the
+implementation is a full rebuild in `crm_app/permissions/tree.py`, and that decision is
+now settled rather than provisional. Treebeard owns its own columns and expects node
+creation through `add_root`/`add_child`, but rows arrive through the generic
+`/api/resource/` endpoint with `reports_to` set, and the schema we must match is Frappe's
+`lft`/`rgt`. Adopting it would mean a second tree representation to keep in sync.
+
+Frappe itself does neither: it maintains bounds **incrementally**
+(`frappe/utils/nestedset.py:update_add_node` / `update_move_node`) and reserves
+`rebuild_tree` for repair. That is a third write path, matching neither treebeard nor
+ours. Do not use a self-referential FK alone — it forces recursive CTEs on every list
+query. `crm_territory` is also a tree; give it the same treatment.
+
+### The rebuild must be serialised, and a row lock is not enough
+
+`lft`/`rgt` decide **which rows a user can see**, so overlapping bounds are a permission
+defect, not a cosmetic one.
+
+The hazard is concurrent **inserts**, not concurrent rebuilds — rebuilding a fixed node
+set twice is harmless, since the walk derives bounds from `reports_to` alone. The damage
+happens when one transaction walks `n` nodes while another walks `n+1`: each writes only
+the rows it read, so the newcomer keeps bounds from one walk and its siblings keep bounds
+from the other.
+
+**`select_for_update()` does not fix this.** A row lock only covers rows the query already
+matched; the second writer blocks, re-reads *those* rows, and still cannot see the row the
+first writer inserted — the classic phantom. It walks `n` nodes regardless, and the bounds
+still collide. This was verified by test: the corruption reproduces with `select_for_update`
+in place.
+
+The lock has to be taken **before the read**, over the operation rather than a row set —
+a transaction-scoped advisory lock (`pg_advisory_xact_lock`). Any test for this must be
+checked to fail with the lock removed; a version that spawned concurrent
+`rebuild_sales_hierarchy()` calls over a static tree passed either way and proved nothing.
 
 Subtree lookup runs on **every list request** for leads and deals. Cache it per
 request at minimum; upstream uses `@request_cache` on the hierarchy checks. Do the
@@ -100,6 +147,36 @@ From source, before any tree evaluation:
 That third one matters: unsaved documents always pass. Skip it and every create fails.
 
 ---
+
+## 4a. Two inherited behaviours, confirmed rather than assumed
+
+Both are faithful to upstream and were reviewed deliberately rather than left to default.
+
+### Only three doctypes have row-level rules
+
+Verified in `crm/hooks.py`: `permission_query_conditions` and `has_permission` are
+registered for **`CRM Lead`, `CRM Deal`, `CRM Notification`** and nothing else.
+
+Everything else — **organizations, tasks, notes, call logs, contacts, products,
+territories, SLAs and all settings** — is readable by **every authenticated user**.
+Only role permissions apply. That is a much wider surface than "the CRM has row-level
+security" suggests, and it is upstream's design: leads and deals are the confidential
+records, the surrounding reference data is shared.
+
+**Decision: keep.** Widening it is a product change, not a port fix, and it would break
+the frontend in non-obvious ways — an org or contact linked to a lead you *can* see would
+start returning 403 on the detail fetch.
+
+### 403 and 404 are distinguishable
+
+`_get_object` raises `DoesNotExistError` for a missing row and `PermissionError` for a
+forbidden one, so a user can tell whether a record they cannot see exists. That is an
+existence oracle, and it matches upstream exactly.
+
+**Decision: keep.** Collapsing both to 404 would diverge from upstream and break the
+frontend's error handling, which branches on `exc_type`
+(`frontend/src/data/document.js:40`). The information leaked is the existence of a record
+name the user already had to guess.
 
 ## 5. Roles
 

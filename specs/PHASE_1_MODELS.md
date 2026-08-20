@@ -30,6 +30,32 @@ The 39 CRM doctypes are **not** the whole data model. The app depends on Frappe
 **Build these first, before any CRM doctype.** Everything else foreign-keys into them.
 Port only the fields the CRM actually uses — do not reimplement Frappe's full platform.
 
+### Platform naming — RESOLVED against `frappe` `version-15`
+
+Originally guessed, because the CRM repo never shows platform `autoname`. Now read from
+source. **Three of these are controller `autoname()` methods, not JSON `autoname`** — a
+seventh strategy beyond the six in `PHASE_0_FOUNDATION.md` §2:
+
+| Model | Naming | Source |
+|---|---|---|
+| **`User`** | PK is the email, **lowercased and stripped**; `Administrator`/`Guest` are named from `first_name` | `core/doctype/user/user.py:150-156` |
+| **`Contact`** | `first middle last` (company only as a *fallback*), + `-<first Dynamic Link>`, + `-N` on collision | `contacts/doctype/contact/contact.py:54-63`, `:463-473` |
+| **`File`** | folder-aware `autoname()`; hash otherwise | `core/doctype/file/file.py:82` |
+| `ToDo` | `hash` | `desk/doctype/todo/todo.json` |
+| `Tag`, `Email Template` | `Prompt` | respective JSON |
+| `Email Account` | `field:email_account_name` | `email/doctype/email_account/email_account.json` |
+| `Comment`, `Communication` | no `autoname`, no method → framework default | — |
+
+Two consequences worth stating, both of which were wrong before:
+
+- **`User` must lowercase.** `owner`, `modified_by`, `ToDo.allocated_to`, `_assign`
+  entries and every `@me` filter compare this value as a plain string. Skip the
+  lowercasing and `John@Example.com` becomes a second, separate user whose records
+  silently vanish from the first one's lists.
+- **`Contact`'s `company_name` is a fallback, never a suffix.** Every CRM contact has
+  `company_name` set (`crm_lead.py:219`), so treating it as a suffix corrupts
+  essentially every contact name — and the frontend routes on that value.
+
 `WhatsApp Message` comes from a separate app (`frappe_whatsapp`) — defer with phase 7.
 
 ---
@@ -115,6 +141,23 @@ One agent per cluster. `(C)` child, `(S)` singleton.
 Cluster 1 blocks 2–6. Clusters 2–6 run concurrently once it lands.
 
 ---
+
+## 5a. `FCRM Settings.access_key` stays readable — confirmed
+
+It is an exchange-rate provider API key, and any authenticated user can read it. That
+looks like something to lock down, and it is deliberate:
+
+- The JSON declares it `Data`, **not** `Password`, and unhidden.
+- The settings screen **reads it back** — `DashboardSettings.vue:157` binds it with
+  `v-model`, and `:216` checks whether it is set.
+
+So adding it to `SENSITIVE_FIELDS` would blank the field for the admin who needs to see
+it, and break the screen in exchange for a hardening upstream does not make.
+
+**Decision: keep readable.** Restricting it is a product change that needs the settings
+screen changed too — one line in `SENSITIVE_FIELDS` plus a write-only field treatment.
+Note it is a third-party FX key, not a CRM credential; the blast radius is the exchange
+rate service.
 
 ## 6. Singletons
 

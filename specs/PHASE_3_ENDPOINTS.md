@@ -1,10 +1,16 @@
 # Phase 3 — API Endpoints
 
-> **PROVISIONAL — revised by phase-0 agent, pending human review.**
-> The registry/serializer assumptions below now describe what phase 0 actually built
-> (see §1a). The revision is itself unreviewed, so the status stays PROVISIONAL per
-> `RUNBOOK.md`. Note this overrides `specs/README.md`, which told the phase-0 agent to
-> flip these to Authoritative — the runbook wins.
+> **BUILT** — phase 3 landed on `phase-3-endpoints`, 944 tests passing, reviewed.
+> See `PROGRESS_PHASE_3.md` for what was built, what diverged and what is still open,
+> and `specs/AS_BUILT.md` for the helpers it added.
+>
+> Two things this spec did not anticipate, both delivered:
+> the `frappe.client.*` / `frappe.desk.*` built-ins the frontend needs
+> (`PORT_PLAN.md` §3 lists them; §2 below does not), and the fact that **C4's totals are
+> a client-side form script upstream**, not server logic.
+>
+> Known gaps, named rather than hidden: six dashboard charts, and the `Version`-derived
+> field-change entries in `get_activities`. Both in `PROGRESS_PHASE_3.md`.
 
 **Fan out by module.** Needs phase 1. One agent per module group; never two agents in
 one file.
@@ -27,51 +33,54 @@ sends them by name.
 
 ---
 
-## 1a. What phase 0 actually built — use this, do not re-invent it
+## 1a. What already exists — use it, do not rebuild it
 
-Registering an endpoint is one decorator. The dotted path is **declared, not derived**,
-because our modules do not live at `crm.api.*`:
+`specs/AS_BUILT.md` is the full inventory. The parts you will reach for constantly:
 
-```python
-from frappe_core.whitelist import whitelist
+| Need | Call |
+|---|---|
+| Register an endpoint | `@whitelist("crm.api.x.y")` from `frappe_core.whitelist` |
+| List rows, permission-filtered | `query.fetch_rows(doctype, fields=, filters=, order_by=, ...)` |
+| Count, permission-filtered | `query.count_rows(doctype, filters=)` |
+| Object permission check | `permissions.check_object_permission(doc, ptype, user)` |
+| Current user | `session.get_current_user()` |
+| Model / serializer / defaults | `registry.get_entry(doctype)` |
+| Who is assigned | `assignment.get_assigned_users(doctype, name)` |
+| **Assign someone** | `assignment.assign_to_user(doctype, name, user)` |
+| **Tag / untag** | `doc_caches.add_tag(doc, tag)` / `remove_tag` / `get_tags` |
+| **Convert a lead** | `crm_app.conversion.convert_to_deal(lead, ...)` |
+| Child tables | `children.read_children` / `replace_children` |
+| Field metadata | `metadata.get_filterable_fields` / `get_group_by_fields` |
 
-@whitelist("crm.api.contact.get_linked_deals")
-def get_linked_deals(contact: str):
-    ...
-```
-
-| Need | Use | Where |
-|---|---|---|
-| Register an endpoint | `@whitelist(path, allow_guest=False, methods=("GET","POST"))` | `frappe_core/whitelist.py` |
-| Make it resolvable | import the module from your app's `AppConfig.ready()` | `frappe_core/apps.py` is the worked example |
-| Envelope | automatic — `MethodView` wraps the return value in `{"message": ...}` | `frappe_core/method_views.py` |
-| Throw a user-facing error | `throw("text")` / `raise ValidationError("text")` | `frappe_core/exceptions.py` |
-| List rows, permission-filtered | `query.fetch_rows(doctype, fields=, filters=, order_by=, ...)` | `frappe_core/query.py` |
-| Count, permission-filtered | `query.count_rows(doctype, filters=)` | `frappe_core/query.py` |
-| Single-object permission check | `permissions.check_object_permission(doc, ptype, user)` | `frappe_core/permissions.py` |
-| Current user (`frappe.session.user`) | `session.get_current_user()` | `frappe_core/session.py` |
-| Model / serializer / defaults for a doctype | `registry.get_entry(doctype)` | `frappe_core/registry.py` |
-| Who is assigned (via ToDo) | `assignment.get_assigned_users(doctype, name)` | `frappe_core/assignment.py` |
+**Already registered — do not rebuild:** `login`, `logout`, `token/refresh`,
+`frappe.auth.get_logged_user`, `crm.api.doc.get_data`.
 
 Behaviours you can rely on, all covered by `backend/tests/`:
 
-- **Parameters** are merged from the query string *and* the JSON body, then JSON-decoded
-  (`query.parse_json_param`). A param may therefore arrive as `'["a","b"]'` or `["a","b"]`
-  — you do not need your own `parse_json` call.
-- **Surplus parameters are dropped** (`whitelist.bind_arguments`), matching Frappe, so
-  `cmd` and cache-busters do not 500 your endpoint.
-- **Auth**: non-`allow_guest` endpoints return 401 `AuthenticationError` when
-  unauthenticated. Do not re-check.
-- **Permissions**: `fetch_rows` / `count_rows` / `base_queryset` all apply the phase-2
-  hook. An endpoint that reads through them cannot bypass row-level security. An
-  endpoint that calls `Model.objects` directly **can** — don't.
-- **`fields`, `order_by` and `group_by` are validated** against the model's concrete
-  fields, so relation traversal (`owner__password`) is rejected with 417.
+- **Parameters** merge query string + JSON body and are JSON-decoded, so a param may
+  arrive as `'["a","b"]'` or `["a","b"]`. No `parse_json` needed in your handler.
+- **Surplus parameters are dropped**, matching Frappe, so `cmd` and cache-busters do not
+  500 an endpoint.
+- **Auth**: non-`allow_guest` endpoints return 401 when unauthenticated. Do not re-check.
+- **Permissions**: `fetch_rows` / `count_rows` / `base_queryset` apply the phase-2 hook.
+  Reading through them cannot bypass row-level security. **`Model.objects` directly
+  can — don't.**
+- **`fields`, `order_by`, `group_by` are validated**; relation traversal is rejected 417.
+- **Envelope** is automatic: `{"message": ...}`.
 
-`get_data` is **already built** at `frappe_core/api/doc.py` and registered as
-`crm.api.doc.get_data`. Do not reimplement it; extend it.
+### Three invariants that will cost you a debugging session
 
----
+**`lead_owner` / `deal_owner` is the access column, not `owner`.** Any endpoint that
+creates a lead or deal **must set it**, or the record is invisible to the user who just
+created it. This is upstream's rule, and it has already caught two tests.
+
+**Unknown field and row names raise**, they are not silently dropped. If an endpoint
+passes a field the model lacks, you get a 417 rather than a quietly missing column.
+
+**Query `ToDo` for anything access-related, never `_assign`.** The two have deliberately
+different status filters — display excludes `Closed` *and* `Cancelled`, permissions
+exclude only `Cancelled` — so a Closed ToDo still grants access while not appearing in
+the cache.
 
 ## 2. Module assignment
 
@@ -187,6 +196,21 @@ duplicate_assignment_rule(docname, new_name)
 phase 1 lifecycle work.
 
 ---
+
+## 2a. Carried-over work this phase owns
+
+Three items from the phase 0-2 review were assigned here (`PROGRESS.md`, Review
+Resolution):
+
+- **C4** — `crm_products` totals (`amount`, `net_amount`, `total`, `net_total`) are
+  columns with nothing computing them. Upstream derives them from qty x rate less
+  discount; find the source before implementing.
+- **C5** — `CRM Call Log.links` is a `Table` of Frappe's `Dynamic Link`, which is not
+  ported. Upstream uses it to attach notes/tasks/leads/deals to a call. Porting
+  `Dynamic Link` also unblocks `Contact.links`, which `Contact.autoname` reads
+  (`frappe_platform.Contact.name_links_suffix` is the waiting seam).
+- **C9** — `has_permission` issues one query per object. `delete_bulk_docs` is specced to
+  check per item, so that path needs batching rather than N round-trips.
 
 ## 3. Controller endpoints
 

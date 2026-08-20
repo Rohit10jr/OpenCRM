@@ -22,16 +22,7 @@
  */
 
 import { frappeRequest } from 'frappe-ui'
-import {
-  clearTokens,
-  getAccessToken,
-  getRefreshToken,
-  setTokens,
-} from './tokens'
-
-const REFRESH_URL = '/api/method/token/refresh'
-
-let refreshInFlight = null
+import { clearTokens, getAccessToken, refreshAccessToken } from './tokens'
 
 function withAuthHeader(options) {
   const token = getAccessToken()
@@ -50,33 +41,6 @@ function isAuthError(error) {
     error?.status === 401 ||
     error?.response?.status === 401
   )
-}
-
-async function refreshAccessToken() {
-  const refresh = getRefreshToken()
-  if (!refresh) return false
-
-  // Collapse concurrent 401s into a single refresh; a list screen can fire a dozen
-  // requests at once and each must not spend a refresh token.
-  if (!refreshInFlight) {
-    refreshInFlight = fetch(REFRESH_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh }),
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((body) => {
-        if (!body?.message?.access) return false
-        setTokens(body.message)
-        return true
-      })
-      .catch(() => false)
-      .finally(() => {
-        refreshInFlight = null
-      })
-  }
-
-  return refreshInFlight
 }
 
 export async function jwtRequest(options) {

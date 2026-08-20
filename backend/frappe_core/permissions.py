@@ -59,3 +59,31 @@ def check_object_permission(doc, ptype: str = "read", user: str | None = None) -
     """``has_permission`` with the ``None``-means-allowed convention resolved."""
     result = has_permission(doc, ptype, user)
     return True if result is None else bool(result)
+
+
+def filter_object_permitted(doctype: str, instances, ptype: str = "read", user: str | None = None):
+    """The subset of ``instances`` that passes the object rule for ``ptype``.
+
+    Same answer as calling :func:`check_object_permission` on each one; the difference is
+    cost. Upstream's per-object check issues a query per object, which is why C9 flags
+    ``delete_bulk_docs``. A doctype whose rule can be evaluated for a whole batch
+    registers ``has_permission_batch``; everything else falls back to the per-object hook,
+    which is correct and, for rules that are pure attribute comparisons, already free.
+
+    This is *not* a substitute for :func:`apply_permission_filter`. The list rule and the
+    object rule are allowed to differ - a public saved view is readable by everyone and
+    deletable only by its owner - so a write path needs both.
+    """
+    user = user or get_current_user()
+    instances = list(instances)
+    if not instances:
+        return []
+    if not registry.has_doctype(doctype):
+        return instances
+
+    entry = registry.get_entry(doctype)
+    if entry.has_permission_batch is not None:
+        return list(entry.has_permission_batch(doctype, instances, ptype, user))
+    if entry.has_permission is None:
+        return instances
+    return [doc for doc in instances if check_object_permission(doc, ptype, user)]

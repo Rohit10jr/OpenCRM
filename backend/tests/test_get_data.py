@@ -459,3 +459,69 @@ def test_surplus_parameters_are_ignored(auth_api, widgets):
         format="json",
     )
     assert response.status_code == 200
+
+
+# --- C10: unknown row keys raise instead of being dropped ------------------------
+
+
+def test_an_unknown_row_key_raises(auth_api, widgets):
+    """Retired port-time concession.
+
+    ``_selectable`` used to silently drop row keys the model had no column for, so a
+    half-built model would not break every list view. That carried a stated expiry -
+    revisit once phase 1 is complete. It is, and all 46 models were checked: no
+    ``default_list_data()`` names a missing field.
+
+    Now it raises, matching upstream and matching ``resolve_fields``, whose own comment
+    gives the reason: silently dropping an unknown field lets a typo'd column quietly
+    vanish from a list view instead of failing loudly.
+    """
+    response = auth_api.post(
+        METHOD_URL,
+        {
+            "doctype": "Phase Zero Widget",
+            "rows": json.dumps(["name", "no_such_column"]),
+            "columns": json.dumps([{"label": "Name", "key": "name"}]),
+        },
+        format="json",
+    )
+
+    assert response.status_code == 417
+    assert response.json()["exc_type"] == "ValidationError"
+    assert "no_such_column" in json.dumps(response.json())
+
+
+def test_several_unknown_keys_are_all_named(auth_api, widgets):
+    response = auth_api.post(
+        METHOD_URL,
+        {
+            "doctype": "Phase Zero Widget",
+            "rows": json.dumps(["nope_one", "nope_two"]),
+            "columns": json.dumps([{"label": "Name", "key": "name"}]),
+        },
+        format="json",
+    )
+
+    body = json.dumps(response.json())
+    assert "nope_one" in body and "nope_two" in body
+
+
+def test_known_row_keys_still_work(auth_api, widgets):
+    response = auth_api.post(
+        METHOD_URL,
+        {
+            "doctype": "Phase Zero Widget",
+            "rows": json.dumps(["name", "widget_name", "status"]),
+            "columns": json.dumps([{"label": "Name", "key": "widget_name"}]),
+        },
+        format="json",
+    )
+    assert response.status_code == 200
+
+
+def test_empty_rows_still_falls_back_to_name(auth_api, widgets):
+    """Not an error - nothing selected yet, so the fallback stays."""
+    from frappe_core import registry
+    from frappe_core.api.doc import _selectable
+
+    assert _selectable(registry.get_entry("Phase Zero Widget"), []) == ["name"]

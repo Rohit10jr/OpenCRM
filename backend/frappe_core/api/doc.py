@@ -173,14 +173,39 @@ def _load_saved_view(doctype: str, view_type: str, user: str):
     return provider(doctype, user, view_type or "list")
 
 
+def _load_default_columns_flag(custom_view_name) -> bool:
+    """``CRM View Settings.load_default_columns`` for a named view. Phase 4."""
+    try:
+        from crm_app.models import CRMViewSettings
+    except Exception:  # pragma: no cover - crm_app absent
+        return False
+    return bool(
+        CRMViewSettings._default_manager.filter(pk=custom_view_name)
+        .values_list("load_default_columns", flat=True)
+        .first()
+    )
+
+
 def _get_views(doctype: str) -> list:
-    """PHASE 4: ``crm/api/views.py:get_views`` - the user's saved views."""
-    return []
+    """The user's saved views. Filled in by phase 4.
+
+    Resolved lazily rather than imported at module scope: ``frappe_core`` must not
+    depend on ``crm_app``, or the framework layer stops standing alone.
+    """
+    try:
+        from crm_app.api.views import get_views
+    except Exception:  # pragma: no cover - crm_app absent
+        return []
+    return get_views(doctype)
 
 
 def _get_form_script(doctype: str, script_type: str = "Form"):
-    """PHASE 4: ``crm_form_script.get_form_script``."""
-    return None
+    """``crm_form_script.get_form_script``. Filled in by phase 4, resolved lazily."""
+    try:
+        from crm_app.api.form_script import get_form_script
+    except Exception:  # pragma: no cover - crm_app absent
+        return None
+    return get_form_script(doctype, script_type)
 
 
 @whitelist("crm.api.doc.get_data")
@@ -316,8 +341,11 @@ def get_data(
             known.add(descriptor["fieldname"])
 
     if not is_default and custom_view_name:
-        # PHASE 4: upstream reads load_default_columns off the saved view here.
-        is_default = False
+        # Upstream reads `load_default_columns` off the named saved view
+        # (``crm/api/doc.py:485-486``): a custom view flagged to load the default
+        # columns reports itself as default, which is how the frontend knows to offer
+        # "reset to default" rather than "save changes".
+        is_default = bool(_load_default_columns_flag(custom_view_name))
 
     if group_by_field and view_type == "group_by":
         group_by_field = _resolve_group_by_options(fields, group_by_field, data, order_by)
@@ -345,17 +373,33 @@ def get_data(
 
 
 def _selectable(entry, rows: list[str]) -> list[str]:
-    """Drop row keys the model has no column for.
+    """Validate the row keys and hand them to the query.
 
-    ``default_list_data()`` is authored against the Frappe doctype and can name a field
-    a partially-ported model does not carry yet. Upstream would raise; during the port
-    that would make every list view fail on a single missing column, so unknown keys are
-    skipped for the *query* while remaining in the returned ``rows`` (the frontend reads
-    ``rows`` to decide which columns to offer).
+    **This used to silently drop unknown keys.** That was a deliberate port-time
+    concession: ``default_list_data()`` is authored against the Frappe doctype, and while
+    models were half-built a single missing column would have broken an entire list view.
+    The concession carried a stated expiry - "revisit once phase 1 is complete, by then a
+    missing field is a genuine bug and should raise".
+
+    Phase 1 is complete and all 46 models were checked: **no ``default_list_data()``
+    names a field its model lacks**. So the concession is retired, and this now behaves
+    like every other field path - ``resolve_fields`` raises on an unknown name, for the
+    reason recorded there: silently dropping one lets a typo'd column quietly vanish from
+    a list view instead of failing loudly. Upstream raises here too.
+
+    The empty-``rows`` fallback stays: it is not an error, just nothing selected yet.
     """
+    if not rows:
+        return ["name"]
+
     available = concrete_field_names(entry.model)
-    selected = [r for r in rows if r in available]
-    return selected or ["name"]
+    unknown = [r for r in rows if r not in available]
+    if unknown:
+        raise ValidationError(
+            f"Unknown field{'s' if len(unknown) > 1 else ''} "
+            f"{', '.join(repr(u) for u in unknown)} for {entry.doctype}"
+        )
+    return list(rows)
 
 
 def _kanban(
@@ -453,19 +497,105 @@ def _kanban(
                 ]
                 column_filters.append([column_field, "=", kc.get("name")])
             page_length = coerce_page_length(kc.get("page_length"), 20)
-            column_data = fetch_rows(
-                doctype,
-                fields=_selectable(entry, rows),
-                filters=column_filters,
-                order_by=order_by,
-                limit_page_length=page_length,
-                user=user,
-            )
+            order = kc.get("order")
+            if order:
+                column_data = get_records_based_on_order(
+                    doctype, _selectable(entry, rows), column_filters, page_length, order, user
+                )
+            else:
+                column_data = fetch_rows(
+                    doctype,
+                    fields=_selectable(entry, rows),
+                    filters=column_filters,
+                    order_by=order_by,
+                    limit_page_length=page_length,
+                    user=user,
+                )
             kc["all_count"] = count_rows(doctype, filters=column_filters, user=user)
             kc["count"] = len(column_data)
+            for row in column_data:
+                get_counts(row, doctype)
+
+            if order:
+                # Upstream re-sorts after fetching so the manual order wins over the
+                # query's; anything not in `order` sinks to the end (doc.py:442-447).
+                column_data = sorted(
+                    column_data,
+                    key=lambda r: order.index(r["name"]) if r.get("name") in order else len(order),
+                )
         data.append({"column": kc, "fields": kanban_fields, "data": column_data})
 
     return data, kanban_columns, kanban_fields, rows, title_field
+
+
+def get_records_based_on_order(doctype, fields, filters, page_length, order, user):
+    """``crm/api/doc.py:560-586`` - a kanban column with a hand-ordered card list.
+
+    Two queries, not one: the cards named in ``order`` first, then whatever else matches
+    to fill the page. Both are permission-filtered, so a card someone dragged into place
+    and later lost access to simply does not come back.
+
+    ``order`` is a list of document names the user arranged by dragging.
+    """
+    in_filters = list(filters) + [["name", "in", list(order)[:page_length]]]
+    records = fetch_rows(
+        doctype,
+        fields=fields,
+        filters=in_filters,
+        order_by="creation desc",
+        limit_page_length=page_length,
+        user=user,
+    )
+
+    if len(records) < page_length:
+        not_in_filters = list(filters) + [["name", "not in", list(order)]]
+        records = records + fetch_rows(
+            doctype,
+            fields=fields,
+            filters=not_in_filters,
+            order_by="creation desc",
+            limit_page_length=page_length - len(records),
+            user=user,
+        )
+
+    return records
+
+
+def get_counts(row: dict, doctype: str) -> dict:
+    """``crm/api/doc.py:644-674`` - the four badge counts on a kanban card.
+
+    ``_email_count`` is the sum of two communication types, which is why it is added
+    rather than assigned twice (source :645-663).
+
+    These are **counts of related rows, not permission-filtered**: upstream uses
+    ``frappe.db.count``. Reproduced, because the numbers say "this card has 3 comments",
+    and a viewer-dependent badge would be stranger than an accurate one. No content
+    leaks - only a total.
+    """
+    from frappe_platform.models import Comment, Communication
+
+    name = row.get("name")
+    if name is None:
+        return row
+
+    row["_email_count"] = Communication._default_manager.filter(
+        reference_doctype=doctype,
+        reference_name=str(name),
+        communication_type__in=["Communication", "Automated Message"],
+    ).count()
+    row["_comment_count"] = Comment._default_manager.filter(
+        reference_doctype=doctype, reference_name=str(name), comment_type="Comment"
+    ).count()
+
+    from crm_app.models import CRMTask, FCRMNote
+
+    row["_task_count"] = CRMTask._default_manager.filter(
+        reference_doctype=doctype, reference_docname=str(name)
+    ).count()
+    row["_note_count"] = FCRMNote._default_manager.filter(
+        reference_doctype=doctype, reference_docname=str(name)
+    ).count()
+    return row
 
 
 def _resolve_group_by_options(fields: list, group_by_field: str, data: list, order_by: Any):
