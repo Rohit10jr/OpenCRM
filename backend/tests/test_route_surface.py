@@ -72,11 +72,6 @@ NOT_YET_REVIEWED = {
     "CRM Telephony Agent": "holds colleagues' phone numbers",
     "CRM Service Level Agreement": "SLA definitions; writes change response deadlines",
     "CRM Product": "catalogue data; writes change prices used in deal totals",
-    "CRM Invitation": (
-        "holds `role` and `key`. **Latent escalation**: forging one is possible today, "
-        "but `crm.api.accept_invitation` is not implemented, so it cannot be redeemed. "
-        "This becomes critical the moment phase 8 implements that endpoint."
-    ),
     "Email Template": "writes change the wording of mail the system sends on your behalf",
 }
 

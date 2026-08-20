@@ -240,6 +240,15 @@ class CRMInvitation(BaseDocument):
     email_sent_at = models.DateTimeField(null=True, blank=True)
     accepted_at = models.DateTimeField(null=True, blank=True)
 
+    #: `key` is a **bearer token**: whoever holds it redeems the invitation, and with it
+    #: the role the invitation grants. The only thing that ever needs it is the email in
+    #: `tasks.py`, which reads the attribute directly. Nothing should receive it over the
+    #: wire - `InviteUserPage.vue`, the sole consumer, asks for `name`, `email` and `role`.
+    #:
+    #: Upstream leaves it a plain `Data` field readable by every Sales User, which is what
+    #: makes `accept_invitation` redeemable by the wrong person (bug #21).
+    SENSITIVE_FIELDS = ("key",)
+
     class Meta:
         ordering = ["-creation"]
         name_strategy = Hash()

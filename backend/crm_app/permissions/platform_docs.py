@@ -299,3 +299,49 @@ def sales_hierarchy_has_permission(doc, ptype: str = "read", user: str | None = 
     if ptype == "read":
         return True
     return bool(_roles(user) & HIERARCHY_ADMIN_ROLES)
+
+
+# ---------------------------------------------------------------------------
+# CRM Invitation
+# ---------------------------------------------------------------------------
+#
+# An invitation row holds the **role being granted** and a **`key` that redeems it**.
+# Upstream's `accept_invitation` (`crm/api/__init__.py:83`) looks the invitation up by key
+# alone, with no authentication and no binding to the caller, then logs in as -- or sends
+# a password-reset link for -- `invitation.email`.
+#
+# Upstream also grants **Sales User `read: 1`** on this doctype, and `key` is a plain
+# `Data` field with no permlevel. Whoever can read the row can redeem it. A Sales User who
+# reads a pending System Manager invitation becomes that System Manager. Recorded as
+# upstream bug #21.
+#
+# Two layers here, because either alone leaves something standing:
+#
+# * reads are **managers only** -- stricter than upstream, and it is exactly upstream's
+#   Sales User read that makes the escalation reachable;
+# * `key` is in `SENSITIVE_FIELDS`, so it never reaches the wire even for a manager. It is
+#   a bearer token; the only thing that ever needs it is the invitation email.
+#
+# The frontend is unaffected: `InviteUserPage.vue` is the sole consumer, it is
+# `isManager()`-gated, and it reads `name`, `email` and `role` -- never `key`.
+#
+# **This matters more than it looks today.** `crm.api.accept_invitation` is not
+# implemented in this port, so a forged or stolen invitation cannot currently be redeemed.
+# The day that endpoint lands, this rule is the only thing standing between any user and
+# an admin account. See specs/SECURITY_MODEL.md.
+
+
+def invitation_query_conditions(doctype: str, user: str | None = None):
+    """Managers only. Deny-all otherwise - `None` would leak the row through the list
+    route while the document route refused it."""
+    user = user or get_current_user()
+    if user == "Administrator" or _roles(user) & MAIL_ADMIN_ROLES:
+        return None
+    return Q(pk__in=[])
+
+
+def invitation_has_permission(doc, ptype: str = "read", user: str | None = None):
+    user = user or get_current_user()
+    if user == "Administrator":
+        return True
+    return bool(_roles(user) & MAIL_ADMIN_ROLES)

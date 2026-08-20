@@ -798,6 +798,11 @@ def test_exactly_the_intended_doctypes_have_row_rules():
         # as upstream has it - tighter than the manager pair used elsewhere, because the
         # chart is what decides what a Sales Manager can see.
         "CRM Sales Hierarchy",
+        # An invitation holds the role granted and the key that redeems it. Managers only,
+        # and the key never reaches the wire. Disarmed ahead of phase 8 implementing
+        # `accept_invitation`, at which point this rule is what stands between any user
+        # and an admin account.
+        "CRM Invitation",
     }
     assert with_rules == upstream | added_by_phase_4
 

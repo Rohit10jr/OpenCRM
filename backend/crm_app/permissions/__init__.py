@@ -120,5 +120,17 @@ def register() -> None:
         has_permission=platform_docs.sales_hierarchy_has_permission,
     )
 
+    # An invitation holds the role being granted and the key that redeems it. Upstream
+    # grants Sales User read on this doctype and redeems by key alone, so reading a
+    # pending System Manager invitation is enough to become one (bug #21). Managers only
+    # here, and the key never reaches the wire at all. Disarmed ahead of phase 8: nothing
+    # can redeem an invitation today because `accept_invitation` is unimplemented, and this
+    # rule is what must already be in place when it lands.
+    register_permission_hooks(
+        "CRM Invitation",
+        permission_query_conditions=platform_docs.invitation_query_conditions,
+        has_permission=platform_docs.invitation_has_permission,
+    )
+
 
 __all__ = ["register", "org_hierarchy", "notification"]
