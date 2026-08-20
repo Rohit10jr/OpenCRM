@@ -132,9 +132,12 @@ the worker path on its own.
 
 ## Still open
 
-* **`clear_old_versions` is a registered no-op.** `Version` is not modelled — phase 1 did
-  not port it — so the task returns 0. The beat entry exists so the schedule matches
-  `hooks.py`; the day `Version` is ported, the body is three lines.
+* ~~**`clear_old_versions` is a registered no-op.**~~ **Resolved, and the stated reason was
+  wrong.** `Version` was modelled during the phase-4 review, but implementing this as "the
+  body is three lines" would have been a general audit-table pruner — which deletes the
+  timeline. Upstream prunes **only** `CRM View Settings` churn. Now implemented against
+  that doctype, and idle because this port deliberately does not track saved views. Full
+  reasoning: `specs/VERSION_HISTORY.md`.
 * **The six lead-sync tasks are no-ops behind `ENABLE_FACEBOOK_LEAD_SYNC`.** Phase 7 owns
   the integration. With the flag *on* they raise `NotImplementedError` rather than
   returning success, because a flag that is on with nothing behind it is a config error,
@@ -142,8 +145,8 @@ the worker path on its own.
 * **`run_product_reconciliation` is flag-gated on `ENABLE_ERPNEXT`** and still publishes
   `crm_product_sync_complete`, because `PHASE_6_REALTIME.md` §2 lists that event as in
   scope and phase 6 needs a real emitter to test against.
-* **`crm_app/realtime.publish` returns `False`.** Phase 6 supplies the transport. Nothing
-  branches on its return value — see `test_publishing_is_never_load_bearing`.
+* ~~**`crm_app/realtime.publish` returns `False`.**~~ **Resolved** — phase 6 supplied the
+  transport.
 * **No worker or broker runs in the test suite.** `CELERY_TASK_ALWAYS_EAGER` plus the
   `locmem` email backend, per RUNBOOK.md. Nothing here has been exercised against a real
   Redis.

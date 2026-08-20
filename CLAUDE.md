@@ -13,6 +13,7 @@ existing Vue frontend.
 | `specs/PHASE_<N>_*.md` | Your phase's spec |
 | **`specs/SECURITY_MODEL.md`** | **Required before touching any permission rule or field-visibility declaration.** Per-doctype comparison with upstream, the four field tools and when each applies |
 | `specs/UNROUTED_DOCTYPES.md` | Doctypes withheld from `/api/resource/`, and why |
+| `specs/VERSION_HISTORY.md` | What change history is recorded and pruned. **Read before touching `clear_old_versions`** — its name invites a change that deletes the timeline |
 | `specs/KNOWN_ISSUES.md` | Problems that outlive a phase — flaky tests, half-built features. Check before re-diagnosing something |
 
 **Do not start work without reading `PORT_PLAN.md` and your phase spec.** They encode

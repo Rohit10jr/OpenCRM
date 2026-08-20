@@ -199,6 +199,21 @@ class CRMTwilioSettings(EncryptedFieldsMixin, SingletonMixin, BaseDocument):
     twilio_apps = models.CharField(max_length=280, blank=True, default="")
     record_calls = models.BooleanField(default=False)
 
+    #: Upstream sets `track_changes` on this doctype, and it is the one of its four
+    #: display-less tracked doctypes worth reproducing: these are **credentials**, and
+    #: without a version row a change to them leaves no trace anywhere in the port.
+    #:
+    #: A4 restricted who may write them, which is what makes "which manager changed the
+    #: telephony account, and when" a question someone will eventually ask. Upstream can
+    #: answer it through Frappe's Desk; we have no Desk, so this is the only record.
+    #:
+    #: **The values themselves never enter the version row** - `capture_tracked_values`
+    #: reads the attribute, which holds ciphertext for `ENCRYPTED_FIELDS`, and the secrets
+    #: are in `SENSITIVE_FIELDS` besides. What is recorded is *that* a field changed, by
+    #: whom, when. That is the audit question; the old secret is not wanted in a second
+    #: table.
+    TRACKED_FIELDS = ("enabled", "account_sid", "api_key", "twiml_sid", "app_name")
+
     #: `Password` fieldtype in the JSON - never serialised, never selectable.
     SENSITIVE_FIELDS = ("api_secret", "auth_token")
 

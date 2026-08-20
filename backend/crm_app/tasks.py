@@ -26,6 +26,11 @@ INVITATION_EXPIRY_DAYS = 3
 #: ``clear_old_versions(days=14)`` (``crm_view_settings.py:311-319``).
 VERSION_RETENTION_DAYS = 14
 
+#: The **only** doctype whose versions are pruned, named as a constant so the narrowness
+#: is visible at the call site rather than buried in a filter. Upstream prunes saved-view
+#: churn and nothing else; Lead and Deal history is the timeline and is kept forever.
+VERSION_CHURN_DOCTYPE = "CRM View Settings"
+
 
 # ---------------------------------------------------------------------------
 # Scheduled — daily
@@ -50,18 +55,43 @@ def expire_invitations() -> int:
 
 @shared_task(name="crm.clear_old_versions")
 def clear_old_versions(days: int = VERSION_RETENTION_DAYS) -> int:
-    """``crm_view_settings.py:311-319`` — deletes old ``Version`` rows.
+    """``crm_view_settings.py:311-319`` — prunes **saved-view churn**, nothing else.
 
-    **A no-op here, and it will stay one until `Version` is modelled.** Upstream deletes
-    from the framework's document-version audit table, which this port does not have
-    (see `PROGRESS_PHASE_3.md` — it is also why `get_activities` has no field-change
-    entries). Registered anyway so the Beat entry matches `hooks.py`, and so the day
-    `Version` lands there is already a job pruning it.
+    **Read the next paragraph before changing this.** The name invites a general
+    "delete old audit rows" implementation, and that would silently erase the timeline.
 
-    Returns 0 rather than raising: a scheduled job that errors every night trains people
-    to ignore the log.
+    Upstream deletes exactly one doctype's versions::
+
+        frappe.db.delete("Version", {
+            "ref_doctype": "CRM View Settings",      # <- only this
+            "creation": ("<", add_days(now_datetime(), -days)),
+        })
+
+    Saved views are edited constantly - every column drag and filter tweak is a save, and
+    each save writes a version row holding two copies of the column JSON. Nobody reads
+    the history of a list view. **Lead and Deal versions are never pruned, by upstream or
+    by us**: those are the audit trail `get_activities` renders, and upstream keeps them
+    forever.
+
+    ### Why this currently deletes nothing
+
+    Not because `Version` is unmodelled - it has been since the phase-4 review. Because
+    **this port does not track `CRM View Settings`**, so the rows it targets are never
+    created (specs/VERSION_HISTORY.md). Upstream tracks six doctypes and displays two;
+    the other four are visible only through Frappe's Desk, which this port has no
+    equivalent of, so recording them would be write-only data.
+
+    Implemented rather than left as ``return 0`` so the body matches the name, and so
+    that turning view tracking on later needs no second change. The guard that matters is
+    `test_lead_and_deal_history_is_never_pruned`.
     """
-    return 0
+    from frappe_core.versions import Version
+
+    cutoff = timezone.now() - datetime.timedelta(days=days)
+    deleted, _ = Version.objects.filter(
+        ref_doctype=VERSION_CHURN_DOCTYPE, creation__lt=cutoff
+    ).delete()
+    return deleted
 
 
 @shared_task(name="crm.flush_expired_tokens")
