@@ -60,13 +60,23 @@ REVIEWED_OPEN = {
 #: Registered, routable, and **nobody has audited it**. Each entry names the question,
 #: not a guess. Emptying this list is A7.
 NOT_YET_REVIEWED = {
-    "Comment": "reads comments on records the caller cannot open? writes forge authorship?",
-    "Communication": "holds email bodies - the widest content exposure if unfiltered",
+    "Comment": (
+        "CONFIRMED leak, unfixed: reads internal remarks on invisible records, and a "
+        "forged comment can be posted onto one. See specs/KNOWN_ISSUES.md #3."
+    ),
+    "Communication": (
+        "CONFIRMED leak, unfixed and the worst of them: full email bodies for any lead "
+        "or deal, readable by anyone with a login. See specs/KNOWN_ISSUES.md #3."
+    ),
     "Contact": "shared across leads and deals; upstream relies on role permissions",
     "CRM Organization": "same as Contact - is org data meant to be company-wide?",
     "CRM Task": "tasks reference leads and deals the caller may not see",
     "FCRM Note": "notes attached to invisible records",
-    "File": "attachments - can a caller fetch a file attached to a record they cannot read?",
+    "File": (
+        "CONFIRMED leak, unfixed: filename and private URL of attachments on invisible "
+        "records. Metadata only while nothing serves the bytes - there is no download "
+        "route yet - and a live document link the day one exists. KNOWN_ISSUES.md #3."
+    ),
     "Tag": "low risk, but writes are unconstrained",
     "CRM Call Log": "call history references leads and deals; recording URLs are on the row",
     "CRM Telephony Agent": "holds colleagues' phone numbers",

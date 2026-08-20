@@ -10,6 +10,7 @@ and anything a future agent would otherwise rediscover the hard way.
 |---|---|---|
 | 1 | A WebSocket test fails intermittently under full-suite load | **Unexplained** — do not paper over |
 | 2 | `crm.api.accept_invitation` is not implemented; invitation links 404 | **Open** — phase 8; the security half is disarmed |
+| 3 | `Communication`, `File` and `Comment` leak content from records the caller cannot open | **Confirmed, unfixed** — fix specified below |
 
 ---
 
@@ -74,3 +75,84 @@ quietly open the hole.
 
 **Whoever builds the endpoint:** the protection is already there, so do not remove it to
 make redemption easier. Redemption needs the key from the *email*, not from the API.
+
+---
+
+## 3. `Communication`, `File` and `Comment` leak content from invisible records
+
+**Confirmed by driving the real route as a plain Sales User**, against a deal she is
+refused. Not yet fixed — this is the top of the A7 backlog.
+
+```
+GET /api/resource/CRM Deal/<bob's deal>   -> 403
+
+GET /api/resource/Communication  -> 200  content='We can go down to 400k if they push back.'
+GET /api/resource/File           -> 200  file_url='/private/files/signed-contract.pdf'
+GET /api/resource/Comment        -> 200  content='Client is desperate, hold firm on price.'
+POST /api/resource/Comment       -> 201  (forged onto that same deal)
+```
+
+These are the three widest remaining holes, and they are **worse than the record they
+hang off**. A deal row leaks a number; its Communications leak the negotiating position in
+prose, and its Comments leak what colleagues say to each other privately.
+
+### Severity, stated accurately
+
+* **`Communication` — the worst.** Full email bodies, subjects, senders and recipients.
+  Every email ever exchanged about any lead or deal, readable by anyone with a login.
+* **`Comment` — read and write.** Reading exposes internal remarks. Writing is the part
+  worth noticing: a forged comment appears on a colleague's record under whatever
+  authorship the row claims, on a record the author cannot see.
+* **`File` — metadata today, documents tomorrow.** The row leaks the filename, the private
+  URL and which record it hangs off. **Nothing currently serves the bytes** — there is no
+  upload or download route in this port at all (`config/urls.py` has only `admin/` and
+  `api/`). So today this is a metadata leak. **The day a file-serving route is added, that
+  leaked URL becomes a live document link**, and whoever adds it must check permission at
+  the serving layer as well as fixing the row rule.
+
+### The fix, and it is one fix
+
+All three carry `reference_doctype`/`reference_name` (`attached_to_doctype`/
+`attached_to_name` on `File`), so the rule is the same in each case:
+
+> **Defer to the referenced document.** Read it if you can read the parent; write it if
+> you can write the parent.
+
+Upstream already does exactly this for `File`, and the implementation is directly portable
+— our model carries every field it reads:
+
+```python
+# frappe/core/doctype/file/file.py:908
+if not doc.is_private and ptype in ("read", "select"):
+    return True                                   # public files are public
+if user != "Guest" and doc.owner == user:
+    return True                                   # your own upload
+if doc.attached_to_doctype and doc.attached_to_name:
+    ref_doc = frappe.get_doc(doc.attached_to_doctype, doc.attached_to_name)
+    if ptype in ["write", "create", "delete"]:
+        return ref_doc.has_permission("write", user=user)
+    return ref_doc.has_permission("read", user=user)
+return False
+```
+
+Upstream protects `Communication` with a hook too
+(`get_permission_query_conditions_for_communication`), but on a **different axis** — it
+filters by which email accounts the user owns, not by the referenced document. That suits
+a mail client; it does not suit a CRM where the question is "may I see this deal?".
+Porting it verbatim would be faithful and wrong here. **Follow `File`'s shape for all
+three.**
+
+`Comment` has no hook upstream at all — it relies on the doctype's role permissions, which
+grant only System Manager and Website Manager. That is the same "no hook means no
+protection" trap as bug #14: upstream had a layer this port does not model.
+
+### Two things to get right
+
+1. **The list route needs `permission_query_conditions`, not just `has_permission`.**
+   Deferring per row would be an N+1 across every timeline; the query hook has to express
+   "referenced document is visible to me" as a subquery. `org_hierarchy` already builds
+   that shape for Leads and Deals and is the thing to reuse.
+2. **`get_activities` must keep working.** It already checks read on the parent
+   (`_require_readable`) and then reads Comments and Communications over the ORM, so it is
+   unaffected by a wire-level rule — but it is the regression to watch, because it is the
+   one legitimate consumer of all three.
