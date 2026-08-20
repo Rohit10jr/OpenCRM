@@ -93,6 +93,30 @@ DATABASES = {
         "PASSWORD": env("DB_PASSWORD", default=""),
         "HOST": env("DB_HOST", default="localhost"),
         "PORT": env("DB_PORT", default="5432"),
+        # Reuse a connection instead of opening one per query. Django's default is 0 -
+        # connect, run, close, every time - and the realtime layer makes that expensive:
+        # `consumers._may_read` is `@database_sync_to_async`, which Channels wraps in
+        # `close_old_connections()` on entry and exit, so **every `doc_subscribe`
+        # permission check opened a fresh Postgres connection**. Opening ten documents
+        # cost ten connections; a reconnect replays every subscription, so it fans out
+        # into one per document, from every client at once after a restart.
+        #
+        # The usual objection to persistent connections under ASGI - one connection per
+        # concurrent request - does not apply: `database_sync_to_async` is
+        # `thread_sensitive` by default, so these calls share one executor thread and this
+        # yields **one reused connection**, not many.
+        #
+        # 60 is not a derived number, and does not need to be. Nearly all the benefit is
+        # in the first reuse: 0 -> 60 removes ~99.9% of the churn, and 60 -> 3600 removes
+        # the remaining 0.1% during idle periods, when there is no load to slow down. Each
+        # held connection is a Postgres backend holding ~5-10 MB, which this machine has
+        # twice run out of. `None` is deliberately avoided - unbounded lifetime pins a
+        # connection for the process's life and is the version that surprises people
+        # during a failover.
+        "CONN_MAX_AGE": env.int("DB_CONN_MAX_AGE", default=60),
+        # Mandatory companion. Without it a connection the server dropped is handed out
+        # and the request fails; with it, Django notices and reconnects.
+        "CONN_HEALTH_CHECKS": True,
     }
 }
 

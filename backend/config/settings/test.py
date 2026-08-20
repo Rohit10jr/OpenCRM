@@ -41,6 +41,18 @@ CACHES = {
 # Fast hashing - these tests create a lot of users.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
+# Persistent connections are a production optimisation (see `base.py`) and a liability
+# here. `transaction=True` tests drop and recreate the test database, and a connection
+# still held from the previous test blocks the drop:
+#
+#     database "test_opencrm" is being accessed by other users
+#
+# Observed, not anticipated. Tests want a deterministic connection lifecycle far more than
+# they want the microseconds; anything measuring connection *reuse* has to do it against
+# `local`, as the realtime smoke test did.
+DATABASES["default"]["CONN_MAX_AGE"] = 0
+DATABASES["default"]["CONN_HEALTH_CHECKS"] = False
+
 # A fixed key, so credential encryption is *on* under test rather than skipped. Running
 # the tests with encryption disabled would leave the whole of `frappe_core.secrets`
 # unexercised while every test still passed - which is the failure mode the setting's

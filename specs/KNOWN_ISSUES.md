@@ -79,10 +79,37 @@ under ASGI is one connection per concurrent request. It does not apply here:
 `database_sync_to_async` uses `thread_sensitive=True` by default, so these calls share a
 single executor thread — `CONN_MAX_AGE > 0` yields **one reused connection**, not many.
 
-Candidate: `CONN_MAX_AGE = 60` with `CONN_HEALTH_CHECKS = True`, so a connection dropped
-by the server is detected rather than handed out. **Not applied** — it is a production
-tuning change, and folding it into a flaky-test investigation is how tuning changes get
-made without anyone deciding to make them.
+**Applied** (`CONN_MAX_AGE = 60`, `CONN_HEALTH_CHECKS = True`), as a decision of its own
+rather than a side effect of the flake work. Measured on the real
+`database_sync_to_async` path, by backend PID:
+
+```
+before (CONN_MAX_AGE=0):  [15132, 15056, 9272, 15512, 10228, 14800]  -> 6 connections
+after  (CONN_MAX_AGE=60): [ 5540,  5540, 5540,  5540,  5540,  5540]  -> 1 connection
+```
+
+**60 is not derived, and does not need to be.** Nearly all the benefit is in the first
+reuse: `0 -> 60` removes ~99.9% of the churn, and `60 -> 3600` removes the remaining 0.1%
+during idle periods, when there is no load to slow down. Each held connection is a
+Postgres backend holding ~5-10 MB, on a machine that has twice run out of memory. `None`
+was avoided deliberately: unbounded lifetime pins a connection for the process's life, and
+is the version that surprises people during a failover.
+
+Nothing in this environment would drop a long-lived connection anyway - `idle_session_timeout`
+is 0, and there is no pooler or load balancer between Django and Postgres. So the choice is
+about the benefit curve, not about safety.
+
+**Tests override it back to 0** (`config/settings/test.py`). Persistent connections and
+`transaction=True` do not mix: a connection still held from the previous test blocks the
+test database being dropped -
+
+```
+database "test_opencrm" is being accessed by other users
+```
+
+Observed rather than anticipated, and the failed teardown then poisoned the *next* run
+with two unrelated-looking timeouts - which is worth knowing, because that failure mode
+reads like a fresh flake rather than fallout.
 
 ---
 
