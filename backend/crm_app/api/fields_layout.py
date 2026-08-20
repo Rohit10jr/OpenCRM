@@ -9,9 +9,23 @@ do, via :mod:`frappe_core.field_meta`, which keeps the DocType JSON's field orde
 
 Not ported: **permlevel restrictions** (`handle_perm_level_restrictions`, source
 :146-170). Frappe's per-field permission levels come from the DocType's `permissions`
-table, which this port does not model — no CRM doctype sets a non-zero `permlevel`
-(checked across all 39 JSONs), so the function would be a no-op on every field it can
-currently see. Noted in PROGRESS_PHASE_4.md rather than faked.
+table, which this port does not model.
+
+**Correcting the reason originally given here.** This docstring used to say "no CRM
+doctype sets a non-zero `permlevel` (checked across all 39 JSONs), so the function would
+be a no-op". That is false. `CRM Twilio Settings` sets `permlevel: 1` on `api_key`,
+`api_secret` and `twiml_sid` — the credential fields, which is exactly what the feature
+exists for.
+
+The effect is covered, by a different mechanism: `RESTRICTED_FIELDS` on the models
+concerned (`frappe_core.field_security`), applied in the serializer, the list-field
+resolver and the filter guard. So the *fields* upstream protects with permlevel are
+protected here; what is absent is a general reading of the permlevel column, which stays
+absent because the `permissions` table it lives on is not modelled at all.
+
+The gap that matters is therefore **not** "permlevel is unhandled" but "a new permlevel
+field upstream will not be noticed here" — someone has to add it to `RESTRICTED_FIELDS`
+by hand. Recorded in specs/SECURITY_MODEL.md.
 """
 
 from __future__ import annotations
