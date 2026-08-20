@@ -154,3 +154,81 @@ the worker path on its own.
   and the four things still unexercised: `specs/KNOWN_ISSUES.md` #4.
 * ~~**Beat is configured, never run.**~~ **Run** — 9 entries loaded, and
   `lead-sync-5-minutes` observed firing through to execution in the worker.
+
+---
+
+# REVIEW RESOLUTION — human pass over the phase 5 concerns
+
+Written down here rather than left in a chat transcript, for the reason phase 3 taught:
+its resolution referenced items that existed nowhere else, and pointed at nothing a week
+later.
+
+## A — Items needing a decision
+
+| # | Item | Status |
+|---|---|---|
+| A1 | `clear_old_versions` is a live no-op; `Version` now exists | ✅ **Done** — and the obvious fix was the wrong one, see below |
+| A2 | Nothing has ever run against a real broker | ✅ **Done** — smoke-tested against Memurai |
+| A3 | Beat is configured but never started | ✅ **Done** — 9 entries loaded, one observed firing |
+| A4 | Six lead-sync tasks raise `NotImplementedError` when flagged on | ❌ **Open** — phase 7 owns it. Confirmed still wanted: a flag that is on with nothing behind it is a config error, not a silent success |
+
+**A1 was nearly a serious mistake.** The docstring said "the day `Version` lands, the body
+is three lines", and following that would have written a general audit-table pruner —
+deleting every timeline entry older than 14 days. Upstream prunes **only** saved-view
+churn. Full reasoning and the six numbered differences: `specs/VERSION_HISTORY.md`.
+
+## B — Verify / research
+
+| # | Item | Status |
+|---|---|---|
+| B1 | Does bulk delete's "authorize twice" hold in the worker? | ✅ **Confirmed** — and the evidence was which row it refused, not that it refused |
+| B2 | Is the no-SLA-sweep decision still correct? | ❌ **Open** — verified as upstream behaviour when written, not re-examined |
+| B3 | `has_permission_batch` agrees with the per-row version | 🟡 **Partly** — see below |
+| B4 | `flush_expired_tokens` — does it actually work? | ✅ **Done** — expired token and its blacklist row removed, live one kept |
+
+**B1's evidence is worth keeping.** Twelve leads, six the caller's and six a colleague's,
+handed to a worker as the caller. It refused `CRM-LEAD-2026-00002` — the *colleague's*. A
+worker running as `Guest` would have refused `00001`, the caller's own. So the worker
+evaluated the real caller's permissions in a process with no request context, which is the
+one property eager mode cannot demonstrate.
+
+**B3, stated precisely.** 16 doctypes now carry an object rule; **only `CRM Lead` and
+`CRM Deal` have a batched form.** The other 14 fall back to the per-object hook, which
+`filter_object_permitted` does by design — the answer is identical, the cost is N calls.
+
+That is correct and slower, and it only bites on batch paths (`delete_bulk_docs`). Nobody
+bulk-deletes email accounts. The open question is narrower than "does the batch agree": it
+is whether any *new* rule ever lands on a batch path in volume, at which point it wants a
+batched form. Not urgent, and worth knowing before someone measures a slow bulk delete and
+blames the wrong layer.
+
+## C — Unfinished work
+
+| # | Item | Status |
+|---|---|---|
+| C1 | `clear_old_versions` implementation | ✅ **Done** (= A1) |
+| C2 | Six lead-sync tasks | ❌ **Open** — phase 7 |
+| C3 | `run_product_reconciliation` gated on `ENABLE_ERPNEXT` | ❌ **Open** — phase 7 |
+| C4 | No broker or beat ever exercised | ✅ **Done** (= A2/A3) |
+
+## D — Divergences
+
+| # | Divergence | Status |
+|---|---|---|
+| D1 | No SLA sweep — upstream has none either | ✅ **Keep** — a periodic recompute would make our lists disagree with upstream's for the same data, and nobody debugging that would think to check a scheduler |
+| D2 | `capture_feature_state` dropped | ✅ **Keep** — reports to Frappe's analytics; not this deployment's business |
+| D3 | `crm.flush_expired_tokens` added | ✅ **Keep** — upstream issues no JWTs. Now verified to work |
+| D4 | Commenting bumps `modified` but not `modified_by` | ✅ **Keep** — it is what makes a lead rise when someone comments, and faithful |
+
+**New in this pass:** `CRM Twilio Settings` is now tracked for change history — the one of
+upstream's four display-less tracked doctypes worth reproducing, because a credential
+change previously left no trace anywhere in the port. Recorded as difference 2 in
+`specs/VERSION_HISTORY.md`.
+
+## What is left
+
+Two phase-7 items (`C2`, `C3`) and two verifications (`B2`, `B3`), none blocking.
+
+The honest limit is in `specs/KNOWN_ISSUES.md` #4: the smoke test covered the chain but
+not a retry, concurrency, queue routing, or a real daily boundary. A green smoke result is
+easy to over-read, which is why what it *did not* cover is written down beside what it did.
