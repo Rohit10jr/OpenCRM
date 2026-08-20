@@ -32,6 +32,27 @@ from frappe_core.session import session_user
 #: exists to re-seed Administrator and Guest after the flush that this implies.
 pytestmark = pytest.mark.django_db(transaction=True)
 
+#: How long to wait for a frame. Was a bare ``5`` at every call site, and that produced an
+#: intermittent ``TimeoutError`` here - twice, weeks apart, only ever under full-suite load
+#: and never in isolation.
+#:
+#: **Characterised before being changed** (specs/KNOWN_ISSUES.md #1): six consecutive
+#: full-suite runs, zero failures; roughly two sightings in about twenty-five runs overall.
+#: That is the "slow machine" end of the range, not the "teardown is broken" end, so
+#: raising the wait is the evidence-supported fix rather than a way of not looking.
+#:
+#: The stall itself is understood. ``_may_read`` is ``@database_sync_to_async``, which
+#: Channels wraps in ``close_old_connections()`` on entry and exit; with ``CONN_MAX_AGE``
+#: at Django's default of 0, "old" means immediately, so **every permission check opens a
+#: fresh Postgres connection**. Under a suite already churning connections on a machine
+#: that has twice run out of memory, occasionally exceeding five seconds is unsurprising.
+#:
+#: Raising this does not address that root cause, which is a production concern in its own
+#: right - see KNOWN_ISSUES.md #1. If this timeout ever needs raising again, fix
+#: ``CONN_MAX_AGE`` instead; a second increase would be the point at which this stopped
+#: being a slow machine.
+RECEIVE_TIMEOUT = 15
+
 
 def _application():
     """The websocket half of the ASGI app, built the way ``config/asgi.py`` builds it."""
@@ -161,7 +182,7 @@ async def test_a_notification_reaches_its_recipient(alice, administrator):
 
     await _make_notification(alice, administrator)
 
-    frame = json.loads(await communicator.receive_from(timeout=5))
+    frame = json.loads(await communicator.receive_from(timeout=RECEIVE_TIMEOUT))
     assert frame["event"] == "crm_notification"
     await communicator.disconnect()
 
@@ -189,7 +210,7 @@ async def test_the_event_name_and_payload_match_upstream(alice, administrator):
 
     await _make_notification(alice, administrator)
 
-    frame = json.loads(await communicator.receive_from(timeout=5))
+    frame = json.loads(await communicator.receive_from(timeout=RECEIVE_TIMEOUT))
     # `{}`, not `null`: `frappe.publish_realtime` normalises a missing body to an empty
     # dict, and several frontend handlers destructure their argument.
     assert frame == {"event": "crm_notification", "message": {}}
@@ -215,7 +236,7 @@ async def test_a_celery_task_can_publish(alice, settings, monkeypatch):
 
     await database_sync_to_async(tasks.run_product_reconciliation)(user=alice.name)
 
-    frame = json.loads(await communicator.receive_from(timeout=5))
+    frame = json.loads(await communicator.receive_from(timeout=RECEIVE_TIMEOUT))
     assert frame["event"] == "crm_product_sync_complete"
     await communicator.disconnect()
 
@@ -259,7 +280,7 @@ async def test_subscribing_to_a_readable_document_succeeds(alice, administrator)
     await communicator.send_to(
         text_data=json.dumps({"event": "doc_subscribe", "args": ["CRM Lead", lead.name]})
     )
-    frame = json.loads(await communicator.receive_from(timeout=5))
+    frame = json.loads(await communicator.receive_from(timeout=RECEIVE_TIMEOUT))
     assert frame["event"] == "doc_subscribed"
     await communicator.disconnect()
 
@@ -275,7 +296,7 @@ async def test_subscribing_to_someone_elses_document_is_refused(alice, bob, admi
     await communicator.send_to(
         text_data=json.dumps({"event": "doc_subscribe", "args": ["CRM Lead", lead.name]})
     )
-    frame = json.loads(await communicator.receive_from(timeout=5))
+    frame = json.loads(await communicator.receive_from(timeout=RECEIVE_TIMEOUT))
     assert frame["event"] == "error"
     await communicator.disconnect()
 
@@ -293,7 +314,7 @@ async def test_a_refused_subscribe_really_does_not_join_the_group(alice, bob, ad
     await communicator.send_to(
         text_data=json.dumps({"event": "doc_subscribe", "args": ["CRM Lead", lead.name]})
     )
-    await communicator.receive_from(timeout=5)  # the error
+    await communicator.receive_from(timeout=RECEIVE_TIMEOUT)  # the error
 
     await realtime.apublish_to_doc("CRM Lead", lead.name, "docinfo_update")
     assert await communicator.receive_nothing(timeout=1)
@@ -309,10 +330,10 @@ async def test_a_permitted_subscriber_does_receive_document_events(alice, admini
     await communicator.send_to(
         text_data=json.dumps({"event": "doc_subscribe", "args": ["CRM Lead", lead.name]})
     )
-    await communicator.receive_from(timeout=5)  # doc_subscribed
+    await communicator.receive_from(timeout=RECEIVE_TIMEOUT)  # doc_subscribed
 
     await realtime.apublish_to_doc("CRM Lead", lead.name, "docinfo_update")
-    frame = json.loads(await communicator.receive_from(timeout=5))
+    frame = json.loads(await communicator.receive_from(timeout=RECEIVE_TIMEOUT))
     assert frame["event"] == "docinfo_update"
     await communicator.disconnect()
 
@@ -328,7 +349,7 @@ async def test_subscribing_to_a_missing_document_is_refused_the_same_way(alice):
         await communicator.send_to(
             text_data=json.dumps({"event": "doc_subscribe", "args": args})
         )
-        frame = json.loads(await communicator.receive_from(timeout=5))
+        frame = json.loads(await communicator.receive_from(timeout=RECEIVE_TIMEOUT))
         assert frame["event"] == "error"
     await communicator.disconnect()
 
@@ -342,13 +363,13 @@ async def test_unsubscribing_stops_delivery(alice, administrator):
     await communicator.send_to(
         text_data=json.dumps({"event": "doc_subscribe", "args": ["CRM Lead", lead.name]})
     )
-    await communicator.receive_from(timeout=5)
+    await communicator.receive_from(timeout=RECEIVE_TIMEOUT)
     await communicator.send_to(
         text_data=json.dumps({"event": "doc_unsubscribe", "args": ["CRM Lead", lead.name]})
     )
     # Wait for the ack before publishing. `send_to` is fire-and-forget, so without this
     # the publish races the unsubscribe and the test passes or fails on timing.
-    frame = json.loads(await communicator.receive_from(timeout=5))
+    frame = json.loads(await communicator.receive_from(timeout=RECEIVE_TIMEOUT))
     assert frame["event"] == "doc_unsubscribed"
 
     await realtime.apublish_to_doc("CRM Lead", lead.name, "docinfo_update")
@@ -363,11 +384,11 @@ async def test_a_malformed_message_does_not_drop_the_socket(alice):
     communicator, _ = await _connect(token)
 
     await communicator.send_to(text_data="}{ not json")
-    frame = json.loads(await communicator.receive_from(timeout=5))
+    frame = json.loads(await communicator.receive_from(timeout=RECEIVE_TIMEOUT))
     assert frame["event"] == "error"
 
     await communicator.send_to(text_data=json.dumps({"event": "ping"}))
-    frame = json.loads(await communicator.receive_from(timeout=5))
+    frame = json.loads(await communicator.receive_from(timeout=RECEIVE_TIMEOUT))
     assert frame["event"] == "pong"
     await communicator.disconnect()
 
@@ -381,7 +402,7 @@ async def test_an_unknown_client_event_is_ignored_not_fatal(alice):
     assert await communicator.receive_nothing(timeout=1)
 
     await communicator.send_to(text_data=json.dumps({"event": "ping"}))
-    frame = json.loads(await communicator.receive_from(timeout=5))
+    frame = json.loads(await communicator.receive_from(timeout=RECEIVE_TIMEOUT))
     assert frame["event"] == "pong"
     await communicator.disconnect()
 
@@ -403,7 +424,7 @@ async def test_a_comment_sends_the_payload_the_frontend_destructures(alice, admi
     await communicator.send_to(
         text_data=json.dumps({"event": "doc_subscribe", "args": ["CRM Lead", lead.name]})
     )
-    await communicator.receive_from(timeout=5)  # doc_subscribed
+    await communicator.receive_from(timeout=RECEIVE_TIMEOUT)  # doc_subscribed
 
     @database_sync_to_async
     def _comment():
@@ -417,7 +438,7 @@ async def test_a_comment_sends_the_payload_the_frontend_destructures(alice, admi
 
     comment = await _comment()
 
-    frame = json.loads(await communicator.receive_from(timeout=5))
+    frame = json.loads(await communicator.receive_from(timeout=RECEIVE_TIMEOUT))
     assert frame["event"] == "docinfo_update"
     assert frame["message"]["key"] == "comments"
     assert frame["message"]["action"] == "add"
@@ -440,7 +461,7 @@ async def test_a_like_uses_its_own_docinfo_key(alice, administrator):
     await communicator.send_to(
         text_data=json.dumps({"event": "doc_subscribe", "args": ["CRM Lead", lead.name]})
     )
-    await communicator.receive_from(timeout=5)
+    await communicator.receive_from(timeout=RECEIVE_TIMEOUT)
 
     @database_sync_to_async
     def _like():
@@ -454,7 +475,7 @@ async def test_a_like_uses_its_own_docinfo_key(alice, administrator):
 
     await _like()
 
-    frame = json.loads(await communicator.receive_from(timeout=5))
+    frame = json.loads(await communicator.receive_from(timeout=RECEIVE_TIMEOUT))
     assert frame["message"]["key"] == "like_logs"
     await communicator.disconnect()
 
@@ -497,7 +518,7 @@ async def test_the_sync_complete_event_reaches_the_session_user(alice, settings,
 
     await database_sync_to_async(_run)()
 
-    frame = json.loads(await communicator.receive_from(timeout=5))
+    frame = json.loads(await communicator.receive_from(timeout=RECEIVE_TIMEOUT))
     assert frame["event"] == "crm_product_sync_complete"
     await communicator.disconnect()
 

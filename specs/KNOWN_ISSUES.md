@@ -8,7 +8,7 @@ and anything a future agent would otherwise rediscover the hard way.
 
 | # | Issue | Status |
 |---|---|---|
-| 1 | A WebSocket test fails intermittently under full-suite load | **Unexplained** — do not paper over |
+| 1 | A WebSocket test fails intermittently under full-suite load | ✅ **Characterised and fixed** — root cause understood, and it is a production concern too |
 | 2 | `crm.api.accept_invitation` is not implemented; invitation links 404 | **Open** — phase 8; the security half is disarmed |
 | 3 | `Communication`, `File` and `Comment` leak content from records the caller cannot open | ✅ **Fixed** — see below for what it took |
 | 4 | The async stack had never run against a real broker, worker or scheduler | ✅ **Smoke-tested** — passed; see below for what is still untested |
@@ -38,16 +38,51 @@ immediate full re-run. Observed twice, weeks apart, both times only under a full
 whether a previous WebSocket test leaves a connection un-torn-down and this one inherits
 the mess. Those want different fixes.
 
-### Do not just raise the timeout
+### Settled, 2026-08-20
 
-That converts a question into a silence. If the cause is a leaked connection, a longer
-wait makes the failure rarer and no less real, and the next person to see it has less
-information than we do now.
+**Rate.** Six consecutive full-suite runs, **zero failures**. Roughly two sightings in
+about twenty-five runs overall — the "slow machine" end of the range set out above, not
+the "teardown is broken" end. No leaked connections either: 22 disconnects for 22
+connecting tests, and no test that connects without one.
 
-**How to settle it:** run the full suite ten times and count. Roughly 1 in 20 says slow
-machine, and raising the wait is then a legitimate fix with evidence behind it. Anything
-like 1 in 3 says the teardown is wrong, and the fix is in `_connect`/`disconnect`, not the
-timeout. Ten runs is about an hour of wall-clock and nobody has to watch it.
+**Mechanism, which turned out to matter more than the rate.** `_may_read` is
+`@database_sync_to_async`. Channels wraps that in `close_old_connections()` on entry *and*
+exit (`channels/db.py`), and with `CONN_MAX_AGE` at Django's default of **0**, "old" means
+immediately. So **every `doc_subscribe` permission check opens a fresh Postgres connection
+and closes it.**
+
+The flaky test's first message (`CRM Lead / no-such-lead`) takes that path; its second
+(`No Such DocType / x`) short-circuits at `registry.has_doctype` and never touches the
+database. Under a suite already churning connections, on a machine that has twice run out
+of memory, occasionally exceeding a five-second wait is unsurprising.
+
+**Fix applied.** `RECEIVE_TIMEOUT = 15` as a named constant in
+`tests/test_phase6_realtime.py`, replacing twenty bare `timeout=5` literals, with the
+evidence recorded beside it. The `receive_nothing(timeout=1)` calls are deliberately
+unchanged — they assert *absence*, where a longer wait buys nothing and costs suite time.
+
+**If this ever needs raising again, do not.** A second increase is the point at which this
+stops being a slow machine. Fix `CONN_MAX_AGE` instead.
+
+### The root cause is a production concern, not just a test one
+
+This is the part worth carrying forward. In a running system:
+
+* opening ten documents costs **ten Postgres connections**, opened and closed;
+* a reconnect replays every subscription (phase 6 built that deliberately, and rightly),
+  so one reconnect fans out into one connection per subscribed document;
+* a backend restart has every client doing that at once. The backoff jitter spreads the
+  *reconnects*; it does nothing about the fan-out inside each one.
+
+**The fix is safe, which is not obvious.** The usual objection to persistent connections
+under ASGI is one connection per concurrent request. It does not apply here:
+`database_sync_to_async` uses `thread_sensitive=True` by default, so these calls share a
+single executor thread — `CONN_MAX_AGE > 0` yields **one reused connection**, not many.
+
+Candidate: `CONN_MAX_AGE = 60` with `CONN_HEALTH_CHECKS = True`, so a connection dropped
+by the server is detected rather than handed out. **Not applied** — it is a production
+tuning change, and folding it into a flaky-test investigation is how tuning changes get
+made without anyone deciding to make them.
 
 ---
 
