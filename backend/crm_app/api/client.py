@@ -24,6 +24,7 @@ from frappe_core import permissions, registry
 from frappe_core.exceptions import DoesNotExistError
 from frappe_core.exceptions import PermissionError as FrappePermissionError
 from frappe_core.exceptions import throw
+from frappe_core.views import _candidate_instance, check_destination
 from frappe_core.naming import validate_name
 from frappe_core.query import fetch_rows, parse_json_param
 from frappe_core.session import get_current_user
@@ -125,6 +126,10 @@ def client_set_value(doctype: str, name: str, fieldname, value=None):
     serializer_class = entry.get_serializer_class()
     serializer = serializer_class(instance, data=payload, partial=True)
     serializer.is_valid(raise_exception=True)
+    # Same guard as `/api/resource/` PUT: a row that names its own parent can be *moved*
+    # onto a document the caller cannot write, and the check on the way in only saw where
+    # it used to live.
+    check_destination(entry, instance, serializer.validated_data)
     with transaction.atomic():
         instance = serializer.save()
     return serializer_class(instance).data
@@ -146,10 +151,15 @@ def client_insert(doc=None, **extra):
         throw("doctype is required")
     entry = _entry_or_404(doctype)
 
-    if not permissions.check_object_permission(entry.model(), "create", get_current_user()):
-        raise FrappePermissionError(f"Not permitted to create {doctype}", title="Not Permitted")
-
     data = {k: v for k, v in payload.items() if k != "doctype"}
+
+    # The candidate carries the payload's fields, so a rule that defers to a referenced
+    # document can see which document. `/api/resource/` has the same check for the same
+    # reason - the two create doors must agree, or the stricter one is decoration.
+    if not permissions.check_object_permission(
+        _candidate_instance(entry, data), "create", get_current_user()
+    ):
+        raise FrappePermissionError(f"Not permitted to create {doctype}", title="Not Permitted")
     serializer_class = entry.get_serializer_class()
     serializer = serializer_class(data=data)
     serializer.is_valid(raise_exception=True)

@@ -803,6 +803,12 @@ def test_exactly_the_intended_doctypes_have_row_rules():
         # `accept_invitation`, at which point this rule is what stands between any user
         # and an admin account.
         "CRM Invitation",
+        # Rows that hang off another document. Each leaked what the record itself refused -
+        # email bodies, private file URLs, internal remarks - and a comment could be forged
+        # onto a record the author cannot see. One rule: defer to the referenced document.
+        "Comment",
+        "Communication",
+        "File",
     }
     assert with_rules == upstream | added_by_phase_4
 

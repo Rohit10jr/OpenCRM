@@ -10,7 +10,7 @@ and anything a future agent would otherwise rediscover the hard way.
 |---|---|---|
 | 1 | A WebSocket test fails intermittently under full-suite load | **Unexplained** — do not paper over |
 | 2 | `crm.api.accept_invitation` is not implemented; invitation links 404 | **Open** — phase 8; the security half is disarmed |
-| 3 | `Communication`, `File` and `Comment` leak content from records the caller cannot open | **Confirmed, unfixed** — fix specified below |
+| 3 | `Communication`, `File` and `Comment` leak content from records the caller cannot open | ✅ **Fixed** — see below for what it took |
 
 ---
 
@@ -80,8 +80,12 @@ make redemption easier. Redemption needs the key from the *email*, not from the 
 
 ## 3. `Communication`, `File` and `Comment` leak content from invisible records
 
-**Confirmed by driving the real route as a plain Sales User**, against a deal she is
-refused. Not yet fixed — this is the top of the A7 backlog.
+**Fixed.** Kept here rather than deleted, because the investigation turned up two extra
+holes that the obvious fix would have left standing, and both are the kind of thing that
+gets reintroduced.
+
+Originally confirmed by driving the real route as a plain Sales User against a deal she is
+refused:
 
 ```
 GET /api/resource/CRM Deal/<bob's deal>   -> 403
@@ -156,3 +160,61 @@ protection" trap as bug #14: upstream had a layer this port does not model.
    (`_require_readable`) and then reads Comments and Communications over the ORM, so it is
    unaffected by a wire-level rule — but it is the regression to watch, because it is the
    one legitimate consumer of all three.
+
+### What it actually took — three mechanisms, not one
+
+The rule alone closes the *read* leak. It closes neither write path, and both were open.
+
+**1. The rule.** `crm_app/permissions/attachments.py`. Defer to the referenced document:
+read it if you can read the parent, write it if you can write the parent. The list route
+gets a **subquery per restricted reference doctype**, not a per-row check — deferring row
+by row would be an N+1 across every timeline in the product.
+
+Only doctypes that *have* a rule are considered as targets, and only those with a
+`CharField` primary key. `CRM View Settings` has a `BigAutoField`, and including it did not
+merely waste a branch: Postgres refused `character varying = bigint` and the whole query
+died.
+
+**2. The create check was looking at an empty shell.** Both create doors —
+`/api/resource/` POST and `frappe.client.insert` — called
+`check_object_permission(entry.model(), "create", ...)`. That was correct when written and
+documented as such: *"every registered rule decides `create` before it looks at any
+field."* It stopped being true the moment a rule started deferring to a reference. An empty
+instance has no reference, so **every create was waved through** and a comment could still
+be forged onto an invisible record with the rule in place.
+
+Both doors now build a candidate from the payload's own plain fields.
+
+**3. Update could still move a row onto an invisible parent.** Write permission is checked
+against the instance *as it stands* — which is the right question everywhere except a row
+that names its own parent. A comment on your own deal passes that check; repointing it at
+someone else's deal then plants a comment there. Same hole as (2), entered through
+`update`.
+
+Closed by `views.check_destination`, and made **opt-in** via
+`DocTypeEntry.reference_fields`. Running it for every doctype would make every write in
+the product pay a second `has_permission` call — a real cost against the org-hierarchy
+rules, which query — to close a hole that exists in three places. An existing test caught
+that: it asserts the hook receives exactly one `write`, and the universal version made it
+two.
+
+### The carve-outs, and why each is upstream's
+
+* **public files stay public** (`file.py:916`) — brand logos and avatars are Files the
+  product serves to everyone;
+* **your own upload is yours** (`file.py:919`) — otherwise uploading to a record you later
+  lose access to would strand your own file;
+* **rows referencing nothing are not hidden** — an orphan hides nothing, and the product
+  creates them;
+* **rows referencing an unrestricted doctype are not hidden** — a comment on an
+  Organization needs no check, since everyone can read Organizations.
+
+### Still true, and worth carrying forward
+
+**One hop, not transitive.** A Comment on a Communication on an invisible Deal is checked
+against the *Communication*. Upstream does not chase the chain either, and doing so needs
+cycle detection for a case the product does not produce.
+
+**`File` remains metadata-only protection until something serves files.** There is still
+no upload or download route. When one is added, it must check permission **at the serving
+layer** — a `file_url` that leaked before this fix may already be written down somewhere.

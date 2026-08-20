@@ -12,6 +12,7 @@ falls back to plain role permissions.
 from frappe_core.registry import register_permission_hooks
 
 from crm_app.permissions import (
+    attachments,
     metadata_docs,
     notification,
     org_hierarchy,
@@ -131,6 +132,28 @@ def register() -> None:
         permission_query_conditions=platform_docs.invitation_query_conditions,
         has_permission=platform_docs.invitation_has_permission,
     )
+
+    # Comment, Communication and File are *about* another document and carry which one.
+    # Unruled, each leaked what the record itself refused: email bodies, private file
+    # URLs, internal remarks - and a comment could be forged onto a record the author
+    # cannot see. One rule, three registrations: defer to the referenced document.
+    for doctype, conditions, permission in (
+        ("Comment", attachments.comment_query_conditions, attachments.comment_has_permission),
+        (
+            "Communication",
+            attachments.communication_query_conditions,
+            attachments.communication_has_permission,
+        ),
+        ("File", attachments.file_query_conditions, attachments.file_has_permission),
+    ):
+        register_permission_hooks(
+            doctype,
+            permission_query_conditions=conditions,
+            has_permission=permission,
+            # Opts this doctype into the destination re-check on update: moving a row onto
+            # a document you cannot write is the same hole as creating one there.
+            reference_fields=attachments.REFERENCE_FIELDS[doctype],
+        )
 
 
 __all__ = ["register", "org_hierarchy", "notification"]

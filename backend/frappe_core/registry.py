@@ -54,6 +54,15 @@ class DocTypeEntry:
     #: than any rule can be. See ``specs/UNROUTED_DOCTYPES.md`` for the standing list and
     #: the reasoning per doctype.
     routable: bool = True
+    #: Fields naming the document this row hangs off, e.g. ``("reference_doctype",
+    #: "reference_name")``. Set for the doctypes whose permission rule *defers to another
+    #: document* - `Comment`, `Communication`, `File`.
+    #:
+    #: It exists so an update that **moves** such a row is re-checked against where it is
+    #: going, not only where it has been. That re-check costs a second `has_permission`
+    #: call, so it is opt-in rather than universal: making every write in the product pay
+    #: it to close a hole in three doctypes would be the wrong trade.
+    reference_fields: tuple[str, ...] = ()
     #: Set by phase 2 via :func:`register_permission_hooks`.
     permission_query_conditions: Callable | None = None
     has_permission: Callable | None = None
@@ -216,10 +225,15 @@ def register_permission_hooks(
     permission_query_conditions: Callable | None = None,
     has_permission: Callable | None = None,
     has_permission_batch: Callable | None = None,
+    reference_fields: tuple[str, ...] | None = None,
 ) -> None:
     """Phase-2 entry point. Mirrors Frappe's ``hooks.py`` blocks.
 
     Upstream registers these for CRM Lead, CRM Deal and CRM Notification only.
+
+    ``reference_fields`` names the columns identifying the document this row hangs off,
+    for the rules that defer to another document. It makes an update that *moves* the row
+    get re-checked against its destination. See :attr:`DocTypeEntry.reference_fields`.
 
     ``has_permission_batch`` has no upstream counterpart; it exists because upstream's
     per-object check is one query per object and phase 3's ``delete_bulk_docs`` has to
@@ -233,6 +247,8 @@ def register_permission_hooks(
         entry.has_permission = has_permission
     if has_permission_batch is not None:
         entry.has_permission_batch = has_permission_batch
+    if reference_fields is not None:
+        entry.reference_fields = tuple(reference_fields)
 
 
 def register_metadata_hooks(
