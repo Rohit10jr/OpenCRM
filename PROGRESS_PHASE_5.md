@@ -147,8 +147,10 @@ the worker path on its own.
   scope and phase 6 needs a real emitter to test against.
 * ~~**`crm_app/realtime.publish` returns `False`.**~~ **Resolved** — phase 6 supplied the
   transport.
-* **No worker or broker runs in the test suite.** `CELERY_TASK_ALWAYS_EAGER` plus the
-  `locmem` email backend, per RUNBOOK.md. Nothing here has been exercised against a real
-  Redis.
-* **Beat is configured, never run.** The schedule is asserted structurally; no test starts
-  a scheduler.
+* **No worker or broker runs in the test suite.** Still true, and now **smoke-tested
+  manually** rather than untested: a worker and beat were run against Memurai on
+  2026-08-20 and the whole chain passed, including the one thing eager mode cannot check —
+  that the worker rebinds the caller's identity rather than running as `Guest`. Results
+  and the four things still unexercised: `specs/KNOWN_ISSUES.md` #4.
+* ~~**Beat is configured, never run.**~~ **Run** — 9 entries loaded, and
+  `lead-sync-5-minutes` observed firing through to execution in the worker.

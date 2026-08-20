@@ -11,6 +11,7 @@ and anything a future agent would otherwise rediscover the hard way.
 | 1 | A WebSocket test fails intermittently under full-suite load | **Unexplained** — do not paper over |
 | 2 | `crm.api.accept_invitation` is not implemented; invitation links 404 | **Open** — phase 8; the security half is disarmed |
 | 3 | `Communication`, `File` and `Comment` leak content from records the caller cannot open | ✅ **Fixed** — see below for what it took |
+| 4 | The async stack had never run against a real broker, worker or scheduler | ✅ **Smoke-tested** — passed; see below for what is still untested |
 
 ---
 
@@ -218,3 +219,62 @@ cycle detection for a case the product does not produce.
 **`File` remains metadata-only protection until something serves files.** There is still
 no upload or download route. When one is added, it must check permission **at the serving
 layer** — a `file_url` that leaked before this fix may already be written down somewhere.
+
+---
+
+## 4. The async stack, smoke-tested against a real broker
+
+**Phase 5 A2/A3, resolved.** Every automated test runs Celery in
+`CELERY_TASK_ALWAYS_EAGER` mode, which executes task bodies inline, in-process, with no
+queue, no worker and no scheduler. That proves the *code* and nothing about the
+*plumbing* — three things could be broken with the whole suite green:
+
+* the worker cannot reach the broker, or cannot resolve tasks by name;
+* beat starts but cannot parse the schedule;
+* a task works inline but fails in a worker, which has **no request context**.
+
+The third was the real risk. Several tasks call `session_user`, and in a worker the
+ambient user is `Guest` unless the task rebinds it from its arguments.
+
+### What was run, 2026-08-20
+
+Memurai 8.2.7 on `127.0.0.1:6379`, a solo-pool worker on `default,long`, and beat with the
+real schedule. All against `config.settings.local` — `eager` confirmed off first, since a
+smoke test that silently ran eagerly would prove nothing while appearing to pass.
+
+| Check | Result |
+|---|---|
+| Worker registers every task | ✅ 13 of 13 |
+| Task queued and executed **in the worker** | ✅ `clear_old_versions`, `expire_invitations` — matching ids in both logs |
+| Beat loads the schedule | ✅ 9 entries, crontabs correct |
+| Beat → broker → worker, end to end | ✅ `lead-sync-5-minutes` fired at 18:15:07 and executed in the same second |
+| `bulk_delete` above the enqueue threshold | ✅ 12 rows, deleted in the worker |
+| **Worker rebinds the caller's identity** | ✅ see below |
+| `flush_expired_tokens` against real rows | ✅ expired row and its blacklist entry gone, live row kept |
+| Queues drained afterwards | ✅ `default` and `long` both 0 |
+
+### The identity check, and why its first result looked like a failure
+
+Twelve leads, six owned by the caller and six by a colleague, handed to the worker as the
+caller. The task **raised `PermissionError` naming `CRM-LEAD-2026-00002`**.
+
+That is the correct answer, and *which* row it named is the evidence: 00002 belongs to the
+colleague. A worker running as `Guest` would have refused 00001 — the caller's own. So the
+worker evaluated the real caller's permissions.
+
+`authorize_bulk_delete` refuses the whole batch rather than deleting the permitted subset.
+Both the request path and the worker call it, so the two agree. Re-run with twelve leads
+all owned by the caller: all twelve deleted, returning `"success"` — which is upstream's
+literal return value (`crm/api/doc.py:837`), not a count.
+
+### Still not exercised
+
+* **A retry.** `send_invitation_email` retries on `SMTPException`/`OSError`; no failing
+  SMTP server was put in front of it.
+* **Concurrency.** One solo-pool worker. Nothing has run with a prefork pool or two
+  workers competing for a queue.
+* **Queue routing.** The worker listened on `default` *and* `long`, so a task landing on
+  the wrong queue would still have been picked up. Worth a worker per queue to prove
+  routing.
+* **A real schedule boundary.** The daily entries were never observed firing; only the
+  `*/5` and `*/15` ones came round during the window.
