@@ -18,6 +18,16 @@ channels-redis==4.2.1
 # process both have to speak ASGI once phase 6 is on.
 daphne==4.1.2
 
+# Integrations (phase 7). Neither is a provider SDK - both are needed with every
+# integration flag OFF, so they are unconditional dependencies:
+#   phonenumbers - the shared call-log path resolves who a number belongs to, which the
+#                  manual "Log a call" flow does with no provider configured.
+#   requests     - outbound HTTP for the API clients, and the recording proxy.
+# Provider SDKs proper (twilio, facebook-business) are deliberately NOT here; see
+# tests/test_integration_isolation.py.
+phonenumbers==8.13.52
+requests==2.32.3
+
 # Testing
 pytest==8.3.4
 pytest-django==4.9.0

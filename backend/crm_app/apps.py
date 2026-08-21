@@ -39,3 +39,9 @@ class CrmAppConfig(AppConfig):
         from crm_app import async_signals
 
         async_signals.connect_signals()
+
+        # Phase 7: the provider-neutral telephony endpoints. Imported unconditionally and
+        # deliberately - `is_call_integration_enabled` has to answer "no" with every flag
+        # off, so the module cannot itself be behind a flag. Nothing it imports touches a
+        # provider SDK; `tests/test_integration_isolation.py` holds that line.
+        from crm_app.integrations import api as integrations_api  # noqa: F401
