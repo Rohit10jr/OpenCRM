@@ -54,11 +54,6 @@ OUT_OF_SCOPE = {
     "crm.api.whatsapp.is_whatsapp_installed",
     "crm.api.whatsapp.react_on_whatsapp_message",
     "crm.api.whatsapp.send_whatsapp_template",
-    "crm.integrations.api.add_note_to_call_log",
-    "crm.integrations.api.add_task_to_call_log",
-    "crm.integrations.api.get_contact_by_phone_number",
-    "crm.integrations.api.is_call_integration_enabled",
-    "crm.integrations.exotel.handler.make_a_call",
     "crm.fcrm.doctype.erpnext_crm_settings.erpnext_crm_settings.get_product_sync_status",
     # PHASE_3_ENDPOINTS.md section 3 - controller methods ship with their doctype
     "crm.fcrm.doctype.crm_call_log.crm_call_log.get_call_log",

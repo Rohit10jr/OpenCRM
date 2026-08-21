@@ -45,3 +45,11 @@ class CrmAppConfig(AppConfig):
         # off, so the module cannot itself be behind a flag. Nothing it imports touches a
         # provider SDK; `tests/test_integration_isolation.py` holds that line.
         from crm_app.integrations import api as integrations_api  # noqa: F401
+
+        # Provider adapters are imported unconditionally too, and that is deliberate.
+        # Upstream registers `make_a_call` always and refuses inside it with "Please setup
+        # Exotel intergration"; gating *registration* on the flag would turn that dialog
+        # into a 404 and break the frontend contract. What must not happen at import time
+        # is loading a provider SDK - none of these do; every `requests` import is inside
+        # the function that makes the call.
+        from crm_app.integrations.exotel import handler as exotel_handler  # noqa: F401
