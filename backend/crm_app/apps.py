@@ -53,3 +53,4 @@ class CrmAppConfig(AppConfig):
         # is loading a provider SDK - none of these do; every `requests` import is inside
         # the function that makes the call.
         from crm_app.integrations.exotel import handler as exotel_handler  # noqa: F401
+        from crm_app.integrations.twilio import handler as twilio_handler  # noqa: F401
