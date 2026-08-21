@@ -48,7 +48,6 @@ def call(client, path: str, payload: dict | None = None):
 #: Paths the frontend calls that are **out of phase-3 scope**, with the reason.
 OUT_OF_SCOPE = {
     # phase 7 - integrations behind feature flags
-    "crm.fcrm.doctype.erpnext_crm_settings.erpnext_crm_settings.get_product_sync_status",
     # PHASE_3_ENDPOINTS.md section 3 - controller methods ship with their doctype
     "crm.fcrm.doctype.crm_call_log.crm_call_log.get_call_log",
     "crm.fcrm.doctype.crm_deal.api.get_deal_contacts",

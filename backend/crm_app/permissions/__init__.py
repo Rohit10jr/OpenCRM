@@ -111,6 +111,9 @@ def register() -> None:
         "Facebook Page",
         "Facebook Lead Form",
         "Failed Lead Sync Log",
+        # `ERPNext CRM Settings` holds an API key/secret pair that authenticates as a user
+        # on the remote ERPNext site. Upstream grants it to System Manager only.
+        "ERPNext CRM Settings",
     ):
         register_permission_hooks(
             doctype,

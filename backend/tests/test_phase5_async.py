@@ -719,13 +719,23 @@ def test_product_reconciliation_publishes_its_completion_event(settings, monkeyp
     assert published == [("crm_product_sync_complete", alice.name)]
 
 
-def test_reconciliation_still_refuses_to_run_without_a_provider(settings):
-    """The flag being on with nothing behind it is a config error, not a silent success."""
+def test_reconciliation_runs_for_real_once_a_provider_exists(settings, db):
+    """This asserted `NotImplementedError` while `_reconcile_products` was a bare seam.
+
+    Phase 7 put the ERPNext client behind it, so raising would now be the bug — the same
+    collision as `test_lead_sync_does_real_work_when_the_flag_is_on`, and for the same
+    reason: the assertion described the stub, not a property worth keeping.
+
+    What survives is that the flag still gates it, and that with the flag on the task does
+    real work and reports a summary. `test_erpnext.py` covers what that work is.
+    """
     from crm_app.tasks import run_product_reconciliation
 
     settings.ENABLE_ERPNEXT = True
-    with pytest.raises(NotImplementedError):
-        run_product_reconciliation()
+    summary = run_product_reconciliation(user="Administrator")
+
+    assert "skipped" not in summary
+    assert "already_linked" in summary
 
 
 def test_publishing_is_never_load_bearing(monkeypatch):

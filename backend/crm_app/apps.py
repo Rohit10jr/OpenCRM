@@ -58,3 +58,8 @@ class CrmAppConfig(AppConfig):
         from crm_app.integrations.whatsapp import signals as whatsapp_signals
 
         whatsapp_signals.connect_signals()
+
+        from crm_app.integrations.erpnext import api as erpnext_api  # noqa: F401
+        from crm_app.integrations.erpnext import customer as erpnext_customer
+
+        erpnext_customer.connect_signals()

@@ -307,14 +307,18 @@ def delete_bulk_docs_task(doctype: str, items: list, delete_linked: bool = False
 
 
 def _reconcile_products() -> dict:
-    """The ERPNext Item <-> CRM Product sync itself — phase 7.
+    """The ERPNext Item <-> CRM Product sync itself.
 
     A named seam rather than an inline ``raise``, so the surrounding control flow (skip,
-    reconcile, publish, return) can be tested against upstream's without a provider.
+    reconcile, publish, return) could be tested against upstream's before a provider
+    existed. **Phase 7 filled it in** — `crm_app/integrations/erpnext/reconcile.py`.
+
+    Keeping the seam rather than inlining the call: it is the one place the phase-5 tests
+    stub, and it keeps `tasks.py` free of an ERPNext import.
     """
-    raise NotImplementedError(
-        "Product reconciliation is phase 7; the flag is on but no provider exists"
-    )
+    from crm_app.integrations.erpnext.reconcile import reconcile
+
+    return reconcile()
 
 
 @shared_task(name="crm.run_product_reconciliation")

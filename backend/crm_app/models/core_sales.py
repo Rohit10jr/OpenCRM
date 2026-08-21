@@ -667,6 +667,10 @@ class CRMDeal(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
     lead = models.ForeignKey(
         CRMLead, on_delete=models.SET_NULL, null=True, blank=True, related_name="deals"
     )
+    #: Phase 7. A runtime `Custom Field` upstream (`erpnext_crm_settings.py:92-99`); an
+    #: ordinary column here, because this port has no `Custom Field`. Holds the name of the
+    #: Customer this deal became on the ERPNext site.
+    erpnext_customer = models.CharField(max_length=140, blank=True, default="", db_index=True)
     deal_owner = models.ForeignKey(
         "frappe_platform.User",
         on_delete=models.SET_NULL,

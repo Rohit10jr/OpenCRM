@@ -832,6 +832,10 @@ def test_exactly_the_intended_doctypes_have_row_rules():
         "Facebook Page",
         "Facebook Lead Form",
         "Failed Lead Sync Log",
+        # An API key/secret pair that authenticates as a user on the remote ERPNext site.
+        # System Manager only upstream; managers here, matching the other settings
+        # singletons.
+        "ERPNext CRM Settings",
     }
     assert with_rules == upstream | added_by_phase_4 | added_by_phase_7
 
