@@ -1,7 +1,7 @@
 # Phase 6 — Realtime (Django Channels)
 
 > **BUILT** — phase 6 landed on `phase-6-realtime`, 1106 tests passing, reviewed.
-> See `PROGRESS_PHASE_6.md` for what was built and what is still open.
+> See `docs/internal/PROGRESS_PHASE_6.md` for what was built and what is still open.
 >
 > **The frontend socket rewrite is documented in `frontend/JWT_PATCH.md`**, alongside the
 > JWT interceptor — those two are the only sanctioned frontend deviations, and they now

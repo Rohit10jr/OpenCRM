@@ -51,6 +51,29 @@ REVIEWED_OPEN = {
     "CRM Communication Status": "reference data - communication status vocabulary",
     "CRM Holiday List": "reference data - business calendar, read by the SLA engine",
     "CRM Dashboard": "chart definitions, not data - `get_dashboard` filters the numbers",
+    # --- collaborative records: upstream grants all three roles full CRUD and registers
+    # no hook, so an open route here is *faithful*, not a modelling gap. This is the
+    # opposite of `Comment`, where upstream's role table restricted access and our missing
+    # hook was the divergence.
+    #
+    # The product relies on it: `pages/Tasks.vue` and `pages/Notes.vue` are company-wide
+    # list views with no owner filter, and the task list shows `reference_doctype` so you
+    # can see which record each task belongs to. Deferring to the parent - the rule
+    # `crm_app/permissions/attachments.py` already implements - would empty those pages of
+    # anything attached to a record you cannot open.
+    #
+    # The residual exposure is real and upstream's: a task titled "Call Acme, they will go
+    # to 400k" is readable by someone who cannot open the deal. Reproduced rather than
+    # fixed, because it is user-visible behaviour and a deliberate grant, not a bug nobody
+    # can observe.
+    "CRM Task": (
+        "collaborative - upstream grants all roles full CRUD and `pages/Tasks.vue` is a "
+        "company-wide board. Deferring to the parent would empty it"
+    ),
+    "FCRM Note": (
+        "same as CRM Task - `pages/Notes.vue` is company-wide, and a note can legitimately "
+        "have no parent at all"
+    ),
     "CRM Global Settings": (
         "no secrets: holds only `dt`, `type` and a JSON blob. Upstream grants all three "
         "roles full CRUD (`crm_global_settings.json`), deliberately. Reproduced."
@@ -62,8 +85,6 @@ REVIEWED_OPEN = {
 NOT_YET_REVIEWED = {
     "Contact": "shared across leads and deals; upstream relies on role permissions",
     "CRM Organization": "same as Contact - is org data meant to be company-wide?",
-    "CRM Task": "tasks reference leads and deals the caller may not see",
-    "FCRM Note": "notes attached to invisible records",
     "Tag": "low risk, but writes are unconstrained",
     "CRM Call Log": "call history references leads and deals; recording URLs are on the row",
     "CRM Telephony Agent": "holds colleagues' phone numbers",

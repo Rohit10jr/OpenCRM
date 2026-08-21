@@ -1,7 +1,7 @@
 """Brute-force protection: account lockout and endpoint throttling.
 
 Ports the two mechanisms upstream applies to authentication, which phase 3 left out
-because both are framework infrastructure (`PROGRESS_PHASE_3.md`, concern 1):
+because both are framework infrastructure (`docs/internal/PROGRESS_PHASE_3.md`, concern 1):
 
 * :class:`LoginAttemptTracker` - ``frappe/auth.py:519-613``. Counts **consecutive**
   failures and locks for an interval. Reset by any success. Upstream tracks the IP and

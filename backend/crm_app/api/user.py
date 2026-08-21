@@ -57,7 +57,7 @@ def change_password(old_password: str, new_password: str):
     """``crm/api/user.py:9-48``. Messages verbatim.
 
     Both of upstream's protections are now ported (they were the open concern in
-    PROGRESS_PHASE_3.md), and they answer different questions:
+    docs/internal/PROGRESS_PHASE_3.md), and they answer different questions:
 
     * ``@rate_limit(5, 300)`` matches ``crm/api/user.py:9`` - a flat cap on calls to this
       endpoint from one address, regardless of whether they succeed.

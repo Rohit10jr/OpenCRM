@@ -1,7 +1,7 @@
 # Phase 4 — Metadata Layer
 
 > **BUILT** — phase 4 landed on `phase-4-metadata`, 1003 tests passing, reviewed.
-> See `PROGRESS_PHASE_4.md` for what was built and what is still open, and
+> See `docs/internal/PROGRESS_PHASE_4.md` for what was built and what is still open, and
 > `specs/AS_BUILT.md` for the helpers it added.
 >
 > **C7 is closed** and **C6 is closed**. The allowlists below (§3) are now keyed on the
@@ -173,7 +173,7 @@ A controller may declare `get_non_filterable_fields()` to subtract from this. Ho
 > list is slightly wrong: `Long Text`, `Small Text` and `Text Editor` are correctly
 > excluded, but so is nothing else that maps to `TextField` — and `Duration`, which
 > upstream *does* allow to group by, is currently included only because it shares
-> `IntegerField`. Flagged in `PROGRESS.md`.
+> `IntegerField`. Flagged in `docs/internal/PROGRESS.md`.
 
 ---
 

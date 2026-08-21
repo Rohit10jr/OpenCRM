@@ -54,7 +54,7 @@ Implemented in `backend/frappe_core/api/auth.py`; covered by `backend/tests/test
 This SPA has **no login page** - upstream redirects to the Frappe desk's
 (`session.js:35`, `window.location.href = '/login?redirect-to=/crm'`). Something has to
 serve that page and call `login`, and it is not in any phase 0-4 spec. Flagged in
-`PROGRESS.md`.
+`docs/internal/PROGRESS.md`.
 
 Concurrent 401s collapse into a single refresh (`refreshInFlight`), because a list
 screen can fire a dozen requests at once and each must not spend a refresh token.

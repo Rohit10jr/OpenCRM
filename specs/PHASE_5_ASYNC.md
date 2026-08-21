@@ -1,7 +1,7 @@
 # Phase 5 — Background Jobs
 
 > **BUILT** — phase 5 landed on `phase-5-async`, 1073 tests passing, reviewed.
-> See `PROGRESS_PHASE_5.md` for what was built and what is still open, and
+> See `docs/internal/PROGRESS_PHASE_5.md` for what was built and what is still open, and
 > `specs/AS_BUILT.md` for the seam it added.
 >
 > **§4 is settled from source: SLA is computed on write and there is no beat entry for

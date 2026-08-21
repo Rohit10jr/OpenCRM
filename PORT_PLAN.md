@@ -18,7 +18,7 @@ Source analysis and architecture brief for agents working on this port.
 
 Phases 0-2 were reviewed afterwards and every concern resolved, reproduced with reasoning,
 or assigned to a later phase — see the **Review Resolution** section at the end of
-`PROGRESS.md`. Nine upstream bugs found along the way are catalogued in `UPSTREAM_BUGS.md`
+`docs/internal/PROGRESS.md`. Nine upstream bugs found along the way are catalogued in `UPSTREAM_BUGS.md`
 (local, gitignored).
 
 Both source repositories are now readable, which they were not during phases 0-2:

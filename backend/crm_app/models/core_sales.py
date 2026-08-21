@@ -13,7 +13,7 @@ rule 4, it is user-facing copy.
 platform lookups outside PHASE_1_MODELS.md section 1's list of nine. They are ported as
 ``CharField``s holding the same link value, which is wire-identical (the client sends
 and receives ``"Mr"``, ``"USD"``, ``"CRM Lead"``) without dragging five more platform
-tables into scope. Logged in PROGRESS.md.
+tables into scope. Logged in docs/internal/PROGRESS.md.
 
 ### SLA fields
 
@@ -57,7 +57,7 @@ class CRMOrganization(BaseDocument):
 
     Not slugified. ``crm/demo/deals.py:75-96`` keys a logo dict by ``"ScaleUp Labs"``
     and looks it up with the Link value, which is this PK; a slug would miss every time.
-    See PROGRESS.md, phase 0, for the full argument.
+    See docs/internal/PROGRESS.md, phase 0, for the full argument.
     """
 
     organization_name = models.CharField(max_length=140, blank=True, default="")

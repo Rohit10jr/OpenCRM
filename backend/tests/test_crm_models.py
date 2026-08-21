@@ -329,7 +329,7 @@ def test_password_fieldtypes_are_not_serialisable(doctype, fields):
 
     ``FCRM Settings.access_key`` is deliberately **not** in this list: the JSON declares
     it ``Data`` and unhidden, so upstream shows it in the settings UI. Blocking it would
-    break that screen for a hardening the source does not do. Noted in PROGRESS.md.
+    break that screen for a hardening the source does not do. Noted in docs/internal/PROGRESS.md.
     """
     serializer_fields = registry.get_entry(doctype).get_serializer_class()().get_fields()
     for fieldname in fields:
