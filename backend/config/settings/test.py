@@ -2,7 +2,7 @@
 
 Runs against the same Postgres server as development; ``pytest-django`` creates and
 drops ``test_opencrm`` on every run, which is what proves migrations apply from empty
-(RUNBOOK.md, gate step 2).
+(docs/internal/RUNBOOK.md, gate step 2).
 """
 
 from .base import *  # noqa: F403,F401
@@ -15,13 +15,13 @@ DEBUG = False
 # has to be proved against models of its own.
 INSTALLED_APPS = [*INSTALLED_APPS, "tests_support"]
 
-# No Celery worker and no SMTP server in the test run (RUNBOOK.md, "Tests that would
+# No Celery worker and no SMTP server in the test run (docs/internal/RUNBOOK.md, "Tests that would
 # need external services"). Tasks execute inline and mail lands in django.core.mail.outbox.
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
-# No Redis either (RUNBOOK.md, same section). The in-memory layer is process-local, which
+# No Redis either (docs/internal/RUNBOOK.md, same section). The in-memory layer is process-local, which
 # is all `WebsocketCommunicator` needs: publisher and consumer are the same process.
 CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 

@@ -9,7 +9,7 @@ reimplement Frappe's full platform."
 
 **Naming strategies here are the weakest evidence in the port.** The CRM source shows
 which fields exist but never the ``autoname`` of a platform doctype. Each choice below
-carries a confidence note; the set is flagged in PROGRESS.md for review.
+carries a confidence note; the set is flagged in docs/internal/PROGRESS.md for review.
 """
 
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin

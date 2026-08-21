@@ -7,7 +7,7 @@ frontend depends on; the chart bodies are independent of each other.
 **Not every chart is ported.** :data:`CHART_BUILDERS` is the list that is; anything else
 resolves to ``None``, which is exactly what upstream does for a name it cannot find
 (``crm/api/dashboard.py:57-59``). The unported ones are the time-series and
-duration-arithmetic charts, and they are named in PROGRESS_PHASE_3.md rather than left
+duration-arithmetic charts, and they are named in docs/internal/PROGRESS_PHASE_3.md rather than left
 to be discovered.
 
 **Sales-User scoping is load-bearing.** Upstream forces ``user = session.user`` for a

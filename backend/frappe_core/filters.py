@@ -64,7 +64,7 @@ def resolve_me_tokens(value: Any, user: str | None = None) -> Any:
     both, at any depth. That is identical to upstream for every filter the product
     actually sends (a token appears at most once per value) and resolves upstream's own
     inconsistency between the two branches in the direction it already takes for
-    ``%@me%``. Logged as a decision in PROGRESS.md.
+    ``%@me%``. Logged as a decision in docs/internal/PROGRESS.md.
     """
     user = user or get_current_user()
 

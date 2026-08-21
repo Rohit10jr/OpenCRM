@@ -564,7 +564,7 @@ def test_lead_is_listable_with_the_criterion_1_request_shape(auth_api, alice, st
     """PHASE_0_FOUNDATION.md criterion 1, now against the real ``CRM Lead``.
 
     Phase 0 could only test the shape against a stand-in doctype (spec section 9 forbade
-    building CRM models), and PROGRESS.md flagged this as owed. Here it is.
+    building CRM models), and docs/internal/PROGRESS.md flagged this as owed. Here it is.
     """
     with session_user(alice.name):
         CRMLead.objects.create(status=statuses["open"], first_name="Ada", lead_owner=alice)

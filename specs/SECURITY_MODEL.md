@@ -276,6 +276,24 @@ finite list of named work.
 It also asserts one invariant with no exceptions list: **a doctype declaring secrets must
 have a rule.** That one would have caught A3 and A4 on the day they were written.
 
+**`tests/test_credential_fields.py` closes the other half.** The route test forces a
+decision about *who can reach* a doctype; nothing forced one about *what is inside it*. It
+matches on field names — `*_token`, `*_secret`, `password`, `api_key`, `auth` — and fails
+unless each is declared in `SENSITIVE_FIELDS`, `ENCRYPTED_FIELDS` or `RESTRICTED_FIELDS`,
+or excused in writing.
+
+A name is a heuristic, deliberately: it is what a reviewer scans for, and what the author
+chose while thinking about the credential. Two exception lists carry the judgement —
+`REVIEWED_NOT_CREDENTIALS` for fields that only look like one (`ascii_encode_password` is
+a boolean flag), and `REVIEWED_RESTRICTED_ONLY` for real secrets deliberately left
+manager-readable. They are kept separate on purpose: conflating them would let a genuine
+secret hide behind "not a credential".
+
+It found an undeclared field on its first run, and a gap in **itself** on its second: a
+field that is encrypted but not sensitive is served over the API as ciphertext and stays
+filterable. Better than plaintext, and not the same as protected. True secrets now need
+both declarations.
+
 ---
 
 ## Known gap: `accept_invitation` is not implemented

@@ -1,7 +1,7 @@
 # Phase 3 — API Endpoints
 
 > **BUILT** — phase 3 landed on `phase-3-endpoints`, 944 tests passing, reviewed.
-> See `PROGRESS_PHASE_3.md` for what was built, what diverged and what is still open,
+> See `docs/internal/PROGRESS_PHASE_3.md` for what was built, what diverged and what is still open,
 > and `specs/AS_BUILT.md` for the helpers it added.
 >
 > Two things this spec did not anticipate, both delivered:
@@ -10,7 +10,7 @@
 > a client-side form script upstream**, not server logic.
 >
 > Known gaps, named rather than hidden: six dashboard charts, and the `Version`-derived
-> field-change entries in `get_activities`. Both in `PROGRESS_PHASE_3.md`.
+> field-change entries in `get_activities`. Both in `docs/internal/PROGRESS_PHASE_3.md`.
 
 **Fan out by module.** Needs phase 1. One agent per module group; never two agents in
 one file.
@@ -199,7 +199,7 @@ phase 1 lifecycle work.
 
 ## 2a. Carried-over work this phase owns
 
-Three items from the phase 0-2 review were assigned here (`PROGRESS.md`, Review
+Three items from the phase 0-2 review were assigned here (`docs/internal/PROGRESS.md`, Review
 Resolution):
 
 - **C4** — `crm_products` totals (`amount`, `net_amount`, `total`, `net_total`) are

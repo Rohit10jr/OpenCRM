@@ -46,7 +46,7 @@ def get_linked_deals(contact: str):
     cannot see yields nothing for that row. Upstream uses ``frappe.get_cached_doc``,
     which does **not** permission-filter - reproducing that would leak deal values
     across the sales hierarchy through a contact the user can legitimately read.
-    Recorded as a deliberate divergence in PROGRESS_PHASE_3.md.
+    Recorded as a deliberate divergence in docs/internal/PROGRESS_PHASE_3.md.
     """
     from crm_app.models import CRMContacts
 

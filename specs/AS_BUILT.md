@@ -233,6 +233,75 @@ bypass with a pleasant API.
 
 ---
 
+### Added by the phase-4 security review — read this before adding any doctype
+
+Registering a doctype **publishes it**. `@register_doctype("X")` gives every authenticated
+caller create, read, update and delete at `/api/resource/X`, and through the
+`frappe.client.*` endpoints, unless something says otherwise.
+
+Five findings across four phases were the same mistake: a phase gated the endpoints it
+wrote, and the generic route stood open beside them doing the same job unguarded. Every
+agent's tests passed, because they tested the endpoint just written. The mechanisms below
+exist so that does not happen a sixth time.
+
+**Full reasoning, per doctype, with the upstream comparison: `specs/SECURITY_MODEL.md`.**
+
+#### Four field declarations, and how to choose
+
+| Declaration | Read | Write | Use for |
+|---|---|---|---|
+| `SENSITIVE_FIELDS` | **nobody** | nobody | Credentials. Never on the wire, not selectable, not filterable |
+| `ENCRYPTED_FIELDS` | via `get_password()` | — | Credentials **at rest**. The attribute holds ciphertext once saved |
+| `RESTRICTED_FIELDS` | **managers only** | — | Visible to admins, not to ordinary users |
+| `READONLY_FIELDS` | everybody | **nobody** | Must be visible, must not be set by its subject |
+
+`SENSITIVE_FIELDS` and `ENCRYPTED_FIELDS` are usually declared **together** on a
+credential: one keeps it off the wire, the other keeps it out of the database in plain
+text. Neither implies the other.
+
+#### Withholding a route entirely
+
+`@register_doctype("X", routable=False)` publishes no route at all. Everything else —
+model, permissions, internal callers — is unchanged. Correct when **nothing addresses the
+doctype over HTTP**, because a route that does not exist is a smaller surface than one
+guarded by a rule. `ToDo` and `Version` are the two; `specs/UNROUTED_DOCTYPES.md` says why,
+and spells out the permission rule to write instead if one is ever needed.
+
+#### Rules that defer to another document
+
+A row that is *about* another record — `Comment`, `Communication`, `File` — reads if you
+can read its parent and writes if you can write its parent
+(`crm_app/permissions/attachments.py`). If you add another such doctype, follow that shape
+and register `reference_fields=(...)`, which opts it into the destination re-check on
+update. Without that, a row can be **moved** onto a document the caller cannot write.
+
+#### Two tests will fail on you, deliberately
+
+* **`tests/test_route_surface.py`** — every routable doctype must be ruled, reviewed-open
+  with a reason, or not-yet-reviewed with the question. Registering one without a recorded
+  decision fails the build. It does not decide for you; it refuses to let you skip
+  deciding.
+* **`tests/test_credential_fields.py`** — a field whose *name* looks like a credential must
+  be declared. See the checklist below.
+
+#### Checklist: adding a doctype that holds a credential
+
+Phase 7 does this repeatedly — ERPNext API keys, Meta page tokens, webhook signing
+secrets. In order:
+
+1. `SENSITIVE_FIELDS` — keeps it out of responses, out of `fields=`, and out of filters.
+   Hiding it from output alone is not enough: a filter turns the row count into an oracle,
+   and `like` narrows a value one character per request. That is how a real SMTP password
+   was recovered from this codebase.
+2. `ENCRYPTED_FIELDS` — plus `frappe_core.secrets`, and a data migration if rows already
+   exist. Read it back with `instance.get_password("field")`, never the attribute.
+3. **A permission rule** — `SENSITIVE_FIELDS` hides the value; it does nothing to stop the
+   *record* being rewritten. Hiding a mail password did not stop anyone repointing the
+   server it belonged to.
+4. **Decide the route** — `routable=False` if the frontend never addresses it.
+5. **Consider `TRACKED_FIELDS`** — for a credential, record *that* it changed, never the
+   old value. `specs/VERSION_HISTORY.md`.
+
 ## 3. Behaviours you can rely on
 
 - **Parameters** merge query string + JSON body, then JSON-decode. A param may arrive as

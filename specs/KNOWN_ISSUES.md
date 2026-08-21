@@ -351,7 +351,7 @@ had quietly stopped being true.
 
 ### A1 — the frontend suite had never executed
 
-`PROGRESS_PHASE_6.md` recorded: *"`frontend/node_modules` does not exist and there is no
+`docs/internal/PROGRESS_PHASE_6.md` recorded: *"`frontend/node_modules` does not exist and there is no
 network to install it, so `vitest` cannot run."* **Node 22.13 and network access are both
 available now**, so the constraint was stale rather than real.
 

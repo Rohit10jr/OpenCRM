@@ -208,7 +208,7 @@ class CRMProducts(BaseDocument):
     ``parenttype``, and that is ported verbatim here.
 
     Single-parent child tables in this port *do* get a real FK; only these three do not.
-    Logged in PROGRESS.md as a deviation from the spec's blanket rule.
+    Logged in docs/internal/PROGRESS.md as a deviation from the spec's blanket rule.
     """
 
     parenttype = models.CharField(max_length=140, blank=True, default="", db_index=True)

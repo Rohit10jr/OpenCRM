@@ -9,7 +9,7 @@ confirms it: `frappe.client.delete`, `set_value`, `insert`, `get`, `get_list`,
 
 The frontend contract is a hard external contract, and the phase's first acceptance
 criterion is "every dotted path resolves at its original URL" - so these are in scope
-even though the group list omits them. Recorded as added scope in PROGRESS_PHASE_3.md.
+even though the group list omits them. Recorded as added scope in docs/internal/PROGRESS_PHASE_3.md.
 
 Every one of these routes through the phase-2 permission layer. They are the widest
 attack surface in the port: a generic "set any field on any document" endpoint that
