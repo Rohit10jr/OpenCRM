@@ -24,14 +24,13 @@ the frontend contract, and the settled architecture decisions. These specs assum
 | [`PHASE_4_METADATA.md`](PHASE_4_METADATA.md) | View settings, field layouts | Fan out | ✅ Shipped |
 | [`PHASE_5_ASYNC.md`](PHASE_5_ASYNC.md) | Celery jobs and schedules | Fan out | ✅ Shipped |
 | [`PHASE_6_REALTIME.md`](PHASE_6_REALTIME.md) | Django Channels | Fan out | ✅ Shipped |
-| [`PHASE_7_INTEGRATIONS.md`](PHASE_7_INTEGRATIONS.md) | ERPNext, Twilio, Exotel, Facebook, WhatsApp | Fan out | **← next** |
+| [`PHASE_7_INTEGRATIONS.md`](PHASE_7_INTEGRATIONS.md) | ERPNext, Twilio, Exotel, Facebook, WhatsApp | Fan out | ✅ Shipped |
 | [`PHASE_8_AUTH_AND_DESK.md`](PHASE_8_AUTH_AND_DESK.md) | Auth UI and the rest of the Desk | — | **Parked** |
 
-**Phase 7 is next**, and it is the credential-heavy one: ERPNext API keys, Meta
-long-lived page tokens, webhook signing secrets. Its runbook is
-`../docs/internal/RUNBOOK_PHASE_7.md`, and two decisions are already made — ERPNext is an
-API client rather than a reimplementation, and WhatsApp's provider is stubbed rather than
-vendored.
+**Phase 7 shipped** on `phase-7-integrations` — all five integrations, each behind its own
+flag, all off by default. See `../docs/internal/PROGRESS_PHASE_7.md`, and read its
+**Concerns** before extending any of them: `get_recording_url` is deliberately unported and
+is the most security-sensitive single function in the phase.
 
 **Phase 8 is parked, not scheduled.** It is also the only phase that ports nothing:
 Frappe ships a Desk (auth screens, generic admin UI) alongside the CRM app, and this port

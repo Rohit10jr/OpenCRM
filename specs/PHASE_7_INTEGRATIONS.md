@@ -1,7 +1,13 @@
 # Phase 7 — Integrations
 
-> **DEFERRED.** Do not start until phases 0–6 are done and the core CRM works.
-> Feature-flag everything off by default.
+> **BUILT** — phase 7 landed on `phase-7-integrations`, 1574 tests passing, reviewed twice
+> at tier 1. See `docs/internal/PROGRESS_PHASE_7.md`.
+>
+> **Two scope reductions are recorded there and are deliberate**, not omissions: ERPNext's
+> *same-site* mode is not ported (it presupposes ERPNext's models in this process, which the
+> standing decision rules out), and `get_recording_url` — the SSRF-safe recording proxy — is
+> left for its own change. Port it **with** upstream's IP pinning and per-hop redirect
+> validation, or not at all.
 
 **Fan out — the four integrations are fully independent.**
 

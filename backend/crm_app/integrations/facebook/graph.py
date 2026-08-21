@@ -26,6 +26,34 @@ def api_url(endpoint: str) -> str:
     return f"{FB_GRAPH_API_BASE}/{FB_GRAPH_API_VERSION}/{endpoint.lstrip('/')}"
 
 
+def _split_token(params: dict) -> tuple[dict, str]:
+    """Move ``access_token`` out of the query string and into a header.
+
+    **Meta documents both**, and upstream uses the query-string form (`facebook.py:70-74`).
+    A query string is the worst place for a long-lived credential: it lands in the server's
+    access log at the far end, in any proxy in between, and in a `Referer`. The `Bearer`
+    header carries the same value and none of those places.
+
+    Found by the phase-7 review, which is also where `redact` was already pointing —
+    `UPSTREAM_BUGS` #33.
+    """
+    remaining = {k: v for k, v in (params or {}).items() if k != "access_token"}
+    return remaining, str((params or {}).get("access_token") or "")
+
+
+def _headers(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
+def _strip_token(url: str) -> str:
+    """Remove ``access_token`` from a URL Graph handed back."""
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+    parts = urlsplit(url)
+    query = [(k, v) for k, v in parse_qsl(parts.query) if k != "access_token"]
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+
 def get(endpoint: str, params: dict) -> dict:
     """One Graph call.
 
@@ -33,7 +61,8 @@ def get(endpoint: str, params: dict) -> dict:
     do about it — a sync logs and continues, a user-facing token check throws — so this
     does not decide.
     """
-    response = http.request("GET", api_url(endpoint), params=params)
+    query, token = _split_token(params)
+    response = http.request("GET", api_url(endpoint), params=query, headers=_headers(token))
     body = {}
     try:
         body = response.json() or {}
@@ -56,6 +85,8 @@ def get_paged(endpoint: str, params: dict, *, max_pages: int = 100) -> list[dict
     never arrive. Following the cursor is the fix; `max_pages` stops a broken cursor from
     looping forever, and exhausting it is logged rather than passed over.
     """
+    _query, token = _split_token(params)
+
     rows: list[dict] = []
     body = get(endpoint, params)
     rows.extend(body.get("data") or [])
@@ -65,7 +96,9 @@ def get_paged(endpoint: str, params: dict, *, max_pages: int = 100) -> list[dict
         next_url = ((body.get("paging") or {}).get("next")) or ""
         if not next_url:
             return rows
-        response = http.request("GET", next_url)
+        # Graph puts the token back into its own `next` URL. Strip it and re-send it as a
+        # header, or following the cursor would undo the whole point of `_split_token`.
+        response = http.request("GET", _strip_token(next_url), headers=_headers(token))
         try:
             body = response.json() or {}
         except ValueError:

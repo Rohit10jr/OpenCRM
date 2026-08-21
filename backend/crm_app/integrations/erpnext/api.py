@@ -209,7 +209,9 @@ def prefill_quotation_items(crm_deal: str):
     for row in CRMProducts._default_manager.filter(
         parenttype="CRM Deal", parent=str(deal.pk)
     ).order_by("idx"):
-        item_code = codes.get(row.product_code_id if hasattr(row, "product_code_id") else None)
+        # `CRMProducts.product_code` is a FK to `CRM Product`, whose PK is the code itself
+        # (`autoname=field:product_code`), so `_id` is the code.
+        item_code = codes.get(row.product_code_id)
         if not item_code:
             continue
         items.append(

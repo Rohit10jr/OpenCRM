@@ -19,7 +19,7 @@ from unittest.mock import patch
 
 import pytest
 
-from crm_app.integrations.facebook import sync
+from crm_app.integrations.facebook import graph, sync
 from frappe_core.session import session_user
 
 pytestmark = pytest.mark.django_db
@@ -90,6 +90,15 @@ def _lead(lead_id="fb-lead-1", email="ada@example.com", name="Ada Lovelace"):
             {"name": "how_did_you_hear", "values": ["A friend"]},
         ],
     }
+
+
+class _Response:
+    def __init__(self, body, status_code=200):
+        self._body = body
+        self.status_code = status_code
+
+    def json(self):
+        return self._body
 
 
 def _syncer(source, leads):
@@ -427,6 +436,51 @@ def test_the_frequency_map_covers_every_registered_task():
 # ---------------------------------------------------------------------------
 # Credentials
 # ---------------------------------------------------------------------------
+
+
+def test_the_token_travels_in_a_header_not_the_query_string(fb_on, source):
+    """Found by the phase-7 review. Meta documents both forms and upstream uses the query
+    string (`facebook.py:70-74`) — which puts a long-lived credential in the far end's
+    access log, in any proxy between, and in a `Referer`."""
+    captured = {}
+
+    def fake(method, url, **kwargs):
+        captured.update(kwargs)
+        captured["url"] = url
+        return _Response({"data": []})
+
+    with patch.object(graph.http, "request", fake):
+        graph.get("/me", {"access_token": "secret-token", "fields": "id"})
+
+    assert captured["headers"]["Authorization"] == "Bearer secret-token"
+    assert "access_token" not in captured["params"]
+    assert "secret-token" not in captured["url"]
+
+
+def test_following_a_cursor_does_not_put_the_token_back(fb_on, source):
+    """Graph embeds the token in its own `next` URL. Following it verbatim would undo the
+    header entirely."""
+    seen = []
+
+    def fake(method, url, **kwargs):
+        seen.append((url, kwargs.get("headers") or {}))
+        if len(seen) == 1:
+            return _Response(
+                {
+                    "data": [{"id": "1"}],
+                    "paging": {"next": "https://graph.facebook.com/v23.0/x?access_token=secret-token&after=abc"},
+                }
+            )
+        return _Response({"data": [{"id": "2"}]})
+
+    with patch.object(graph.http, "request", fake):
+        rows = graph.get_paged("/form/leads", {"access_token": "secret-token"})
+
+    assert len(rows) == 2
+    next_url, next_headers = seen[1]
+    assert "access_token" not in next_url
+    assert "after=abc" in next_url, "the cursor itself must survive"
+    assert next_headers["Authorization"] == "Bearer secret-token"
 
 
 def test_both_access_tokens_are_encrypted_at_rest(fb_on, source):

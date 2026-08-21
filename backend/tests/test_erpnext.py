@@ -491,6 +491,30 @@ def test_dismissing_an_issue_hides_it(erpnext_on, products, administrator):
         assert api.get_open_sync_issues() == []
 
 
+def test_quotation_items_are_prefilled_from_synced_products(erpnext_on, deal, alice, products):
+    """`erpnext_crm_settings.py:446-464`. A product with no `erpnext_item_code` is skipped,
+    which is upstream's behaviour: an unsynced product silently does not reach the
+    quotation."""
+    from crm_app.models import CRMProduct, CRMProducts
+
+    CRMProduct.objects.filter(pk="WIDGET").update(erpnext_item_code="ERP-WIDGET")
+
+    with session_user(alice.name):
+        CRMProducts.objects.create(
+            parenttype="CRM Deal", parent=str(deal.pk), idx=1,
+            product_code_id="WIDGET", product_name="Widget", rate=10, qty=3,
+        )
+        CRMProducts.objects.create(
+            parenttype="CRM Deal", parent=str(deal.pk), idx=2,
+            product_code_id="GADGET", product_name="Gadget", rate=5, qty=1,
+        )
+        items = api.prefill_quotation_items(str(deal.pk))
+
+    assert items == [
+        {"item_code": "ERP-WIDGET", "qty": 3, "price_list_rate": 10, "discount_percentage": 0}
+    ]
+
+
 def test_the_sync_status_reports_unsynced_products(erpnext_on, products, administrator):
     from crm_app.models import CRMProduct
 

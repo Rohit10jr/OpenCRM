@@ -231,6 +231,48 @@ the list filter *and* the object rule, the same pair the HTTP detail route uses.
 client event that names a document must do the same, or realtime becomes a permission
 bypass with a pleasant API.
 
+### Added by phase 7
+
+| Need | Call |
+|---|---|
+| One outbound HTTP call, with a timeout and retries | `crm_app.integrations.http.request(method, url, auth=, json=, params=, headers=)` |
+| Strip credentials from a URL before logging it | `crm_app.integrations.http.redact(url)` |
+| Who is this phone number? | `crm_app.integrations.phone.get_contact_by_phone_number(number)`, `get_contact_lead_or_deal_from_number(number)` |
+| Write a call log (either provider) | `crm_app.integrations.call_log.record_call(call_id=, medium=, call_type=, status=, ...)` |
+| Attach a call to a document | `call_log.link_with_reference_doc(log, doctype, name)`, `resolve_and_link(log, number)` |
+| An endpoint that needs the HTTP request | `@whitelist(path, wants_request=True)` → the handler receives `_request` |
+
+**Every outbound call goes through `integrations.http`.** It is the only place a timeout and
+a retry policy are configured, and `PHASE_7_INTEGRATIONS.md` §3 makes both acceptance
+criteria. Upstream's integrations pass no timeout at all (`UPSTREAM_BUGS` #24), which hangs
+a worker thread on a provider that accepts a connection and never answers.
+
+**`record_call` is the dedupe point, and the dedupe is a database constraint.**
+`CRM Call Log` is `autoname=field:id`, so the provider's own call id *is* the primary key —
+a redelivered webhook updates the row it created. Fields are only overwritten when the new
+value is non-empty, because a provider sends several callbacks per call and a later one is
+not a superset of an earlier one.
+
+**A webhook signature cannot be verified from the payload.** The signature is a header and
+the signed string is the absolute URL, so a handler that only sees parameters cannot check
+anything — phase 7 shipped exactly that and it was verifiable only in tests. Use
+`wants_request=True`; the set of endpoints that do is asserted in
+`tests/test_phase7_review_fixes.py`, and it should stay small.
+
+**`ENABLE_*` is the outer gate and the settings checkbox is the inner one.** A provider is
+active only when both say so (`UPSTREAM_BUGS` #22). Turning an integration on is a
+*deployment* decision; configuring it is an *administrative* one, and someone who can write
+the settings row must not be able to switch on outbound calling in a deployment that opted
+out.
+
+**A disabled integration must not write, and must not call out.** Both were review findings.
+Reads are deliberately left open — turning WhatsApp off should not hide conversations that
+already happened.
+
+**Any caller creating a lead must set `lead_owner`** — §4 below, and phase 7 is where it
+bites: upstream's Facebook sync sets nothing, so every synced lead there is invisible to
+every Sales User (`UPSTREAM_BUGS` #29).
+
 ---
 
 ### Added by the phase-4 security review — read this before adding any doctype
