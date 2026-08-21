@@ -215,7 +215,7 @@ for the standing test rather than another round of manual audit.
 | B2 | Comment / Communication content leak, untested with real data | ✅ **Done** — tested, confirmed, fixed |
 | B3 | `get_default_layout` has no upstream fixture to diff against | ❌ **Open** — wants a visual check against the running frontend |
 | B4 | `field_meta` falls back to introspection for 9 platform doctypes | ❌ **Open** |
-| B5 | `get_counts` deliberately unfiltered | ❌ **Open** |
+| B5 | `get_counts` deliberately unfiltered | ✅ **Checked — no leak.** `get_counts` only ever receives rows from `fetch_rows` / `get_records_based_on_order`, both permission-filtered, so an invisible record never becomes a row and never gets a badge. Structural rather than careful, which is why it is now pinned by `tests/test_kanban_counts.py` |
 
 ## C — Unfinished work
 
