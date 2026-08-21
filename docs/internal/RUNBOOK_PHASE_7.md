@@ -44,16 +44,8 @@ Do not re-open these.
 
 ## Before you begin
 
-Read, in order:
-
-1. **`specs/AS_BUILT.md`** — what already exists. **Its security section is not optional
-   for this phase**: you are adding credential-bearing doctypes, and it carries the
-   checklist for that
-2. `CLAUDE.md` — project rules and the reviewer policy
-3. `specs/SECURITY_MODEL.md` — what protects a doctype and why, per doctype
-4. `PORT_PLAN.md` — inventory, frontend contract, settled decisions
-5. `specs/PHASE_7_INTEGRATIONS.md` — the spec
-6. `specs/KNOWN_ISSUES.md` — problems that outlive a phase; check before re-diagnosing
+**Start at Step 0 below** — it carries the reading list and the orientation file you write
+before touching code. What follows here is the short version of why that matters.
 
 ### What is already built for you
 
@@ -108,6 +100,138 @@ skip deciding.
 The checklist is in `specs/AS_BUILT.md`. Follow it in order; it is five steps and it exists
 because this project has already shipped a plaintext SMTP password and an API key on a
 world-readable record.
+
+---
+
+## Step 0 — Understand what exists, and write down what you found
+
+**Before writing any code.** Not a formality: an agent that skips this rebuilds a
+framework layer that already exists, or trusts a document that has gone stale.
+
+Read, in this order:
+
+| # | File | What you are looking for |
+|---|---|---|
+| 1 | `specs/AS_BUILT.md` | What exists. **Its security section is mandatory for this phase** |
+| 2 | `specs/SECURITY_MODEL.md` | What protects each doctype, and the 11 places we differ from upstream |
+| 3 | `specs/UNROUTED_DOCTYPES.md` | Two routes withheld, and the rule we would write instead |
+| 4 | `specs/VERSION_HISTORY.md` | What change history is recorded and pruned |
+| 5 | `specs/KNOWN_ISSUES.md` | Problems that outlive a phase — check before re-diagnosing |
+| 6 | `UPSTREAM_BUGS_PHASE_*.md` | 21 upstream defects and our stance on each |
+| 7 | `PORT_PLAN.md` | Inventory, frontend contract, settled decisions |
+| 8 | `docs/internal/PROGRESS_PHASE_3..6.md` | What each phase built, and its Review Resolution |
+| 9 | `specs/PHASE_7_INTEGRATIONS.md` | Your task |
+
+Then **write `docs/internal/ORIENTATION_PHASE_7.md`** before starting. Six sections:
+
+1. **What exists that I must not rebuild.** Name the helpers and seams, with paths. Phase 5
+   left `_reconcile_products`, six registered lead-sync tasks and two settings doctypes
+   with credentials already encrypted, specifically for you.
+2. **The mechanisms that protect a doctype**, in your own words, and when each applies. If
+   you cannot explain why `SENSITIVE_FIELDS` and `ENCRYPTED_FIELDS` are both needed on a
+   credential, re-read before continuing.
+3. **What I believe is stale or wrong in these documents.** See the rule below — this is
+   the section most likely to be genuinely useful.
+4. **What I do not understand yet**, and what I will do about it.
+5. **The risks I see in phase 7 specifically**, given what I have read.
+6. **My plan**, integration by integration, with the order and why.
+
+**Keep it under two pages.** It is a thinking exercise, not a deliverable. Its value is
+that it forces you to notice the gap between what the docs say and what the code does —
+which is exactly where this project's worst bugs have lived.
+
+---
+
+## How to work here — lessons this project paid for
+
+These are not style preferences. Each one is a bug that shipped.
+
+### Verify the premise before following an instruction
+
+`clear_old_versions` carried a docstring saying *"the day `Version` lands, the body is
+three lines."* `Version` landed. Following that instruction would have written a general
+audit-table pruner and **silently deleted every timeline entry older than 14 days** —
+upstream prunes only saved-view churn.
+
+Another said *"no CRM doctype sets a non-zero `permlevel`, checked across all 39 JSONs."*
+False: `CRM Twilio Settings` sets it on three credential fields.
+
+**A document is evidence, not proof.** When an instruction tells you to do something,
+check that the reason it gives is still true.
+
+### A claim you write will be trusted
+
+A progress file said *"phase 3's `_resolved_fieldtype` plaster is deleted."* It was not —
+it is still serving three endpoints. Someone reading that file believes it.
+
+Before you write "X is done", check that X is done. Before you write "nothing uses Y",
+grep for Y.
+
+### Verify a test fails without the thing it tests
+
+A test asserting that a disabled user could not re-enable themselves **passed with the
+mechanism removed** — the account was rejected at authentication, so the test never
+reached the code it claimed to cover. Green for a reason unrelated to its own subject.
+
+For anything load-bearing: remove the mechanism, confirm the test fails, put it back. It
+takes a minute and it is the difference between a test and a decoration.
+
+### Record what you did not check
+
+The most useful sections of this project's documents are the honest ones. A smoke test
+that passed is recorded beside a list of what it did not cover. The phase-4 review found
+**eight** security holes by pulling threads a progress file left dangling — that file was
+useful *because* it admitted its own gaps.
+
+A gap you record is a decision. A gap you omit is a bug someone finds later.
+
+### Investigate before applying a pattern
+
+Three doctypes that all reference Leads and Deals got three different answers: `ToDo`'s
+route was withheld, `Email Account` got a rule, and `CRM Task` was deliberately left open.
+Deciding by resemblance would have got two of the three wrong.
+
+Two questions settle it, and they are cheaper than designing a rule:
+
+1. **Does anything actually call this route?** No → withhold it; a route that does not
+   exist is a smaller surface than one that is guarded.
+2. **Do the `frappe.client.*` endpoints share the check?** They resolve through
+   `_get_checked`, so if they do, a row rule covers every door — and withholding the route
+   would fix nothing.
+
+### Measure rather than assert
+
+"Connections are being reused" was verified by watching the Postgres backend PID across
+six calls: six distinct before, one after. "The flaky test is rare" was verified by running
+the suite six times and counting.
+
+If a claim can be measured in five minutes, measure it.
+
+### Do not widen scope silently
+
+While fixing a flaky test, a real production problem surfaced — a database connection
+opened per permission check. It was **recorded first and applied as its own decision**,
+not folded into the flake fix. Tuning changes that arrive as a side effect of something
+else are how nobody remembers deciding.
+
+If you find something outside your task, write it in the progress file and either raise it
+or do it deliberately. Never both silently.
+
+### Update the document in the same commit as the code
+
+Every stale claim in this project was true when written. `AS_BUILT.md` went two phases
+stale; a docstring promised a three-line fix that would have deleted the timeline; a
+progress file said a plaster was removed while it was still serving three endpoints.
+
+Nobody wrote those to mislead. They changed the code and left the sentence behind.
+
+If your change makes a sentence somewhere false, fix the sentence in the same commit. It
+is the cheapest thing in this list and it has cost the most.
+
+### When you disagree with a review finding
+
+Record the disagreement and your reasoning in the progress file. Never silently ignore it,
+and never apply a fix you believe is wrong to make a reviewer happy.
 
 ---
 

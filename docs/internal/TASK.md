@@ -9,6 +9,20 @@ Branch: cut phase-7-integrations from main
 Main:   phases 0-6 complete and merged. ~1,290 backend tests + 152 frontend, all passing
 ```
 
+## Step 0 comes before any code
+
+The runbook opens with **Step 0: read the recorded reasoning, then write
+`docs/internal/ORIENTATION_PHASE_7.md`** saying what you understood — including **what you
+think is stale or wrong** in what you read.
+
+Do not skip it, and do not treat it as paperwork. Six phases of decisions are written down
+in this repo, and the two most expensive bugs of the last review both came from an agent
+(and later, a human) trusting a sentence that had quietly stopped being true. The section
+where you disagree with the documents is the one most likely to be worth reading.
+
+The runbook also carries **"How to work here"** — seven rules, each one a bug that
+shipped. Read them before starting, not after your first review round.
+
 ## Read first, in this order
 
 1. **`specs/AS_BUILT.md`** — what already exists. Read this before writing any code, and
