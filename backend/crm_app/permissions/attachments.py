@@ -46,15 +46,20 @@ from django.db.models import Q
 from frappe_core import permissions, registry
 from frappe_core.session import get_current_user
 
-#: The three doctypes this module governs. Excluded from each other's reference checks so
-#: the subquery below cannot recurse - see "One hop, not transitive".
-DEFERRING_DOCTYPES = ("Comment", "Communication", "File")
+#: The doctypes this module governs. Excluded from each other's reference checks so the
+#: subquery below cannot recurse - see "One hop, not transitive".
+#:
+#: `WhatsApp Message` joined in phase 7. It is the same shape - a row about a lead or deal,
+#: carrying which one - and the reason is sharper than for the others: a deal row leaks a
+#: number, but a WhatsApp thread leaks the conversation.
+DEFERRING_DOCTYPES = ("Comment", "Communication", "File", "WhatsApp Message")
 
 #: doctype -> (doctype field, name field). `File` spells them differently.
 REFERENCE_FIELDS = {
     "Comment": ("reference_doctype", "reference_name"),
     "Communication": ("reference_doctype", "reference_name"),
     "File": ("attached_to_doctype", "attached_to_name"),
+    "WhatsApp Message": ("reference_doctype", "reference_name"),
 }
 
 
@@ -175,6 +180,14 @@ def communication_query_conditions(doctype: str, user: str | None = None):
 
 def communication_has_permission(doc, ptype: str = "read", user: str | None = None):
     return _has_permission(doc, ptype, user, "Communication")
+
+
+def whatsapp_message_query_conditions(doctype: str, user: str | None = None):
+    return _query_conditions("WhatsApp Message", user)
+
+
+def whatsapp_message_has_permission(doc, ptype: str = "read", user: str | None = None):
+    return _has_permission(doc, ptype, user, "WhatsApp Message")
 
 
 def file_query_conditions(doctype: str, user: str | None = None):

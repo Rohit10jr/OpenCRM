@@ -54,3 +54,7 @@ class CrmAppConfig(AppConfig):
         # the function that makes the call.
         from crm_app.integrations.exotel import handler as exotel_handler  # noqa: F401
         from crm_app.integrations.twilio import handler as twilio_handler  # noqa: F401
+        from crm_app.integrations.whatsapp import api as whatsapp_api  # noqa: F401
+        from crm_app.integrations.whatsapp import signals as whatsapp_signals
+
+        whatsapp_signals.connect_signals()

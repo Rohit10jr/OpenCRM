@@ -48,12 +48,6 @@ def call(client, path: str, payload: dict | None = None):
 #: Paths the frontend calls that are **out of phase-3 scope**, with the reason.
 OUT_OF_SCOPE = {
     # phase 7 - integrations behind feature flags
-    "crm.api.whatsapp.create_whatsapp_message",
-    "crm.api.whatsapp.get_whatsapp_messages",
-    "crm.api.whatsapp.is_whatsapp_enabled",
-    "crm.api.whatsapp.is_whatsapp_installed",
-    "crm.api.whatsapp.react_on_whatsapp_message",
-    "crm.api.whatsapp.send_whatsapp_template",
     "crm.fcrm.doctype.erpnext_crm_settings.erpnext_crm_settings.get_product_sync_status",
     # PHASE_3_ENDPOINTS.md section 3 - controller methods ship with their doctype
     "crm.fcrm.doctype.crm_call_log.crm_call_log.get_call_log",

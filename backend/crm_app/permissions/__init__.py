@@ -145,6 +145,11 @@ def register() -> None:
             attachments.communication_has_permission,
         ),
         ("File", attachments.file_query_conditions, attachments.file_has_permission),
+        (
+            "WhatsApp Message",
+            attachments.whatsapp_message_query_conditions,
+            attachments.whatsapp_message_has_permission,
+        ),
     ):
         register_permission_hooks(
             doctype,
