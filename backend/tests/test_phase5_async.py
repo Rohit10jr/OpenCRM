@@ -210,13 +210,25 @@ def test_lead_sync_tasks_are_registered_and_no_op(task_name, settings):
     assert "skipped" in result
 
 
-def test_lead_sync_raises_rather_than_lying_when_the_flag_is_on(settings):
-    """A flag that is on with nothing behind it is a config error, not a silent success."""
+def test_lead_sync_does_real_work_when_the_flag_is_on(settings, db):
+    """This asserted `NotImplementedError` while phase 5's stub was the whole body.
+
+    The property it was written for — *"a flag that is on with nothing behind it is a
+    config error, not a silent success"* — was about the **stub**, and phase 7 put a
+    provider behind the flag. Raising now would be the bug.
+
+    What survives is the half that is still meaningful: with the flag on, the task must
+    actually consult the configured sources rather than return a `skipped` marker. With no
+    sources configured that is an empty result, not a refusal.
+    `test_facebook_lead_sync.py` covers what it does once sources exist.
+    """
     from crm_app.tasks import sync_leads_daily
 
     settings.ENABLE_FACEBOOK_LEAD_SYNC = True
-    with pytest.raises(NotImplementedError):
-        sync_leads_daily()
+    result = sync_leads_daily()
+
+    assert "skipped" not in result
+    assert result == {"frequency": "Daily", "sources": {}}
 
 
 # ---------------------------------------------------------------------------

@@ -127,6 +127,21 @@ def lead_sync_enabled() -> bool:
     return bool(getattr(settings, "ENABLE_FACEBOOK_LEAD_SYNC", False))
 
 
+#: The task name's frequency slug -> the label stored on `Lead Sync Source`.
+#: `lead_sync_source.json`'s Select options are the labels; `hooks.py`'s scheduler keys are
+#: the slugs. Nothing upstream maps between them because upstream runs one job per
+#: frequency that filters on the label directly; this keeps the two vocabularies in one
+#: place so a typo is a KeyError here rather than a source that silently never syncs.
+FREQUENCY_LABELS = {
+    "5_minutes": "Every 5 Minutes",
+    "10_minutes": "Every 10 Minutes",
+    "15_minutes": "Every 15 Minutes",
+    "hourly": "Hourly",
+    "daily": "Daily",
+    "monthly": "Monthly",
+}
+
+
 def _sync_leads(frequency: str) -> dict:
     """`PHASE_5_ASYNC.md` §1: *"register the beat entries now, leave the tasks as no-ops
     behind a feature flag."*
@@ -138,9 +153,12 @@ def _sync_leads(frequency: str) -> dict:
     """
     if not lead_sync_enabled():
         return {"skipped": "ENABLE_FACEBOOK_LEAD_SYNC is off", "frequency": frequency}
-    raise NotImplementedError(
-        "Lead sync is phase 7; the flag is on but no provider is implemented"
-    )
+
+    # Phase 7 filled this in. The task names, queues and cron entries are unchanged from
+    # phase 5 — only the body moved from `raise NotImplementedError` to real work.
+    from crm_app.integrations.facebook.sync import sync_due_sources
+
+    return sync_due_sources(FREQUENCY_LABELS[frequency])
 
 
 @shared_task(name="crm.sync_leads_daily")

@@ -822,6 +822,16 @@ def test_exactly_the_intended_doctypes_have_row_rules():
         # the layer this port does not model, so "no hook" would have meant "no protection"
         # for the fifth time.
         "WhatsApp Message",
+        # The Facebook lead-sync group. Two hold access tokens - a page token reads every
+        # lead the page has collected and can post as the page. `Failed Lead Sync Log`
+        # holds the raw Graph payload for a lead that never imported: a real person's
+        # name, email and phone, in a table with nothing else protecting it. The form
+        # doctype holds no secret and is ruled anyway, because leaving one doctype of a
+        # four-doctype feature open reads as intent.
+        "Lead Sync Source",
+        "Facebook Page",
+        "Facebook Lead Form",
+        "Failed Lead Sync Log",
     }
     assert with_rules == upstream | added_by_phase_4 | added_by_phase_7
 

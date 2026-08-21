@@ -231,6 +231,40 @@ def telephony_settings_has_permission(doc, ptype: str = "read", user: str | None
     return bool(_roles(user) & MAIL_ADMIN_ROLES)
 
 
+# ---------------------------------------------------------------------------
+# Lead sync (phase 7)
+# ---------------------------------------------------------------------------
+#
+# Three doctypes, one rule: managers only, reads closed.
+#
+# `Lead Sync Source` and `Facebook Page` hold **access tokens** — a Facebook page token
+# reads every lead the page has ever collected and can post as the page. `Failed Lead Sync
+# Log` holds `lead_data`, which is the raw Graph payload: a real person's name, email and
+# phone number, for a lead that never made it into the CRM and therefore has no row rule of
+# its own protecting it.
+#
+# That last one is the reason this is not "just settings". Everything else in this group is
+# configuration; the failure log is personal data about members of the public, sitting in a
+# table nobody would think to look at.
+#
+# Same shape as the telephony settings above, and for the same reason: these back an
+# administration screen, so closing reads costs nothing a user needs.
+
+
+def lead_sync_query_conditions(doctype: str, user: str | None = None):
+    user = user or get_current_user()
+    if user == "Administrator" or _roles(user) & MAIL_ADMIN_ROLES:
+        return None
+    return Q(pk__in=[])
+
+
+def lead_sync_has_permission(doc, ptype: str = "read", user: str | None = None):
+    user = user or get_current_user()
+    if user == "Administrator":
+        return True
+    return bool(_roles(user) & MAIL_ADMIN_ROLES)
+
+
 # `FCRM Settings` is different, and upstream says so: **Sales User holds read** on it.
 # It has to - `stores/settings.js` loads it as a document resource and the activity
 # timeline reads `crm_timeline_timestamp_format` from it on every screen in the product.
