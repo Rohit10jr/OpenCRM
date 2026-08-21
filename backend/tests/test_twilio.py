@@ -219,6 +219,70 @@ def test_every_webhook_endpoint_refuses_a_forged_signature(twilio_on, endpoint):
         getattr(handler, endpoint)(_twilio_url=URL, _twilio_signature=forged, **params)
 
 
+def test_a_real_http_webhook_is_verified_from_its_header(twilio_on, api, settings):
+    """The finding the phase-7 review caught, tested the way it would have been caught.
+
+    Twilio puts the signature in the `X-Twilio-Signature` **header** and signs the absolute
+    request URL. Every other test in this file passes them as arguments, which is a
+    convenient seam and cannot detect that the production path never receives them — the
+    first version of these endpoints took them as ordinary parameters and rejected every
+    real webhook while this file was green.
+
+    This one goes through the actual HTTP stack.
+    """
+    from crm_app.models import CRMCallLog
+
+    params = _params(Caller="+919876543210", CallStatus="completed")
+    url = "http://testserver/api/method/crm.integrations.twilio.api.twilio_incoming_call_handler"
+
+    response = api.post(
+        "/api/method/crm.integrations.twilio.api.twilio_incoming_call_handler",
+        params,
+        format="json",
+        HTTP_X_TWILIO_SIGNATURE=sign(url, params),
+    )
+
+    assert response.status_code == 200, response.content[:400]
+    assert CRMCallLog.objects.filter(pk="CA-twilio-1").exists()
+
+
+def test_a_real_http_webhook_without_the_header_is_refused(twilio_on, api):
+    from crm_app.models import CRMCallLog
+
+    params = _params(Caller="+919876543210")
+    response = api.post(
+        "/api/method/crm.integrations.twilio.api.twilio_incoming_call_handler",
+        params,
+        format="json",
+    )
+
+    assert response.status_code == 403, response.content[:400]
+    assert not CRMCallLog.objects.filter(pk="CA-twilio-1").exists()
+
+
+def test_a_forged_parameter_cannot_stand_in_for_the_header(twilio_on, api):
+    """The parameters are a test seam. Over real HTTP the request wins, so a caller cannot
+    supply their own `_twilio_url` / `_twilio_signature` pair and be believed."""
+    from crm_app.models import CRMCallLog
+
+    params = _params(Caller="+919876543210")
+    attacker_url = "http://attacker.example.com/x"
+    payload = {
+        **params,
+        "_twilio_url": attacker_url,
+        "_twilio_signature": sign(attacker_url, params, token="attacker-token"),
+    }
+
+    response = api.post(
+        "/api/method/crm.integrations.twilio.api.twilio_incoming_call_handler",
+        payload,
+        format="json",
+    )
+
+    assert response.status_code == 403
+    assert not CRMCallLog.objects.filter(pk="CA-twilio-1").exists()
+
+
 @pytest.mark.parametrize(
     "path",
     [

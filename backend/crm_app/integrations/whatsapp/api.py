@@ -46,6 +46,23 @@ def _roles(user: str) -> set[str]:
     return obj.get_roles() if obj else set()
 
 
+def _require_enabled() -> None:
+    """The write paths refuse when the integration is off.
+
+    Found by the phase-7 review. `is_whatsapp_enabled` existed and the three write
+    endpoints did not consult it, so with `ENABLE_WHATSAPP` off a caller could still create
+    `WhatsApp Message` rows — which the signal then broadcast and turned into notifications.
+    Messages that will never be delivered, in a feature the deployment has switched off.
+
+    Reads are deliberately **not** gated: a deployment that turns WhatsApp off should not
+    lose the history of conversations it already had.
+    """
+    if not provider.is_enabled():
+        raise FrappePermissionError(
+            "WhatsApp is not enabled for this deployment.", title="Not Permitted"
+        )
+
+
 def validate_access(reference_doctype: str | None = None, reference_name: str | None = None,
                     permtype: str = "read"):
     """`whatsapp.py:14-34`, both halves."""
@@ -182,6 +199,7 @@ def create_whatsapp_message(
     """`whatsapp.py:255-294`."""
     from crm_app.models import WhatsAppMessage
 
+    _require_enabled()
     validate_access(reference_doctype, reference_name)
 
     fields = {
@@ -217,6 +235,7 @@ def send_whatsapp_template(reference_doctype: str, reference_name: str, template
     """`whatsapp.py:297-313`."""
     from crm_app.models import WhatsAppMessage
 
+    _require_enabled()
     validate_access(reference_doctype, reference_name)
 
     record = WhatsAppMessage._default_manager.create(
@@ -242,6 +261,7 @@ def react_on_whatsapp_message(emoji: str, reply_to_name: str):
     """
     from crm_app.models import WhatsAppMessage
 
+    _require_enabled()
     validate_access()
 
     original = WhatsAppMessage._default_manager.filter(pk=reply_to_name).first()

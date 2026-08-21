@@ -39,6 +39,28 @@ def is_enabled():
     return bool(get_twilio_settings().enabled)
 
 
+#: Twilio's header. `X-Twilio-Signature` on the wire; Django normalises it to this.
+SIGNATURE_HEADER = "HTTP_X_TWILIO_SIGNATURE"
+
+
+def signature_and_url(request, url: str = "", signature: str | None = None):
+    """Where the signed string and the signature actually come from.
+
+    **From the request**, when there is one: the signature is the `X-Twilio-Signature`
+    header and the signed string is the absolute request URL. Neither is a parameter, so
+    an endpoint that only sees the payload cannot verify anything.
+
+    The explicit arguments are the test seam, and they are second. A first version had
+    them as the *only* source, which meant real webhooks — whose signature is in a header
+    — were rejected every time while the tests passed. Found by the phase-7 review; it is
+    the "green for a reason unrelated to production" failure the runbook warns about.
+    """
+    if request is not None:
+        header = request.META.get(SIGNATURE_HEADER)
+        return (request.build_absolute_uri(), header)
+    return (url, signature)
+
+
 def validate_twilio_request(
     params: dict, *, url: str, signature: str | None, require_application_sid: bool = False
 ):
@@ -278,8 +300,10 @@ def status_callback_url() -> str:
     return _callback_url("/api/method/crm.integrations.twilio.api.update_call_status_info")
 
 
-@whitelist("crm.integrations.twilio.api.voice", allow_guest=True)
-def voice(_twilio_url: str = "", _twilio_signature: str | None = None, **kwargs):
+@whitelist("crm.integrations.twilio.api.voice", allow_guest=True, wants_request=True)
+def voice(
+    _request=None, _twilio_url: str = "", _twilio_signature: str | None = None, **kwargs
+):
     """`api.py:53-71` — outbound: the browser dials, Twilio asks us what to do.
 
     Returns TwiML. The transport wrapper is responsible for serving it as `text/xml`;
@@ -287,8 +311,9 @@ def voice(_twilio_url: str = "", _twilio_signature: str | None = None, **kwargs)
     """
     from crm_app.models import CRMTelephonyAgent
 
+    _url, _sig = signature_and_url(_request, _twilio_url, _twilio_signature)
     settings_row = validate_twilio_request(
-        kwargs, url=_twilio_url, signature=_twilio_signature, require_application_sid=True
+        kwargs, url=_url, signature=_sig, require_application_sid=True
     )
 
     identity = str(kwargs.get("Caller") or "").replace("client:", "").strip()
@@ -311,10 +336,13 @@ def voice(_twilio_url: str = "", _twilio_signature: str | None = None, **kwargs)
     )
 
 
-@whitelist("crm.integrations.twilio.api.twilio_incoming_call_handler", allow_guest=True)
-def twilio_incoming_call_handler(_twilio_url: str = "", _twilio_signature: str | None = None, **kwargs):
+@whitelist("crm.integrations.twilio.api.twilio_incoming_call_handler", allow_guest=True, wants_request=True)
+def twilio_incoming_call_handler(
+    _request=None, _twilio_url: str = "", _twilio_signature: str | None = None, **kwargs
+):
     """`api.py:74-83` — inbound: someone dialled our Twilio number."""
-    settings_row = validate_twilio_request(kwargs, url=_twilio_url, signature=_twilio_signature)
+    _url, _sig = signature_and_url(_request, _twilio_url, _twilio_signature)
+    settings_row = validate_twilio_request(kwargs, url=_url, signature=_sig)
 
     create_call_log(call_details(kwargs))
 
@@ -371,12 +399,15 @@ def update_call_log(call_sid: str, status: str | None = None):
     return log
 
 
-@whitelist("crm.integrations.twilio.api.update_recording_info", allow_guest=True)
-def update_recording_info(_twilio_url: str = "", _twilio_signature: str | None = None, **kwargs):
+@whitelist("crm.integrations.twilio.api.update_recording_info", allow_guest=True, wants_request=True)
+def update_recording_info(
+    _request=None, _twilio_url: str = "", _twilio_signature: str | None = None, **kwargs
+):
     """`api.py:139-156`."""
     from crm_app.models import CRMCallLog
 
-    validate_twilio_request(kwargs, url=_twilio_url, signature=_twilio_signature)
+    _url, _sig = signature_and_url(_request, _twilio_url, _twilio_signature)
+    validate_twilio_request(kwargs, url=_url, signature=_sig)
 
     call_sid = str(kwargs.get("CallSid") or "")
     log = update_call_log(call_sid)
@@ -389,8 +420,10 @@ def update_recording_info(_twilio_url: str = "", _twilio_signature: str | None =
     return {"ok": True}
 
 
-@whitelist("crm.integrations.twilio.api.update_call_status_info", allow_guest=True)
-def update_call_status_info(_twilio_url: str = "", _twilio_signature: str | None = None, **kwargs):
+@whitelist("crm.integrations.twilio.api.update_call_status_info", allow_guest=True, wants_request=True)
+def update_call_status_info(
+    _request=None, _twilio_url: str = "", _twilio_signature: str | None = None, **kwargs
+):
     """`api.py:158-183`.
 
     Upstream also posts a `user_defined_message` back to Twilio so the browser SDK learns
@@ -398,7 +431,8 @@ def update_call_status_info(_twilio_url: str = "", _twilio_signature: str | None
     parent-call websocket relay the SDK provides, and this port pushes status to the
     browser over its own Channels layer instead.
     """
-    validate_twilio_request(kwargs, url=_twilio_url, signature=_twilio_signature)
+    _url, _sig = signature_and_url(_request, _twilio_url, _twilio_signature)
+    validate_twilio_request(kwargs, url=_url, signature=_sig)
 
     parent_sid = str(kwargs.get("ParentCallSid") or "")
     log = update_call_log(parent_sid, status=kwargs.get("CallStatus"))

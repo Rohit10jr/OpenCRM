@@ -52,6 +52,11 @@ class MethodView(FrappeAPIView):
                 raise AuthenticationError("Not permitted")
 
         payload = self._build_payload(request)
+        # Opt-in, and only webhook signature verification asks for it: the signature is a
+        # header and the signed string is the absolute URL, neither of which is a
+        # parameter. See `whitelist(wants_request=...)`.
+        if getattr(func, "__frappe_wants_request__", False):
+            payload["_request"] = request
         result = func(**bind_arguments(func, payload))
         return self.envelope(result, status.HTTP_200_OK)
 

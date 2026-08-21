@@ -95,17 +95,48 @@ def client_get_list(
 
 @whitelist("frappe.client.get_single_value")
 def client_get_single_value(doctype: str, field: str):
-    """``frappe/client.py:get_single_value`` - one field off a singleton."""
+    """``frappe/client.py:get_single_value`` - one field off a singleton.
+
+    **Three checks, and it shipped with one.** Found by the phase-7 review.
+
+    The original only rejected `SENSITIVE_FIELDS`, which left this endpoint as a way around
+    both of the other mechanisms:
+
+    * no **row rule** was applied, so a doctype whose whole point is being manager-only —
+      `CRM Twilio Settings`, `CRM Exotel Settings`, `ERPNext CRM Settings` — answered to any
+      authenticated caller;
+    * no **`RESTRICTED_FIELDS`** check, so the manager-only *fields* on those rows came back
+      too.
+
+    Concretely, before this fix, any Sales User could read
+    `CRM Exotel Settings.webhook_verify_token` — the shared secret that is the entire
+    authentication on a public webhook — and `ERPNext CRM Settings.api_key`. The hole
+    predates phase 7 (`frappe.client.*` landed in phase 3), and phase 7 is what made it
+    serious by putting credentials behind restricted fields.
+
+    It is the same lesson as every other finding in this project, one layer along: *a
+    doctype's endpoints are not its attack surface.* Here it was not even the generic
+    route — it was a second, older method endpoint doing the same job unguarded.
+    """
+    from frappe_core.field_security import is_hidden
+
     entry = _entry_or_404(doctype)
     if not entry.is_single:
         throw(f"{doctype} is not a single DocType")
+
     instance = entry.model._default_manager.first()
     if instance is None:
         return None
-    from frappe_core.field_security import sensitive_fields
 
-    if field in sensitive_fields(entry.model):
+    user = get_current_user()
+    if not permissions.check_object_permission(instance, "read", user):
+        raise FrappePermissionError(f"Not permitted to read {doctype}")
+
+    # `is_hidden` answers for sensitive *and* restricted, and only consults roles for the
+    # latter - the same entry point the four field-naming routes use.
+    if is_hidden(entry.model, field, user):
         raise FrappePermissionError(f"Field {field!r} is not readable")
+
     return getattr(instance, field, None)
 
 

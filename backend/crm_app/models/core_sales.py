@@ -482,6 +482,22 @@ class CRMLead(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
     class Meta:
         ordering = ["-modified"]
         name_strategy = NamingSeries("CRM-LEAD-.YYYY.-")
+        constraints = [
+            # Phase 7. The Facebook sync's duplicate check runs *before* the insert, so two
+            # workers replaying the same batch can both pass it and both insert. Found by
+            # the phase-7 review; this makes idempotency the database's guarantee rather
+            # than a race the application usually wins.
+            #
+            # **Partial**, on non-empty pairs only: every manually created lead leaves both
+            # columns blank, and an unconditional unique constraint would permit exactly
+            # one such lead to exist.
+            models.UniqueConstraint(
+                fields=["facebook_form_id", "facebook_lead_id"],
+                condition=models.Q(facebook_lead_id__gt="")
+                & models.Q(facebook_form_id__gt=""),
+                name="unique_facebook_lead_per_form",
+            )
+        ]
 
     #: Child tables with more than one possible parent, so they carry ``parent`` +
     #: ``parenttype`` instead of a FK. See frappe_core.children.

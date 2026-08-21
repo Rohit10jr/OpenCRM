@@ -75,8 +75,14 @@ def is_erpnext_installed():
 
 @whitelist(f"{_PREFIX}.get_external_companies")
 def get_external_companies():
-    """`erpnext_crm_settings.py:207-212`."""
-    if not client.is_configured():
+    """`erpnext_crm_settings.py:207-212`.
+
+    Both gates. `is_configured` only asks whether a URL and credentials are present; found
+    by the phase-7 review, it would call out to the remote site on behalf of a deployment
+    that has ERPNext switched off — an outbound request from a disabled integration, which
+    is exactly what a feature flag is supposed to prevent.
+    """
+    if not client.is_enabled() or not client.is_configured():
         return []
     return client.get_list("Company", fields=["company_name"])
 
@@ -246,8 +252,22 @@ def get_open_sync_issues():
 
 @whitelist(f"{_PREFIX}.dismiss_sync_issue")
 def dismiss_sync_issue(issue_name: str):
-    """`erpnext_crm_settings.py:246-255`."""
+    """`erpnext_crm_settings.py:246-255`.
+
+    **Permission is checked against the parent.** Found by the phase-7 review: this wrote
+    straight to the child table, and a child table has no route and therefore no rule of
+    its own — so the write was unguarded. Upstream reaches the same check by mutating
+    `settings.sync_issues` and calling `settings.save()`, which enforces write permission
+    on the singleton.
+
+    That is the child-table shape of the recurring finding in this project: the rule lives
+    on the parent, and a writer that goes around the parent goes around the rule.
+    """
     from crm_app.models import CRMProductSyncIssue
+
+    row = settings()
+    if not permissions.check_object_permission(row, "write", get_current_user()):
+        throw("Not permitted", title="Not Permitted")
 
     updated = CRMProductSyncIssue._default_manager.filter(pk=issue_name).update(dismissed=True)
     return bool(updated)
