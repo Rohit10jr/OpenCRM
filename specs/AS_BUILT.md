@@ -1,6 +1,6 @@
 # As-built reference — read this before writing any code
 
-**Authoritative.** Phases 0–2 are complete and reviewed; this describes what actually
+**Authoritative.** Phases 0–6 are complete and reviewed; this describes what actually
 exists, as opposed to what the phase specs predicted. Where a phase spec and this file
 disagree, **this file wins** — the specs were written before the code.
 
@@ -158,7 +158,7 @@ empty dict would render a column-less list.
 |---|---|
 | Enqueue anything | `@shared_task` — `config.celery.app` is imported by `config/__init__.py`, so bare `shared_task` binds |
 | Scheduled work | `config.celery.app.conf.beat_schedule` — one entry per `crm/hooks.py:scheduler_events` row |
-| Emit a realtime event | `crm_app.realtime.publish(event, user=..., message=...)` |
+| Emit a realtime event | `crm_app.realtime.publish(event, message=None, user=...)` — **message is second**, see phase 6 below |
 | Object rule for a whole batch | `frappe_core.permissions.filter_object_permitted(doctype, instances, ptype, user)` |
 | Bulk delete, split for the worker | `crm_app.api.doc.authorize_bulk_delete(...)` / `perform_bulk_delete(...)` |
 
@@ -414,7 +414,10 @@ Available fixtures in `tests/conftest.py`: `alice`, `bob`, `administrator`, `mak
 
 ## 6. The rule that governed every divergence
 
-Upstream has bugs. Nine are catalogued in `UPSTREAM_BUGS.md` (gitignored, local).
+Upstream has bugs. **21** are catalogued across `UPSTREAM_BUGS_PHASE_0-2.md` and
+`UPSTREAM_BUGS_PHASE_3-6.md` — both gitignored as local working notes (`.gitignore:59`),
+so a divergence recorded only there is invisible to a reviewer. Summarise the ones that
+matter in the phase's progress file too.
 
 > **Diverge on bugs nothing can observe. Reproduce bugs that are user-visible.**
 
