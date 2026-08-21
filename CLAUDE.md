@@ -55,6 +55,15 @@ per-doctype detail and the two questions that settle each case.
 3. No two concurrent agents edit the same file.
 4. Preserve `frappe.throw` message text verbatim — it is user-facing copy.
 5. Work on a branch, never directly on `main`.
+6. **One commit per meaningful change, never one per phase.** An earlier run was told
+   "one commit per phase" and produced single commits of 25,000 lines — unreviewable,
+   unbisectable, unrevertable. Commit when a coherent piece of work is done and the suite
+   is green; a dozen commits in a phase is correct. Each must stand alone, with a message
+   saying what changed and **why**.
+7. **Registering a doctype publishes it.** Every field is readable, filterable and
+   writable through `/api/resource/` unless something says otherwise. Before adding one,
+   read the checklist in `specs/AS_BUILT.md` — two tests will fail on you otherwise, by
+   design.
 
 ## Keep shell commands short
 
@@ -106,7 +115,8 @@ tier you used.
 | **2** | Codex via PowerShell 5.1 | Same reviewer, fallback shell |
 | **3** | Claude subagent | **Degraded** — same model and same spec, so correlated blind spots |
 
-Full procedure, including the per-phase prompts: `docs/internal/RUNBOOK.md` §3.
+Full procedure: `docs/internal/RUNBOOK_PHASE_7.md` §3. (`RUNBOOK.md` covered the
+phases 3-6 run and is now a record of it.)
 
 ## Tier 1 — Codex (default)
 
