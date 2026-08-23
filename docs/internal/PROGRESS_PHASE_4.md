@@ -187,7 +187,7 @@ Route surface at the close of this pass:
 | A4 | Settings singles unprotected — Twilio, Exotel, FCRM, Global | ✅ **Done** — rules + encryption | `30740d0` |
 | A5 | `Version` leaks change history of invisible records | ✅ **Done** — route withheld | `9ef46ee` |
 | A6 | The standing test — every routable doctype accounted for | ✅ **Done** | `9ef46ee` |
-| A7 | Triage the remaining ~26 doctypes | 🟡 **16 of 26** — 10 left, all reference data | `34f48a1` |
+| A7 | Triage the remaining ~26 doctypes | 🟡 **18 of 26** — 8 left, all reference or catalogue data | `34f48a1`, `bc47258` |
 | A8 | `_resolved_fieldtype` still live in 3 endpoints | ❌ **Open** — 2 uses in `crm_app/api/doc.py` | — |
 | A9 | `handle_perm_level_restrictions` unported | 🟡 **Effect covered** by `RESTRICTED_FIELDS`; the false justification is corrected | `7bc6b98` |
 
@@ -215,14 +215,14 @@ for the standing test rather than another round of manual audit.
 | B2 | Comment / Communication content leak, untested with real data | ✅ **Done** — tested, confirmed, fixed |
 | B3 | `get_default_layout` has no upstream fixture to diff against | ❌ **Open** — wants a visual check against the running frontend |
 | B4 | `field_meta` falls back to introspection for 9 platform doctypes | ❌ **Open** |
-| B5 | `get_counts` deliberately unfiltered | ❌ **Open** |
+| B5 | `get_counts` deliberately unfiltered | ✅ **Checked — no leak.** `get_counts` only ever receives rows from `fetch_rows` / `get_records_based_on_order`, both permission-filtered, so an invisible record never becomes a row and never gets a badge. Structural rather than careful, which is why it is now pinned by `tests/test_kanban_counts.py` |
 
 ## C — Unfinished work
 
 | # | Item | Status |
 |---|---|---|
 | C1 | The standing test | ✅ **Done** (= A6) |
-| C2 | `clear_old_versions` | ❌ **Open** — phase 5. `Version` now exists, so the blocker is gone |
+| C2 | `clear_old_versions` | ✅ **Done** in phase 5 (`6d691f5`) — and the obvious implementation would have deleted the timeline; see `specs/VERSION_HISTORY.md` |
 | C3 | `CRM Dashboard` layout editing — no endpoint | ❌ **Open** |
 | C4 | `STANDARD_FILTER_FIELDS` still hand-kept | ❌ **Open** — a test does verify it against the JSON |
 | C5 | Six dashboard charts (from phase 3) | ❌ **Deferred** — see `PROGRESS_PHASE_3.md` |

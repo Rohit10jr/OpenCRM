@@ -220,6 +220,65 @@ write-up in `specs/UNROUTED_DOCTYPES.md`.
 
 ---
 
+## Phase 7 — the integration doctypes
+
+Ten new routable doctypes, all ruled **manager-only, reads closed**, matching the telephony
+settings above and for the same reason: they back administration screens.
+
+| Doctype | Holds | Upstream | Us |
+|---|---|---|---|
+| `ERPNext CRM Settings` | API key + secret for the remote site | System Manager | managers — match |
+| `Lead Sync Source` | Meta access token (`Password`) | role table | managers |
+| `Facebook Page` | Meta **page** access token, plain `Data` upstream | role table | managers, and **encrypted** — bug #28 |
+| `Facebook Lead Form` | form metadata, no secret | role table | managers — ruled anyway, see below |
+| `Failed Lead Sync Log` | **the raw Graph payload** | role table | managers |
+| `WhatsApp Message` | conversation content | `frappe_whatsapp`'s role table | **defers to its referenced document** |
+
+**`Failed Lead Sync Log` is the one to notice.** Everything else in that group is
+configuration; this holds `lead_data`, the raw Facebook payload for a lead that *failed* to
+import — a real person's name, email and phone number, for a record that never became a CRM
+document and therefore has no row rule of its own protecting it. It is personal data in a
+table nobody would think to look at.
+
+**`Facebook Lead Form` holds no secret and is ruled anyway.** Leaving one doctype of a
+four-doctype feature open reads to the next person as intent rather than as an oversight.
+
+**`WhatsApp Message` joins `Comment` / `Communication` / `File`** in
+`crm_app/permissions/attachments.py` rather than getting a rule of its own — it is a row
+*about* a lead or deal that carries which one, which is exactly that shape. The reason is
+sharper than for the others: a deal row leaks a number, a WhatsApp thread leaks the
+negotiation.
+
+### The second door the phase-7 review found
+
+`frappe.client.get_single_value` rejected `SENSITIVE_FIELDS` and checked **nothing else** —
+no row rule, no `RESTRICTED_FIELDS`. So every manager-only singleton above answered to any
+authenticated caller, including `CRM Exotel Settings.webhook_verify_token`, which is the
+entire authentication on a public webhook.
+
+The hole is phase 3's and there were no tests for that endpoint at all. Phase 7 is what made
+it serious. It now applies the row rule and routes the field name through
+`field_security.is_hidden`, like the four field-naming routes.
+
+> **The pattern, one layer along.** It was not the generic `/api/resource/` route this time.
+> It was a second, older *method* endpoint doing the same job unguarded — which is the same
+> mistake wearing its sixth disguise. When a mechanism protects a doctype, ask what else can
+> read that doctype.
+
+### Known gap: `CRM Exotel Settings.webhook_verify_token` is plaintext at rest
+
+`RESTRICTED_FIELDS` but **not** `ENCRYPTED_FIELDS`. It is not encrypted because
+`ExotelSettings.vue:66` binds it with `v-model` — an editable input the administrator types
+into and reads back — so encrypting it would show them ciphertext and saving would
+re-encrypt that.
+
+Closing it needs either a decrypt-on-read path for permitted users, which does not exist, or
+a frontend change so the screen shows the callback URL instead of the token. Both are
+mechanisms rather than fixes, so phase 7 recorded it instead of inventing one. The serious
+half — that any authenticated user could read it — is closed above.
+
+---
+
 ## Where we deliberately differ, and why
 
 | # | Divergence | Direction | Reason |

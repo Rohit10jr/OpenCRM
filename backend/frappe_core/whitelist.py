@@ -24,14 +24,33 @@ class MethodNotFound(KeyError):
     pass
 
 
-def whitelist(dotted_path: str, *, allow_guest: bool = False, methods: tuple[str, ...] = ("GET", "POST")):
-    """Register ``func`` as callable at ``/api/method/<dotted_path>``."""
+def whitelist(
+    dotted_path: str,
+    *,
+    allow_guest: bool = False,
+    methods: tuple[str, ...] = ("GET", "POST"),
+    wants_request: bool = False,
+):
+    """Register ``func`` as callable at ``/api/method/<dotted_path>``.
+
+    ``wants_request`` passes the DRF request in as ``_request``. Almost nothing should
+    want it — the payload already merges query string and body, which is what an endpoint
+    normally needs.
+
+    **Webhook signature verification is the case it exists for.** A provider signs the
+    request URL and puts the signature in a *header*; neither is a parameter, so a handler
+    that cannot see the request cannot verify anything. Phase 7's Twilio endpoints took the
+    URL and signature as ordinary arguments and were therefore verifiable only in tests —
+    a real webhook has no such parameters and was rejected every time. Found by the phase-7
+    review.
+    """
 
     def decorator(func: Callable) -> Callable:
         func.__frappe_whitelisted__ = True
         func.__frappe_path__ = dotted_path
         func.__frappe_allow_guest__ = allow_guest
         func.__frappe_methods__ = tuple(m.upper() for m in methods)
+        func.__frappe_wants_request__ = wants_request
         _METHODS[dotted_path] = func
         return func
 

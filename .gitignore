@@ -53,7 +53,12 @@ Thumbs.db
 
 quick_recap.md
 
-# Local working notes. Glob, not an exact name: the file was split per phase
-# (UPSTREAM_BUGS_PHASE_0-2, _PHASE_3-6) and the exact-match rule silently stopped
-# covering them, so `git add -A` would have committed both.
-UPSTREAM_BUGS*.md
+# UPSTREAM_BUGS*.md was ignored here as "local working notes". It is tracked now.
+#
+# It had grown into 33 defects found in Frappe and Frappe CRM while porting them, each
+# with file:line evidence and our stance - reproduce or diverge - and the reasoning for
+# it. That is the most portable thing this repo contains, and it existed on one laptop.
+#
+# It is also what a reviewer needs: when this port behaves differently from upstream, the
+# answer to "is that a port bug?" lives in that file. The per-phase progress files carry
+# one-line summaries, so the findings survived being ignored; the reasoning did not.

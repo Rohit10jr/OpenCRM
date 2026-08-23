@@ -1,6 +1,17 @@
-# Unattended Run — Phases 3 to 6
+# Unattended Run — Phases 3 to 6  ·  COMPLETED
 
-**You are running without a human available. Read this whole file before starting.**
+> **This run is finished and this file is a record of it. Do not follow it.**
+> The operative runbook is **`RUNBOOK_PHASE_7.md`**.
+>
+> One instruction here is now actively wrong: §4 said *"one commit per phase"*, and the
+> result was single commits of 25,000 lines. The phase-7 runbook replaces it with one
+> commit per meaningful change, and `CLAUDE.md` rule 6 carries the same.
+>
+> The reviewer policy in §3 is unchanged and still correct.
+
+Phases 3-6 landed and are merged to `main`. What each produced is in
+`PROGRESS_PHASE_<N>.md`; what was found reviewing them afterwards is in the Review
+Resolution section of each.
 
 ## Scope
 

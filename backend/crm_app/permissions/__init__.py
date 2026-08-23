@@ -99,6 +99,28 @@ def register() -> None:
             has_permission=platform_docs.telephony_settings_has_permission,
         )
 
+    # Phase 7. Two hold access tokens; the third holds the raw Facebook payload for a lead
+    # that failed to import - a real person's name, email and phone, in a table with no
+    # other rule protecting it. Managers only, reads closed.
+    # `Facebook Lead Form` holds no secret itself, and gets the same rule anyway: it is
+    # reachable only from the sync settings screen, which is manager-only, and leaving one
+    # doctype of a four-doctype feature open is how the next reader concludes the feature
+    # was meant to be public.
+    for doctype in (
+        "Lead Sync Source",
+        "Facebook Page",
+        "Facebook Lead Form",
+        "Failed Lead Sync Log",
+        # `ERPNext CRM Settings` holds an API key/secret pair that authenticates as a user
+        # on the remote ERPNext site. Upstream grants it to System Manager only.
+        "ERPNext CRM Settings",
+    ):
+        register_permission_hooks(
+            doctype,
+            permission_query_conditions=platform_docs.lead_sync_query_conditions,
+            has_permission=platform_docs.lead_sync_has_permission,
+        )
+
     # A4. `FCRM Settings` is read by every screen in the product - the activity timeline
     # takes its timestamp format from it - so upstream grants Sales User read and withholds
     # write. Same split here; the credential that should never have been on a
@@ -145,6 +167,11 @@ def register() -> None:
             attachments.communication_has_permission,
         ),
         ("File", attachments.file_query_conditions, attachments.file_has_permission),
+        (
+            "WhatsApp Message",
+            attachments.whatsapp_message_query_conditions,
+            attachments.whatsapp_message_has_permission,
+        ),
     ):
         register_permission_hooks(
             doctype,

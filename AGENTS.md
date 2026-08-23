@@ -8,6 +8,8 @@ existing Vue frontend.
 | File | What it is |
 |---|---|
 | `PORT_PLAN.md` | Source inventory, frontend contract, settled architecture decisions |
+| `specs/AS_BUILT.md` | What already exists. Its security section lists the mechanisms a doctype can use |
+| `specs/SECURITY_MODEL.md` | Per-doctype comparison with upstream, and the 11 places we deliberately differ |
 | `specs/README.md` | Index of per-phase specs and their status |
 | `specs/PHASE_<N>_*.md` | The spec for the phase you were asked about |
 
@@ -33,6 +35,11 @@ Read it whenever behaviour is unclear. **Never invent semantics.**
 3. `_assign` is a denormalised cache of `ToDo` records. Never use it for access control.
 4. Preserve `frappe.throw` message text verbatim — it is user-facing copy.
 5. Postgres, not MariaDB: map Frappe's `like` to `ilike`/`icontains`.
+6. **Registering a doctype publishes it.** Every field is readable, filterable and
+   writable through the generic `/api/resource/` route unless a rule says otherwise.
+   Upstream leans on DocType role permissions, which this port does not model — so
+   "upstream registers no hook" means "upstream had a layer we lack", not "no protection
+   needed".
 
 ## Stack
 
@@ -45,3 +52,27 @@ You are usually invoked as a **reviewer**, giving a second opinion on code writt
 Claude. Prioritise, in order: correctness against the Frappe source, permission/security
 correctness, and adherence to the phase spec. Be specific — cite file and line. Say
 plainly when something is right; do not manufacture findings.
+
+### What has actually gone wrong here before
+
+Worth knowing, because these are the shapes that survived the author's own tests:
+
+* **The endpoint was gated and the generic route was not.** Five findings across four
+  phases. An agent tests the endpoint it just wrote; `/api/resource/<doctype>` does the
+  same job beside it, unguarded.
+* **A value was hidden from responses and left filterable.** Hiding output is not
+  protection — a filter turns the row count into an oracle, and `like` narrows a value one
+  character per request. A real SMTP password was recovered this way.
+* **A credential was hidden from the wire and stored in plain text**, and separately, one
+  was encrypted but not hidden — served as ciphertext and still filterable. The two
+  declarations are independent.
+* **A permission check ran against the wrong object** — an empty instance on create, and
+  the pre-edit instance on update, so a row could be *moved* onto a document the caller
+  cannot write.
+* **A rule was written against the read path only.** `permission_query_conditions` guards
+  the list; `has_permission` guards the document. Setting one and not the other leaves the
+  other route open.
+
+**Phase 7 is the credential-heavy phase** — ERPNext API keys, Meta long-lived page tokens,
+webhook signing secrets. Signature verification on webhooks is an acceptance criterion, not
+a nicety: an unsigned webhook is an unauthenticated write path from the public internet.

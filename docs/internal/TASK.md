@@ -1,117 +1,100 @@
 # TASK — Start Here
 
-Read `RUNBOOK.md` and follow it exactly. Where anything in this file conflicts with it,
-the runbook wins.
+Read `docs/internal/RUNBOOK_PHASE_7.md` and follow it exactly. Where anything in this file
+conflicts with it, the runbook wins.
 
 ```
 Repo:   D:\02_Personal\01_OpenSource\03_Applications\CRM\frappe_django_crm
-Branch: phase-0-foundation  (phases 0-2 complete, 813 tests passing)
+Branch: cut phase-7-integrations from main
+Main:   phases 0-6 complete and merged. ~1,290 backend tests + 152 frontend, all passing
 ```
+
+## Step 0 comes before any code
+
+The runbook opens with **Step 0: read the recorded reasoning, then write
+`docs/internal/ORIENTATION_PHASE_7.md`** saying what you understood — including **what you
+think is stale or wrong** in what you read.
+
+Do not skip it, and do not treat it as paperwork. Six phases of decisions are written down
+in this repo, and the two most expensive bugs of the last review both came from an agent
+(and later, a human) trusting a sentence that had quietly stopped being true. The section
+where you disagree with the documents is the one most likely to be worth reading.
+
+The runbook also carries **"How to work here"** — seven rules, each one a bug that
+shipped. Read them before starting, not after your first review round.
 
 ## Read first, in this order
 
-1. `specs/AS_BUILT.md` — **what already exists.** Read this before writing any code
+1. **`specs/AS_BUILT.md`** — what already exists. Read this before writing any code, and
+   **read its security section**: this phase adds credential-bearing doctypes and that
+   section carries the checklist
 2. `CLAUDE.md` — project rules and the reviewer policy
-3. `PORT_PLAN.md` — inventory, frontend contract, settled decisions
-4. `specs/PHASE_3_ENDPOINTS.md` — your first task
+3. `specs/SECURITY_MODEL.md` — what protects each doctype, and why we differ from upstream
+4. `PORT_PLAN.md` — inventory, frontend contract, settled decisions
+5. `specs/PHASE_7_INTEGRATIONS.md` — the spec
+6. `specs/KNOWN_ISSUES.md` — problems that outlive a phase
 
-`AS_BUILT.md` is first for a reason: phases 0-2 built a framework layer, and the single
-biggest time-waster available to you is rewriting part of it.
+`AS_BUILT.md` is first for a reason: six phases built a framework layer, and the single
+biggest time-waster available to you is rewriting part of it. Phase 5 in particular left
+named seams for this phase to fill — `_reconcile_products`, six registered lead-sync tasks,
+the Twilio and Exotel settings doctypes with their credentials already encrypted.
 
 ## What to run
 
-**All four phases: 3, 4, 5, 6.** In that order, each on its own branch, each branching
-from the previous phase's completed tip:
+**Phase 7 only.** Five integrations, each behind its own flag, all off by default:
 
-| Phase | Branch | Progress file |
+| Integration | Flag | ~LOC |
 |---|---|---|
-| 3 | `phase-3-endpoints` | `PROGRESS_PHASE_3.md` |
-| 4 | `phase-4-metadata` | `PROGRESS_PHASE_4.md` |
-| 5 | `phase-5-async` | `PROGRESS_PHASE_5.md` |
-| 6 | `phase-6-realtime` | `PROGRESS_PHASE_6.md` |
+| ERPNext | `ENABLE_ERPNEXT` | 1,300 |
+| Facebook lead sync | `ENABLE_FACEBOOK_LEAD_SYNC` | 550 |
+| Twilio | `ENABLE_TWILIO` | 250 |
+| Exotel | `ENABLE_EXOTEL` | 200 |
+| WhatsApp | `ENABLE_WHATSAPP` | 200 |
 
-```powershell
-git checkout -b phase-3-endpoints          # from phase-0-foundation
-# ... phase 3, gate passes, commit ...
-git checkout -b phase-4-metadata           # from phase-3-endpoints
-```
+Progress file: `docs/internal/PROGRESS_PHASE_7.md`.
 
-Write each phase's report to **its own** `PROGRESS_PHASE_<N>.md`, in the same format the
-existing `PROGRESS.md` uses. Do not append to `PROGRESS.md` — it is the phase 0-2 record.
+**Stop after phase 7's gate passes.** Phase 8 needs a human scope decision.
 
-After phase 6, **STOP**. Do not start phase 7 (integrations, deferred) or phase 8
-(parked).
+## Two decisions already made — do not re-open
 
-**All four are expected to land.** Phase 3 is the largest at ~50 endpoints, but 4, 5 and
-6 are progressively smaller and the framework layer they build on already exists. Pace
-accordingly — do not treat phase 3 as the whole job.
+1. **ERPNext is an API client** against a live instance. You are not reimplementing
+   ERPNext's models; that is out of scope.
+2. **WhatsApp: port the endpoints, stub the provider.** Do not vendor `frappe_whatsapp`.
 
-## Do not idle
+## Commits — the thing that went wrong last time
 
-The failure mode to avoid is stalling, not moving too fast.
+**One commit per meaningful change.** The previous run was told "one commit per phase" and
+produced single commits of 25,000 lines, which cannot be reviewed, bisected or reverted.
 
-- **Fan out within a phase.** Phase 3's five module groups are independent; phase 4's
-  components likewise. Never two agents in one file, but several files at once is fine.
-- **Blocked on one module? Move to another** and come back. Do not serialise on a
-  question you can park.
-- **Do not wait on anything external.** Nothing in phases 3-6 needs a running worker, a
-  mail server or a browser (see the testing rule below).
-- **Do not re-litigate settled decisions.** They are in `PORT_PLAN.md` §10 and
-  `specs/AS_BUILT.md`. If you disagree, log it and keep moving.
+Commit when a coherent piece of work is complete and the suite is green — an integration's
+model layer, its API client, its webhook handler, a bug fix, a docs update. **A dozen or
+more commits for this phase is correct.**
 
-## The gate — every phase, before the next begins
+Each commit stands alone: suite green at that commit, and a message saying what changed and
+**why**. Write the message to a file and `git commit -F` — a long inline message stalls the
+run (`CLAUDE.md`, shell rules).
 
-1. `pytest` exits 0, with a real test for every acceptance criterion
-2. Migrations apply cleanly (`makemigrations --check` reports nothing)
-3. A reviewer passes — tier 1 is Codex, and **it works now**; see `RUNBOOK.md` §3
-4. Commit, write `PROGRESS_PHASE_<N>.md`, then branch for the next phase
+## The gate, per phase
 
-## Tests that would need external services
+1. Full suite green, nothing weakened, **and green with all five flags off with no
+   integration module imported**
+2. Migrations clean, applying from empty
+3. Independent review — Codex on PowerShell 7, then 5.1, then a fresh Claude subagent.
+   **State which tier you used.** `codex exec` exits 0 even when it ran nothing
+4. Commits as above
 
-**Never let a missing service block the gate.** Phases 5 and 6 look like they need
-infrastructure; almost none of it is actually required, because the standard in-process
-substitutes exist:
+Fail twice on the same gate → write up what happened and **stop**. A clean stop with three
+integrations landed beats five unverified ones.
 
-| Instead of | Use |
-|---|---|
-| A running Celery worker | `CELERY_TASK_ALWAYS_EAGER = True` — tasks run inline |
-| A running Celery Beat | Assert the schedule off `app.conf.beat_schedule`; do not run it |
-| Redis as a channel layer | `InMemoryChannelLayer` in test settings |
-| A real WebSocket server | `channels.testing.WebsocketCommunicator` |
-| An SMTP server | `locmem` email backend; assert `django.core.mail.outbox` |
+## Two obligations while you work
 
-So write the test properly first — reach for a skip only when the behaviour genuinely
-cannot be exercised in-process (a real broker round-trip, a live third-party API).
+- **Record every divergence** in `UPSTREAM_BUGS_PHASE_3-6.md`, continuing from #21
+- **Keep `specs/AS_BUILT.md` current** as you add framework helpers — it is what the next
+  phase reads first, and it was two phases stale before this run
 
-When you do skip, **`pytest.mark.skip` with a reason naming what it would need**, and
-list it in that phase's progress file. A silently missing test is the thing to avoid; an
-explicitly skipped one with a reason is fine and does not block the gate.
+## What the human will read first
 
-## Rules
-
-- **Gate fails twice on the same phase → STOP.** Write why to `PROGRESS_PHASE_<N>.md`,
-  halt, and do not branch for the next phase.
-- **Never disable or weaken a test to make a gate pass.**
-- **A test that cannot fail is not a test.** Before trusting one, check it fails without
-  the fix. This caught two vacuous tests in earlier phases.
-- **Never invent Frappe semantics.** Both sources are readable now:
-  - CRM app — `D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm` (`main`)
-  - Framework — `D:\02_Personal\01_OpenSource\02_FrameWorks\frappe` (`version-15`)
-- **Diverge only on bugs nothing can observe; reproduce user-visible ones.** Check
-  whether anything reads the field before deciding, and record it in `UPSTREAM_BUGS.md`.
-- **Log every judgment call** to that phase's `PROGRESS_PHASE_<N>.md`, with evidence.
-
-## If something looks impossible
-
-Suspect a missing framework mechanism before suspecting your own code. `fetch_from` was
-never ported, and the symptom looked like a conversion bug for an hour. Check the
-framework source for the feature before working around it.
-
----
-
-I am away for about 4 hours, and I expect all four phases attempted. The gate is there to
-keep the work honest, not to give you a reason to stop early — if a phase passes its gate,
-branch and start the next one immediately.
-
-The one thing I do not want is unverified code presented as finished. Everything else,
-keep moving.
+`docs/internal/PROGRESS_PHASE_7.md`. Make it scannable, and **write down what you are
+unsure about**. The phase-4 review found eight security holes by pulling threads that
+phase's progress file left dangling — the file was useful *because* it admitted what it had
+not checked.

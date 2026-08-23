@@ -759,11 +759,15 @@ def test_a_user_with_no_hierarchy_row_has_no_subtree(users):
 def test_exactly_the_intended_doctypes_have_row_rules():
     """The registered set, stated explicitly so an accidental addition is caught.
 
-    ``crm/hooks.py:134-144`` registers three. **Phase 4 deliberately added four more**,
-    after a review found them reachable through the generic ``/api/resource/`` route:
-    upstream protects them with DocType role permissions, which this port does not
-    model, so with no hook they were world-readable and world-writable. See
+    ``crm/hooks.py:134-144`` registers three. **Phase 4 deliberately added more**, after a
+    review found them reachable through the generic ``/api/resource/`` route: upstream
+    protects them with DocType role permissions, which this port does not model, so with no
+    hook they were world-readable and world-writable. See
     ``crm_app/permissions/metadata_docs.py`` and ``platform_docs.py``.
+
+    **Phase 7 added one**, for the same reason, when it registered ``WhatsApp Message``.
+    That is this test working rather than failing: registering a doctype breaks it until
+    somebody writes down which of the two things the new doctype is.
     """
     with_rules = {
         dt
@@ -810,7 +814,30 @@ def test_exactly_the_intended_doctypes_have_row_rules():
         "Communication",
         "File",
     }
-    assert with_rules == upstream | added_by_phase_4
+    added_by_phase_7 = {
+        # `WhatsApp Message` is the same shape as the three above - a row about a lead or
+        # deal, carrying which one - and gets the same rule. The reason is sharper here: a
+        # deal row leaks a number, a WhatsApp thread leaks the conversation. Ported from
+        # `frappe_whatsapp`, which upstream protects with that app's own role permissions -
+        # the layer this port does not model, so "no hook" would have meant "no protection"
+        # for the fifth time.
+        "WhatsApp Message",
+        # The Facebook lead-sync group. Two hold access tokens - a page token reads every
+        # lead the page has collected and can post as the page. `Failed Lead Sync Log`
+        # holds the raw Graph payload for a lead that never imported: a real person's
+        # name, email and phone, in a table with nothing else protecting it. The form
+        # doctype holds no secret and is ruled anyway, because leaving one doctype of a
+        # four-doctype feature open reads as intent.
+        "Lead Sync Source",
+        "Facebook Page",
+        "Facebook Lead Form",
+        "Failed Lead Sync Log",
+        # An API key/secret pair that authenticates as a user on the remote ERPNext site.
+        # System Manager only upstream; managers here, matching the other settings
+        # singletons.
+        "ERPNext CRM Settings",
+    }
+    assert with_rules == upstream | added_by_phase_4 | added_by_phase_7
 
 
 def test_the_upstream_three_still_use_the_org_hierarchy_rule():

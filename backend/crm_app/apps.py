@@ -39,3 +39,27 @@ class CrmAppConfig(AppConfig):
         from crm_app import async_signals
 
         async_signals.connect_signals()
+
+        # Phase 7: the provider-neutral telephony endpoints. Imported unconditionally and
+        # deliberately - `is_call_integration_enabled` has to answer "no" with every flag
+        # off, so the module cannot itself be behind a flag. Nothing it imports touches a
+        # provider SDK; `tests/test_integration_isolation.py` holds that line.
+        from crm_app.integrations import api as integrations_api  # noqa: F401
+
+        # Provider adapters are imported unconditionally too, and that is deliberate.
+        # Upstream registers `make_a_call` always and refuses inside it with "Please setup
+        # Exotel intergration"; gating *registration* on the flag would turn that dialog
+        # into a 404 and break the frontend contract. What must not happen at import time
+        # is loading a provider SDK - none of these do; every `requests` import is inside
+        # the function that makes the call.
+        from crm_app.integrations.exotel import handler as exotel_handler  # noqa: F401
+        from crm_app.integrations.twilio import handler as twilio_handler  # noqa: F401
+        from crm_app.integrations.whatsapp import api as whatsapp_api  # noqa: F401
+        from crm_app.integrations.whatsapp import signals as whatsapp_signals
+
+        whatsapp_signals.connect_signals()
+
+        from crm_app.integrations.erpnext import api as erpnext_api  # noqa: F401
+        from crm_app.integrations.erpnext import customer as erpnext_customer
+
+        erpnext_customer.connect_signals()

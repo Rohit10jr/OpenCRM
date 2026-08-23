@@ -173,6 +173,11 @@ class CRMProduct(BaseDocument):
     product_code = models.CharField(max_length=140)
     product_name = models.CharField(max_length=140, blank=True, default="")
     disabled = models.BooleanField(default=False)
+    #: Phase 7. Upstream adds this as a runtime `Custom Field` when the ERPNext
+    #: integration is enabled (`erpnext_crm_settings.py:100-108`); this port has no
+    #: `Custom Field`, so it is an ordinary column. Empty on a deployment that never
+    #: enables ERPNext, which is the same observable state.
+    erpnext_item_code = models.CharField(max_length=140, blank=True, default="", db_index=True)
     # `Attach Image` is a URL string, not a FileField (PHASE_1_MODELS.md section 2).
     image = models.CharField(max_length=500, blank=True, default="")
     description = models.TextField(blank=True, default="")

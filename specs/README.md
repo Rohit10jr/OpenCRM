@@ -3,8 +3,13 @@
 One spec per phase.
 
 > **Read [`AS_BUILT.md`](AS_BUILT.md) before anything else.** It records what phases
-> 0-2 actually built, as opposed to what these specs predicted. Where a spec and
+> **0-6** actually built, as opposed to what these specs predicted. Where a spec and
 > `AS_BUILT.md` disagree, **`AS_BUILT.md` wins** — the specs were written first.
+>
+> Two companions are not optional before adding a doctype:
+> [`SECURITY_MODEL.md`](SECURITY_MODEL.md) (what protects each one, and the 11 places we
+> deliberately differ from upstream) and [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) (problems
+> that outlive a phase — check before re-diagnosing something).
 
 Then **`../PORT_PLAN.md`** — it holds the source inventory,
 the frontend contract, and the settled architecture decisions. These specs assume it.
@@ -15,12 +20,17 @@ the frontend contract, and the settled architecture decisions. These specs assum
 | [`PHASE_0_FOUNDATION.md`](PHASE_0_FOUNDATION.md) | Foundation, generic API, auth | **Single agent** | ✅ Shipped |
 | [`PHASE_1_MODELS.md`](PHASE_1_MODELS.md) | Platform + CRM models | Fan out by cluster | ✅ Shipped |
 | [`PHASE_2_PERMISSIONS.md`](PHASE_2_PERMISSIONS.md) | Row-level permission engine | **Single agent** | ✅ Shipped |
-| [`PHASE_3_ENDPOINTS.md`](PHASE_3_ENDPOINTS.md) | 51 API endpoints | Fan out by module | Provisional |
-| [`PHASE_4_METADATA.md`](PHASE_4_METADATA.md) | View settings, field layouts | Fan out | Provisional |
-| [`PHASE_5_ASYNC.md`](PHASE_5_ASYNC.md) | Celery jobs and schedules | Fan out | Provisional |
-| [`PHASE_6_REALTIME.md`](PHASE_6_REALTIME.md) | Django Channels | Fan out | Provisional |
-| [`PHASE_7_INTEGRATIONS.md`](PHASE_7_INTEGRATIONS.md) | ERPNext, Twilio, Exotel, Facebook | Fan out | Deferred |
+| [`PHASE_3_ENDPOINTS.md`](PHASE_3_ENDPOINTS.md) | 51 API endpoints | Fan out by module | ✅ Shipped |
+| [`PHASE_4_METADATA.md`](PHASE_4_METADATA.md) | View settings, field layouts | Fan out | ✅ Shipped |
+| [`PHASE_5_ASYNC.md`](PHASE_5_ASYNC.md) | Celery jobs and schedules | Fan out | ✅ Shipped |
+| [`PHASE_6_REALTIME.md`](PHASE_6_REALTIME.md) | Django Channels | Fan out | ✅ Shipped |
+| [`PHASE_7_INTEGRATIONS.md`](PHASE_7_INTEGRATIONS.md) | ERPNext, Twilio, Exotel, Facebook, WhatsApp | Fan out | ✅ Shipped |
 | [`PHASE_8_AUTH_AND_DESK.md`](PHASE_8_AUTH_AND_DESK.md) | Auth UI and the rest of the Desk | — | **Parked** |
+
+**Phase 7 shipped** on `phase-7-integrations` — all five integrations, each behind its own
+flag, all off by default. See `../docs/internal/PROGRESS_PHASE_7.md`, and read its
+**Concerns** before extending any of them: `get_recording_url` is deliberately unported and
+is the most security-sensitive single function in the phase.
 
 **Phase 8 is parked, not scheduled.** It is also the only phase that ports nothing:
 Frappe ships a Desk (auth screens, generic admin UI) alongside the CRM app, and this port
