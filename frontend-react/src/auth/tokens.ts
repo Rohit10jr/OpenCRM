@@ -90,3 +90,19 @@ export function getTokenUser(): string | null {
     return null
   }
 }
+
+/**
+ * Whether there is a usable session, read straight from storage.
+ *
+ * **The route guard uses this rather than React state, and that is the point of it.**
+ * `setTokens` is synchronous; a `useState` update is not. A guard reading React state
+ * runs on the *pre-login* value when a page navigates in the same tick as signing in,
+ * bounces the user back to the login screen, and looks exactly like a failed login.
+ *
+ * That is the bug phase 8 shipped in the Vue app (`stores/session.js:20-38`), and it
+ * reappeared here in a React shape until the guard was pointed at storage instead.
+ */
+export function isAuthenticated(): boolean {
+  const user = getTokenUser()
+  return Boolean(user) && user !== 'Guest'
+}

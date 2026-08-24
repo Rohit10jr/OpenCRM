@@ -5,6 +5,7 @@ import {
   Outlet,
   redirect,
 } from '@tanstack/react-router'
+import { isAuthenticated } from '@/auth/tokens'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { AcceptInvitationPage } from '@/pages/auth/AcceptInvitation'
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPassword'
@@ -25,7 +26,10 @@ import { LeadsPage } from '@/pages/Leads'
  */
 
 export type RouterContext = {
-  /** Read at navigation time so the guard sees the *current* session, not a stale copy. */
+  /**
+   * Read at navigation time, from token storage rather than React state — see
+   * `isAuthenticated`. A guard reading state navigates on the pre-login value.
+   */
   isLoggedIn: () => boolean
 }
 
@@ -164,9 +168,7 @@ const routeTree = rootRoute.addChildren([
 
 export const router = createRouter({
   routeTree,
-  // Replaced in `App.tsx` with one that reads live session state. A router needs its
-  // context at construction, and the session only exists inside React.
-  context: { isLoggedIn: () => false },
+  context: { isLoggedIn: isAuthenticated },
 })
 
 declare module '@tanstack/react-router' {

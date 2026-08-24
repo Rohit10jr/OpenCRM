@@ -1,8 +1,7 @@
-import { useMemo } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
 import { Toaster } from 'sonner'
-import { SessionProvider, useSession } from '@/auth/session'
+import { SessionProvider } from '@/auth/session'
 import { TooltipProvider } from '@/components/ui/primitives'
 import { router } from '@/router'
 
@@ -18,26 +17,14 @@ const queryClient = new QueryClient({
   },
 })
 
-/**
- * The router needs `isLoggedIn` in its context but the session lives in React, so the
- * guard reads it through a function rather than a snapshot — otherwise a navigation
- * immediately after signing in would still see the old value.
- */
-function Routes() {
-  const session = useSession()
-  const context = useMemo(
-    () => ({ isLoggedIn: () => session.isLoggedIn }),
-    [session.isLoggedIn],
-  )
-  return <RouterProvider router={router} context={context} />
-}
-
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <SessionProvider>
         <TooltipProvider delayDuration={300}>
-          <Routes />
+          {/* The router's auth guard reads token storage directly (`isAuthenticated`),
+              so it needs nothing from React here. */}
+          <RouterProvider router={router} />
           <Toaster position="bottom-right" />
         </TooltipProvider>
       </SessionProvider>

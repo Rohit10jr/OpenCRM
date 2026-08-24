@@ -42,12 +42,20 @@ export function timeAgo(value: unknown): string {
 
 export function formatCurrency(value: unknown, currency = 'USD'): string {
   const amount = Number(value)
-  if (value === null || value === undefined || Number.isNaN(amount)) return ''
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 2,
-  }).format(amount)
+  if (value === null || value === undefined || value === '' || Number.isNaN(amount)) {
+    return ''
+  }
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 2,
+    }).format(amount)
+  } catch {
+    // `Intl` throws on an unrecognised currency code, and the row's `currency` is free
+    // text on the server. A number without its symbol beats a blank cell.
+    return formatFloat(amount)
+  }
 }
 
 export function formatFloat(value: unknown): string {

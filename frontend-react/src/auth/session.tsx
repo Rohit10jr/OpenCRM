@@ -8,14 +8,13 @@ import { clearTokens, getTokenUser, setTokens, type TokenPair } from './tokens'
  * A Pinia store in the Vue app; here it is context, because that is what React
  * developers reach for and there is exactly one value in it. No state library.
  *
- * **The reason this is state and not a call to `getTokenUser()` at each read** is a bug
- * phase 8 shipped: `UpdatePassword.vue` and `AcceptInvitation.vue` wrote tokens to
- * localStorage and then navigated, and the route guard — reading a value captured
- * earlier — still saw a logged-out user and bounced them back to Login. Setting a
- * password succeeded on the server and returned the user to the login page. Every
- * backend test passed, and the end-to-end walk passed, because neither runs a browser.
+ * **This is for rendering, not for routing.** The route guard reads token storage
+ * directly (`isAuthenticated`), because React state updates on the next render and a
+ * navigation in the same tick as signing in would run the guard on the pre-login value.
+ * That is the bug phase 8 shipped in Vue and it reappeared here until the guard moved.
  *
- * So: any page that receives a token pair calls `acceptTokens`, never `setTokens`.
+ * Pages that receive a token pair still call `acceptTokens` rather than `setTokens`, so
+ * the chrome updates too.
  */
 
 type Session = {

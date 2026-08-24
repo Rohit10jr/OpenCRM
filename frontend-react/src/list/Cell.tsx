@@ -98,7 +98,13 @@ export function Cell({
     case 'Date':
       return <span className="truncate">{formatDate(value)}</span>
     case 'Currency':
-      return <span className="truncate tabular-nums">{formatCurrency(value)}</span>
+      // The row carries its own `currency` — a deal in EUR next to one in USD is normal
+      // in this CRM, so formatting every amount as the site default would misreport it.
+      return (
+        <span className="truncate tabular-nums">
+          {formatCurrency(value, (row.currency as string) || undefined)}
+        </span>
+      )
     case 'Float':
       return <span className="truncate tabular-nums">{formatFloat(value)}</span>
     case 'Percent':
