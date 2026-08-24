@@ -41,6 +41,13 @@ REVIEWED_NOT_CREDENTIALS = {
         "will supply credentials later' switch (`email_account.py:157`). Ported in A4 as "
         "one of three escape hatches around credential validation."
     ),
+    ("User", "last_reset_password_key_generated_on"): (
+        "A **timestamp**, not a secret: when the current reset key was issued. Matched on "
+        "the name alone, which is the heuristic doing its job. It is in SENSITIVE_FIELDS "
+        "anyway, for a different reason — `User` reads are open to every authenticated "
+        "caller (SECURITY_MODEL divergence #5), so a visible issue time would tell any "
+        "colleague which accounts have a live reset link and when."
+    ),
     ("Email Account", "ascii_encode_password"): (
         "A **boolean flag**, not a password: upstream's switch for ASCII-encoding the "
         "password before handing it to the SMTP library. Caught by the name on this "
@@ -121,6 +128,29 @@ REVIEWED_RESTRICTED_ONLY = {
     ),
 }
 
+#: Secrets **hashed** at rest rather than encrypted — a third answer the first two lists
+#: could not express, added in phase 8.
+#:
+#: Encryption is reversible by design: an encrypted reset key is still a working key to
+#: whoever reaches the encryption key. A one-way hash is not, so hashing is **stronger**
+#: here, not a weaker substitute. It is only available for a value the server never needs to
+#: read back — it compares, it does not recover — which is exactly a reset key and is not
+#: true of an SMTP password or an API secret.
+#:
+#: Kept separate from the two lists above on purpose. `REVIEWED_NOT_CREDENTIALS` would be a
+#: lie (it is a credential) and `REVIEWED_RESTRICTED_ONLY` would be worse (it says a manager
+#: may read it, and nobody may). An entry here still has to be in `SENSITIVE_FIELDS`; the
+#: test below enforces that, so this excuses one requirement rather than both.
+REVIEWED_HASHED_AT_REST = {
+    ("User", "reset_password_key"): (
+        "Stored as sha256(key); the raw value exists only in the emailed link "
+        "(frappe_core/password_reset.py, porting user.py:385-387). Encrypting a hash would "
+        "add nothing - the plaintext is already unrecoverable, which is more than "
+        "encryption gives - and the server never needs the original back, only a "
+        "comparison. A database dump yields nothing redeemable either way."
+    ),
+}
+
 
 def test_a_true_secret_is_both_hidden_and_encrypted():
     """The two are independent, and needing only one of them is how A3 happened.
@@ -152,6 +182,11 @@ def test_a_true_secret_is_both_hidden_and_encrypted():
             continue
         if fieldname not in sensitive_fields(model):
             missing_hidden.append((doctype, fieldname))
+        # A hashed secret is excused from ENCRYPTED_FIELDS and **not** from
+        # SENSITIVE_FIELDS: the check above still applies to it, so this excuses one
+        # requirement rather than both.
+        if (doctype, fieldname) in REVIEWED_HASHED_AT_REST:
+            continue
         if fieldname not in set(getattr(model, "ENCRYPTED_FIELDS", ()) or ()):
             missing_encrypted.append((doctype, fieldname))
 
@@ -170,7 +205,11 @@ def test_the_exception_list_does_not_go_stale():
     """An excused field that has since been renamed or removed leaves a dangling entry,
     and a dangling entry makes the list look considered when it is not."""
     known = {(dt, name) for dt, name, _ in _credential_fields()}
-    listed = set(REVIEWED_NOT_CREDENTIALS) | set(REVIEWED_RESTRICTED_ONLY)
+    listed = (
+        set(REVIEWED_NOT_CREDENTIALS)
+        | set(REVIEWED_RESTRICTED_ONLY)
+        | set(REVIEWED_HASHED_AT_REST)
+    )
     dangling = sorted(listed - known)
 
     assert not dangling, f"Listed as reviewed but no longer exist: {dangling}"

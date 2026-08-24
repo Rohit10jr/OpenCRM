@@ -93,6 +93,21 @@ class User(AbstractBaseUser, PermissionsMixin):
     #: (``crm/api/__init__.py:25-30``).
     email_signature = models.TextField(blank=True, default="")
 
+    #: Phase 8. The password-reset key, **stored as a SHA-256 hash** — the raw value exists
+    #: only in the emailed link (`frappe/core/doctype/user/user.py:385-387`).
+    #:
+    #: Hashed rather than encrypted, and the difference matters. `ENCRYPTED_FIELDS` is
+    #: reversible by design, so an encrypted reset key is still a working key to anyone who
+    #: reaches the encryption key. A hash is not: a database dump yields nothing redeemable.
+    #: That is why this is not simply another entry in the credential checklist.
+    #:
+    #: `SENSITIVE_FIELDS` on top, because the hash is still a comparison target and has no
+    #: business on the wire.
+    reset_password_key = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    #: `user.py:388`. Paired with the key: expiry is measured from when it was issued, so
+    #: clearing one without the other leaves an expiry test with nothing to test.
+    last_reset_password_key_generated_on = models.DateTimeField(null=True, blank=True)
+
     # Django admin plumbing.
     is_staff = models.BooleanField(default=False)
 
@@ -114,7 +129,27 @@ class User(AbstractBaseUser, PermissionsMixin):
     #: Nothing needs them here: the frontend reads roles from `crm.api.session.get_users`,
     #: and roles are changed through `crm_app.api.user.update_user_role`, which checks who
     #: is asking. Internal ORM use is unaffected - this covers the wire only.
-    SENSITIVE_FIELDS = ("groups", "user_permissions", "is_superuser", "is_staff")
+    #:
+    #: Phase 8 adds the two reset-key columns.
+    #:
+    #: `reset_password_key` is a hash, so leaking it hands nobody a link — but it is what
+    #: the redeem path compares against, and a filterable value is one that can be probed a
+    #: character at a time (the `like` attack in `SECURITY_MODEL.md`).
+    #:
+    #: `last_reset_password_key_generated_on` is **not** a credential, and is hidden anyway.
+    #: `User` reads are open to every authenticated caller here (divergence #5, so kanban
+    #: can build a column per user), so leaving it visible would tell any colleague which
+    #: accounts have a live reset link and when it was issued — which is the window an
+    #: attacker with mailbox access wants, and nobody else's business. Nothing on the wire
+    #: needs it; the expiry check reads it server-side.
+    SENSITIVE_FIELDS = (
+        "groups",
+        "user_permissions",
+        "is_superuser",
+        "is_staff",
+        "reset_password_key",
+        "last_reset_password_key_generated_on",
+    )
 
     #: Readable, never writable through the generic route.
     #:

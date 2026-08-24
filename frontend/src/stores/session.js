@@ -18,6 +18,27 @@ export const sessionStore = defineStore('crm-session', () => {
   let user = ref(sessionUser())
   const isLoggedIn = computed(() => !!user.value)
 
+  /**
+   * Take a token pair and become signed in.
+   *
+   * **`setTokens` alone is not enough**, and that is the whole reason this exists.
+   * `isLoggedIn` is computed from `user`, a ref read once at store creation — so a page
+   * that writes tokens to localStorage and then routes is still `isLoggedIn === false` to
+   * the navigation guard, which bounces it straight back to Login.
+   *
+   * Found by the phase-8 review: `UpdatePassword.vue` and `AcceptInvitation.vue` both did
+   * exactly that, so setting a password succeeded on the server and returned the user to
+   * the login page. Every backend test passed, and the end-to-end walk passed, because
+   * neither runs a browser.
+   *
+   * Any future page that receives tokens should call this rather than `setTokens`.
+   */
+  function acceptTokens(data) {
+    setTokens(data || {})
+    user.value = sessionUser()
+    return isLoggedIn.value
+  }
+
   const login = createResource({
     url: 'login',
     onError() {
@@ -25,10 +46,18 @@ export const sessionStore = defineStore('crm-session', () => {
     },
     // JWT PATCH: /api/method/login now returns a token pair instead of setting `sid`.
     onSuccess(data) {
-      setTokens(data || {})
-      user.value = sessionUser()
+      acceptTokens(data)
       login.reset()
-      router.replace({ path: '/' })
+      // Phase 8: return them to whatever they were trying to reach. The guard puts it in
+      // `?redirect=` when it bounces an unauthenticated visitor.
+      //
+      // Only a path, never a full URL: `redirect` comes from the query string, so a caller
+      // can put anything there. Accepting `https://elsewhere.example/` would make the
+      // login page an open redirect — a phishing link that really does log you in and then
+      // lands you somewhere else.
+      const target = router.currentRoute.value.query.redirect
+      const safe = typeof target === 'string' && /^\/(?!\/)/.test(target) ? target : '/'
+      router.replace({ path: safe })
     },
   })
 
@@ -38,13 +67,18 @@ export const sessionStore = defineStore('crm-session', () => {
       // JWT PATCH: nothing to expire server-side, so drop the tokens locally.
       clearTokens()
       user.value = null
-      window.location.href = '/login?redirect-to=/crm'
+      // Phase 8: the second half of the same bug the router had. This was
+      // `window.location.href = '/login?redirect-to=/crm'`, which took a user who had just
+      // signed out to a URL nothing serves. Caught by the phase-8 review, outside the
+      // files it was asked to look at.
+      router.replace({ name: 'Login' })
     },
   })
 
   return {
     user,
     isLoggedIn,
+    acceptTokens,
     login,
     logout,
   }

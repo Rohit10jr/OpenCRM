@@ -16,6 +16,7 @@ from crm_app.api import (  # noqa: F401
     activities,
     assignment_rule,
     auth,
+    auth_pages,
     client,
     comment,
     contact,

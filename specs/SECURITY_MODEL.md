@@ -355,7 +355,68 @@ both declarations.
 
 ---
 
-## Known gap: `accept_invitation` is not implemented
+## Phase 8 — the front door
+
+Three `allow_guest` endpoints, which is rarer here than anywhere else in the port: they are
+the only ones an unauthenticated stranger can reach *and* that write something.
+
+| Endpoint | What stands in for a permission check |
+|---|---|
+| `reset_password` | Nothing to check — and it never reveals whether the address exists |
+| `update_password` | The reset key, or the old password. Both are proofs |
+| `accept_invitation` | The invitation key, which arrives **by email** |
+
+None enumerates: each is a lookup by key or primary key, with no list read. That is why
+`auth_pages.py` is on `test_no_endpoint_bypasses_the_permission_layer`'s allowlist — the
+phase-2 hook answers "what may this user see", and the whole point of these three is that
+the caller is not yet a user.
+
+### The reset key
+
+Hashed with SHA-256, never encrypted. Encryption is reversible, so an encrypted key is
+still a working key to whoever holds the encryption key; a hash is not, and the server only
+ever needs to *compare*. Both reset columns are `SENSITIVE_FIELDS` — the second one,
+`last_reset_password_key_generated_on`, is not a credential but is hidden anyway, because
+`User` reads are open to every authenticated caller (divergence #5) and a visible issue time
+tells a colleague which accounts have a live link right now.
+
+Single use is a **compare-and-swap**, not a read-then-clear. The phase-8 review found the
+two-statement version: two requests arriving together could both resolve and both set a
+password, the second winning silently — and whoever holds a forwarded copy of the link *is*
+that second request.
+
+### The lockout is not login's private business
+
+`update_password`'s old-password path checks a password on an `allow_guest` endpoint. Until
+the phase-8 review it did so without `check_login_allowed`, which made it an online password
+oracle that sidestepped the tracker protecting `login` entirely.
+
+> **The rule this generalises to:** anywhere a password is verified, the attempt tracker
+> applies. A second door that checks credentials without it makes the first door's
+> protection decorative — the same shape as `get_single_value` reading singleton fields
+> without the row rule (phase 7), one layer along.
+
+### And one that only the flow catches
+
+The invitation email linked to `/api/method/crm.api.accept_invitation`. Upstream can link to
+its endpoint because that one answers a GET with an HTTP redirect into the Desk; ours
+answers with JSON, so an invitee clicking the link landed on a JSON blob. Every unit test
+passed, because they tested the endpoint. Gate step 5 exists for this, and even walking the
+flow missed it once — the walk followed the endpoint rather than the URL.
+
+---
+
+## ~~Known gap: `accept_invitation` is not implemented~~ — closed in phase 8
+
+**Implemented** in `crm_app/api/auth_pages.py`, with the protections that were put in place
+before it existed left exactly as they were: `CRM Invitation` is manager-only and its `key`
+is `SENSITIVE_FIELDS`. Redemption reads the key from the email, never from the API.
+
+The original write-up is kept below, because it is the record of a hole being disarmed
+*before* the endpoint that could open it was built — which is the only reason building it
+was a small change rather than a risky one.
+
+### Original entry
 
 `crm_app/tasks.py:214` emails an invitation link pointing at
 `/api/method/crm.api.accept_invitation`. **Nothing implements that endpoint** — upstream

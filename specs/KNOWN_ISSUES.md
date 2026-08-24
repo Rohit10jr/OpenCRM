@@ -9,7 +9,7 @@ and anything a future agent would otherwise rediscover the hard way.
 | # | Issue | Status |
 |---|---|---|
 | 1 | A WebSocket test fails intermittently under full-suite load | ✅ **Characterised and fixed** — root cause understood, and it is a production concern too |
-| 2 | `crm.api.accept_invitation` is not implemented; invitation links 404 | **Open** — phase 8; the security half is disarmed |
+| 2 | `crm.api.accept_invitation` is not implemented; invitation links 404 | ✅ **Closed in phase 8** — implemented, and the flow walked end to end |
 | 3 | `Communication`, `File` and `Comment` leak content from records the caller cannot open | ✅ **Fixed** — see below for what it took |
 | 4 | The async stack had never run against a real broker, worker or scheduler | ✅ **Smoke-tested** — passed; see below for what is still untested |
 | 5 | The frontend test suite had never been executed; the realtime layer had never run on real Redis | ✅ **Both run** — 152 frontend tests pass, cross-process delivery confirmed |
@@ -113,7 +113,19 @@ reads like a fresh flake rather than fallout.
 
 ---
 
-## 2. `crm.api.accept_invitation` was never implemented
+## 2. `crm.api.accept_invitation` was never implemented — CLOSED in phase 8
+
+> **Closed.** Implemented in `crm_app/api/auth_pages.py`, along with the `accept()` it
+> needed, which did not exist either. The protections below were left exactly as they were —
+> and the note addressed to "whoever builds the endpoint" was read and followed: redemption
+> takes the key from the email, and neither the manager-only rule nor `SENSITIVE_FIELDS`
+> was relaxed to make it easier.
+>
+> Kept rather than deleted, because it is the record of a hole being disarmed *before* the
+> endpoint that could open it existed. That is the only reason building it was a small
+> change rather than a risky one, and it is worth someone seeing that worked.
+
+### Original entry
 
 **Where:** `crm_app/tasks.py:214` sends the link; nothing serves it.
 Upstream implements it at `crm/api/__init__.py:83`.

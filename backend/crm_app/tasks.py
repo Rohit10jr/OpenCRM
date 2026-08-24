@@ -240,37 +240,30 @@ def send_invitation_email(invitation_name: str) -> bool:
     Idempotent: it skips an invitation that already has ``email_sent_at``, so neither a
     redelivery nor a retry after a partial failure sends a second invite.
     """
-    from django.core.mail import EmailMessage
-
+    from crm_app import mail
     from crm_app.models import CRMInvitation
-    from frappe_platform.models import EmailAccount
 
     invitation = CRMInvitation._default_manager.filter(pk=invitation_name).first()
     if invitation is None or invitation.email_sent_at:
         return False
 
-    sender = (
-        EmailAccount._default_manager.filter(default_outgoing=True)
-        .values_list("email_id", flat=True)
-        .first()
-    ) or settings.DEFAULT_FROM_EMAIL
-
-    title = "Frappe CRM"
-    # `frappe.utils.get_url()` upstream; the path is an API route, so it is the backend's
-    # own origin, not the frontend's (see SITE_URL in settings/base.py).
+    # **A page, not the API.** Upstream links to `/api/method/crm.api.accept_invitation`
+    # because that endpoint answers a GET with an HTTP *redirect* into the Desk. Ours
+    # answers with JSON, so a person clicking that link would land on raw JSON — which is
+    # exactly what this link did until the phase-8 review caught it.
+    #
+    # The SPA page calls the endpoint and acts on what it returns. Same destination for the
+    # invitee, and the URL in the email is now something a human can be shown.
     invite_link = (
-        f"{settings.SITE_URL}/api/method/crm.api.accept_invitation?key={invitation.key}"
+        f"{settings.FRONTEND_ORIGIN.rstrip('/')}/crm/accept-invitation?key={invitation.key}"
     )
 
-    EmailMessage(
-        subject=f"You have been invited to join {title}",
-        body=(
-            f"You have been invited to join {title}.\n\n"
-            f"Accept the invitation: {invite_link}\n"
-        ),
-        from_email=sender,
-        to=[invitation.email],
-    ).send(fail_silently=False)
+    # Phase 8 moved the wording into `crm_app/templates/emails/invitation.txt`. It was an
+    # f-string here; there are two emails now, and one answer to "where does the wording
+    # live" is worth more than the indirection costs.
+    mail.send_invitation(
+        to=invitation.email, invite_link=invite_link, expiry_days=INVITATION_EXPIRY_DAYS
+    )
 
     # update(), not save(): stamping the send time must not bump `modified`.
     CRMInvitation._default_manager.filter(pk=invitation_name).update(

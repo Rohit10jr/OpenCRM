@@ -246,6 +246,17 @@ CELERY_ENABLE_UTC = True
 # A task that outlives its result is just noise in Redis.
 CELERY_RESULT_EXPIRES = 60 * 60 * 24
 
+# Phase 8. How long a password-reset link lives.
+#
+# **Zero means 60 minutes, not "never expires"** - see frappe_core/password_reset.py.
+# Upstream's `reset_password_link_expiry_duration` defaults to 0 and treats that as
+# disabling the expiry check, which turns a mail archive into a credential store. That is
+# the one part of upstream's reset behaviour this port deliberately refuses.
+#
+# Separate from the invitation's three days on purpose: three days to accept an invitation,
+# one hour to choose a password once you have.
+PASSWORD_RESET_LINK_EXPIRY_MINUTES = env.int("PASSWORD_RESET_LINK_EXPIRY_MINUTES", default=60)
+
 # Realtime (phase 6). Off switches the WebSocket route out of the ASGI application and
 # makes `realtime.publish` a no-op; nothing else changes, because publishing is never
 # load-bearing (PHASE_6_REALTIME.md section 4).

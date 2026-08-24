@@ -280,6 +280,19 @@ _DIRECT_ACCESS_ALLOWED = {
     # `check_permission`, which is CRM View Settings' own model (owner / public+Sales
     # Manager / System Manager) rather than the phase-2 row rule.
     "view_settings.py",
+    # Phase 8. The auth endpoints are `allow_guest` and run **before** anybody has an
+    # identity, so there is no permission layer for them to apply — the phase-2 hook
+    # answers "what may this user see", and the whole point of these three is that the
+    # caller is not yet a user.
+    #
+    # What stands in for it, per endpoint:
+    #   reset_password     — never reveals whether the row exists (one response, always)
+    #   update_password    — the reset key, or the old password; both are proofs
+    #   accept_invitation  — the invitation key, which arrives by email and is
+    #                        `SENSITIVE_FIELDS` so it cannot be read back out of the API
+    #
+    # A lookup by primary key with no list read: none of these enumerate.
+    "auth_pages.py",
 }
 
 
