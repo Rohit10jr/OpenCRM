@@ -199,7 +199,12 @@ def record_login_success(*keys: str) -> None:
 # --- endpoint throttling ------------------------------------------------------------
 
 
-def rate_limit(limit: int = 5, seconds: int = 86400, key: str | None = None):
+def rate_limit(
+    limit: int = 5,
+    seconds: int = 86400,
+    key: str | None = None,
+    normalise=None,
+):
     """Port of ``frappe/rate_limiter.py:105-171``. Cap calls to one endpoint per window.
 
     Applied **below** ``@whitelist`` so the registry stores the wrapped function::
@@ -214,6 +219,12 @@ def rate_limit(limit: int = 5, seconds: int = 86400, key: str | None = None):
 
     ``key`` names a parameter to include in the bucket - use it where one IP legitimately
     serves many users and you want per-account limits instead.
+
+    ``normalise`` is applied to that parameter before it becomes part of the bucket.
+    **Without it the limit is bypassable**, which the phase-8 review found on
+    forgot-password: the raw value went straight into the key, so ``Alice@x.com``,
+    ``alice@x.com`` and ``" alice@x.com "`` were three buckets aimed at one account. A
+    per-target cap that a caller can multiply by changing whitespace is not a cap.
     """
 
     def decorator(func):
@@ -221,7 +232,13 @@ def rate_limit(limit: int = 5, seconds: int = 86400, key: str | None = None):
         def wrapper(*args, **kwargs):
             identity = get_client_ip() or ""
             if key:
-                identity = f"{identity}:{kwargs.get(key, '')}"
+                value = kwargs.get(key, "")
+                if normalise is not None:
+                    try:
+                        value = normalise(value)
+                    except Exception:
+                        value = ""
+                identity = f"{identity}:{value}"
             if not identity.strip(":"):
                 # No IP and no key - outside a request, e.g. a direct call in tests.
                 return func(*args, **kwargs)

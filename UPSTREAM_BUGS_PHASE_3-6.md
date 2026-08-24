@@ -43,6 +43,8 @@ Source refs: `crm/` = `D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm`
 | 31 | Reconciliation issues accumulate on every run | **Diverge** — cleared |
 | 32 | A provider outage rolls back a deal's status change | **Diverge** — decoupled |
 | 33 | Meta access tokens travel in the query string | **Diverge** — header |
+| 34 | **A password-reset link never expires by default** | **Diverge** — zero means one hour |
+| 35 | Forgot-password is rate-limited per caller, not per target | **Diverge** — stricter |
 
 ---
 
@@ -693,6 +695,64 @@ A page access token reads every lead the page has collected and can post as the 
 **Us:** *Diverge — stricter.* `graph._split_token` moves it into the header, and
 `_strip_token` removes it from the `next` URL before the cursor is followed. Found by the
 phase-7 review, which is what `http.redact` was already anticipating.
+
+---
+
+## 34. A password-reset link never expires by default
+
+**Where:** `frappe/core/doctype/user/user.py:955-962`
+
+```python
+reset_password_link_expiry = cint(
+    frappe.db.get_single_value("System Settings", "reset_password_link_expiry_duration")
+)
+if (
+    reset_password_link_expiry
+    and now_datetime() > last_reset_password_key_generated_on + timedelta(seconds=...)
+):
+    result.message = _("The reset password link has been expired")
+```
+
+The setting defaults to **0**, and `if reset_password_link_expiry and …` short-circuits on
+zero — so out of the box the expiry check does not run at all and a reset link is valid
+forever. It stops working only when it is used, or when another is issued for the same
+account.
+
+A link that never expires turns a mail archive into a credential store: anyone who later
+reaches an old inbox, a backup of one, or a forwarded thread has a working password reset.
+It is the same shape as the invitation-key exposure phase 4 closed (#21), reached through a
+mailbox rather than the API.
+
+**Us:** *Diverge.* `PASSWORD_RESET_LINK_EXPIRY_MINUTES`, default 60, and **zero is
+redefined as 60 rather than as infinity** — `frappe_core/password_reset.py:expiry_minutes`.
+Upstream's "0 disables the check" is a footgun, and a deployment that sets it to zero
+meaning "no limit" gets an hour instead of a permanent one.
+`test_a_zero_setting_still_expires_a_key` pins the behaviour rather than the setting.
+
+---
+
+## 35. Forgot-password is rate-limited per caller, not per target
+
+**Where:** `frappe/core/doctype/user/user.py:1041-1042`
+
+```python
+@frappe.whitelist(allow_guest=True, methods=["POST"])
+@rate_limit(limit=get_password_reset_limit, seconds=60 * 60)
+def reset_password(user: str) -> None:
+```
+
+`rate_limit` buckets on the caller's IP alone. Upstream is careful here in every other
+respect — the response is deliberately invariant to avoid enumeration (#3 in this phase's
+notes) — but the cap counts *requests*, not *addresses*, so one caller can send the hourly
+allowance to a different victim each time.
+
+The harm is small and real: unsolicited "reset your password" mail attributed to your
+product, aimed at whoever the caller names.
+
+**Us:** *Diverge — stricter.* `@rate_limit(limit=10, seconds=3600, key="user")` puts the
+requested address in the bucket as well, so the cap is per IP **and** per target.
+`frappe_core.security.rate_limit` already supported `key` from phase 3; this is the first
+caller to use it.
 
 ---
 

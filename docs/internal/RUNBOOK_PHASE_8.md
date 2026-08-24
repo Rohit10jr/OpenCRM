@@ -64,6 +64,12 @@ revisit:
   minimum server-side through Django's `AUTH_PASSWORD_VALIDATORS`, already configured.
 - **JWT, not a session.** `update_password` returns a token pair, not a redirect;
   `logout_all_sessions` blacklists outstanding refresh tokens.
+- **Email wording lives in a Django template** — `crm_app/templates/emails/`. `APP_DIRS`
+  already finds it; no doctype, no settings screen. **Move the invitation email there
+  too** (`tasks.py:217` builds it as an f-string), so there is one answer to "where does
+  the wording live" rather than two.
+- **The apps switcher stays dead** (`UserDropdown.vue:169`). Not this phase's work — see
+  the spec. Do not tidy it while you are in the file.
 
 ### Four things to match exactly
 
@@ -74,8 +80,16 @@ revisit:
 4. **Two failure messages, and only two** — expired, versus used-or-invalid. The second
    merges "used" and "never existed" on purpose.
 
-**Rate-limit the reset endpoint.** `frappe_core.security.rate_limit` exists and already
-fronts login. Unlimited, it is a mail cannon aimed at any address the caller names.
+**Rate-limit the reset endpoint.** `frappe_core.security.rate_limit` exists — phase 3 built
+it and it fronts `change_password`. Unlimited, forgot-password is a mail cannon aimed at any
+address the caller names.
+
+> **Correction.** An earlier version of this line said `rate_limit` "already fronts login".
+> It does not, and deliberately: `frappe_core/api/auth.py:52-53` explains that login is
+> protected by `check_login_allowed` — an IP-**and**-account attempt tracker — and that *"a
+> hard request cap here is what locks out a whole office behind one NAT address."* The
+> instruction above is unchanged; only the precedent cited for it was wrong. Do not copy a
+> pattern from login, because there is none there.
 
 ---
 

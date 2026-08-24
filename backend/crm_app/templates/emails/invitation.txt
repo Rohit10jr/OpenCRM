@@ -1,0 +1,6 @@
+{% autoescape off %}You have been invited to join {{ app_name }}.
+
+Accept the invitation: {{ invite_link }}
+
+This invitation expires in {{ expiry_days }} days.
+{% endautoescape %}

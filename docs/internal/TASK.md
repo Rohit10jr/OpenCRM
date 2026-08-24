@@ -5,8 +5,9 @@ conflicts with it, the runbook wins.
 
 ```
 Repo:   D:\02_Personal\01_OpenSource\03_Applications\CRM\frappe_django_crm
-Branch: cut phase-8-auth from phase-8-prep  (NOT from main - prep carries the
-        corrected spec and this runbook, and is not merged yet)
+Branch: cut phase-8-auth from phase-8-prep-2  (NOT from main, and NOT from
+        phase-8-prep - only prep-2 carries the two settled flag decisions, and
+        it is deliberately unmerged)
 Main:   phases 0-7 complete and merged. ~1,574 backend tests + 152 frontend, all passing
 ```
 
@@ -27,8 +28,9 @@ shipped. Read them before starting, not after your first review round.
 ## Read first, in this order
 
 1. **`specs/AS_BUILT.md`** — what already exists. Read this before writing any code, and
-   **read its security section**: this phase adds credential-bearing doctypes and that
-   section carries the checklist
+   **read its security section**: this phase adds a credential-bearing **field** to `User`
+   (the password-reset key) and that section carries the checklist. Not a new doctype — that
+   sentence is carried over from phase 7
 2. `CLAUDE.md` — project rules and the reviewer policy
 3. `specs/SECURITY_MODEL.md` — what protects each doctype, and why we differ from upstream
 4. `PORT_PLAN.md` — inventory, frontend contract, settled decisions
@@ -104,14 +106,15 @@ password reset half-built, honestly reported, beats four screens nobody has walk
 
 ## Two obligations while you work
 
-- **Record every divergence** in `UPSTREAM_BUGS_PHASE_3-6.md`, continuing from #33.
-  It is tracked in git now, so a reviewer can see it
+- **Record every divergence** in `UPSTREAM_BUGS_PHASE_3-6.md`, continuing from **#34** —
+  #33 is phase 7's last entry, not the next free number. It is tracked in git now, so a
+  reviewer can see it
 - **Keep `specs/AS_BUILT.md` current** as you add framework helpers — it is what the next
   phase reads first, and it was two phases stale before this run
 
 ## What the human will read first
 
-`docs/internal/PROGRESS_PHASE_7.md`. Make it scannable, and **write down what you are
+`docs/internal/PROGRESS_PHASE_8.md`. Make it scannable, and **write down what you are
 unsure about**. The phase-4 review found eight security holes by pulling threads that
 phase's progress file left dangling — the file was useful *because* it admitted what it had
 not checked.
