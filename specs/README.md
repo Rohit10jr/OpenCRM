@@ -25,18 +25,37 @@ the frontend contract, and the settled architecture decisions. These specs assum
 | [`PHASE_5_ASYNC.md`](PHASE_5_ASYNC.md) | Celery jobs and schedules | Fan out | ✅ Shipped |
 | [`PHASE_6_REALTIME.md`](PHASE_6_REALTIME.md) | Django Channels | Fan out | ✅ Shipped |
 | [`PHASE_7_INTEGRATIONS.md`](PHASE_7_INTEGRATIONS.md) | ERPNext, Twilio, Exotel, Facebook, WhatsApp | Fan out | ✅ Shipped |
-| [`PHASE_8_AUTH_AND_DESK.md`](PHASE_8_AUTH_AND_DESK.md) | Auth UI and the rest of the Desk | — | **Parked** |
+| [`PHASE_8_AUTH_AND_DESK.md`](PHASE_8_AUTH_AND_DESK.md) | Auth screens (scope A) | — | ✅ Shipped |
 
-**Phase 7 shipped** on `phase-7-integrations` — all five integrations, each behind its own
-flag, all off by default. See `../docs/internal/PROGRESS_PHASE_7.md`, and read its
-**Concerns** before extending any of them: `get_recording_url` is deliberately unported and
-is the most security-sensitive single function in the phase.
+## The port is complete
 
-**Phase 8 is parked, not scheduled.** It is also the only phase that ports nothing:
-Frappe ships a Desk (auth screens, generic admin UI) alongside the CRM app, and this port
-dropped it. Blocking consequence recorded there — **there is currently no way to onboard
-a second user**, because accepting an invitation redirects to a Desk-hosted set-password
-page. Do not start it before phases 0–7 are done.
+**All eight phases have shipped.** ~1,644 backend tests and 162 frontend tests, every phase
+reviewed independently at tier 1.
+
+Phase 8 closed the last thing that stopped the product being usable by more than one person:
+**a second user can now be onboarded**. Invitation acceptance, password reset and a login
+page all existed only in Frappe's Desk, which this port dropped — so the invitation email
+led nowhere. That flow is now walked end to end by
+`backend/scripts/walk_auth_flow.py`, which is worth running after any change to auth.
+
+**Read before extending anything:**
+
+* `../docs/internal/PROGRESS_PHASE_8.md` — its **Concerns** are the honest list of what this
+  phase did not check. The screens have no component tests and nobody has clicked them in a
+  browser.
+* `../docs/internal/PROGRESS_PHASE_7.md` — `get_recording_url` is deliberately unported and
+  is the most security-sensitive single function in that phase. Port it *with* upstream's
+  IP pinning and per-hop redirect validation, or not at all.
+* `SECURITY_MODEL.md` — per-doctype, and the recurring finding that appeared in five
+  separate phases: **a doctype's endpoints are not its attack surface.**
+* `../UPSTREAM_BUGS_PHASE_0-2.md` and `../UPSTREAM_BUGS_PHASE_3-6.md` — 35 defects found in
+  Frappe and Frappe CRM while porting, each with evidence and our stance. When this port
+  behaves differently from upstream, the answer to "is that a port bug?" is in there.
+
+**What is deliberately not built**, and is a product decision rather than an omission:
+scope B (CRM screens for the Desk-linked doctypes — assignment rules, holiday lists, SLA
+policies) and scope C (a generic admin UI over the doctype registry). Both are sized in
+`PHASE_8_AUTH_AND_DESK.md`.
 
 ## What "Provisional" means
 

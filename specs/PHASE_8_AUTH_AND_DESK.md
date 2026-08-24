@@ -1,7 +1,11 @@
 # Phase 8 — Auth UI and the rest of the Desk
 
-> **IN PROGRESS** — unparked and running on `phase-8-auth`, **scope A only**.
+> **BUILT** — scope A shipped on `phase-8-auth`. 1644 backend tests, 162 frontend, reviewed
+> at tier 1, and the flow walked end to end (`backend/scripts/walk_auth_flow.py`).
 > See `docs/internal/PROGRESS_PHASE_8.md`.
+>
+> **Scopes B and C were not built**, by the decision recorded below. The "Degraded" table
+> further down is still accurate: seven links open a Desk record editor that does not exist.
 
 ## Why this phase is different from every other one
 

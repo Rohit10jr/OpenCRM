@@ -273,6 +273,54 @@ already happened.
 bites: upstream's Facebook sync sets nothing, so every synced lead there is invisible to
 every Sales User (`UPSTREAM_BUGS` #29).
 
+### Added by phase 8
+
+| Need | Call |
+|---|---|
+| Issue a password-reset key | `frappe_core.password_reset.issue_key(user)` → the **raw** key |
+| Verify one | `password_reset.resolve_key(raw)` → `.ok` / `.user` / `.message` |
+| Spend one | `password_reset.consume_key(user, raw_key=…)` → **False if somebody else won** |
+| The link that goes in the email | `password_reset.reset_link(raw)` |
+| Send templated mail | `crm_app.mail.send_invitation(...)`, `send_password_reset(...)` |
+| A token pair, same shape as login's | `frappe_core.api.auth.issue_tokens(user)` |
+| Rate-limit on a normalised parameter | `@rate_limit(..., key="user", normalise=…)` |
+
+**A reset key is hashed, not encrypted, and that is the stronger choice.** Encryption is
+reversible, so an encrypted key is still a working key to whoever reaches the encryption
+key; SHA-256 is not. It is only available because the server never needs the value back —
+it compares. `tests/test_credential_fields.py` has a third exception list,
+`REVIEWED_HASHED_AT_REST`, for exactly this, and an entry there is still held to
+`SENSITIVE_FIELDS`.
+
+**`consume_key` returns a bool and you must check it.** It is a compare-and-swap: the
+UPDATE is conditional on the key still being the one you resolved. Ignoring the result
+reintroduces the race where two requests both redeem one link and the second silently wins.
+Same shape for `accept_invitation`, which claims its row with a conditional UPDATE on
+`status` and `key` rather than a Python check followed by a write.
+
+**Zero minutes means sixty, not forever** (`PASSWORD_RESET_LINK_EXPIRY_MINUTES`).
+Upstream's `0 disables the expiry check` is the one part of its reset behaviour this port
+refuses — `UPSTREAM_BUGS` #34.
+
+**Anything that checks a password goes through the login lockout.**
+`security.check_login_allowed` / `record_login_failure` / `record_login_success` are not
+login's private business: an endpoint that verifies a password without them is a second door
+past the tracker. `update_password`'s old-password path learned this from the phase-8
+review.
+
+**Two clocks, deliberately.** An invitation lives 3 days
+(`tasks.INVITATION_EXPIRY_DAYS`); the set-password key it mints when redeemed lives 1 hour.
+Three days to accept, one hour to choose a password once you have.
+
+**Email wording lives in `crm_app/templates/emails/`**, not in Python and not in a doctype.
+`APP_DIRS` finds it. Both emails go through `crm_app.mail`, so there is one answer to
+"where does the wording live".
+
+**An emailed link points at a page, never at `/api/method/`.** Upstream can link to its
+endpoints because they answer a GET with an HTTP redirect into the Desk; ours answer with
+JSON, so a link to one lands a person on a JSON blob. `scripts/walk_auth_flow.py` asserts
+it, because a unit test of the endpoint will not.
+
 ---
 
 ### Added by the phase-4 security review — read this before adding any doctype
