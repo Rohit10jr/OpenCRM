@@ -2,6 +2,23 @@
 
 **You are running unattended against a clock.** Read this whole file before starting.
 
+## Start here
+
+You are working in the worktree
+`D:\02_Personal\01_OpenSource\03_Applications\CRM\frappe_django_crm_react`, on branch
+**`react-conversion`**. Run everything from this directory. Never `cd` to the sibling
+repository, and never work on `main`.
+
+**Do not re-plan this run.** The order of work below is fixed and chosen by dependency, not
+preference. Do not reorder it, do not skip ahead to easier screens, and do not substitute
+your own scope. If you think something in here is wrong, note it in the report and follow it
+anyway — the run is only comparable if it is run as written.
+
+**Set the clock before anything else** (next section). Stopping mid-plan with an honest
+report is the successful outcome. Running over without one is not.
+
+Then read the three files under "Read first" and start.
+
 ## What this run is
 
 Convert the Vue frontend to React, screen by screen, **getting as far as three hours
@@ -189,9 +206,22 @@ Include, precisely:
 1. **The ledger** — one row per piece: name, state, lines, wall-clock minutes.
 2. **The two numbers the run exists for** — cost of screen 1 (with the engine) and cost of
    screen 2 (without). State them even if screen 2 was not reached; say so plainly if not.
-3. **Extrapolation** — at the measured marginal cost, what does the remaining conversion
-   total? Show the arithmetic. Say which of `SPIKE_PLAN.md`'s outcomes A / B / C the numbers
-   point at, and why.
+3. **Extrapolation, and the decision it feeds.** At the measured marginal cost, what does
+   the remaining conversion total? Show the arithmetic.
+
+   **Then answer the actual question this run exists to settle**, in one paragraph, plainly:
+
+   > **Keep going at full-conversion pace, or fall back to the two-screen spike scope in
+   > `SPIKE_PLAN.md`?**
+
+   Those are the two live options. Full conversion is right if the engine held up, the
+   marginal screen is genuinely cheap, and the code is readable at this pace. The spike is
+   right if speed cost quality — if screens are stacking up in `written` state, if Deals had
+   to be special-cased, or if you would not want the owner reading what you produced in
+   hour three. Map it onto `SPIKE_PLAN.md`'s outcomes A / B / C and say which, and why.
+
+   **Recommending the slower path is a legitimate and useful result.** You are not being
+   scored on distance covered.
 4. **What is next-up**, in order, so the run can be resumed cold.
 5. **Codex findings** — what was raised, what was fixed, what was left and why.
 6. **Where the code is weak.** Anything rushed for the clock, anything you would write
