@@ -5,8 +5,9 @@ conflicts with it, the runbook wins.
 
 ```
 Repo:   D:\02_Personal\01_OpenSource\03_Applications\CRM\frappe_django_crm
-Branch: cut phase-8-auth from phase-8-prep  (NOT from main - prep carries the
-        corrected spec and this runbook, and is not merged yet)
+Branch: cut phase-8-auth from phase-8-prep-2  (NOT from main, and NOT from
+        phase-8-prep - only prep-2 carries the two settled flag decisions, and
+        it is deliberately unmerged)
 Main:   phases 0-7 complete and merged. ~1,574 backend tests + 152 frontend, all passing
 ```
 
