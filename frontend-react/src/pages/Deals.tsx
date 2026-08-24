@@ -28,7 +28,7 @@ export function DealsPage() {
       statusDoctype="CRM Deal Status"
       viewType={viewType}
       savedViewName={view}
-      allowedViews={['list', 'kanban']}
+      allowedViews={['list', 'group_by', 'kanban']}
       kanbanTitleField="organization"
       cellOverrides={{
         // `deal_owner` is a Link to User, but the payload types it `Data` for some

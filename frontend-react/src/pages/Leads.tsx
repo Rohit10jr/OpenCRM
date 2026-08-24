@@ -25,7 +25,7 @@ export function LeadsPage() {
       statusDoctype="CRM Lead Status"
       viewType={viewType}
       savedViewName={view}
-      allowedViews={['list', 'kanban']}
+      allowedViews={['list', 'group_by', 'kanban']}
       kanbanTitleField="lead_name"
       defaultFilters={{ converted: 0 }}
       cellOverrides={{

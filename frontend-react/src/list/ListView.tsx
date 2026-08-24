@@ -114,15 +114,45 @@ export function ListView({
           <Message icon={AlertCircle} text={`No ${title.toLowerCase()} found.`} />
         ) : (
           <>
-            <ListTable
-              rows={list.rows}
-              columns={list.columns}
-              selection={selection}
-              onSelectionChange={setSelection}
-              onRowClick={onRowClick}
-              getStatusColor={getStatusColor}
-              overrides={cellOverrides}
-            />
+            {list.viewType === 'group_by' ? (
+              <>
+                {/* One shared header, then a headerless table per group. */}
+                <ListTable
+                  rows={[]}
+                  columns={list.columns}
+                  selection={selection}
+                  onSelectionChange={setSelection}
+                />
+                {list.groups.map((group) => (
+                  <section key={group.value || '__empty'}>
+                    <h2 className="bg-surface-gray-1 px-4 py-1.5 text-sm font-medium text-ink-gray-6">
+                      {group.label}
+                      <span className="ml-2 text-ink-gray-4">{group.rows.length}</span>
+                    </h2>
+                    <ListTable
+                      rows={group.rows}
+                      columns={list.columns}
+                      selection={selection}
+                      onSelectionChange={setSelection}
+                      onRowClick={onRowClick}
+                      getStatusColor={getStatusColor}
+                      overrides={cellOverrides}
+                      showHeader={false}
+                    />
+                  </section>
+                ))}
+              </>
+            ) : (
+              <ListTable
+                rows={list.rows}
+                columns={list.columns}
+                selection={selection}
+                onSelectionChange={setSelection}
+                onRowClick={onRowClick}
+                getStatusColor={getStatusColor}
+                overrides={cellOverrides}
+              />
+            )}
             {list.hasMore ? (
               <div className="flex justify-center p-3">
                 <Button variant="subtle" size="sm" onClick={list.loadMore}>

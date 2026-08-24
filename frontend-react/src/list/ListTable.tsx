@@ -28,6 +28,7 @@ export function ListTable({
   onRowClick,
   getStatusColor,
   overrides,
+  showHeader = true,
 }: {
   rows: DocRow[]
   columns: ListColumn[]
@@ -36,6 +37,11 @@ export function ListTable({
   onRowClick?: (row: DocRow) => void
   getStatusColor?: (value: string) => string | undefined
   overrides?: Record<string, CellOverride>
+  /**
+   * A group_by view stacks one table per group under a single shared header. The widths
+   * are fixed from the column descriptors, so the tables line up.
+   */
+  showHeader?: boolean
 }) {
   const tableColumns = useMemo<ColumnDef<DocRow>[]>(() => {
     const select: ColumnDef<DocRow> = {
@@ -94,13 +100,20 @@ export function ListTable({
 
   return (
     <table className="w-full table-fixed border-collapse text-base">
-      <thead className="sticky top-0 z-10 bg-surface-white">
+      {/* Widths live on <col> rather than <th> so a group_by section, which hides its
+          header, still lines up with the shared one above it. */}
+      <colgroup>
+        <col style={{ width: '2.5rem' }} />
+        {columns.map((column) => (
+          <col key={column.key} style={column.width ? { width: column.width } : undefined} />
+        ))}
+      </colgroup>
+      <thead className={showHeader ? 'sticky top-0 z-10 bg-surface-white' : 'hidden'}>
         {table.getHeaderGroups().map((group) => (
           <tr key={group.id} className="border-b border-outline-gray-1">
             {group.headers.map((header) => (
               <th
                 key={header.id}
-                style={widthOf(header.column.id, columns)}
                 className="truncate px-3 py-2 text-left text-sm font-medium text-ink-gray-5"
               >
                 {flexRender(header.column.columnDef.header, header.getContext())}
@@ -126,10 +139,4 @@ export function ListTable({
       </tbody>
     </table>
   )
-}
-
-function widthOf(columnId: string, columns: ListColumn[]) {
-  if (columnId === 'select') return { width: '2.5rem' }
-  const width = columns.find((c) => c.key === columnId)?.width
-  return width ? { width } : undefined
 }

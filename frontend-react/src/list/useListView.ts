@@ -31,6 +31,13 @@ export type ListFilter = {
   value: string
 }
 
+/** One section of a group_by view. */
+export type RowGroup = {
+  label: string
+  value: string
+  rows: DocRow[]
+}
+
 export type UseListViewOptions = {
   doctype: string
   /** Which view types the page offers. `Deals` allows all three; `Notes` only list. */
@@ -43,6 +50,8 @@ export type UseListViewOptions = {
   defaultFilters?: Filters
   /** The field kanban columns group on. `ViewControls.vue:468` defaults it to `status`. */
   columnField?: string
+  /** The field a group_by view groups on. `ViewControls.vue:464` defaults it to `owner`. */
+  groupByField?: string
 }
 
 const DEFAULT_PAGE_LENGTH = 20
@@ -54,6 +63,7 @@ export function useListView({
   savedViewName,
   defaultFilters,
   columnField = 'status',
+  groupByField = 'owner',
 }: UseListViewOptions) {
   const [filters, setFilters] = useState<ListFilter[]>([])
   const [orderBy, setOrderBy] = useState(DEFAULT_ORDER_BY)
@@ -80,7 +90,7 @@ export function useListView({
       view: {
         custom_view_name: savedViewName ?? '',
         view_type: currentViewType,
-        group_by_field: 'owner',
+        group_by_field: groupByField,
       },
       // Only in kanban mode: `_kanban` uses it to build the columns, and sending it for a
       // list view would put a `column_field` the list does not use into the query key.
@@ -96,6 +106,7 @@ export function useListView({
       savedViewName,
       currentViewType,
       columnField,
+      groupByField,
       pageLength,
       pageLengthCount,
     ],
@@ -118,6 +129,24 @@ export function useListView({
     () => (payload?.columns ?? []).filter((c) => !hiddenColumns.includes(c.key)),
     [payload, hiddenColumns],
   )
+
+  /**
+   * A group_by view returns flat rows plus a descriptor of what to group them by; the
+   * grouping itself is the client's job (`Deals.vue:341`). Empty is a real group — the
+   * server puts `""` in `options` when any row has no value.
+   */
+  const groups = useMemo<RowGroup[]>(() => {
+    if (currentViewType !== 'group_by') return []
+    const field = payload?.group_by_field
+    if (!field || typeof field === 'string') return []
+    return field.options.map((option) => ({
+      label: option || 'No value',
+      value: option,
+      rows: rows.filter((row) =>
+        option ? row[field.fieldname] === option : !row[field.fieldname],
+      ),
+    }))
+  }, [payload, rows, currentViewType])
 
   const toggleColumn = useCallback((key: string) => {
     setHiddenColumns((current) =>
@@ -148,6 +177,7 @@ export function useListView({
     payload: payload as GetDataResponse | undefined,
     params,
     rows,
+    groups,
     kanbanGroups,
     columns,
     allColumns: payload?.columns ?? [],

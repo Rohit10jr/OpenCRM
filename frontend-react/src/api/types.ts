@@ -77,6 +77,19 @@ export type SavedView = {
 
 export type ViewType = 'list' | 'group_by' | 'kanban'
 
+/**
+ * `group_by_field` comes back as a plain string *unless* `view_type` is `group_by`, in
+ * which case the server resolves it into this descriptor with the options to group on
+ * (`_resolve_group_by_options`, doc.py:601). Rows themselves stay flat — the client does
+ * the grouping.
+ */
+export type GroupByField = {
+  label?: string
+  fieldname: string
+  fieldtype?: string
+  options: string[]
+}
+
 /** Exactly the object `get_data` returns (doc.py:353-372). */
 export type GetDataResponse = {
   /** `DocRow[]` for list and group_by; `KanbanGroup[]` when `view_type` is kanban. */
@@ -88,7 +101,8 @@ export type GetDataResponse = {
   title_field: string | null
   kanban_columns: KanbanColumn[]
   kanban_fields: string[]
-  group_by_field: unknown
+  /** A `GroupByField` when `view_type` is `group_by`; the bare fieldname otherwise. */
+  group_by_field: GroupByField | string | null
   page_length: number
   page_length_count: number
   is_default: boolean
