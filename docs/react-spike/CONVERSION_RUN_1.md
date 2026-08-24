@@ -1,7 +1,9 @@
 # Conversion run 1 — what three hours bought
 
-Branch `react-conversion`, worktree `frappe_django_crm_react/`. Clock started 18:51 IST,
-code stopped at 1h55m, report written after. Eleven commits.
+Branch `react-conversion`, worktree `frappe_django_crm_react/`. Clock started 18:51 IST;
+code stopped at 2h00m, well inside the 2h30m limit, because the work that remained —
+record screens, saved views — obviously would not fit and starting it would have produced
+a half-screen instead of a number. Fourteen commits of code, plus this report.
 
 **Headline: seven list screens and four auth screens, all clicked in a browser against the
 real Django API.** The engine held. The marginal screen came in at 46 lines and about four
@@ -33,8 +35,11 @@ not exercised end to end), `written` (code exists, never run).
 | 9 | Contacts · Organizations · Notes · Tasks · Call Logs | `verified` | 103 | 7 min (all five) |
 | 10 | Record screens, settings | not started | — | — |
 | — | Router, app shell, formatting utils | `verified` | 376 | 6 min |
-| — | Browser verification harness (not committed) | — | 167 | 25 min² |
-| | **Total committed React** | | **3,421** | |
+| | **Total application code** | | **3,421** | |
+| — | Browser verification harness (`npm run verify`) | — | 176 | 25 min² |
+
+The ratios in §2 and §3 use the 3,421 figure: it is application code compared against
+application code. The harness is tooling and is counted separately.
 
 ¹ Login, sign-out and the guard are exercised every run. ForgotPassword, UpdatePassword and
 AcceptInvitation **render and are wired**, but their happy paths need an email round trip or
@@ -215,11 +220,14 @@ Written after re-reading the tree, not from memory.
    would have been worse than none, but the gap is real.
 6. **The bundle is one 573 kB chunk.** No route-level code splitting. Fine for a dev
    preview, not fine shipped.
-7. **No tests.** Not one. The browser pass is the only safety net, and it lives in
-   `frontend-react/scratch/` (gitignored) rather than in the repo. Given that this project's
-   recurring failure mode is *green tests over unrun code*, a browser pass beats unit tests
-   as a first investment — but "no tests at all" is not a position to hold for another
-   twenty hours. The verification script should be committed and made a CI step.
+7. **No unit tests. Not one.** The browser pass is the only safety net. It is at least
+   committed now — `npm run verify`, 15 steps, non-zero exit on a failed step or a console
+   error — because leaving it in a gitignored scratch directory meant nobody else could run
+   it. Given that this project's recurring failure mode is *green tests over unrun code*, a
+   browser pass is the right first investment; but it asserts that seven screens load and
+   one filter narrows, and nothing finer. `likeWrap` and `toFilterDict` are pure functions
+   with exact upstream counterparts and should have unit tests before the next twenty hours
+   go in.
 8. **`useListView` returns fifteen values.** It is honest about what a list view is, but it
    is at the edge of what reads well as a hook result.
 9. **Currency uses the row's `currency` with a plain-number fallback.** That is better than
