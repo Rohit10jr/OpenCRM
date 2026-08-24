@@ -18,6 +18,27 @@ export const sessionStore = defineStore('crm-session', () => {
   let user = ref(sessionUser())
   const isLoggedIn = computed(() => !!user.value)
 
+  /**
+   * Take a token pair and become signed in.
+   *
+   * **`setTokens` alone is not enough**, and that is the whole reason this exists.
+   * `isLoggedIn` is computed from `user`, a ref read once at store creation — so a page
+   * that writes tokens to localStorage and then routes is still `isLoggedIn === false` to
+   * the navigation guard, which bounces it straight back to Login.
+   *
+   * Found by the phase-8 review: `UpdatePassword.vue` and `AcceptInvitation.vue` both did
+   * exactly that, so setting a password succeeded on the server and returned the user to
+   * the login page. Every backend test passed, and the end-to-end walk passed, because
+   * neither runs a browser.
+   *
+   * Any future page that receives tokens should call this rather than `setTokens`.
+   */
+  function acceptTokens(data) {
+    setTokens(data || {})
+    user.value = sessionUser()
+    return isLoggedIn.value
+  }
+
   const login = createResource({
     url: 'login',
     onError() {
@@ -25,8 +46,7 @@ export const sessionStore = defineStore('crm-session', () => {
     },
     // JWT PATCH: /api/method/login now returns a token pair instead of setting `sid`.
     onSuccess(data) {
-      setTokens(data || {})
-      user.value = sessionUser()
+      acceptTokens(data)
       login.reset()
       // Phase 8: return them to whatever they were trying to reach. The guard puts it in
       // `?redirect=` when it bounces an unauthenticated visitor.
@@ -58,6 +78,7 @@ export const sessionStore = defineStore('crm-session', () => {
   return {
     user,
     isLoggedIn,
+    acceptTokens,
     login,
     logout,
   }

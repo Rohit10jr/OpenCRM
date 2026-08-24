@@ -5,11 +5,20 @@
 <template>
   <AuthLayout :title="__('Sign in to Frappe CRM')">
     <form class="flex flex-col gap-4" @submit.prevent="submit">
+      <!--
+        `type="text"`, not `type="email"`. The backend authenticates against `User.name`,
+        and the seeded superuser's name is literally `Administrator` — not an address. With
+        `type="email"` the browser refuses to submit it, so the one account that always
+        exists could not log in. Found by the phase-8 review.
+
+        `inputmode="email"` still gives a phone the right keyboard.
+      -->
       <FormControl
         v-model="email"
-        type="email"
-        :label="__('Email')"
-        name="email"
+        type="text"
+        inputmode="email"
+        :label="__('Email or username')"
+        name="username"
         autocomplete="username"
         required
         autofocus

@@ -6,13 +6,13 @@ now onboard a second user**, which it could not before: the invitation flow was 
 to end.
 
 **Tests:** **1644 backend passing** (from 1574), 31 skipped (all pre-existing), 0 failing.
-**162 frontend passing** (from 152). Nothing skipped or weakened. **Migrations clean.**
-**Review: tier 1 (Codex, PowerShell 7)**, two passes.
+**166 frontend passing** (from 152). Nothing skipped or weakened. **Migrations clean.**
+**Review: tier 1 (Codex, PowerShell 7)**, two passes — the second found two more, both real.
 
 **The flow was walked**, which is gate step 5 and the reason this phase has one:
 `backend/scripts/walk_auth_flow.py`, **26 of 26 steps**. See "How I checked" below.
 
-**6 commits**, each green.
+**7 commits**, each green.
 
 | # | Commit | What |
 |---|---|---|
@@ -21,7 +21,8 @@ to end.
 | 3 | `b6de2a6` | The three endpoints, and both emails behind one template |
 | 4 | `4909f2d` | The four screens, and the redirect that was the bug |
 | 5 | `adbcb52` | Review fixes |
-| 6 | *(this)* | Docs |
+| 6 | `c319ebf` | Docs |
+| 7 | *(this)* | Second-pass review fixes |
 
 ## Acceptance criteria
 
@@ -138,6 +139,33 @@ request. Now a compare-and-swap in both places.
 **Low — logout had the same redirect bug the router had**, in a file the review was not
 asked to look at.
 
+### The second pass — and the two that mattered most came last
+
+Re-reviewed after the fixes. All five backend findings confirmed closed, and **two more
+found, both frontend, and the first of them meant the product did not work.**
+
+**Setting a password returned you to the login page.** `UpdatePassword.vue` and
+`AcceptInvitation.vue` called `setTokens()` and then routed. `isLoggedIn` is *computed from
+a ref the store holds*, and `setTokens` only writes localStorage — so the navigation guard
+still saw a logged-out visitor and bounced them straight back to Login. Reset your password
+successfully, land back at the login form.
+
+**Every backend test passed. The end-to-end walk passed. Neither runs a browser.** This is
+the third time in two phases that the same shape has appeared — correct code that nothing
+real reaches — and it is the exact risk this file's own Concerns section named before the
+review found it: *"the pages have no component tests… the Vue is covered by inspection."*
+Fixed with one `acceptTokens` on the store that does both halves, used by all three
+entry points, and asserted by test.
+
+**`type="email"` on the login field blocked `Administrator`.** The backend authenticates
+against `User.name`, and the seeded superuser's name is literally `Administrator`, not an
+address — so the browser refused to submit the one account that always exists, before the
+request was ever sent. Now `type="text"` with `inputmode="email"`.
+
+I had marked this phase PASS before these two were found. That was premature, and it was
+premature for a reason worth keeping: I had run every gate step, including the walk, and
+they were all green.
+
 ## Not done — named, not hidden
 
 - **Scope B and C**: no record editors for Desk-linked doctypes, no generic admin UI. Both
@@ -152,13 +180,16 @@ asked to look at.
 
 ## Concerns — what I would look at first with another hour
 
-1. **The pages have no component tests.** `authRouting.test.js` covers the routing rules and
-   the redirect sanitising, which is where the security is, but nothing renders
-   `Login.vue`. The backend is covered from both sides; the Vue is covered by inspection.
-   That is the weakest part of this phase.
-2. **Nobody has clicked these screens in a browser.** The flow is proven at the HTTP layer
-   end to end, and the markup is proven by reading. A real browser pass — invite yourself,
-   read the mail, click through — is an hour and would close the gap the walk cannot.
+1. **The pages still have no component tests, and this is now a demonstrated gap rather
+   than a theoretical one.** The second review pass found two frontend bugs here, one of
+   which broke the reset flow outright. What exists now asserts the *rules* by reading the
+   source — that `acceptTokens` is used, that the login field is not `type="email"` — which
+   catches a regression of exactly these two and nothing else. Mounting `Login.vue` and
+   `UpdatePassword.vue` with a stubbed router is the real fix and is maybe two hours.
+2. **Nobody has clicked these screens in a browser.** Still true, and the point is now
+   sharper: the two bugs above were *only* findable that way or by reading, because the
+   whole server side was green. A real browser pass — invite yourself, read the mail, click
+   through — is an hour and would close the gap the walk provably cannot.
 3. **An access token issued before `logout_all_sessions` stays valid for its five minutes.**
    Same window `logout` has, recorded in `KNOWN_ISSUES` §4 rather than closed. Closing it
    needs a per-request blacklist check, which is a different decision.

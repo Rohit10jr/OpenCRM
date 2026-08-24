@@ -73,6 +73,74 @@ describe('the source and this test agree', () => {
   })
 })
 
+describe('receiving a token pair actually signs you in', () => {
+  /**
+   * The phase-8 review's first finding, and the one that broke the product for a real
+   * person while every server-side test passed.
+   *
+   * `isLoggedIn` is computed from a ref the store holds. Writing tokens to localStorage
+   * with `setTokens` does not touch it, so a page that did that and then routed was still
+   * logged out as far as the navigation guard was concerned — and got bounced back to
+   * Login. Setting your password succeeded and returned you to the login page.
+   *
+   * Asserted on the source: the two pages that receive tokens must go through the store's
+   * `acceptTokens`, which updates both.
+   */
+  const read = (relative) => {
+    const fs = require('node:fs')
+    const path = require('node:path')
+    return fs.readFileSync(path.resolve(__dirname, relative), 'utf8')
+  }
+
+  it('the store has one method that does both halves', () => {
+    const source = read('../../src/stores/session.js')
+    expect(source).toContain('function acceptTokens(data)')
+    // Both halves, in that function.
+    const body = source.slice(source.indexOf('function acceptTokens(data)'))
+    expect(body).toContain('setTokens(')
+    expect(body).toContain('user.value = sessionUser()')
+  })
+
+  it('every page that receives tokens uses it', () => {
+    for (const page of [
+      '../../src/pages/auth/UpdatePassword.vue',
+      '../../src/pages/auth/AcceptInvitation.vue',
+    ]) {
+      const source = read(page)
+      expect(source, page).toContain('acceptTokens(result)')
+      // The bare call is the bug; it must not come back.
+      expect(source, page).not.toContain('setTokens(result')
+    }
+  })
+
+  it('login uses it too, so there is one path', () => {
+    const source = read('../../src/stores/session.js')
+    expect(source).toContain('acceptTokens(data)')
+  })
+})
+
+describe('the login field accepts a username', () => {
+  it('is not restricted to email addresses', () => {
+    // The seeded superuser is literally `Administrator`. With `type="email"` the browser
+    // blocks the submit before the request is sent, so the one account that always exists
+    // could not log in. Found by the phase-8 review.
+    const fs = require('node:fs')
+    const path = require('node:path')
+    const source = fs.readFileSync(
+      path.resolve(__dirname, '../../src/pages/auth/Login.vue'),
+      'utf8',
+    )
+    // HTML comments stripped first — the comment above the field explains why
+    // `type="email"` is wrong, and a test that forbids saying so gets the comment
+    // deleted. Same lesson as the redirect test below.
+    const markup = source.replace(/<!--[\s\S]*?-->/g, '')
+
+    expect(markup).not.toContain('type="email"')
+    expect(markup).toContain('inputmode="email"')
+    expect(markup).toContain('type="text"')
+  })
+})
+
 describe('the auth routes are public', () => {
   it('every auth screen is reachable without a session', async () => {
     const fs = await import('node:fs')

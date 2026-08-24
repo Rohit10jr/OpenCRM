@@ -67,11 +67,12 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button, ErrorMessage, FormControl } from 'frappe-ui'
 import { jwtRequest } from '@/auth/jwtRequest'
-import { setTokens } from '@/auth/tokens'
+import { sessionStore } from '@/stores/session'
 import AuthLayout from './AuthLayout.vue'
 
 const route = useRoute()
 const router = useRouter()
+const { acceptTokens } = sessionStore()
 
 const key = computed(() => route.query.key || '')
 const oldPassword = ref('')
@@ -112,7 +113,11 @@ async function submit() {
     })
 
     // 200 carries the same payload `login` returns, so this is a real sign-in.
-    setTokens(result || {})
+    //
+    // `acceptTokens`, not `setTokens`: the guard reads `isLoggedIn`, which is computed from
+    // a ref the store holds — writing tokens to localStorage does not update it, so routing
+    // afterwards bounced straight back to Login. Found by the phase-8 review.
+    acceptTokens(result)
     router.replace({ path: '/' })
   } catch (e) {
     const status = e?.response?.status || e?.status

@@ -31,11 +31,12 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button, Spinner } from 'frappe-ui'
 import { jwtRequest } from '@/auth/jwtRequest'
-import { setTokens } from '@/auth/tokens'
+import { sessionStore } from '@/stores/session'
 import AuthLayout from './AuthLayout.vue'
 
 const route = useRoute()
 const router = useRouter()
+const { acceptTokens } = sessionStore()
 
 const loading = ref(true)
 const error = ref('')
@@ -69,7 +70,8 @@ onMounted(async () => {
     }
 
     // An address that already had an account: the response is a token pair.
-    setTokens(result || {})
+    // `acceptTokens` rather than `setTokens` — see UpdatePassword.vue.
+    acceptTokens(result)
     router.replace({ path: '/' })
   } catch (e) {
     // One message for every failure — used, unknown, expired. The endpoint answers the
