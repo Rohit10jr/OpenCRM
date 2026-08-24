@@ -2,3 +2,4 @@ node_modules
 dist
 *.local
 scratch
+tsconfig.tsbuildinfo
