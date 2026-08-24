@@ -47,11 +47,14 @@ overhead.
 |---|---|---|
 | 1 | **What does one list screen cost?** | Measure the first, then the second. They differ by ~4× and both numbers matter |
 | 2 | **Does `createResource` → TanStack Query map cleanly?** | ~90 call sites depend on one pattern. If it is awkward, everything downstream is awkward |
-| 3 | **Can the owner read and defend the output?** | Read it cold, a day later. This is the acceptance test |
+| 3 | **Is the output learnable?** | Read it. Sort what was hard into *domain hard* and *code hard*. The second list is the answer |
 | 4 | **Where does the shadcn mapping actually break?** | The inventory looks clean. Something always is not |
 | 5 | **Can React and Vue run side by side during a migration?** | Determines whether this can be incremental or must be a big bang |
 
-Question 3 is the one that decides whether to continue. The others decide how.
+Question 3 decides whether to continue; the others decide how. Note what it is not asking:
+not whether every line is obvious on first read, but whether the difficulty that remains is
+the CRM's rather than the code's. The first kind gets easier with time. The second does
+not.
 
 ---
 
