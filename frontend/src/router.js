@@ -26,6 +26,37 @@ const routes = [
     path: '/',
     name: 'Home',
   },
+  // Phase 8. The auth screens, inside the app.
+  //
+  // `isPublic` is what the navigation guard below reads: without it, the guard's
+  // "not logged in" branch would send an unauthenticated visitor to Login from Login.
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/pages/auth/Login.vue'),
+    meta: { isPublic: true },
+  },
+  {
+    path: '/forgot-password',
+    name: 'Forgot Password',
+    component: () => import('@/pages/auth/ForgotPassword.vue'),
+    meta: { isPublic: true },
+  },
+  {
+    // The URL the reset email links to. `frappe_core/password_reset.py:reset_link` builds
+    // it, so the two must agree — a mismatch is a link that 404s, and nothing fails
+    // until somebody clicks one.
+    path: '/update-password',
+    name: 'Update Password',
+    component: () => import('@/pages/auth/UpdatePassword.vue'),
+    meta: { isPublic: true },
+  },
+  {
+    path: '/accept-invitation',
+    name: 'Accept Invitation',
+    component: () => import('@/pages/auth/AcceptInvitation.vue'),
+    meta: { isPublic: true },
+  },
   {
     path: '/notifications',
     name: 'Notifications',
@@ -154,6 +185,18 @@ router.beforeEach(async (to, from, next) => {
   router.previousRoute = from
 
   const { isLoggedIn, user } = sessionStore()
+
+  // Phase 8. The auth screens render for someone with no account, so they must bypass
+  // everything below — the users store, the CRM-role check, the persona wizard, all of
+  // which assume a session. **First statement in the guard**, deliberately: an earlier
+  // return anywhere below would be a screen an invited user cannot reach.
+  //
+  // A signed-in visitor is sent home instead: a login form for someone already logged in
+  // is a way to end up with two sessions and no clear idea which one is current.
+  if (to.meta?.isPublic) {
+    return isLoggedIn && to.name === 'Login' ? next({ path: '/' }) : next()
+  }
+
   const { users, isCrmUser, isAdmin } = usersStore()
 
   if (isLoggedIn && !users.fetched) {
@@ -219,7 +262,14 @@ router.beforeEach(async (to, from, next) => {
       next({ name: route_name, params: { viewType: type } })
     }
   } else if (!isLoggedIn) {
-    window.location.href = '/login?redirect-to=/crm'
+    // Phase 8. This was `window.location.href = '/login?redirect-to=/crm'` — a jump out of
+    // the SPA to a URL nothing serves (`config/urls.py` has only `admin/` and `api/`), so
+    // an unauthenticated visitor got a 404 instead of a login form. That redirect was the
+    // bug, not the contract (`PHASE_8_AUTH_AND_DESK.md`).
+    //
+    // `redirect` carries where they were headed, so signing in returns them to it rather
+    // than to the default view.
+    next({ name: 'Login', query: to.fullPath === '/' ? {} : { redirect: to.fullPath } })
   } else if (to.matched.length === 0) {
     next({ name: 'Invalid Page' })
   } else if (['Deal', 'Lead'].includes(to.name) && !to.hash) {

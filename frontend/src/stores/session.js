@@ -28,7 +28,16 @@ export const sessionStore = defineStore('crm-session', () => {
       setTokens(data || {})
       user.value = sessionUser()
       login.reset()
-      router.replace({ path: '/' })
+      // Phase 8: return them to whatever they were trying to reach. The guard puts it in
+      // `?redirect=` when it bounces an unauthenticated visitor.
+      //
+      // Only a path, never a full URL: `redirect` comes from the query string, so a caller
+      // can put anything there. Accepting `https://elsewhere.example/` would make the
+      // login page an open redirect — a phishing link that really does log you in and then
+      // lands you somewhere else.
+      const target = router.currentRoute.value.query.redirect
+      const safe = typeof target === 'string' && /^\/(?!\/)/.test(target) ? target : '/'
+      router.replace({ path: safe })
     },
   })
 
