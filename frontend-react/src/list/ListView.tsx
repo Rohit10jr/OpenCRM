@@ -53,7 +53,7 @@ export function ListView({
   headerActions?: React.ReactNode
 }) {
   const list = useListView({ doctype, viewType, savedViewName, defaultFilters })
-  const { getStatus } = useStatuses(statusDoctype ?? '')
+  const { getStatus } = useStatuses(statusDoctype)
   const [selection, setSelection] = useState<RowSelectionState>({})
 
   const getStatusColor = statusDoctype

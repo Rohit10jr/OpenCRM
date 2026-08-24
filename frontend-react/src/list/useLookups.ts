@@ -47,16 +47,22 @@ export function useUsers() {
 /**
  * Status rows for one doctype, e.g. `CRM Deal Status`. Colour is the only thing the list
  * needs from them, and it drives the dot beside a status label.
+ *
+ * `statusDoctype` is optional because not every list has one — a Task's status is a
+ * Select field on the model, not rows in a doctype. Passing nothing must not fetch:
+ * without the `enabled` guard this requested `/api/resource/` with an empty name and
+ * 404'd once per screen.
  */
-export function useStatuses(statusDoctype: string) {
+export function useStatuses(statusDoctype?: string) {
   const query = useQuery({
-    queryKey: keys.statuses(statusDoctype),
+    queryKey: keys.statuses(statusDoctype ?? ''),
     queryFn: () =>
-      getList<CrmStatus>(statusDoctype, {
+      getList<CrmStatus>(statusDoctype as string, {
         fields: ['name', 'color', 'position', 'type'],
         order_by: 'position asc',
         limit_page_length: 0,
       }),
+    enabled: Boolean(statusDoctype),
     staleTime: Infinity,
   })
 

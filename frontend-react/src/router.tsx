@@ -11,8 +11,13 @@ import { AcceptInvitationPage } from '@/pages/auth/AcceptInvitation'
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPassword'
 import { LoginPage } from '@/pages/auth/Login'
 import { UpdatePasswordPage } from '@/pages/auth/UpdatePassword'
+import { CallLogsPage } from '@/pages/CallLogs'
+import { ContactsPage } from '@/pages/Contacts'
 import { DealsPage } from '@/pages/Deals'
 import { LeadsPage } from '@/pages/Leads'
+import { NotesPage } from '@/pages/Notes'
+import { OrganizationsPage } from '@/pages/Organizations'
+import { TasksPage } from '@/pages/Tasks'
 
 /**
  * Routes. The Vue app's `router.js`, minus what this conversion has not reached yet.
@@ -114,41 +119,46 @@ const indexRoute = createRoute({
 
 /**
  * `viewType` is optional in the Vue routes (`/deals/view/:viewType?`). TanStack Router
- * has no optional path segment, so it is two routes pointing at one component — which is
- * also what makes `/deals/view` and `/deals/view/kanban` both valid URLs, as before.
+ * has no optional path segment, so each list screen is two routes pointing at one
+ * component — which is what keeps `/deals/view` and `/deals/view/kanban` both valid.
+ *
+ * Seven screens need that pair, so it is written once. (Two would not have justified a
+ * helper; seven do.)
  */
-const dealsRoute = createRoute({
-  getParentRoute: () => authedRoute,
-  path: '/deals/view',
-  validateSearch: viewSearch,
-  component: DealsPage,
-})
-
-const dealsViewTypeRoute = createRoute({
-  getParentRoute: () => authedRoute,
-  path: '/deals/view/$viewType',
-  validateSearch: viewSearch,
-  component: DealsPage,
-})
-
-const leadsRoute = createRoute({
-  getParentRoute: () => authedRoute,
-  path: '/leads/view',
-  validateSearch: viewSearch,
-  component: LeadsPage,
-})
-
-const leadsViewTypeRoute = createRoute({
-  getParentRoute: () => authedRoute,
-  path: '/leads/view/$viewType',
-  validateSearch: viewSearch,
-  component: LeadsPage,
-})
+function listRoutes<TPath extends string>(
+  basePath: TPath,
+  component: () => JSX.Element,
+) {
+  return [
+    createRoute({
+      getParentRoute: () => authedRoute,
+      path: basePath,
+      validateSearch: viewSearch,
+      component,
+    }),
+    createRoute({
+      getParentRoute: () => authedRoute,
+      path: `${basePath}/$viewType` as const,
+      validateSearch: viewSearch,
+      component,
+    }),
+  ] as const
+}
 
 /** `?view=<saved view name>`, the same query param the Vue app uses. */
 function viewSearch(search: Record<string, unknown>): { view?: string } {
   return typeof search.view === 'string' ? { view: search.view } : {}
 }
+
+const listScreenRoutes = [
+  ...listRoutes('/deals/view', DealsPage),
+  ...listRoutes('/leads/view', LeadsPage),
+  ...listRoutes('/contacts/view', ContactsPage),
+  ...listRoutes('/organizations/view', OrganizationsPage),
+  ...listRoutes('/notes/view', NotesPage),
+  ...listRoutes('/tasks/view', TasksPage),
+  ...listRoutes('/call-logs/view', CallLogsPage),
+]
 
 const routeTree = rootRoute.addChildren([
   publicRoute.addChildren([
@@ -157,13 +167,7 @@ const routeTree = rootRoute.addChildren([
     updatePasswordRoute,
     acceptInvitationRoute,
   ]),
-  authedRoute.addChildren([
-    indexRoute,
-    dealsRoute,
-    dealsViewTypeRoute,
-    leadsRoute,
-    leadsViewTypeRoute,
-  ]),
+  authedRoute.addChildren([indexRoute, ...listScreenRoutes]),
 ])
 
 export const router = createRouter({

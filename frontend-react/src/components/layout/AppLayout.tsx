@@ -1,5 +1,14 @@
 import { Link, Outlet, useNavigate } from '@tanstack/react-router'
-import { Briefcase, LogOut, Users } from 'lucide-react'
+import {
+  Briefcase,
+  Building2,
+  CheckSquare,
+  Contact,
+  LogOut,
+  Phone,
+  StickyNote,
+  Users,
+} from 'lucide-react'
 import { useSession } from '@/auth/session'
 import { Avatar } from '@/components/ui/primitives'
 import { Button } from '@/components/ui/button'
@@ -12,8 +21,13 @@ import { Button } from '@/components/ui/button'
  * them here would be inventing an abstraction for callers that do not exist.
  */
 const NAV = [
-  { to: '/deals/view', label: 'Deals', icon: Briefcase },
   { to: '/leads/view', label: 'Leads', icon: Users },
+  { to: '/deals/view', label: 'Deals', icon: Briefcase },
+  { to: '/contacts/view', label: 'Contacts', icon: Contact },
+  { to: '/organizations/view', label: 'Organizations', icon: Building2 },
+  { to: '/notes/view', label: 'Notes', icon: StickyNote },
+  { to: '/tasks/view', label: 'Tasks', icon: CheckSquare },
+  { to: '/call-logs/view', label: 'Call Logs', icon: Phone },
 ] as const
 
 export function AppLayout() {
