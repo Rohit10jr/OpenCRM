@@ -32,13 +32,25 @@ export type DocField = {
 /** A kanban column. `name` is the value of `column_field` the column groups on. */
 export type KanbanColumn = {
   name: string
-  label?: string
-  /** Rows already fetched for this column. Kanban paginates per column. */
-  data?: DocRow[]
+  /** Rows matching this column in total, vs. the `count` actually returned. */
+  all_count?: number
+  count?: number
   page_length?: number
-  all_loaded?: boolean
+  /** Document names the user arranged by dragging (`get_records_based_on_order`). */
   order?: string[]
+  delete?: boolean
   [key: string]: unknown
+}
+
+/**
+ * One kanban column plus its cards. In kanban mode `get_data`'s `data` is a list of
+ * these, not a list of rows (`_kanban`, doc.py:526) — the shape changes with `view_type`,
+ * which is the single most surprising thing about this endpoint.
+ */
+export type KanbanGroup = {
+  column: KanbanColumn
+  fields: string[]
+  data: DocRow[]
 }
 
 /** A saved `CRM View Settings` row, as returned in `views`. */
@@ -67,7 +79,8 @@ export type ViewType = 'list' | 'group_by' | 'kanban'
 
 /** Exactly the object `get_data` returns (doc.py:353-372). */
 export type GetDataResponse = {
-  data: DocRow[] | KanbanColumn[]
+  /** `DocRow[]` for list and group_by; `KanbanGroup[]` when `view_type` is kanban. */
+  data: DocRow[] | KanbanGroup[]
   columns: ListColumn[]
   rows: string[]
   fields: DocField[]
