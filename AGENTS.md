@@ -81,6 +81,13 @@ were about permissions and do not transfer. These are the shapes worth suspectin
   sites of one pattern — a subtle mismatch here is subtle everywhere at once.
 * **`v-model` → controlled components.** Two-way binding becomes a value/onChange pair, and
   a dropped `onChange` produces a field that renders but never updates.
+* **Wrote the credential, forgot to tell the reactive layer.** Phase 8 shipped this to
+  review: `setTokens()` wrote localStorage, but `isLoggedIn` is computed from a ref the
+  store holds — so the route guard still saw a logged-out visitor and bounced a
+  just-authenticated user back to Login. Reset your password successfully, land back at the
+  login form. **This is not a Vue bug.** Write the token, skip `invalidateQueries`, and
+  TanStack Query renders logged-out with a valid token in storage. Check that every auth
+  entry point goes through one function that does *both* halves.
 * **Special-casing the first screen.** `ViewControls.vue` is 1,365 lines shared by *seven*
   pages. A list engine written around Deals specifically will pass screen 1 and fail
   screen 2 — which is exactly what the two-screen scope exists to catch. Check that shared

@@ -1,7 +1,7 @@
 # What the Vue frontend actually is
 
 Measured before planning anything, so the estimates below are arithmetic rather than
-instinct. All figures from `frontend/src` on `main` (phases 0–7 merged).
+instinct. All figures from `frontend/src` on `main` (phases 0–**8** merged).
 
 ---
 
@@ -9,10 +9,17 @@ instinct. All figures from `frontend/src` on `main` (phases 0–7 merged).
 
 | | Count |
 |---|---|
-| `.vue` files | **321** — 22 pages, 298 components, 1 root |
-| Lines of `.vue` | **~46,800** |
+| `.vue` files | **326** — 27 pages, 298 components, 1 root |
+| Lines of `.vue` | **~47,300** |
 | `.js` files | 47 (~5,500 lines) — stores, composables, auth, socket |
-| Files importing `frappe-ui` | **199** |
+| Files importing `frappe-ui` | **203** |
+
+> **Updated after phase 8 merged.** It added five auth pages (`pages/auth/` — Login,
+> ForgotPassword, UpdatePassword, AcceptInvitation, AuthLayout, ~425 lines) plus changes to
+> `router.js` and `stores/session.js`. Small, and **good news for this work**: auth was a
+> hole before, and is now a complete, tested reference to port from. Four of the five import
+> only `Button`, `ErrorMessage`, `FormControl` and `Spinner` — all already in the mapping
+> below.
 
 For scale: the entire backend port — seven phases — is about 25,000 lines. **The frontend
 is roughly twice the backend.**

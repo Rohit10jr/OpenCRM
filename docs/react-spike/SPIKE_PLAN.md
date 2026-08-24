@@ -166,12 +166,20 @@ recording a decision or a trap, not by narrating the line below it.
 
 The spike is done when all of these are true:
 
-1. **Both screens work against the real Django API.** Not mocks. Log in, list deals,
-   filter, sort, switch to kanban, open one. Then the same for leads.
+1. **Both screens work against the real Django API — clicked by hand, in a browser.** Not
+   mocks, and not a script either. Log in, list deals, filter, sort, switch to kanban, open
+   one. Then the same for leads.
+
+   *Why the wording is this specific:* phase 8 wrote an end-to-end walk that drove real HTTP
+   against a real database and passed **26 of 26 steps** — and still shipped two bugs to
+   review. The invitation email linked to the raw JSON API, and setting a password bounced
+   the user straight back to the login screen. Every backend test passed; the walk passed;
+   **neither runs a browser.** That was the third occurrence of the same shape in two
+   phases. A green integration script is not this gate item.
 2. **The dotted-path test passes against the React source.** Point
    `test_every_frontend_dotted_path_resolves` at `frontend-react/` and confirm every API
    path it calls exists. This is the contract, already enforced, and it is free.
-3. **The Vue app still works.** Untouched, still building, still passing its 152 tests.
+3. **The Vue app still works.** Untouched, still building, still passing its 166 tests.
 4. **Both numbers are written down** — the cost of screen 1 and of screen 2, in hours and
    in lines.
 5. **The read-through happens, and what was hard is written down.** Not a memory test —
