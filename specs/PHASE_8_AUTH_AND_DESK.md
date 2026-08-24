@@ -1,11 +1,17 @@
 # Phase 8 — Auth UI and the rest of the Desk
 
-> **PARKED.** Do not start this until phases 0–7 are complete. Recorded now so the
-> dependency is not rediscovered late; deliberately not scheduled.
+> **IN PROGRESS** — unparked and running on `phase-8-auth`, **scope A only**.
+> See `docs/internal/PROGRESS_PHASE_8.md`.
 
 ## Why this phase is different from every other one
 
-Phases 0–7 **port the CRM app**. This one does not port anything.
+Phases 0–7 **port the CRM app**. This one ports part of the framework's **website layer**
+instead — the half the port dropped along with the Desk.
+
+> *This section used to open "This one does not port anything."* That was the same wrong
+> claim the correction below was written to fix, still sitting two paragraphs above it where
+> a reader who skims gets the wrong answer first. Fixed in phase 8; the marked correction is
+> left exactly as it was.
 
 Frappe ships two halves: the framework's **Desk** (a generic admin UI, auth screens,
 record editors) and the **CRM app** that runs alongside it. Our port replaces the CRM
