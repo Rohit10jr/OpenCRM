@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-table'
 import type { DocRow, ListColumn } from '@/api/types'
 import { Checkbox } from '@/components/ui/primitives'
+import { cn } from '@/lib/utils'
 import { Cell, type CellOverride } from './Cell'
 
 /**
@@ -119,8 +120,13 @@ export function ListTable({
         {table.getRowModel().rows.map((row) => (
           <tr
             key={row.id}
-            onClick={() => onRowClick?.(row.original)}
-            className="cursor-pointer border-b border-outline-gray-1 hover:bg-surface-gray-1"
+            onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+            // No pointer cursor without a handler: there is no record screen yet, and a
+            // row that looks clickable and is not reads as a broken app.
+            className={cn(
+              'border-b border-outline-gray-1 hover:bg-surface-gray-1',
+              onRowClick && 'cursor-pointer',
+            )}
           >
             {row.getVisibleCells().map((cell) => (
               <td key={cell.id} className="truncate px-3 py-2 text-ink-gray-7">

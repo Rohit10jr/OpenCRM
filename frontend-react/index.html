@@ -3,6 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Inline so there is no /favicon.ico request to 404. The Vue app's icons live in
+         `frontend/public`, which this app does not share. -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>%F0%9F%93%88</text></svg>"
+    />
     <title>Frappe CRM</title>
   </head>
   <body>
