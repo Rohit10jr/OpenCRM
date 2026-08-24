@@ -64,6 +64,12 @@ revisit:
   minimum server-side through Django's `AUTH_PASSWORD_VALIDATORS`, already configured.
 - **JWT, not a session.** `update_password` returns a token pair, not a redirect;
   `logout_all_sessions` blacklists outstanding refresh tokens.
+- **Email wording lives in a Django template** — `crm_app/templates/emails/`. `APP_DIRS`
+  already finds it; no doctype, no settings screen. **Move the invitation email there
+  too** (`tasks.py:217` builds it as an f-string), so there is one answer to "where does
+  the wording live" rather than two.
+- **The apps switcher stays dead** (`UserDropdown.vue:169`). Not this phase's work — see
+  the spec. Do not tidy it while you are in the file.
 
 ### Four things to match exactly
 

@@ -207,10 +207,28 @@ The first three are settled above and kept here so the change is visible.
   `CRM Invitation` is already in place (bug #21) — **do not weaken it to make redemption
   easier.** The key comes from the email, not from the API.
 
-### Still genuinely open
+### Both now decided
 
-- **Does the apps switcher (`UserDropdown.vue:169`) still make sense with no other apps?**
-  Scope A does not touch it. It is a dead link either way; removing it is a product call.
-- **What the reset email says.** Upstream uses a `password_reset` template and a System
-  Settings override. This port has no template layer, and `tasks.py`'s invitation mail is
-  the precedent to follow — plain text, built in the task, no template doctype.
+**The apps switcher stays, dead.** `UserDropdown.vue:169` points at Frappe's app chooser —
+the thing that hops between CRM, Helpdesk and Books on one install. There is one app here,
+so it links to a page that does not exist, for a concept that does not apply.
+
+**Not phase 8 work**: leaving it is zero effort, and removing it is a frontend change to a
+component this phase has no other reason to touch. Recorded so it is a decision rather than
+an oversight. Revisit if a second app ever exists, which is the only thing that would make
+it mean something.
+
+**The reset email is a Django template, editable by whoever deploys.**
+
+`crm_app/templates/emails/password_reset.txt`. `APP_DIRS` is already `True` in
+`config/settings/base.py`, so no settings change and no new doctype — Django finds it.
+
+Upstream's answer is a `password_reset` template doctype with a System Settings override,
+so a non-technical admin can reword it in the product. That needs a settings *screen* to
+edit it, and building one to change an email body is not what "let a second person log in"
+means. **If in-product editing is wanted later**, the field belongs on `FCRM Settings`
+(manager-writable already) plus a screen — a feature, sized as one.
+
+**Move the invitation email to a template in the same change.** It is currently an f-string
+inside `tasks.py:217`. Two emails, one mechanism, and the next person looking for "where
+does the wording live" finds one answer instead of two.
