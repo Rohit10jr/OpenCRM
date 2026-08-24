@@ -62,3 +62,7 @@ quick_recap.md
 # It is also what a reviewer needs: when this port behaves differently from upstream, the
 # answer to "is that a port bug?" lives in that file. The per-phase progress files carry
 # one-line summaries, so the findings survived being ignored; the reasoning did not.
+
+# Agent scratch at the repo root (the React worktree's equivalent of /backend/scratch/)
+/scratch/
+
