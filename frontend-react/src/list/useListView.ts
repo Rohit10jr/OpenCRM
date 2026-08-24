@@ -58,6 +58,13 @@ export function useListView({
   const [filters, setFilters] = useState<ListFilter[]>([])
   const [orderBy, setOrderBy] = useState(DEFAULT_ORDER_BY)
   const [pageLength, setPageLength] = useState(DEFAULT_PAGE_LENGTH)
+  /**
+   * The page *increment*, not the page size — `page_length` grows past it as the user
+   * loads more, and `page_length_count` stays put. `updatePageLength` does exactly this
+   * (`ViewControls.vue:1052`); setting both to the accumulated length sends a request
+   * the Vue client never sends.
+   */
+  const [pageLengthCount, setPageLengthCount] = useState(DEFAULT_PAGE_LENGTH)
   /** Column keys the user has hidden. Empty means "whatever the server sends". */
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([])
 
@@ -79,7 +86,7 @@ export function useListView({
       // list view would put a `column_field` the list does not use into the query key.
       ...(currentViewType === 'kanban' ? { column_field: columnField } : {}),
       page_length: pageLength,
-      page_length_count: pageLength,
+      page_length_count: pageLengthCount,
     }),
     [
       doctype,
@@ -90,6 +97,7 @@ export function useListView({
       currentViewType,
       columnField,
       pageLength,
+      pageLengthCount,
     ],
   )
 
@@ -119,13 +127,19 @@ export function useListView({
 
   /**
    * "Load more" grows the page rather than paging. That is what the Vue list does —
-   * `updatePageLength(value, true)` adds 20 to `page_length` — and it is why the server
-   * takes `page_length` and `page_length_count` rather than an offset.
+   * `page_length += page_length_count` (`ViewControls.vue:1059`) — and it is why the
+   * server takes both numbers rather than an offset.
    */
   const loadMore = useCallback(
-    () => setPageLength((n) => n + DEFAULT_PAGE_LENGTH),
-    [],
+    () => setPageLength((n) => n + pageLengthCount),
+    [pageLengthCount],
   )
+
+  /** Changing the page size resets the accumulated length, as `updatePageLength` does. */
+  const setPageSize = useCallback((size: number) => {
+    setPageLength(size)
+    setPageLengthCount(size)
+  }, [])
 
   const hasMore = (payload?.total_count ?? 0) > rows.length && currentViewType !== 'kanban'
 
@@ -153,6 +167,7 @@ export function useListView({
     hiddenColumns,
     toggleColumn,
     pageLength,
+    setPageSize,
     loadMore,
     hasMore,
   }
@@ -172,7 +187,23 @@ function toFilterDict(filters: ListFilter[]): Filters {
   for (const filter of filters) {
     if (!filter.fieldname || filter.value === '') continue
     out[filter.fieldname] =
-      filter.operator === '=' ? filter.value : [filter.operator, filter.value]
+      filter.operator === '='
+        ? filter.value
+        : [filter.operator, likeWrap(filter.operator, filter.value)]
   }
   return out
+}
+
+/**
+ * `like` values are sent pre-wrapped in `%`, as `Filter.vue:595` does.
+ *
+ * **The client must do this, not the server.** `_like_to_lookup`
+ * (`backend/frappe_core/filters.py:144`) reads the wildcards to pick the narrowest
+ * lookup — `%foo%` becomes `icontains`, a bare `foo` becomes `iexact`. So an unwrapped
+ * value does not search for "contains foo", it searches for exactly "foo", and a
+ * search box that looks like it works returns nothing.
+ */
+function likeWrap(operator: string, value: string): string {
+  if (!operator.includes('like') || value.includes('%')) return value
+  return `%${value}%`
 }

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import {
   ArrowDownUp,
@@ -212,6 +213,44 @@ function ViewTypeTabs({
   )
 }
 
+/**
+ * A filter value that commits on blur or Enter rather than on every keystroke.
+ *
+ * The filter value is part of the query key, so a controlled input would fire a
+ * `get_data` request per character typed. `Filter.vue:107` binds on `change` for the same
+ * reason; a debounce would work too, but "the request goes when you finish typing" is
+ * easier to reason about than "the request goes 300ms after you stop".
+ */
+function FilterValueInput({
+  value,
+  onCommit,
+}: {
+  value: string
+  onCommit: (value: string) => void
+}) {
+  const [draft, setDraft] = useState(value)
+
+  // The committed value can change underneath this — removing a filter row shifts the
+  // rest up — so the draft follows it when it does.
+  useEffect(() => setDraft(value), [value])
+
+  return (
+    <Input
+      className="flex-1"
+      placeholder="Value"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => draft !== value && onCommit(draft)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          onCommit(draft)
+        }
+      }}
+    />
+  )
+}
+
 function FilterEditor({
   fields,
   filters,
@@ -255,11 +294,9 @@ function FilterEditor({
               </option>
             ))}
           </select>
-          <Input
-            className="flex-1"
-            placeholder="Value"
+          <FilterValueInput
             value={filter.value}
-            onChange={(e) => update(index, { value: e.target.value })}
+            onCommit={(value) => update(index, { value })}
           />
           <Button
             variant="ghost"
