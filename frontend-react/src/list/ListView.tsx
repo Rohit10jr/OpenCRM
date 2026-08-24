@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import type { RowSelectionState } from '@tanstack/react-table'
-import { AlertCircle, Loader2 } from 'lucide-react'
+import { AlertCircle, Loader2, type LucideIcon } from 'lucide-react'
 import { errorMessage } from '@/api/client'
 import type { DocRow, Filters, ViewType } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import type { CellOverride } from './Cell'
 import { KanbanBoard } from './KanbanBoard'
-import { ListTable } from './ListTable'
+import { ListTable, ListTableHeader } from './ListTable'
 import { useListView } from './useListView'
 import { useStatuses } from './useLookups'
 import { ViewControls } from './ViewControls'
@@ -117,12 +117,7 @@ export function ListView({
             {list.viewType === 'group_by' ? (
               <>
                 {/* One shared header, then a headerless table per group. */}
-                <ListTable
-                  rows={[]}
-                  columns={list.columns}
-                  selection={selection}
-                  onSelectionChange={setSelection}
-                />
+                <ListTableHeader columns={list.columns} />
                 {list.groups.map((group) => (
                   <section key={group.value || '__empty'}>
                     <h2 className="bg-surface-gray-1 px-4 py-1.5 text-sm font-medium text-ink-gray-6">
@@ -172,7 +167,7 @@ function Message({
   text,
   spin,
 }: {
-  icon: typeof AlertCircle
+  icon: LucideIcon
   text: string
   spin?: boolean
 }) {

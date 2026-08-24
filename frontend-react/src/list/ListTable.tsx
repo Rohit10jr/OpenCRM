@@ -38,8 +38,8 @@ export function ListTable({
   getStatusColor?: (value: string) => string | undefined
   overrides?: Record<string, CellOverride>
   /**
-   * A group_by view stacks one table per group under a single shared header. The widths
-   * are fixed from the column descriptors, so the tables line up.
+   * A group_by view stacks one table per group under a single `ListTableHeader`. The
+   * widths are fixed from the column descriptors, so the tables line up.
    */
   showHeader?: boolean
 }) {
@@ -100,14 +100,7 @@ export function ListTable({
 
   return (
     <table className="w-full table-fixed border-collapse text-base">
-      {/* Widths live on <col> rather than <th> so a group_by section, which hides its
-          header, still lines up with the shared one above it. */}
-      <colgroup>
-        <col style={{ width: '2.5rem' }} />
-        {columns.map((column) => (
-          <col key={column.key} style={column.width ? { width: column.width } : undefined} />
-        ))}
-      </colgroup>
+      <ColumnWidths columns={columns} />
       <thead className={showHeader ? 'sticky top-0 z-10 bg-surface-white' : 'hidden'}>
         {table.getHeaderGroups().map((group) => (
           <tr key={group.id} className="border-b border-outline-gray-1">
@@ -138,5 +131,48 @@ export function ListTable({
         ))}
       </tbody>
     </table>
+  )
+}
+
+/**
+ * The column header on its own, for a group_by view: one of these above a stack of
+ * `ListTable`s with `showHeader={false}`.
+ *
+ * A separate component rather than an empty `ListTable`, which read as a puzzle.
+ */
+export function ListTableHeader({ columns }: { columns: ListColumn[] }) {
+  return (
+    <table className="w-full table-fixed border-collapse text-base">
+      <ColumnWidths columns={columns} />
+      <thead className="sticky top-0 z-10 bg-surface-white">
+        <tr className="border-b border-outline-gray-1">
+          {/* Matches the selection column the tables below render. */}
+          <th />
+          {columns.map((column) => (
+            <th
+              key={column.key}
+              className="truncate px-3 py-2 text-left text-sm font-medium text-ink-gray-5"
+            >
+              {column.label}
+            </th>
+          ))}
+        </tr>
+      </thead>
+    </table>
+  )
+}
+
+/**
+ * Widths live on `<col>` rather than `<th>` so a group_by section, which hides its own
+ * header, still lines up with the shared header above it.
+ */
+function ColumnWidths({ columns }: { columns: ListColumn[] }) {
+  return (
+    <colgroup>
+      <col style={{ width: '2.5rem' }} />
+      {columns.map((column) => (
+        <col key={column.key} style={column.width ? { width: column.width } : undefined} />
+      ))}
+    </colgroup>
   )
 }

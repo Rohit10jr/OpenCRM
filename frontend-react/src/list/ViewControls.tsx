@@ -17,6 +17,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -32,9 +34,10 @@ import type { ListFilter } from './useListView'
  * every option comes from the `fields` and `columns` the server sent — so the seven pages
  * that share it get the same controls without any of them configuring it.
  *
- * Saved views are read-only here: the payload's `views` are listed and can be selected,
- * but creating and editing one is `CRM View Settings` write traffic that no screen in
- * this conversion has reached yet.
+ * **Saved views are not here at all yet.** The payload carries them (`views`) and
+ * `useListView` passes the selected name through to the server, but there is no UI to
+ * pick, create or edit one — that is `CRM View Settings` write traffic this conversion
+ * has not reached. See the run report for what that gap costs.
  */
 
 const FILTER_OPERATORS = [
@@ -119,17 +122,19 @@ export function ViewControls({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="max-h-80 overflow-y-auto">
             <DropdownMenuLabel>Sort by</DropdownMenuLabel>
-            {fields.map((field) => (
-              <DropdownMenuCheckboxItem
-                key={field.fieldname}
-                checked={sortField === field.fieldname}
-                onCheckedChange={() =>
-                  onOrderByChange(`${field.fieldname} ${sortDirection || 'desc'}`)
-                }
-              >
-                {field.label}
-              </DropdownMenuCheckboxItem>
-            ))}
+            {/* A radio group, not checkboxes: `order_by` holds one field. */}
+            <DropdownMenuRadioGroup
+              value={sortField}
+              onValueChange={(fieldname) =>
+                onOrderByChange(`${fieldname} ${sortDirection || 'desc'}`)
+              }
+            >
+              {fields.map((field) => (
+                <DropdownMenuRadioItem key={field.fieldname} value={field.fieldname}>
+                  {field.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onSelect={() =>

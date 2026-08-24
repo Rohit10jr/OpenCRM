@@ -40,8 +40,6 @@ export type RowGroup = {
 
 export type UseListViewOptions = {
   doctype: string
-  /** Which view types the page offers. `Deals` allows all three; `Notes` only list. */
-  allowedViews?: ViewType[]
   /** From the route: `/deals/view/kanban`. */
   viewType?: string
   /** From the route: `?view=<saved view name>`. */

@@ -1,6 +1,6 @@
 import * as React from 'react'
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
-import { Check } from 'lucide-react'
+import { Check, Circle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /** shadcn's dropdown-menu, trimmed to the parts the list screens use (23 sites in Vue). */
@@ -73,6 +73,30 @@ export const DropdownMenuCheckboxItem = React.forwardRef<
   </DropdownMenuPrimitive.CheckboxItem>
 ))
 DropdownMenuCheckboxItem.displayName = 'DropdownMenuCheckboxItem'
+
+export const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup
+
+export const DropdownMenuRadioItem = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.RadioItem>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.RadioItem>
+>(({ className, children, ...props }, ref) => (
+  <DropdownMenuPrimitive.RadioItem
+    ref={ref}
+    className={cn(
+      'relative flex cursor-pointer select-none items-center gap-2 rounded py-1.5 pl-7 pr-2 text-base text-ink-gray-7 outline-none focus:bg-surface-gray-2',
+      className,
+    )}
+    {...props}
+  >
+    <span className="absolute left-1.5 flex h-4 w-4 items-center justify-center">
+      <DropdownMenuPrimitive.ItemIndicator>
+        <Circle className="h-2 w-2 fill-current" />
+      </DropdownMenuPrimitive.ItemIndicator>
+    </span>
+    {children}
+  </DropdownMenuPrimitive.RadioItem>
+))
+DropdownMenuRadioItem.displayName = 'DropdownMenuRadioItem'
 
 export const DropdownMenuLabel = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Label>,
