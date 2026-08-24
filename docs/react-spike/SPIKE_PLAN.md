@@ -14,13 +14,25 @@ means here:
 > The owner of this project is fluent in React, shadcn, TanStack and axios, and not in
 > Vue. A portfolio project you cannot read is a portfolio project you cannot defend.
 
-So success is **not** "the screen renders". Success is:
+So success is **not** "the screen renders". But it is also not "can you explain every
+line on day one" — nobody can do that with code they did not write, including code they
+wrote themselves six months ago. The point is not instant recall. It is that the code is
+**learnable**, in a stack already familiar, so that time spent reading it compounds instead
+of being spent on Vue's syntax first.
 
-> **Open the resulting files a day later, cold. Can you explain every one of them to
-> someone who asks why it is written that way?**
+The useful test is therefore about **where the difficulty sits**:
 
-That criterion changes how the work runs. It is the reason for small commits, for
-conventional idioms over clever ones, and for stopping after one screen.
+> **Read a file you have not seen. When something is hard to follow, is it hard because
+> the *problem* is hard, or because of how the code is written?**
+
+Domain difficulty is expected and fine. The list engine is genuinely intricate — filters,
+saved views, kanban and pagination against one endpoint — and no amount of good style makes
+that a five-minute read. **Difficulty that comes from the code itself is the defect**: an
+invented abstraction, an unfamiliar pattern where a conventional one existed, indirection
+with one caller.
+
+That distinction is what the work is optimised for, and it is the reason for small commits,
+for conventional idioms over clever ones, and for stopping after two screens.
 
 **The trap to name out loud:** if an agent writes 46,000 lines of React and nobody reads
 them, "cannot explain Vue" has become "cannot explain React I did not write" — the same
@@ -159,9 +171,17 @@ The spike is done when all of these are true:
 3. **The Vue app still works.** Untouched, still building, still passing its 152 tests.
 4. **Both numbers are written down** — the cost of screen 1 and of screen 2, in hours and
    in lines.
-5. **The acceptance test is run and reported honestly.** The owner reads the files cold, a
-   day later, and records what they could not explain. **That list is the most valuable
-   output of the spike**, and an empty one should be suspicious rather than pleasing.
+5. **The read-through happens, and what was hard is written down.** Not a memory test —
+   read the files, and for anything that did not land, record *which kind* of hard it was:
+
+   * **domain hard** — the list engine has a lot going on. Expected; note it and move on
+   * **code hard** — a pattern that had to be reverse-engineered, an abstraction whose
+     purpose was not obvious, something that would have been clearer written plainly
+
+   **The second list is the valuable output of the spike.** Every entry on it is either a
+   thing to rewrite before scaling up, or a convention to fix for the remaining 300 files.
+   An empty list should be suspicious rather than pleasing — it more likely means the
+   read-through was shallow than that the code is perfect.
 
 ---
 
