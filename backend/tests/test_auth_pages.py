@@ -324,6 +324,142 @@ def test_a_reset_does_not_re_enable_a_disabled_account(api, alice):
 
 
 # ---------------------------------------------------------------------------
+# The phase-8 review's findings
+# ---------------------------------------------------------------------------
+
+
+def test_update_password_is_rate_limited(api, alice):
+    """It is `allow_guest` and it checks passwords. Uncapped, it is a brute-force endpoint."""
+    for _ in range(20):
+        _post(api, UPDATE, {"key": "wrong", "new_password": "Str0ng!Passw0rd"})
+
+    response = _post(api, UPDATE, {"key": "wrong", "new_password": "Str0ng!Passw0rd"})
+    assert response.status_code == 429
+
+
+def test_the_old_password_path_goes_through_the_login_lockout(api, make_user):
+    """The finding that mattered most.
+
+    `login` is protected by an IP-and-account attempt tracker, not by a request cap. An
+    endpoint that checks a password *without* that tracker is a second door past it — an
+    online password oracle. This asserts the lockout engages here too.
+    """
+    from frappe_core.exceptions import ValidationError
+
+    account = make_user("oracle@example.com", password="Original!Pass1")
+
+    statuses = []
+    for _ in range(12):
+        response = _post(
+            api,
+            UPDATE,
+            {"usr": account.pk, "old_password": "guess", "new_password": "Str0ng!Passw0rd"},
+        )
+        statuses.append(response.status_code)
+
+    # The tracker locks the account out before the request cap would; either way the
+    # endpoint must stop answering "wrong password" indefinitely.
+    assert statuses[-1] != 401, f"still an oracle after 12 attempts: {statuses}"
+
+
+def test_the_reset_limiter_cannot_be_bypassed_by_case_or_whitespace(api, alice):
+    """`key="user"` bucketed on the raw value, so `Alice@x.com` and ` alice@x.com ` were
+    three different buckets aimed at one account. A per-target cap a caller can multiply by
+    pressing the space bar is not a cap."""
+    variants = [alice.pk, alice.pk.upper(), f"  {alice.pk}  ", alice.pk.title()]
+
+    statuses = []
+    for i in range(12):
+        statuses.append(
+            _post(api, RESET, {"user": variants[i % len(variants)]}).status_code
+        )
+
+    assert 429 in statuses, f"the limiter was bypassed by normalisation variants: {statuses}"
+
+
+def test_a_reset_key_can_only_be_claimed_once_even_under_a_race(alice):
+    """Single use, made atomic.
+
+    Resolving and clearing were two statements, so two requests could both resolve and both
+    set a password — the second silently winning. Simulating true concurrency needs two
+    connections; this asserts the compare-and-swap that makes it impossible, by claiming the
+    key twice in a row and requiring the second to lose.
+    """
+    raw = password_reset.issue_key(alice)
+
+    assert password_reset.consume_key(alice, raw_key=raw) is True
+    assert password_reset.consume_key(alice, raw_key=raw) is False
+
+
+def test_a_stale_key_cannot_claim_after_a_new_one_is_issued(alice):
+    """The realistic version of the race: an old link redeemed after a second was requested."""
+    first = password_reset.issue_key(alice)
+    password_reset.issue_key(alice)  # invalidates the first
+
+    assert password_reset.consume_key(alice, raw_key=first) is False
+
+
+def test_changing_a_password_kills_any_outstanding_reset_link(api, make_user):
+    """The old-password path clears the key too.
+
+    Someone who changes their password deliberately should not leave a live reset link in an
+    inbox — that is the credential-store problem from the other direction.
+    """
+    account = make_user("tidy@example.com", password="Original!Pass1")
+    raw = password_reset.issue_key(account)
+
+    _post(
+        api,
+        UPDATE,
+        {"usr": account.pk, "old_password": "Original!Pass1", "new_password": "Str0ng!Passw0rd"},
+    )
+
+    assert password_reset.resolve_key(raw).message == password_reset.INVALID_MESSAGE
+
+
+def test_the_invitation_email_links_to_a_page_not_the_api(administrator, settings):
+    """**The finding my own end-to-end walk missed.**
+
+    The link went to `/api/method/crm.api.accept_invitation`, which answers with JSON — so
+    an invitee clicking it landed on raw JSON rather than a page. Upstream can link to its
+    endpoint because that one answers a GET with an HTTP redirect into the Desk; ours does
+    not, and I walked the *endpoint* rather than the *URL a person clicks*.
+    """
+    from crm_app.models import CRMInvitation
+
+    settings.FRONTEND_ORIGIN = "https://crm.example.com"
+    django_mail.outbox.clear()
+
+    with session_user(administrator.name):
+        CRMInvitation.objects.create(
+            email="linked@example.com", role="Sales User", status="Pending", key="k-link"
+        )
+
+    body = django_mail.outbox[0].body
+    assert "https://crm.example.com/crm/accept-invitation?key=k-link" in body
+    assert "/api/method/" not in body, "the email must not send a person to a JSON endpoint"
+
+
+def test_an_invitation_cannot_be_claimed_twice_even_under_a_race(api, invitation):
+    """The claim is a conditional UPDATE, so exactly one caller wins.
+
+    Both callers pass the `status == "Pending"` read; only one changes a row.
+    """
+    from crm_app.models import CRMInvitation
+
+    first = auth_pages.accept(CRMInvitation.objects.get(pk=invitation.pk))
+    assert first is True
+
+    # A second caller holding the same row as it was before the claim.
+    stale = CRMInvitation(pk=invitation.pk, status="Pending", key="invite-key-1",
+                          email=invitation.email, role=invitation.role)
+    from frappe_core.exceptions import ValidationError
+
+    with pytest.raises(ValidationError):
+        auth_pages.accept(stale)
+
+
+# ---------------------------------------------------------------------------
 # accept_invitation
 # ---------------------------------------------------------------------------
 

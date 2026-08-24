@@ -47,7 +47,7 @@ MAX_PASSWORD_SIZE = 512
     allow_guest=True,
     methods=("POST",),
 )
-@rate_limit(limit=10, seconds=60 * 60, key="user")
+@rate_limit(limit=10, seconds=60 * 60, key="user", normalise=lambda v: str(v or "").strip().lower())
 def reset_password(user: str = "", **extra):
     """`user.py:1041-1067` — forgot password.
 
@@ -101,6 +101,7 @@ def reset_password(user: str = "", **extra):
     allow_guest=True,
     methods=("POST",),
 )
+@rate_limit(limit=20, seconds=60 * 60)
 def update_password(
     new_password: str = "",
     key: str = "",
@@ -148,11 +149,23 @@ def update_password(
 
     _validate_password(new_password, account)
 
+    # **Claim the key before setting the password**, not after. Found by the phase-8 review:
+    # resolving and clearing were two statements, so two requests arriving together could
+    # both resolve and both set a password — and the second one wins silently. Whoever
+    # holds a forwarded copy of the link *is* that second request.
+    #
+    # `consume_key` makes the clear conditional on the key still being the resolved one, so
+    # exactly one caller can win. The loser gets the same 410 as any dead link.
+    if key and not password_reset.consume_key(account, raw_key=key):
+        raise LinkNoLongerValid(password_reset.INVALID_MESSAGE)
+
     account.set_password(new_password)
     account.save(update_fields=["password"])
 
-    # Single use: the link dies here whether or not it was the path taken.
-    password_reset.consume_key(account)
+    if not key:
+        # The old-password path: no key was presented, but any outstanding reset link for
+        # this account is now stale and should not survive a password change.
+        password_reset.consume_key(account)
 
     if int(logout_all_sessions or 0):
         _blacklist_outstanding_tokens(account)
@@ -164,22 +177,42 @@ def _authenticate_with_old_password(extra: dict, old_password: str):
     """`user.py:967-971` — the signed-in path.
 
     Upstream reads `frappe.session.user`; this port has no session, so the caller names
-    itself and proves it with the old password. That makes this endpoint's guest path and
-    its authenticated path structurally the same: **nothing here trusts an identity it has
-    not checked**.
+    itself and proves it with the old password.
+
+    **This checks a password on an `allow_guest` endpoint, so it goes through the login
+    lockout.** Found by the phase-8 review: without it, the endpoint is an online password
+    oracle that sidesteps `check_login_allowed` entirely — `login` is protected by an
+    IP-and-account attempt tracker (`frappe_core/api/auth.py:52`), and a second door that
+    checks passwords without it makes that protection decorative.
+
+    The endpoint carries a `@rate_limit` as well. They do different jobs: the rate limit
+    caps requests per hour, and the tracker locks a *specific account* after a run of
+    failures however they are spread out.
     """
     from django.contrib.auth import authenticate
 
+    from frappe_core.security import (
+        check_login_allowed,
+        get_client_ip,
+        record_login_failure,
+        record_login_success,
+    )
     from frappe_core.session import get_current_user
 
     username = (extra.get("usr") or extra.get("user") or get_current_user() or "").strip().lower()
-    if not username or username == "Guest".lower():
+    if not username or username == "guest":
         raise WrongPassword("Invalid password")
+
+    ip_key = get_client_ip()
+    check_login_allowed(ip_key, username)
 
     account = authenticate(username=username, password=old_password)
     if account is None:
+        record_login_failure(ip_key, username)
         # 401 — upstream's status when the old password is wrong.
         raise WrongPassword("Invalid password")
+
+    record_login_success(ip_key, username)
     return account
 
 
@@ -300,12 +333,18 @@ def accept(invitation) -> bool:
         # same as a fabricated key.
         throw("Invalid or expired key")
 
+    # **Claim it first, atomically.** The status check above reads; this writes only if the
+    # row is *still* Pending with *this* key. Two requests arriving together both pass the
+    # read — the phase-8 review's point — and without this both would create the account
+    # and grant roles. One row updated means this caller won.
+    claimed = CRMInvitation._default_manager.filter(
+        pk=invitation.pk, status="Pending", key=invitation.key
+    ).update(status="Accepted", accepted_at=timezone.now(), key="")
+    if not claimed:
+        throw("Invalid or expired key")
+
     account, is_new_user = _create_user_if_not_exists(invitation.email)
     _grant_roles(account, invitation.role)
-
-    CRMInvitation._default_manager.filter(pk=invitation.pk).update(
-        status="Accepted", accepted_at=timezone.now(), key=""
-    )
     return is_new_user
 
 

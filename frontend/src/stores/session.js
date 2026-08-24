@@ -47,7 +47,11 @@ export const sessionStore = defineStore('crm-session', () => {
       // JWT PATCH: nothing to expire server-side, so drop the tokens locally.
       clearTokens()
       user.value = null
-      window.location.href = '/login?redirect-to=/crm'
+      // Phase 8: the second half of the same bug the router had. This was
+      // `window.location.href = '/login?redirect-to=/crm'`, which took a user who had just
+      // signed out to a URL nothing serves. Caught by the phase-8 review, outside the
+      // files it was asked to look at.
+      router.replace({ name: 'Login' })
     },
   })
 

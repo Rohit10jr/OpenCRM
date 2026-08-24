@@ -247,10 +247,15 @@ def send_invitation_email(invitation_name: str) -> bool:
     if invitation is None or invitation.email_sent_at:
         return False
 
-    # `frappe.utils.get_url()` upstream; the path is an API route, so it is the backend's
-    # own origin, not the frontend's (see SITE_URL in settings/base.py).
+    # **A page, not the API.** Upstream links to `/api/method/crm.api.accept_invitation`
+    # because that endpoint answers a GET with an HTTP *redirect* into the Desk. Ours
+    # answers with JSON, so a person clicking that link would land on raw JSON — which is
+    # exactly what this link did until the phase-8 review caught it.
+    #
+    # The SPA page calls the endpoint and acts on what it returns. Same destination for the
+    # invitee, and the URL in the email is now something a human can be shown.
     invite_link = (
-        f"{settings.SITE_URL}/api/method/crm.api.accept_invitation?key={invitation.key}"
+        f"{settings.FRONTEND_ORIGIN.rstrip('/')}/crm/accept-invitation?key={invitation.key}"
     )
 
     # Phase 8 moved the wording into `crm_app/templates/emails/invitation.txt`. It was an

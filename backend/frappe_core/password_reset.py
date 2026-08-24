@@ -150,18 +150,30 @@ def resolve_key(raw_key: str) -> KeyResolution:
     return KeyResolution(user=user)
 
 
-def consume_key(user) -> None:
-    """`user.py:874-875`. Clear it, so the link is dead.
+def consume_key(user, raw_key: str | None = None) -> bool:
+    """`user.py:874-875`. Clear it, so the link is dead. Returns whether *this* call won.
 
-    Both columns, not just the key: leaving a stale issue timestamp behind would make a
-    later `resolve_key` on a *new* key compare against the wrong clock if the key were ever
-    written without the timestamp.
+    **Compare-and-swap, not read-then-clear.** Found by the phase-8 review: resolving the
+    key and clearing it were two statements, so two requests arriving together could both
+    resolve successfully and both go on to set a password. The loser's password would win,
+    silently, and whoever holds a forwarded copy of the link is exactly the second request.
+
+    Passing ``raw_key`` makes the UPDATE conditional on the key still being the one that was
+    resolved — one row updated means this caller cleared it, zero means somebody else got
+    there first. The caller can then refuse rather than proceeding on a key it no longer
+    holds.
+
+    Both columns, not just the key: a stale issue timestamp left behind would age the next
+    key against the wrong clock.
     """
     from frappe_platform.models import User
 
-    User._default_manager.filter(pk=user.pk).update(
-        reset_password_key="", last_reset_password_key_generated_on=None
-    )
+    rows = User._default_manager.filter(pk=user.pk)
+    if raw_key is not None:
+        rows = rows.filter(reset_password_key=hash_key(raw_key))
+
+    updated = rows.update(reset_password_key="", last_reset_password_key_generated_on=None)
+    return bool(updated)
 
 
 def reset_link(raw_key: str) -> str:
