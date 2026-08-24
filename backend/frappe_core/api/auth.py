@@ -85,6 +85,17 @@ def login(usr: str = "", pwd: str = "", **extra) -> dict:
 
     record_login_success(ip_key, account_key)
 
+    return issue_tokens(user)
+
+
+def issue_tokens(user) -> dict:
+    """The token pair plus the fields the frontend stores alongside it.
+
+    Extracted in phase 8 so `update_password` returns **the same shape** as `login`.
+    `frontend/src/auth/tokens.js:setTokens` reads `access` and `refresh`, and
+    `stores/session.js` reads `user` and `full_name` — a set-password page that landed the
+    user with a subtly different payload would log them in and then show an empty header.
+    """
     refresh = RefreshToken.for_user(user)
     return {
         "access": str(refresh.access_token),
