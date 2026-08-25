@@ -25,6 +25,15 @@ does none, delete it.
 
 A "unit" is whatever you hand over in one go: a phase, a milestone, a timeboxed run.
 
+### Give every spec a status, and flip it
+
+Specs written up front are guesses. Mark them **Provisional**, and **flip the header to
+Authoritative when that unit's gate passes.** A spec still claiming to be provisional after
+its unit shipped is worse than no status at all — the reader cannot tell which half of the
+folder to trust, so they trust none of it.
+
+Keep the statuses in one index (`specs/README.md`), so the folder can be read at a glance.
+
 ### The file layout
 
 ```
@@ -175,6 +184,12 @@ detail, only the different model caught it, by reading the framework source inst
 trusting the sentence. Since the weakness is model correlation, isolating context further
 buys nothing. Only a different model does.
 
+**Degraded is not useless.** Tier 3 is weak at finding *different* bugs, not at finding
+bugs. In one unit here the writing agent re-read its own work *after* the tier-1 reviewer
+signed off, and found two real defects it had missed — including the most serious one in the
+phase. Same-model review covers less new ground; it still covers ground. **A reviewer
+signing off is not a reason to stop looking.**
+
 If you land on tier 3, add one instruction the other tiers don't need:
 
 > *"Assume the author was competent and the obvious things are right. Look for what a reader
@@ -196,6 +211,12 @@ tier. **A review that never returned is not a review that passed.**
 **Act on findings.** Fix what is real. Where you disagree, record the disagreement and the
 reasoning — never silently ignore it, and never apply a fix you believe is wrong to make a
 reviewer happy.
+
+**Say whether the agent may act on them, and be consistent.** This project's standing rules
+said *"report findings to me, don't auto-apply them"* while the runbook said *"act on the
+findings"* — correct for an attended session and an unattended run respectively, and a
+straight contradiction to an agent reading both. An orientation file caught it and followed
+the runbook. Decide per mode, and make the runbook say which mode it is written for.
 
 ---
 
@@ -262,11 +283,115 @@ correct.
 
 ---
 
-## 7. Skeletons
+## 7. Resolving ambiguity, and being wrong well
 
-Copy these four files. Replace `<UNIT>` and the bracketed prompts.
+The rules in §6 are about not shipping a mistake. These are about what to do when the
+answer genuinely is not written down anywhere.
 
-### 7.1 `docs/TASK.md`
+### The ladder — work down it, do not skip to the bottom
+
+1. **Read the source you are porting or integrating with.** It is the truth and it is right
+   there.
+2. **Read the layer underneath it.** The framework, the library, the platform. Several
+   defects in this project were *only* findable one level down, in code nobody thought to
+   open.
+3. **Read the consumer.** What does the caller expect back? The existing client is a
+   specification nobody wrote down.
+4. **Choose the option that matches existing behaviour, implement it, and log the decision.**
+
+**Never invent semantics to make something easier.** If a choice would be expensive to
+reverse and the evidence is genuinely ambiguous, prefer to stop and ask over guessing — log
+it and halt. That is a legitimate outcome; a guess baked into a contract is not.
+
+### When the thing you are porting is wrong
+
+It sometimes is. The rule that governed every divergence here:
+
+> **Diverge on bugs nothing can observe. Reproduce bugs that are user-visible.**
+
+Before diverging, **check whether anything actually reads the field or behaviour.** One
+field was corrected because nothing read it; an odd guard was faithfully reproduced because
+users see the result. Record either choice **in the code, with the source line**, and add an
+entry to the divergence register.
+
+### When something looks impossible
+
+**Suspect a missing mechanism before suspecting your own code.** A feature of the framework
+had never been ported, and the symptom — "converted records have a contact but no email" —
+looked like a conversion bug for an hour. Check whether the thing you are reimplementing
+already exists one layer down.
+
+### Suspect your tools
+
+An inspection script silently truncated a field at 50 characters, and the agent transcribed
+the visible prefix without noticing. Three option lists shipped wrong. **When the data looks
+odd, check the thing that showed it to you before you check the data.**
+
+### What your own tests cannot catch
+
+Across four units here, the same defect class surfaced four times in four disguises, and an
+independent reviewer found every one. The writer's summary is worth quoting:
+
+> *"In every case my own tests passed, because they tested the endpoint I had just written."*
+
+Your tests cover what you wrote. They cannot cover what you forgot to write. That is not a
+discipline problem and more testing does not fix it — it is the argument for §5, and it is
+why a recurring defect class should be named **once, in a durable place**, the moment you
+notice it repeating.
+
+---
+
+## 8. Running unattended
+
+Everything above assumes nobody is watching. Four things make that work.
+
+### Do not idle
+
+The stated failure mode is stalling, not moving too fast. §4's fail-stop is about a *failing
+gate* — it is not permission to stop when the work gets awkward.
+
+- **Fan out where the work is independent.** Never two agents in one file; several files at
+  once is fine.
+- **Blocked on one piece? Move to another.** Do not serialise on a parkable question.
+- **Never wait on an external service.**
+- **Do not re-litigate settled decisions.** Log the disagreement and keep going.
+- **When a gate passes, start the next unit immediately.** The gate exists to keep the work
+  honest, not to provide a stopping point.
+
+### Keep commands short
+
+**A long shell command cannot be security-scanned, so it escalates to human review — which
+stalls an unattended run indefinitely.** This has already cost a run here. It is not about
+what the command does; the harness refuses to approve text it could not read, so no
+permission rule can pre-approve it.
+
+**Long content belongs in a file; the command that uses it stays tiny.** Write the commit
+message with a file tool and `git commit -F <path>`. Write the script to a file and run the
+file. Never pipe a heredoc into anything.
+
+### Say what is already set up, and forbid reconfiguring it
+
+Put an explicit *Environment* block in the runbook: which services are running, which
+database, which credentials file, where the reference sources live. Then: **do not
+reconfigure it.** Without that block an agent will spend its first hour rebuilding a working
+environment.
+
+### If a reviewer cannot see it, it did not get recorded
+
+One runbook obliged the agent to log every divergence in a register that was **gitignored**.
+The orientation file caught it: *"a standing obligation to record every divergence in a file
+that is never committed and that a reviewer cannot see."* The agent complied *and* mirrored
+each entry into the tracked progress file.
+
+Anything you require an agent to record must live somewhere a reviewer will actually read.
+
+---
+
+## 9. Skeletons
+
+Copy these five files. Replace `<UNIT>` and the bracketed prompts.
+
+### 9.1 `docs/TASK.md`
 
 ```markdown
 # TASK — Start Here
@@ -327,7 +452,7 @@ Fail twice on the same gate → write up what happened and **stop**.
 `docs/PROGRESS_<UNIT>.md`. Make it scannable, and **write down what you are unsure about**.
 ```
 
-### 7.2 `docs/RUNBOOK_<UNIT>.md`
+### 9.2 `docs/RUNBOOK_<UNIT>.md`
 
 ```markdown
 # Unattended Run — <UNIT>
@@ -355,6 +480,12 @@ Do not re-open these.
 1. **<decision>.** <one line of reasoning, so the agent can tell when it does not apply.>
 2. ...
 
+## Environment — prepared. Do not reconfigure it
+
+<services and ports, database name, where credentials live, where the reference sources
+are and which branch/version of each. without this block the agent spends its first hour
+rebuilding a working environment.>
+
 ## What is already built for you
 
 <a table of existing helpers and seams, with paths. this section prevents the single most
@@ -379,7 +510,7 @@ Read, in this order:
 | 2 | ... | ... |
 
 Then **write `docs/ORIENTATION_<UNIT>.md`** before starting. Six sections — the skeleton is
-in `docs/WORKFLOW.md` §7.3.
+in `docs/WORKFLOW.md` §9.3.
 
 ---
 
@@ -421,7 +552,7 @@ Do not work around a failing gate. Do not skip ahead. **Do not disable or weaken
 
 ## `PROGRESS_<UNIT>.md`
 
-<the template — see WORKFLOW.md §7.4>
+<the template — see WORKFLOW.md §9.4>
 
 ## Two standing obligations
 
@@ -430,7 +561,7 @@ Do not work around a failing gate. Do not skip ahead. **Do not disable or weaken
   reads first
 ```
 
-### 7.3 `docs/ORIENTATION_<UNIT>.md` — written by the agent, before code
+### 9.3 `docs/ORIENTATION_<UNIT>.md` — written by the agent, before code
 
 ```markdown
 # Orientation — <UNIT>
@@ -451,6 +582,12 @@ that is section 4.>
 <the point of the exercise. every claim you checked and found false, with evidence.
 an empty section here means you read passively.>
 
+<include your own starting instructions in what you check. one orientation here found
+that TASK.md said to branch from `main`, while the runbook it was told to follow lived
+on a prep branch carrying six commits `main` did not have -- including the runbook
+itself and a test the runbook said would fail on it. branching as instructed would have
+silently discarded both. the handoff is a document like any other.>
+
 ## 4. What I do not understand yet
 
 <name it now, cheaply, rather than guessing later and expensively.>
@@ -462,7 +599,7 @@ an empty section here means you read passively.>
 <the order you intend to work in, and why.>
 ```
 
-### 7.4 `docs/PROGRESS_<UNIT>.md` — written by the agent, at the gate
+### 9.4 `docs/PROGRESS_<UNIT>.md` — written by the agent, at the gate
 
 ```markdown
 # <UNIT> — <PASS | FAILED | STOPPED>   [branch: <name>]
@@ -492,9 +629,35 @@ valuable section**, and an empty one is not credible — it reads as a shallow r
 than clean work.
 ```
 
+### 9.5 `docs/FINAL_REPORT.md` — once, at the end of a multi-unit run
+
+A progress file covers one unit. When a run spanning several units ends — or stops early —
+one more file gathers what no per-unit file can show: the pattern across them.
+
+```markdown
+# Final report — <units covered>
+
+1. **What landed** — per unit: branch, commit SHAs, test counts.
+2. **What was attempted and not finished**, and exactly where it stopped.
+3. **Every skipped or unrun test**, with what it would need to run. Distinguish
+   *skipped* (guarded, deliberate) from *never executed* — they are not the same and
+   only one of them is honest by default.
+4. **Every decision taken without the human**, gathered in one place. Split into
+   "read from the source" and "deliberate deviation, with reason".
+5. **Which review tier each unit actually got.**
+6. **The recurring lesson** — the defect class that surfaced more than once, in
+   different disguises. State it plainly, in one sentence, for whoever continues.
+7. **For a human, before this continues** — ordered by how much you want it looked at.
+8. **What the next session should tackle first.**
+```
+
+Item 6 is the one a per-unit file structurally cannot produce. In this project it was:
+*"a doctype's endpoints are not its attack surface — the generic route is"*, and naming it
+once was worth more than the four individual fixes.
+
 ---
 
-## 8. Adopting this in a new repo
+## 10. Adopting this in a new repo
 
 You do not need thirteen documents. You need the **roles**. Minimum viable version:
 
@@ -550,6 +713,6 @@ history shows exactly when each piece was bought:
 | Day 8 | *"…and fix the instruction that caused big commits"*, then *"Make the agent orient before coding, and write down the rules this cost us"* | **Step 0, the nine rules, and per-change commits — all at once, all as fixes** |
 | Day 8+ | Next two units: **14 commits** and **9 commits**, both tier-1 reviewed | The process, working |
 
-If you are starting a new project: take §2, §3 and §7 on day 1, and let §6 grow one rule at a
+If you are starting a new project: take §2, §3 and §9 on day 1, and let §6 grow one rule at a
 time as things go wrong. A rules list written before anything has broken is a style guide,
 and it will be skimmed like one.
