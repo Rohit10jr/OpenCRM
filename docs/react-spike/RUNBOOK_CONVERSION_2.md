@@ -29,6 +29,7 @@ Then read "Read first" and start.
 |---|---|
 | `docs/react-spike/CONVERSION_RUN_1.md` | **What run 1 built, measured, and got wrong.** §4 is your queue, §6 is your inheritance, §7 will save you an hour |
 | `CLAUDE.md` | Hard rules, shell rules, reviewer policy |
+| `docs/react-spike/VUE_DIVERGENCES.md` | **Where React already behaves differently from Vue, and why.** Read before calling any difference a bug |
 | `frontend-react/src/list/` | The engine you are about to build on. Read it before extending it |
 
 Skip `specs/PHASE_*` and `docs/internal/*` — backend-port history.
@@ -69,20 +70,49 @@ recommendation was conditional, and this is the condition:
 So piece 1 is not just the first task. It is a **measurement**, and it decides whether the
 rest of the run happens.
 
+### Why run 1's 2:1 might not hold — read this before measuring
+
+Run 1 replaced 7,050 Vue lines with 3,421 React ones. **Most of that saving was deleted
+repetition, not React being terser.** Each of seven Vue list pages carried its own
+`parseRows()` formatting Datetime, Currency, `_assign` and status — the same ~200 lines,
+seven times. React wrote it once as `Cell`.
+
+**A record screen has no seven-way duplication to collapse.** Neither do the settings
+screens. So there is no prior reason to expect 2:1 here, and the honest possibilities run
+from 2:1 down to roughly 1:1.
+
+That is the question. Do not assume the answer in either direction.
+
 ### How to decide, mechanically
 
-When the Deal record screen is `verified`, write down its line count and its wall clock.
-Then:
+**Measure a ratio, not a line count.** Absolute size does not transfer between screens; the
+ratio is what the remaining estimate is actually built on.
 
-| Outcome | What it means | What you do |
+When the Deal record screen is `verified`:
+
+1. **Count the Vue you replaced.** Name the files and their line counts in the report. The
+   honest slice is `pages/Deal.vue` (832) + `SidePanelLayout.vue` (727) +
+   `Activities/Activities.vue` and `ActivityHeader.vue` (1,026) + whichever activity areas
+   you actually implemented. **Count only what you replaced** — counting `WhatsAppArea.vue`
+   because it sits in the same folder would inflate the ratio and poison the decision.
+2. **Count the React you wrote** for it.
+3. **Divide.**
+
+| Ratio | What it means | What you do |
 |---|---|---|
-| **≤ ~450 lines, ≤ ~35 min** | Record screens are cheap too; the estimate holds | **Continue** with the order below |
-| **~450–900 lines** | Real per-screen work, but tractable | **Continue**, and say plainly in the report that the 20–30 hour estimate should move up |
-| **≳ 900 lines, or ≳ 75 min** | It cost what Deals-plus-engine cost, and there are ~20 more record and settings screens | **Stop building.** Spend the remaining time on the report and recommend **outcome B — core flows only** |
+| **≥ 1.8 : 1** | The leverage survives a screen with no shared engine | **Continue.** The 20–30 hour estimate stands |
+| **1.2 – 1.8 : 1** | Real per-screen work, but React is still ahead | **Continue**, and say in the report how much the estimate moves and why |
+| **< 1.2 : 1** | You are rewriting line for line. There are ~20 record and settings screens left | **Stop building.** Spend the remaining time on the report and recommend **outcome B — core flows only** |
 
-**Do not soften this because the run feels productive.** The whole value of run 1 was that it
-produced a number nobody had to argue about. The third row is a legitimate and useful result;
-recording it honestly is worth more than four more screens.
+**Sanity anchor, so a number does not surprise you into the wrong row:** on run 1's ratio,
+this screen lands near **1,300 React lines and ~45 minutes** at run 1's ~30 lines/minute.
+That is the *expected* result, not a bad one. Stop territory is roughly 2,200 lines or 100
+minutes.
+
+**Do not soften this because the run feels productive**, and do not tighten it because a
+number looks big. The whole value of run 1 was a figure nobody had to argue about. The third
+row is a legitimate and useful result; recording it honestly is worth more than four more
+screens.
 
 ---
 
@@ -134,6 +164,23 @@ Unchanged from `RUNBOOK_CONVERSION.md` §Rules. The three that were tested harde
 
 Plus, short shell commands; never a bare `git stash` (the stack is shared with the sibling
 worktree).
+
+### One standing obligation
+
+**Record every divergence in `docs/react-spike/VUE_DIVERGENCES.md`, continuing from #7.**
+That means: anything React does that the Vue client did not, any Vue behaviour you chose not
+to reproduce, any Vue bug you reproduced on purpose, and any gap where Vue does something you
+have not built.
+
+Run 1's findings lived only inside its own report, which meant that by run 3 they would have
+been invisible without re-reading it. The file exists so that does not happen again — **a
+per-run report says what happened; the register says what is still true.** Removing an entry
+when the gap closes is part of the obligation.
+
+The backend port learned this twice over. Its register spent six phases gitignored, so a
+reviewer could not see the divergences an agent was told to record; and when it was finally
+tracked, two files had independently numbered entries 10–13, so a cross-reference meant two
+different bugs. **One file, one sequence, tracked in git.**
 
 ---
 
@@ -187,15 +234,17 @@ Last twenty minutes. Same three states, unblurred: **`verified`** (a browser dro
 
 Include, in this order:
 
-1. **The gate answer, first and plainly.** The record screen's lines and minutes, which row of
-   the table above it landed in, and what follows. This is the single thing the run exists to
-   produce — it goes at the top, not in a conclusion.
+1. **The gate answer, first and plainly.** The Vue files you replaced with their line counts,
+   the React lines you wrote, the ratio, which row of the table it landed in, and what
+   follows. This is the single thing the run exists to produce — it goes at the top, not in a
+   conclusion.
 2. **The ledger** — one row per piece: name, state, lines, wall clock.
 3. **How the ratio moved.** Run 1 measured 2.06:1 across the list slice. Recompute over what
    run 2 replaced, and say whether the remaining estimate — 20–30 hours, 11 as a floor —
    should move, and in which direction.
 4. **Next-up, in order**, so run 3 can start cold.
-5. **Codex findings** — raised, fixed, disputed, with reasons.
+5. **Codex findings** — raised, fixed, disputed, with reasons. Anything raised and *not*
+   fixed goes into `VUE_DIVERGENCES.md` as well as here, or it dies with this report.
 6. **Where the code is weak.** Run 1's §6 is the standard; an empty or shorter section will be
    read as a shallower review, not cleaner code. Say which of run 1's nine you fixed, which
    you inherited unchanged, and which got worse.
