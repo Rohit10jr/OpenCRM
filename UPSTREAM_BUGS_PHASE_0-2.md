@@ -2,7 +2,10 @@
 
 Defects found in **upstream** while porting. Not our bugs.
 
-This file is gitignored — it is a local working note, not part of the port.
+**Numbering.** Entries **1–9** were written during phases 0–2. Entries **36–38** were
+appended later, after phases 3–7 had filled 10–35 in `UPSTREAM_BUGS_PHASE_3-6.md` — they
+are numbered to continue that sequence rather than to sit next to their neighbours here.
+There is one sequence across both files, and it is the one a cross-reference means.
 
 Two reasons it exists:
 
@@ -27,6 +30,9 @@ Source refs are `crm/` = `D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\c
 | 7 | Holiday list Desk link is unencoded | Frontend — unfixed |
 | 8 | Lead status types resolved against the **deal** status table | **Diverge** — fixed |
 | 9 | Three `fetch_from` values on CRM Deal have an empty link field | **Reproduce** — inert |
+| 36 | `crm_products` money fields are computed client-side only | **Diverge** — computed on save |
+| 37 | `create_email_account` has no permission check | **Diverge** — restricted to managers |
+| 38 | Metadata doctypes have no row-level protection | **Diverge** — rules added |
 
 ---
 
@@ -214,21 +220,12 @@ Recorded here so they are not later mistaken for defects:
   it `Data`, unhidden, and the settings screen reads it back. Restricting it is a product
   decision that diverges from upstream and needs a UI change too.
 
-## 10. `remove_assignments` exposes `ignore_permissions` over HTTP
+> **`remove_assignments` was recorded here too, as a second #10.** Same defect, same
+> endpoint, written twice — once from each phase's notes. The fuller account, with the
+> framework line that makes the mechanism clear and the note that it was verified
+> independently, is **`UPSTREAM_BUGS_PHASE_3-6.md` #10**. That is the entry to cite.
 
-`crm/api/doc.py:589-604`. The endpoint is `@frappe.whitelist()` with
-`ignore_permissions: bool = False`, and passes it straight to
-`frappe.desk.form.assign_to.set_status(..., ignore_permissions=ignore_permissions)`.
-
-Any authenticated caller who knows a document name can therefore send
-`ignore_permissions=True` and cancel assignment ToDo rows on a lead or deal they cannot
-write — which revokes another user's access to that record.
-
-**Diverged: the flag is accepted and ignored.** No client sends it (the frontend calls
-the endpoint without it), so honest behaviour is unchanged; the escalation is closed.
-Port: `backend/crm_app/api/doc.py:remove_assignments`.
-
-## 11. `crm_products` money fields are computed client-side only
+## 36. `crm_products` money fields are computed client-side only
 
 `crm/fcrm/doctype/crm_products/crm_products.py:112-195` builds a **JavaScript** form
 script; `amount`, `net_amount`, `discount_amount`, `total` and `net_total` are all
@@ -242,7 +239,7 @@ Note the `net_total` rule is subtle and was ported exactly: `net_total = sum(net
 or total`, **unless** a discount was applied, in which case a zero sum stands. Dropping
 the second branch makes a 100%-discounted deal report its full gross value.
 
-## 12. `crm.api.settings.create_email_account` has no permission check
+## 37. `crm.api.settings.create_email_account` has no permission check
 
 `crm/api/settings.py:5-53` is `@frappe.whitelist()` with no `frappe.only_for`. Upstream
 relies on the Email Account doctype's own role permissions, which this port does not
@@ -253,7 +250,7 @@ outbound mail.
 **Diverged: restricted to System Manager / Sales Manager.**
 Port: `backend/crm_app/api/settings.py`.
 
-## 13. Metadata doctypes have no row-level protection
+## 38. Metadata doctypes have no row-level protection
 
 `CRM View Settings`, `CRM Form Script` and `CRM Fields Layout` are ordinary doctypes
 upstream, protected by the DocType's `permissions` table (System Manager for write). This

@@ -2,8 +2,13 @@
 
 Defects found in **upstream** while porting. Not our bugs.
 
-Companion to `UPSTREAM_BUGS_PHASE_0-2.md`, which holds bugs 1–9 from the earlier
-phases. Numbering continues from there.
+Companion to `UPSTREAM_BUGS_PHASE_0-2.md`, which holds bugs **1–9** from the earlier
+phases, and **36–38** appended after this file had filled 10–35. Numbering is one
+sequence across both files.
+
+**This file now holds 10–35, which span phases 3–8**, not 3–6 as the name says. The name
+is stale and is left alone deliberately: renaming a tracked file that eight documents
+cite by name costs more than the confusion saves.
 
 Two reasons this file exists:
 

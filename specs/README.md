@@ -48,7 +48,7 @@ led nowhere. That flow is now walked end to end by
   IP pinning and per-hop redirect validation, or not at all.
 * `SECURITY_MODEL.md` — per-doctype, and the recurring finding that appeared in five
   separate phases: **a doctype's endpoints are not its attack surface.**
-* `../UPSTREAM_BUGS_PHASE_0-2.md` and `../UPSTREAM_BUGS_PHASE_3-6.md` — 35 defects found in
+* `../UPSTREAM_BUGS_PHASE_0-2.md` and `../UPSTREAM_BUGS_PHASE_3-6.md` — 38 defects found in
   Frappe and Frappe CRM while porting, each with evidence and our stance. When this port
   behaves differently from upstream, the answer to "is that a port bug?" is in there.
 
