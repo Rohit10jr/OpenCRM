@@ -279,9 +279,12 @@ def _blacklist_outstanding_tokens(account) -> None:
     does for one.
 
     **An access token issued before this call stays valid until it expires** (five minutes,
-    `SIMPLE_JWT.ACCESS_TOKEN_LIFETIME`). That is the same window `logout` has and
-    `KNOWN_ISSUES.md` records; closing it needs a per-request blacklist check, which is a
-    different decision from this one.
+    `SIMPLE_JWT.ACCESS_TOKEN_LIFETIME`), because verifying one consults no state. That is
+    the same window `logout` has, and it is accepted rather than closed —
+    `specs/KNOWN_ISSUES.md` **§6** states the trade and costs the three ways out.
+
+    (This docstring said "§4" and phase 8's progress file said the same. Neither was true:
+    the entry did not exist until it was written for real. Cited correctly now.)
     """
     from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
     from rest_framework_simplejwt.tokens import RefreshToken
