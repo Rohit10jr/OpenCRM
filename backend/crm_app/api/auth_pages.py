@@ -101,7 +101,7 @@ def reset_password(user: str = "", **extra):
     allow_guest=True,
     methods=("POST",),
 )
-@rate_limit(limit=20, seconds=60 * 60)
+@rate_limit(limit=20, seconds=60 * 60, key=lambda params: _throttle_identity(params))
 def update_password(
     new_password: str = "",
     key: str = "",
@@ -173,6 +173,49 @@ def update_password(
     return issue_tokens(account)
 
 
+def _caller_username(params: dict) -> str:
+    """Who the old-password path is acting for, normalised.
+
+    Three sources because the endpoint accepts three: upstream reads `frappe.session.user`,
+    this port has no session so a caller may name itself, and it may do so under either of
+    two parameter names. Lower-cased and stripped, because an identity used as a throttle
+    bucket that varies with case is a throttle a caller can multiply — the phase-8 review
+    found exactly that on forgot-password.
+    """
+    from frappe_core.session import get_current_user
+
+    return (
+        params.get("usr") or params.get("user") or get_current_user() or ""
+    ).strip().lower()
+
+
+def _throttle_identity(params: dict) -> str:
+    """What `update_password`'s rate limit counts against. One endpoint, two jobs.
+
+    **The reset path returns `""`, so the bucket stays the IP alone, and that is correct.**
+    The caller is anonymous and holds a key we have not resolved yet; the attacker we are
+    stopping is guessing keys, and their address is the only thing we know about them.
+    Bucketing on the key itself would invert the protection — a guesser would mint a fresh
+    bucket with every guess and never meet the limit.
+
+    **The signed-in path returns the account**, because there we know exactly who is
+    asking. Bucketing that on the IP alone charges a shared address for its own users:
+    everyone behind one office NAT — or one mobile carrier, where the sharing is far
+    wider — draws down a single allowance of 20 an hour. `frappe_core/api/auth.py:52`
+    declines to put a hard cap on `login` for this reason, and this endpoint was the other
+    half of that inconsistency.
+
+    Rotating usernames to mint buckets does not buy an attacker anything here:
+    `_authenticate_with_old_password` runs `check_login_allowed(ip, username)`, which locks
+    on **either** identity (`security.py:173-184`), so the IP tracker catches the rotation
+    the bucket key no longer does. The two mechanisms answer different questions, which is
+    why upstream uses both.
+    """
+    if params.get("key"):
+        return ""
+    return _caller_username(params)
+
+
 def _authenticate_with_old_password(extra: dict, old_password: str):
     """`user.py:967-971` — the signed-in path.
 
@@ -187,7 +230,8 @@ def _authenticate_with_old_password(extra: dict, old_password: str):
 
     The endpoint carries a `@rate_limit` as well. They do different jobs: the rate limit
     caps requests per hour, and the tracker locks a *specific account* after a run of
-    failures however they are spread out.
+    failures however they are spread out. On this path the cap is counted per account
+    rather than per address — see `_throttle_identity` for why the reset path is not.
     """
     from django.contrib.auth import authenticate
 
@@ -197,9 +241,8 @@ def _authenticate_with_old_password(extra: dict, old_password: str):
         record_login_failure,
         record_login_success,
     )
-    from frappe_core.session import get_current_user
 
-    username = (extra.get("usr") or extra.get("user") or get_current_user() or "").strip().lower()
+    username = _caller_username(extra)
     if not username or username == "guest":
         raise WrongPassword("Invalid password")
 

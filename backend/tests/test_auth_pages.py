@@ -362,6 +362,55 @@ def test_the_old_password_path_goes_through_the_login_lockout(api, make_user):
     assert statuses[-1] != 401, f"still an oracle after 12 attempts: {statuses}"
 
 
+def test_one_users_password_changes_do_not_exhaust_anothers_allowance(api, make_user):
+    """The cap on the signed-in path counts per account, not per address.
+
+    Everyone in an office shares one public IP, and a mobile carrier shares one far more
+    widely. Counted per address, twenty colleagues changing their passwords locks out the
+    twenty-first — a legitimate user, refused for something nobody did wrong.
+
+    Fails without the fix: both callers land in one bucket, so the second is 429 before it
+    has spent an attempt of its own.
+    """
+    first = make_user("busy@example.com", password="Original!Pass1")
+    second = make_user("quiet@example.com", password="Original!Pass2")
+
+    for _ in range(21):
+        _post(
+            api,
+            UPDATE,
+            {"usr": first.pk, "old_password": "wrong", "new_password": "Str0ng!Passw0rd"},
+        )
+
+    response = _post(
+        api,
+        UPDATE,
+        {
+            "usr": second.pk,
+            "old_password": "Original!Pass2",
+            "new_password": "An0ther!Passw0rd",
+        },
+    )
+
+    assert response.status_code != 429, "a colleague's attempts spent this account's cap"
+
+
+def test_the_reset_path_is_still_capped_per_address(api):
+    """And the reset path must *not* count per account, which is why the split exists.
+
+    The caller is anonymous and the key is unresolved, so the address is the only identity
+    there is. Bucketing on the key would hand a guesser a fresh allowance with every guess.
+    """
+    statuses = [
+        _post(
+            api, UPDATE, {"key": f"guess-{i}", "new_password": "Str0ng!Passw0rd"}
+        ).status_code
+        for i in range(22)
+    ]
+
+    assert 429 in statuses, f"varying the key bought unlimited guesses: {statuses}"
+
+
 def test_the_reset_limiter_cannot_be_bypassed_by_case_or_whitespace(api, alice):
     """`key="user"` bucketed on the raw value, so `Alice@x.com` and ` alice@x.com ` were
     three different buckets aimed at one account. A per-target cap a caller can multiply by
