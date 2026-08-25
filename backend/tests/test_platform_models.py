@@ -357,3 +357,43 @@ def test_user_is_deliberately_not_a_base_document():
 
     assert not issubclass(User, BaseDocument)
     assert "_assign" not in {f.name for f in User._meta.get_fields()}
+
+
+# --- createsuperuser has to produce an account that can actually administer ----
+
+
+def test_createsuperuser_produces_an_account_with_admin_authority(db):
+    """`manage.py createsuperuser` is the documented way in. It must mean what it says.
+
+    Authority here is roles, never `is_superuser` — which is read nowhere in the permission
+    layer, deliberately, so that the closed self-escalation route stays worthless if it ever
+    leaks. That left the built-in command producing an account that logged in and then saw
+    an empty CRM: it is not named `Administrator`, so the by-name checks miss it, and it
+    held no group, so the role checks missed it too.
+
+    Asserted through `_is_admin` rather than by reading `groups`, because the group is the
+    mechanism and passing the gate is the property. Fails without the fix.
+    """
+    from crm_app.permissions.platform_docs import _is_admin
+
+    account = User.objects.create_superuser(
+        "founder@example.com", password="Str0ng!Passw0rd", first_name="Founder"
+    )
+
+    with session_user(account.name):
+        assert _is_admin(account.name), "createsuperuser made an admin who cannot administer"
+
+
+def test_createsuperuser_does_not_hand_out_the_administrator_identity(db):
+    """`System Manager`, and not the built-in principal.
+
+    `Administrator` is granted by name rather than held as a group, and several checks test
+    for it specifically. An ordinary account carrying it would be indistinguishable from the
+    one Frappe reserves.
+    """
+    account = User.objects.create_superuser(
+        "founder2@example.com", password="Str0ng!Passw0rd"
+    )
+
+    assert "System Manager" in account.get_roles()
+    assert "Administrator" not in account.get_roles()

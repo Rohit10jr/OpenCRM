@@ -56,10 +56,40 @@ class UserManager(BaseUserManager):
         return user
 
     def create_superuser(self, name, password=None, **extra):
+        """Django's ``createsuperuser`` calls this. It must produce a working CRM admin.
+
+        **The role is the point.** Authority in this port comes from a user's roles, which
+        are Django groups (:meth:`User.get_roles`), or from being the literal
+        ``Administrator``. ``is_superuser`` is deliberately read **nowhere** in the
+        permission layer: it is a flag an attacker would try to set on their own record,
+        and the self-escalation route for it is closed
+        (``crm_app/permissions/platform_docs.py``). Leaving it inert means a leak there buys
+        nothing, and that is worth keeping.
+
+        Which left ``createsuperuser`` producing an account that authenticated and then saw
+        an empty CRM — every check asks for ``System Manager`` or the Administrator name,
+        and it had neither. Granting the group here is what makes the built-in command mean
+        what an operator reading its name assumes it means.
+
+        ``System Manager`` and not ``Administrator``: the latter is Frappe's single
+        built-in principal, granted by name rather than held as a group, and handing it to
+        an ordinary account would make the two indistinguishable in the permission checks
+        that test for it.
+        """
         extra.setdefault("is_staff", True)
         extra.setdefault("is_superuser", True)
         extra.setdefault("enabled", True)
-        return self.create_user(name, password, **extra)
+        user = self.create_user(name, password, **extra)
+
+        from django.contrib.auth.models import Group
+
+        # get_or_create, not get: a fresh database that has run migrations always has this
+        # row, but createsuperuser is also the first thing reached for on a database that
+        # has been through something unusual, and failing there with DoesNotExist would be
+        # an unhelpful place to learn about it.
+        group, _ = Group.objects.get_or_create(name="System Manager")
+        user.groups.add(group)
+        return user
 
 
 @register_doctype("User")
