@@ -22,7 +22,7 @@ in this repo, and the two most expensive bugs of the last review both came from 
 (and later, a human) trusting a sentence that had quietly stopped being true. The section
 where you disagree with the documents is the one most likely to be worth reading.
 
-The runbook also carries **"How to work here"** — seven rules, each one a bug that
+The runbook also carries **"How to work here"** — nine rules, each one a bug that
 shipped. Read them before starting, not after your first review round.
 
 ## Read first, in this order

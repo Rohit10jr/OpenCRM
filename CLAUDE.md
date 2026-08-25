@@ -73,6 +73,19 @@ Read upstream only to understand *intent* where ours is unclear. Where the two d
 7. **Do not tidy adjacent files.** This is a spike with a scope; stay in it.
 8. Comments explain **why**, not what. A comment earns its place by recording a decision
    or a trap.
+9. **Update the document in the same commit as the code.** Every stale claim in this
+   project was true when written — `AS_BUILT.md` went two phases stale, a docstring
+   promised a three-line fix that would have deleted the timeline, a progress file said a
+   plaster was removed while it was still serving three endpoints. Nobody wrote those to
+   mislead; they changed the code and left the sentence behind. If your change makes a
+   sentence somewhere false, fix the sentence in the same commit. It is the cheapest rule
+   here and it has cost the most.
+10. **Never disable or weaken a test to make it pass.** That is the worst available
+    outcome, because it hides the failure instead of reporting it. The same applies to
+    lowering a bar to clear it — a screen marked `verified` that was not clicked, a
+    coverage claim narrowed after the fact. If something will not pass, say so and stop;
+    an honest failure is a result, and a fabricated pass poisons every decision made from
+    it.
 
 ## Stack
 
