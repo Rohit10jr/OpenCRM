@@ -10,7 +10,7 @@ is the *sibling* worktree. See "What not to read" below before opening anything.
 
 | File | What it is |
 |---|---|
-| **`docs/react-spike/FINDINGS.md`** | **What the Vue frontend actually is** — 321 files, ~46,800 lines, measured. Read first |
+| **`docs/react-spike/FINDINGS.md`** | **What the Vue frontend actually is** — 326 files, ~47,300 lines, measured. Read first |
 | **`docs/react-spike/SPIKE_PLAN.md`** | **Scope, stack, the gate, and what "done" means.** Read second |
 | `PORT_PLAN.md` **§3** | *The frontend contract.* The wire protocol the React client must speak |
 | `PORT_PLAN.md` **§6** | The API surface — 51 whitelisted endpoints |
@@ -54,7 +54,10 @@ Read upstream only to understand *intent* where ours is unclear. Where the two d
 2. **The Vue app must keep working.** Do not edit `frontend/`. New code goes in
    `frontend-react/` beside it, speaking to the same API. That is what makes this
    reversible.
-3. **Work on `react-spike`.** Never `main`. Do not merge to `main` during the spike.
+3. **Work on the branch your runbook names**, and never on `main`. Do not merge to `main`
+   while this is still an experiment. Do not name a branch here — this file has already
+   gone stale once by doing that, when the work moved from `react-spike` to
+   `react-conversion` and the sentence stayed behind.
 4. **One commit per meaningful change, never one per screen.** The owner reads every
    commit — that is the point of the exercise, not overhead. A commit too large to review
    in a sitting has failed regardless of whether the code is right. Roughly: scaffold ·
@@ -70,7 +73,7 @@ Read upstream only to understand *intent* where ours is unclear. Where the two d
    logic (backoff, jitter, re-subscribe) are load-bearing and tested. **Do not reimplement
    them from memory.** Pinia stores, `createResource` and composables are rewritten —
    they are Vue answers to Vue problems.
-7. **Do not tidy adjacent files.** This is a spike with a scope; stay in it.
+7. **Do not tidy adjacent files.** The run you were given has a scope; stay inside it.
 8. Comments explain **why**, not what. A comment earns its place by recording a decision
    or a trap.
 9. **Update the document in the same commit as the code.** Every stale claim in this
