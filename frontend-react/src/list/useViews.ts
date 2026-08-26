@@ -61,7 +61,7 @@ export type ViewParams = {
 export function viewParams(view: SavedView | undefined): ViewParams {
   if (!view) return { filters: {} }
   return {
-    filters: (parseJson(view.filters) as Filters) ?? {},
+    filters: asFilters(parseJson(view.filters)),
     orderBy: view.order_by || undefined,
     columns: parseJson(view.columns) ?? undefined,
     rows: parseJson(view.rows) ?? undefined,
@@ -72,6 +72,21 @@ export function viewParams(view: SavedView | undefined): ViewParams {
     groupByField: view.group_by_field || undefined,
     viewType: (view.type as ViewType) || undefined,
   }
+}
+
+/**
+ * Only the two shapes the filter grammar actually has: a dict, or a list of tuples
+ * (`doc.py:68`).
+ *
+ * `parseJson` alone was not enough — a stored `"123"` is valid JSON and survived it, then
+ * went into the request as `filters: 123`. The column is free-form text on the server, so
+ * a hand-edited or half-migrated row is a real possibility, and an unusable filter should
+ * mean "no filter" rather than a 500.
+ */
+function asFilters(value: unknown): Filters {
+  if (Array.isArray(value)) return value as Filters
+  if (value && typeof value === 'object') return value as Filters
+  return {}
 }
 
 function parseJson(value: unknown): unknown {

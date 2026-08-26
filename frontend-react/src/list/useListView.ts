@@ -58,7 +58,15 @@ export type UseListViewOptions = {
    * a record and pressing back.
    */
   filters: ListFilter[]
-  orderBy: string
+  /**
+   * `undefined` means the user has not chosen a sort, so the saved view's wins.
+   *
+   * It cannot be a string compared against the default: that treats a user who
+   * deliberately picks `modified desc` as not having chosen, and silently sends the saved
+   * view's sort instead. Absence and "the same as the default" are different facts and
+   * the URL already distinguishes them.
+   */
+  orderBy?: string
 }
 
 const DEFAULT_PAGE_LENGTH = 20
@@ -89,6 +97,9 @@ export function useListView({
   const savedView = getView(savedViewName)
   const saved = useMemo(() => viewParams(savedView), [savedView])
 
+  /** The user's choice, else the view's, else the default. */
+  const effectiveOrderBy = orderBy ?? saved.orderBy ?? DEFAULT_ORDER_BY
+
   const currentViewType: ViewType =
     viewType === 'kanban' || viewType === 'group_by' ? viewType : 'list'
 
@@ -100,7 +111,7 @@ export function useListView({
       // filter UI writes back into the same object, so this is the same precedence
       // expressed with two sources instead of one.
       filters: filters.length ? toFilterDict(filters) : saved.filters,
-      order_by: orderBy !== DEFAULT_ORDER_BY ? orderBy : (saved.orderBy ?? orderBy),
+      order_by: effectiveOrderBy,
       default_filters: defaultFilters,
       view: {
         custom_view_name: savedViewName ?? '',
@@ -132,7 +143,7 @@ export function useListView({
     [
       doctype,
       filters,
-      orderBy,
+      effectiveOrderBy,
       defaultFilters,
       savedViewName,
       saved,
@@ -222,6 +233,8 @@ export function useListView({
      */
     views,
     savedView,
+    /** For the toolbar, which needs a concrete value to show as the current sort. */
+    orderBy: effectiveOrderBy,
     viewType: currentViewType,
     isPending: query.isPending,
     isFetching: query.isFetching,

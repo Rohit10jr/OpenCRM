@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import type { CellOverride } from './Cell'
 import { KanbanBoard } from './KanbanBoard'
 import { ListTable, ListTableHeader } from './ListTable'
-import { DEFAULT_ORDER_BY, useListView, type ListFilter } from './useListView'
+import { useListView, type ListFilter } from './useListView'
 import { useViewMutations } from './useViews'
 import type { ListSearch } from '@/router'
 
@@ -62,7 +62,6 @@ export function ListView({
   const navigate = useNavigate()
   const search = useSearch({ strict: false }) as ListSearch
   const filters = search.filters ?? EMPTY_FILTERS
-  const orderBy = search.order_by ?? DEFAULT_ORDER_BY
 
   /**
    * Filters and sort live in the URL, so changing one is a navigation.
@@ -85,7 +84,8 @@ export function ListView({
     savedViewName,
     defaultFilters,
     filters,
-    orderBy,
+    // Undefined when the user has not chosen, so the saved view's sort wins.
+    orderBy: search.order_by,
   })
   const { getStatus } = useStatuses(statusDoctype)
   const viewMutations = useViewMutations(doctype)
@@ -114,7 +114,7 @@ export function ListView({
         onToggleColumn={list.toggleColumn}
         filters={filters}
         onFiltersChange={(next) => setSearch({ filters: next.length ? next : undefined })}
-        orderBy={orderBy}
+        orderBy={list.orderBy}
         onOrderByChange={(next) => setSearch({ order_by: next })}
         views={list.views}
         savedViewName={savedViewName}
@@ -126,7 +126,7 @@ export function ListView({
         }
         onSaveView={(label) =>
           viewMutations.create.mutate(
-            { label, type: list.viewType, filters: list.params.filters ?? {}, order_by: orderBy },
+            { label, type: list.viewType, filters: list.params.filters ?? {}, order_by: list.orderBy },
             {
               onSuccess: (view) =>
                 setSearch({ view: String(view.name), filters: undefined }),
