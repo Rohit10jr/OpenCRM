@@ -119,6 +119,30 @@ export function Cell({
 }
 
 /**
+ * A cell override that renders a user id as the person: avatar and full name.
+ *
+ * Deals and Leads each carried an identical copy of this for `deal_owner` and
+ * `lead_owner`. Run 1 left the duplicate deliberately — *"two is not yet a pattern; note
+ * it before writing the third"* — and the record screens are the third caller.
+ *
+ * It exists because the payload types those columns `Data` for some doctypes, so the
+ * generic Link-to-User branch below does not always fire.
+ */
+export function userCell(getUser: (name?: string | null) => CrmUser): CellOverride {
+  return (row, column) => {
+    const value = row[column.key]
+    if (!value) return null
+    const user = getUser(String(value))
+    return (
+      <span className="flex items-center gap-2 truncate">
+        <Avatar image={user.user_image} label={user.full_name} size="sm" />
+        <span className="truncate">{user.full_name}</span>
+      </span>
+    )
+  }
+}
+
+/**
  * A Link column holds a document name. For `User` that name is an email address, and the
  * list shows the person instead — the one Link target the CRM cares about often enough
  * to special-case.
