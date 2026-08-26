@@ -1,0 +1,226 @@
+import { useEffect, useState } from 'react'
+import { useDocList } from '@/api/hooks'
+import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/primitives'
+import { cn } from '@/lib/utils'
+import type { PanelField } from './types'
+
+/**
+ * One editable field, chosen by fieldtype.
+ *
+ * This is the write-side twin of the list engine's `Cell`, which renders the same
+ * fieldtypes read-only. They are deliberately *not* one component: a Currency cell is a
+ * formatted string and a Currency input is a number box, and the branch that tried to be
+ * both would be longer than the two of them.
+ *
+ * Every input commits on blur or Enter rather than per keystroke — each commit is a
+ * `set_value` round trip, and the list engine learned the same lesson about refetching
+ * per character.
+ */
+export function FieldInput({
+  field,
+  value,
+  onCommit,
+  disabled,
+}: {
+  field: PanelField
+  value: unknown
+  onCommit: (value: unknown) => void
+  disabled?: boolean
+}) {
+  const readOnly = disabled || Boolean(field.read_only)
+
+  switch (field.fieldtype) {
+    case 'Check':
+      return (
+        <Switch
+          checked={Boolean(value)}
+          onCheckedChange={(checked) => onCommit(checked ? 1 : 0)}
+          disabled={readOnly}
+        />
+      )
+
+    case 'Select':
+      return (
+        <SelectInput field={field} value={value} onCommit={onCommit} disabled={readOnly} />
+      )
+
+    case 'Link':
+      return (
+        <LinkInput field={field} value={value} onCommit={onCommit} disabled={readOnly} />
+      )
+
+    case 'Date':
+      return (
+        <TextLike
+          field={field}
+          type="date"
+          // The API returns `2026-08-24`; `<input type="date">` wants exactly that, but a
+          // Datetime field arrives with a time part that would make the input blank.
+          value={String(value ?? '').slice(0, 10)}
+          onCommit={onCommit}
+          disabled={readOnly}
+        />
+      )
+
+    case 'Datetime':
+      return (
+        <TextLike
+          field={field}
+          type="datetime-local"
+          value={String(value ?? '').slice(0, 16)}
+          onCommit={onCommit}
+          disabled={readOnly}
+        />
+      )
+
+    case 'Currency':
+    case 'Float':
+    case 'Percent':
+    case 'Int':
+      return (
+        <TextLike
+          field={field}
+          type="number"
+          value={value == null ? '' : String(value)}
+          onCommit={(next) => onCommit(next === '' ? null : Number(next))}
+          disabled={readOnly}
+        />
+      )
+
+    default:
+      return (
+        <TextLike
+          field={field}
+          type="text"
+          value={value == null ? '' : String(value)}
+          onCommit={onCommit}
+          disabled={readOnly}
+        />
+      )
+  }
+}
+
+/** The shared text-ish input: draft locally, commit on blur or Enter. */
+function TextLike({
+  field,
+  type,
+  value,
+  onCommit,
+  disabled,
+}: {
+  field: PanelField
+  type: string
+  value: string
+  onCommit: (value: string) => void
+  disabled?: boolean
+}) {
+  const [draft, setDraft] = useState(value)
+
+  // The saved value can change underneath this — another field's save refetches the
+  // document — so the draft follows it.
+  useEffect(() => setDraft(value), [value])
+
+  return (
+    <Input
+      type={type}
+      value={draft}
+      placeholder={field.placeholder}
+      disabled={disabled}
+      className="border-transparent bg-transparent hover:border-outline-gray-2 focus:border-outline-gray-2"
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => draft !== value && onCommit(draft)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          e.currentTarget.blur()
+        }
+      }}
+    />
+  )
+}
+
+/** A Select's choices are newline-joined in `options` — Frappe's format, not ours. */
+function SelectInput({
+  field,
+  value,
+  onCommit,
+  disabled,
+}: {
+  field: PanelField
+  value: unknown
+  onCommit: (value: unknown) => void
+  disabled?: boolean
+}) {
+  const choices = (field.options ?? '').split('\n')
+
+  return (
+    <select
+      value={String(value ?? '')}
+      disabled={disabled}
+      onChange={(e) => onCommit(e.target.value)}
+      className={selectClass}
+    >
+      {choices.map((choice) => (
+        <option key={choice} value={choice}>
+          {choice || '—'}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+/**
+ * A Link field's `options` names the target doctype, so the choices are that doctype's
+ * documents.
+ *
+ * A `<select>` of every row, not a searchable combobox. That is a real difference from
+ * the Vue `Link` component, which searches server-side and pages — fine for a Territory
+ * with six rows, wrong for an Organization list with thousands. It is called out in the
+ * run report rather than hidden here.
+ */
+function LinkInput({
+  field,
+  value,
+  onCommit,
+  disabled,
+}: {
+  field: PanelField
+  value: unknown
+  onCommit: (value: unknown) => void
+  disabled?: boolean
+}) {
+  const target = field.options ?? ''
+  const options = useDocList<{ name: string }>(
+    target,
+    { fields: ['name'], limit_page_length: 100, order_by: 'modified desc' },
+    { enabled: Boolean(target) && !disabled },
+  )
+
+  const current = String(value ?? '')
+  const names = options.data?.map((row) => row.name) ?? []
+  // The saved value may sit outside the first 100 rows; without this the select would
+  // silently show a different record's name.
+  const choices = current && !names.includes(current) ? [current, ...names] : names
+
+  return (
+    <select
+      value={current}
+      disabled={disabled}
+      onChange={(e) => onCommit(e.target.value || null)}
+      className={selectClass}
+    >
+      <option value="">{field.placeholder ?? '—'}</option>
+      {choices.map((name) => (
+        <option key={name} value={name}>
+          {name}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+const selectClass = cn(
+  'h-8 w-full truncate rounded border border-transparent bg-transparent px-2 text-base text-ink-gray-8',
+  'hover:border-outline-gray-2 focus:border-outline-gray-2 focus:outline-none disabled:opacity-50',
+)
