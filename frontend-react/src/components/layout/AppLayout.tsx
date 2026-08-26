@@ -6,6 +6,7 @@ import {
   Contact,
   LogOut,
   Phone,
+  Settings,
   StickyNote,
   Users,
 } from 'lucide-react'
@@ -28,6 +29,7 @@ const NAV = [
   { to: '/notes/view', label: 'Notes', icon: StickyNote },
   { to: '/tasks/view', label: 'Tasks', icon: CheckSquare },
   { to: '/call-logs/view', label: 'Call Logs', icon: Phone },
+  { to: '/settings/users', label: 'Users', icon: Settings },
 ] as const
 
 export function AppLayout() {

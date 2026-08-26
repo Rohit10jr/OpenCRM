@@ -28,14 +28,28 @@ export type CrmStatus = {
   type?: string
 }
 
+/**
+ * `crm.api.session.get_users` returns a **tuple** `(users, crm_users)`
+ * (`session.py:62`), which arrives as a two-element array.
+ *
+ * Run 1 read it as `{ crmUsers }`. That is not an error in JavaScript — it is `undefined`
+ * — so the map was always empty and `getUser` always fell back to the raw id. The
+ * fallback renders an email address, which looks like a plausible answer, so nothing
+ * looked broken: every avatar showed one letter of an email and every owner cell showed
+ * the address instead of the name. Two endpoints in this API return tuples and both of
+ * them have now cost a bug.
+ */
+type UsersPayload = [users: CrmUser[], crmUsers: CrmUser[]]
+
 export function useUsers() {
   const query = useQuery({
     queryKey: keys.users,
-    queryFn: () => callGet<{ crmUsers?: CrmUser[] }>('crm.api.session.get_users'),
+    queryFn: () => callGet<UsersPayload>('crm.api.session.get_users'),
     staleTime: Infinity,
   })
 
-  const byName = new Map((query.data?.crmUsers ?? []).map((u) => [u.name, u]))
+  const [, crmUsers = []] = query.data ?? []
+  const byName = new Map(crmUsers.map((user) => [user.name, user]))
   // Falls back to the id itself, which is an email address and is what the Vue app shows
   // before the users resource resolves.
   const getUser = (name?: string | null): CrmUser =>

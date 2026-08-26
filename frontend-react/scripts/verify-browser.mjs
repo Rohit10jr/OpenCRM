@@ -430,6 +430,28 @@ await step('delete the saved view', async () => {
   console.log('        deleted, back to All')
 })
 
+console.log('settings')
+await step('the Users settings screen lists real users', async () => {
+  await page.goto(`${BASE}/settings/users`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('ul li select', { timeout: 15000 })
+  const rows = await page.$$eval('ul li', (ls) =>
+    ls.map((l) => l.innerText.split('\n')[0]),
+  )
+  console.log(`        users: ${rows.join(', ')}`)
+  if (!rows.length) throw new Error('no users listed')
+  // The whole point of the `get_users` tuple fix: a full name, not a raw email id.
+  const body = await text()
+  if (!/Administrator/.test(body)) throw new Error('the signed-in user is not listed')
+  await shot(page, '14-settings-users')
+})
+
+await step('the invite dialog opens and validates', async () => {
+  const [invite] = await page.$$('xpath/.//button[contains(., "Invite")]')
+  await invite.click()
+  await page.waitForSelector('[role="dialog"] input[name="emails"]', { timeout: 5000 })
+  await page.keyboard.press('Escape')
+})
+
 await step('sign out returns to login', async () => {
   await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('button[title="Sign out"]', { timeout: 10000 })

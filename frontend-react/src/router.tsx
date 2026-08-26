@@ -21,6 +21,7 @@ import { LeadsPage } from '@/pages/Leads'
 import { NotesPage } from '@/pages/Notes'
 import { OrganizationPage } from '@/pages/Organization'
 import { OrganizationsPage } from '@/pages/Organizations'
+import { UsersSettingsPage } from '@/pages/settings/Users'
 import { TasksPage } from '@/pages/Tasks'
 
 /**
@@ -223,6 +224,12 @@ const organizationRoute = createRoute({
   component: OrganizationPage,
 })
 
+const usersSettingsRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: '/settings/users',
+  component: UsersSettingsPage,
+})
+
 const listScreenRoutes = [
   ...listRoutes('/deals/view', DealsPage),
   ...listRoutes('/leads/view', LeadsPage),
@@ -245,6 +252,7 @@ const routeTree = rootRoute.addChildren([
     dealRoute,
     contactRoute,
     organizationRoute,
+    usersSettingsRoute,
     ...listScreenRoutes,
   ]),
 ])
