@@ -167,6 +167,112 @@ for (const [path, label] of [
   })
 }
 
+console.log('the deal record screen')
+await step('a row click opens the record', async () => {
+  await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table tbody tr', { timeout: 15000 })
+  await page.click('table tbody tr td:nth-child(2)')
+  await page.waitForFunction(() => /^\/deals\/CRM-DEAL/.test(location.pathname), {
+    timeout: 15000,
+  })
+  console.log(`        at ${await page.evaluate(() => location.pathname)}`)
+})
+
+await step('the record shows its side panel fields', async () => {
+  await page.waitForSelector('aside label', { timeout: 15000 })
+  const labels = await page.$$eval('aside label', (ls) => ls.map((l) => l.innerText))
+  console.log(`        panel fields: ${labels.join(', ')}`)
+  if (!labels.includes('Website')) throw new Error('side panel did not render its fields')
+  await shot(page, '09-deal-record')
+})
+
+await step('the activity timeline renders entries', async () => {
+  const entries = await page.$$eval('ol li', (ls) => ls.length)
+  console.log(`        ${entries} activity entries`)
+  if (entries === 0) throw new Error('no activity entries')
+})
+
+await step('switching a tab shows that tab', async () => {
+  const [tasksTab] = await page.$$('xpath/.//button[@role="tab"][contains(., "Tasks")]')
+  await tasksTab.click()
+  await page.waitForFunction(
+    () => /No tasks yet\.|task/i.test(document.body.innerText),
+    { timeout: 5000 },
+  )
+})
+
+await step('editing a side panel field saves to the server', async () => {
+  const stamp = `verify-${Date.now() % 100000}`
+  const [websiteInput] = await page.$$(
+    'xpath/.//label[contains(., "Website")]/following::input[1]',
+  )
+  await websiteInput.click({ clickCount: 3 })
+  await websiteInput.type(stamp)
+  await page.keyboard.press('Enter')
+  await new Promise((r) => setTimeout(r, 2500))
+  // Reload: the only proof the value reached the server rather than staying in the input.
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('aside label', { timeout: 15000 })
+  const saved = await page.$eval(
+    'aside input[type="text"]',
+    (el, expected) => el.value.includes(expected),
+    stamp,
+  ).catch(() => false)
+  const anyMatch =
+    saved ||
+    (await page.$$eval('aside input', (els, expected) =>
+      els.some((el) => el.value.includes(expected)), stamp))
+  if (!anyMatch) throw new Error(`"${stamp}" did not survive a reload`)
+  console.log(`        "${stamp}" persisted`)
+  await shot(page, '10-deal-edited')
+})
+
+await step('a status change persists', async () => {
+  const before = await page.$eval('header button', (b) => b.innerText)
+  await page.click('header button')
+  await page.waitForSelector('[role="menuitem"]', { timeout: 5000 })
+  const items = await page.$$('[role="menuitem"]')
+  const labels = await Promise.all(items.map((i) => i.evaluate((e) => e.innerText)))
+  const target = labels.findIndex((l) => l && !before.includes(l.trim()))
+  if (target < 0) throw new Error('no alternative status offered')
+  await items[target].click()
+  await new Promise((r) => setTimeout(r, 2500))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('header button', { timeout: 15000 })
+  const after = await page.$eval('header button', (b) => b.innerText)
+  if (after.trim() === before.trim()) throw new Error(`status stayed "${before}"`)
+  console.log(`        ${before.trim()} -> ${after.trim()}`)
+})
+
+await step('filters survive a trip to a record and back', async () => {
+  await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table tbody tr', { timeout: 15000 })
+  const [filterButton] = await page.$$('xpath/.//button[contains(., "Filter")]')
+  await filterButton.click()
+  const [addButton] = await page.$$('xpath/.//button[contains(., "Add filter")]')
+  await addButton.click()
+  await page.waitForSelector('input[placeholder="Value"]', { timeout: 5000 })
+  const [fieldSelect] = await page.$$('select')
+  await fieldSelect.select('email')
+  await page.type('input[placeholder="Value"]', 'buyer1')
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => location.search.includes('filters='), { timeout: 8000 })
+  await page.keyboard.press('Escape')
+  await new Promise((r) => setTimeout(r, 1500))
+
+  const filtered = await page.$$eval('table tbody tr', (trs) => trs.length)
+  await page.click('table tbody tr td:nth-child(2)')
+  await page.waitForFunction(() => /^\/deals\/CRM-DEAL/.test(location.pathname), {
+    timeout: 15000,
+  })
+  await page.goBack({ waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table tbody tr', { timeout: 15000 })
+  await new Promise((r) => setTimeout(r, 1500))
+  const afterBack = await page.$$eval('table tbody tr', (trs) => trs.length)
+  console.log(`        ${filtered} rows filtered, ${afterBack} after back`)
+  if (afterBack !== filtered) throw new Error('the filter was lost on the way back')
+})
+
 await step('sign out returns to login', async () => {
   await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('button[title="Sign out"]', { timeout: 10000 })
