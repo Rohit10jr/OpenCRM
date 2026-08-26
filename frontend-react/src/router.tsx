@@ -6,6 +6,7 @@ import {
   redirect,
 } from '@tanstack/react-router'
 import { isAuthenticated } from '@/auth/tokens'
+import type { ListFilter } from '@/list/useListView'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { AcceptInvitationPage } from '@/pages/auth/AcceptInvitation'
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPassword'
@@ -13,6 +14,7 @@ import { LoginPage } from '@/pages/auth/Login'
 import { UpdatePasswordPage } from '@/pages/auth/UpdatePassword'
 import { CallLogsPage } from '@/pages/CallLogs'
 import { ContactsPage } from '@/pages/Contacts'
+import { DealPage } from '@/pages/Deal'
 import { DealsPage } from '@/pages/Deals'
 import { LeadsPage } from '@/pages/Leads'
 import { NotesPage } from '@/pages/Notes'
@@ -145,10 +147,61 @@ function listRoutes<TPath extends string>(
   ] as const
 }
 
-/** `?view=<saved view name>`, the same query param the Vue app uses. */
-function viewSearch(search: Record<string, unknown>): { view?: string } {
-  return typeof search.view === 'string' ? { view: search.view } : {}
+/**
+ * A list screen's query string: the saved view, plus the user's filters and sort.
+ *
+ * **Filters and sort are in the URL, not in component state.** They were state in run 1,
+ * which meant a filtered list could not be linked, did not survive a reload, and — once
+ * rows became clickable — was gone when the user came back from a record.
+ *
+ * `filters` is a JSON array because a filter is three values and there can be several;
+ * spreading them across `field1=`/`op1=`/`value1=` would encode the same thing worse. A
+ * malformed value is dropped rather than thrown on: it arrives from a URL a person may
+ * have edited, and an unparseable filter should show an unfiltered list, not a crash.
+ */
+export type ListSearch = {
+  view?: string
+  filters?: ListFilter[]
+  order_by?: string
 }
+
+function viewSearch(search: Record<string, unknown>): ListSearch {
+  const out: ListSearch = {}
+  if (typeof search.view === 'string') out.view = search.view
+  if (typeof search.order_by === 'string') out.order_by = search.order_by
+
+  const filters = parseFilters(search.filters)
+  if (filters.length) out.filters = filters
+  return out
+}
+
+function parseFilters(value: unknown): ListFilter[] {
+  const raw = typeof value === 'string' ? safeParse(value) : value
+  if (!Array.isArray(raw)) return []
+  return raw.filter(
+    (entry): entry is ListFilter =>
+      Boolean(entry) &&
+      typeof entry === 'object' &&
+      typeof (entry as ListFilter).fieldname === 'string' &&
+      typeof (entry as ListFilter).operator === 'string' &&
+      typeof (entry as ListFilter).value === 'string',
+  )
+}
+
+function safeParse(value: string): unknown {
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}
+
+/** Record screens: `/deals/CRM-DEAL-2026-00006`, matching the Vue route shape. */
+const dealRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: '/deals/$dealId',
+  component: DealPage,
+})
 
 const listScreenRoutes = [
   ...listRoutes('/deals/view', DealsPage),
@@ -167,7 +220,7 @@ const routeTree = rootRoute.addChildren([
     updatePasswordRoute,
     acceptInvitationRoute,
   ]),
-  authedRoute.addChildren([indexRoute, ...listScreenRoutes]),
+  authedRoute.addChildren([indexRoute, dealRoute, ...listScreenRoutes]),
 ])
 
 export const router = createRouter({

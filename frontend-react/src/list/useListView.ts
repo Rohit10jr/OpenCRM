@@ -50,10 +50,19 @@ export type UseListViewOptions = {
   columnField?: string
   /** The field a group_by view groups on. `ViewControls.vue:464` defaults it to `owner`. */
   groupByField?: string
+  /**
+   * The user's filters and sort, owned by the caller.
+   *
+   * They live in the URL rather than in this hook, so a filtered list can be linked,
+   * survives a reload, and — the reason it changed this run — is still there after opening
+   * a record and pressing back.
+   */
+  filters: ListFilter[]
+  orderBy: string
 }
 
 const DEFAULT_PAGE_LENGTH = 20
-const DEFAULT_ORDER_BY = 'modified desc'
+export const DEFAULT_ORDER_BY = 'modified desc'
 
 export function useListView({
   doctype,
@@ -62,9 +71,9 @@ export function useListView({
   defaultFilters,
   columnField = 'status',
   groupByField = 'owner',
+  filters,
+  orderBy,
 }: UseListViewOptions) {
-  const [filters, setFilters] = useState<ListFilter[]>([])
-  const [orderBy, setOrderBy] = useState(DEFAULT_ORDER_BY)
   const [pageLength, setPageLength] = useState(DEFAULT_PAGE_LENGTH)
   /**
    * The page *increment*, not the page size — `page_length` grows past it as the user
@@ -188,10 +197,6 @@ export function useListView({
     error: query.error,
     refetch: query.refetch,
 
-    filters,
-    setFilters,
-    orderBy,
-    setOrderBy,
     hiddenColumns,
     toggleColumn,
     pageLength,

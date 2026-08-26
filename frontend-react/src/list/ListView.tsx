@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import type { RowSelectionState } from '@tanstack/react-table'
 import { AlertCircle, Loader2, type LucideIcon } from 'lucide-react'
 import { errorMessage } from '@/api/client'
@@ -7,7 +8,11 @@ import { Button } from '@/components/ui/button'
 import type { CellOverride } from './Cell'
 import { KanbanBoard } from './KanbanBoard'
 import { ListTable, ListTableHeader } from './ListTable'
-import { useListView } from './useListView'
+import { DEFAULT_ORDER_BY, useListView, type ListFilter } from './useListView'
+import type { ListSearch } from '@/router'
+
+/** A stable empty array: a fresh `[]` per render would change the query key every time. */
+const EMPTY_FILTERS: ListFilter[] = []
 import { useStatuses } from './useLookups'
 import { ViewControls } from './ViewControls'
 
@@ -52,7 +57,34 @@ export function ListView({
   onRowClick?: (row: DocRow) => void
   headerActions?: React.ReactNode
 }) {
-  const list = useListView({ doctype, viewType, savedViewName, defaultFilters })
+  const navigate = useNavigate()
+  const search = useSearch({ strict: false }) as ListSearch
+  const filters = search.filters ?? EMPTY_FILTERS
+  const orderBy = search.order_by ?? DEFAULT_ORDER_BY
+
+  /**
+   * Filters and sort live in the URL, so changing one is a navigation.
+   *
+   * `replace: true` — a filter is a refinement of the current view, not a place. Pushing
+   * each keystroke-committed filter onto the history stack would make Back mean "undo my
+   * last filter" several times before it meant "the screen I came from".
+   */
+  const setSearch = (next: Partial<ListSearch>) => {
+    void navigate({
+      to: '.',
+      search: (current: ListSearch) => ({ ...current, ...next }),
+      replace: true,
+    })
+  }
+
+  const list = useListView({
+    doctype,
+    viewType,
+    savedViewName,
+    defaultFilters,
+    filters,
+    orderBy,
+  })
   const { getStatus } = useStatuses(statusDoctype)
   const [selection, setSelection] = useState<RowSelectionState>({})
 
@@ -77,10 +109,10 @@ export function ListView({
         allColumns={list.allColumns}
         hiddenColumns={list.hiddenColumns}
         onToggleColumn={list.toggleColumn}
-        filters={list.filters}
-        onFiltersChange={list.setFilters}
-        orderBy={list.orderBy}
-        onOrderByChange={list.setOrderBy}
+        filters={filters}
+        onFiltersChange={(next) => setSearch({ filters: next.length ? next : undefined })}
+        orderBy={orderBy}
+        onOrderByChange={(next) => setSearch({ order_by: next })}
         totalCount={list.totalCount}
         isFetching={list.isFetching}
         onRefresh={() => void list.refetch()}
