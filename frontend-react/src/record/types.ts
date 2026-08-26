@@ -7,12 +7,22 @@
  */
 
 /** One field, as `get_field_obj` expands it. */
+/** One `Select` choice, as this port's field metadata serialises them. */
+export type SelectChoice = { label: string; value: string }
+
 export type PanelField = {
   fieldname: string
   fieldtype: string
   label: string
-  /** The link target for `Link`, the newline-joined choices for `Select`. */
-  options?: string
+  /**
+   * A string for `Link` — the target doctype.
+   *
+   * For `Select` it is an **array of `{label, value}`**, which is where this port diverges
+   * from Frappe: upstream sends the choices newline-joined in the same field, and code
+   * written against that (including the first draft of `SelectInput`) calls `.split` on an
+   * array and takes the screen down. Both shapes are accepted below.
+   */
+  options?: string | SelectChoice[]
   placeholder?: string
   read_only?: boolean | number
   mandatory?: boolean | number

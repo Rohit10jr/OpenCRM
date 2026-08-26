@@ -296,6 +296,33 @@ await step('filters survive a trip to a record and back', async () => {
   if (afterBack !== filtered) throw new Error('the filter was lost on the way back')
 })
 
+console.log('the other two record screens')
+// The expected field is whatever the *server's* layout resolves to, capitalisation
+// included — Contact's labels come back lowercase and Organization's do not, and guessing
+// that from the Vue app got both wrong the first time.
+for (const [listPath, prefix, label, panelField] of [
+  ['/contacts/view', '/contacts/', 'Contact', 'mobile no'],
+  ['/organizations/view', '/organizations/', 'Organization', 'No. of Employees'],
+]) {
+  await step(`${label} record opens with its own panel`, async () => {
+    await page.goto(`${BASE}${listPath}`, { waitUntil: 'domcontentloaded' })
+    await page.waitForSelector('table tbody tr', { timeout: 15000 })
+    await page.click('table tbody tr td:nth-child(2)')
+    await page.waitForFunction(
+      (p) => location.pathname.startsWith(p) && !location.pathname.endsWith('/view'),
+      { timeout: 15000 },
+      prefix,
+    )
+    await page.waitForSelector('aside label', { timeout: 15000 })
+    const labels = await page.$$eval('aside label', (ls) => ls.map((l) => l.innerText))
+    console.log(`        ${label} panel: ${labels.join(', ')}`)
+    if (!labels.includes(panelField)) {
+      throw new Error(`${label} panel is missing ${panelField}`)
+    }
+    await shot(page, `13-${label.toLowerCase()}-record`)
+  })
+}
+
 console.log('realtime')
 await step('the socket opens against the real server', async () => {
   // The record screen subscribes, so by now a socket should have been created. Give the

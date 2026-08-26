@@ -3,7 +3,7 @@ import { useDocList } from '@/api/hooks'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/primitives'
 import { cn } from '@/lib/utils'
-import type { PanelField } from './types'
+import type { PanelField, SelectChoice } from './types'
 
 /**
  * One editable field, chosen by fieldtype.
@@ -158,7 +158,15 @@ function TextLike({
   )
 }
 
-/** A Select's choices are newline-joined in `options` — Frappe's format, not ours. */
+/**
+ * A Select's choices.
+ *
+ * **Two shapes, because there are two.** This port sends an array of `{label, value}`
+ * (`no_of_employees` on CRM Organization is the one that found this); upstream Frappe
+ * sends them newline-joined in the same field, and the stock layouts are authored against
+ * that. Accepting only the Frappe shape called `.split` on an array and took the whole
+ * record screen down behind an error boundary.
+ */
 function SelectInput({
   field,
   value,
@@ -170,7 +178,11 @@ function SelectInput({
   onCommit: (value: unknown) => void
   disabled?: boolean
 }) {
-  const choices = (field.options ?? '').split('\n')
+  const choices: SelectChoice[] = Array.isArray(field.options)
+    ? field.options
+    : String(field.options ?? '')
+        .split('\n')
+        .map((choice) => ({ label: choice, value: choice }))
 
   return (
     <select
@@ -179,9 +191,14 @@ function SelectInput({
       onChange={(e) => onCommit(e.target.value)}
       className={selectClass}
     >
+      {/* The stored value can be empty even when no choice is; without this the select
+          would display the first choice for a field that is genuinely unset. */}
+      {choices.some((choice) => choice.value === '') ? null : (
+        <option value="">{field.placeholder ?? '—'}</option>
+      )}
       {choices.map((choice) => (
-        <option key={choice} value={choice}>
-          {choice || '—'}
+        <option key={choice.value} value={choice.value}>
+          {choice.label || '—'}
         </option>
       ))}
     </select>
@@ -212,7 +229,8 @@ function LinkInput({
   onCommit: (value: unknown) => void
   disabled?: boolean
 }) {
-  const target = field.options ?? ''
+  // A Link's `options` is always the target doctype name; the array shape is Select's.
+  const target = typeof field.options === 'string' ? field.options : ''
   const unmodelled = UNMODELLED_LINK_TARGETS.has(target)
   const options = useDocList<{ name: string }>(
     target,

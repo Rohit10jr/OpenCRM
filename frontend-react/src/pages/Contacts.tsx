@@ -1,4 +1,4 @@
-import { useParams, useSearch } from '@tanstack/react-router'
+import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { ListView } from '@/list/ListView'
 
 /**
@@ -12,6 +12,7 @@ import { ListView } from '@/list/ListView'
 export function ContactsPage() {
   const { viewType } = useParams({ strict: false })
   const { view } = useSearch({ strict: false })
+  const navigate = useNavigate()
 
   return (
     <ListView
@@ -20,6 +21,9 @@ export function ContactsPage() {
       basePath="/contacts/view"
       viewType={viewType}
       savedViewName={view}
+      onRowClick={(row) =>
+        navigate({ to: '/contacts/$contactId', params: { contactId: row.name } })
+      }
     />
   )
 }

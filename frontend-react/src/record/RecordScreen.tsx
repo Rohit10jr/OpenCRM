@@ -62,13 +62,17 @@ export function RecordScreen({
 
   const doc = record.doc as Record<string, unknown> | undefined
 
-  const tabs: Tab[] = [
-    { id: 'activity', label: 'Activity' },
-    { id: 'calls', label: `Calls (${record.calls.length})` },
-    { id: 'tasks', label: `Tasks (${record.tasks.length})` },
-    { id: 'notes', label: `Notes (${record.notes.length})` },
-    { id: 'attachments', label: `Attachments (${record.attachments.length})` },
-  ]
+  // Only deals and leads have an activity feed. A contact showing five empty tabs would
+  // read as a record with no history rather than a doctype the endpoint does not serve.
+  const tabs: Tab[] = record.hasActivities
+    ? [
+        { id: 'activity', label: 'Activity' },
+        { id: 'calls', label: `Calls (${record.calls.length})` },
+        { id: 'tasks', label: `Tasks (${record.tasks.length})` },
+        { id: 'notes', label: `Notes (${record.notes.length})` },
+        { id: 'attachments', label: `Attachments (${record.attachments.length})` },
+      ]
+    : []
 
   function saveField(fieldname: string, value: unknown) {
     record.updateField.mutate(
@@ -145,7 +149,10 @@ export function RecordScreen({
         <div className="flex min-w-0 flex-1 flex-col">
           <div
             role="tablist"
-            className="flex shrink-0 gap-5 border-b border-outline-gray-1 px-5"
+            className={cn(
+              'flex shrink-0 gap-5 px-5',
+              tabs.length && 'border-b border-outline-gray-1',
+            )}
           >
             {tabs.map((option) => (
               <button
@@ -166,7 +173,11 @@ export function RecordScreen({
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto">
-            {tab === 'activity' ? (
+            {!record.hasActivities ? (
+              <div className="flex h-full items-center justify-center p-10 text-base text-ink-gray-4">
+                This doctype has no activity feed. Edit its fields in the panel.
+              </div>
+            ) : tab === 'activity' ? (
               <ActivityTimeline
                 activities={record.activities}
                 isPending={record.activitiesPending}

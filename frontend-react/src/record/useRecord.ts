@@ -15,6 +15,9 @@ import type { ActivitiesPayload, PanelSection } from './types'
  * **Doctype-agnostic on purpose.** Contact and Organization record screens are the next
  * two callers, and the only thing that differs between them is the doctype string.
  */
+/** The two doctypes `crm.api.activities.get_activities` resolves (`activities.py:458`). */
+const DOCTYPES_WITH_ACTIVITIES = new Set(['CRM Deal', 'CRM Lead'])
+
 export function useRecord(doctype: string, name: string) {
   const queryClient = useQueryClient()
 
@@ -41,10 +44,15 @@ export function useRecord(doctype: string, name: string) {
     enabled: Boolean(name),
   })
 
+  /**
+   * `get_activities` looks the name up as a deal, then as a lead, and 404s otherwise
+   * (`activities.py:454`) — there is no activity feed for a contact or an organization.
+   * Asking anyway produced a 404 per record screen, which is how this was found.
+   */
   const activities = useQuery({
     queryKey: ['activities', name],
     queryFn: () => callGet<ActivitiesPayload>('crm.api.activities.get_activities', { name }),
-    enabled: Boolean(name),
+    enabled: Boolean(name) && DOCTYPES_WITH_ACTIVITIES.has(doctype),
   })
 
   /**
@@ -83,7 +91,9 @@ export function useRecord(doctype: string, name: string) {
     notes,
     tasks,
     attachments,
-    activitiesPending: activities.isPending,
+    activitiesPending: activities.isFetching,
+    /** Whether this doctype has an activity feed at all — see the query above. */
+    hasActivities: DOCTYPES_WITH_ACTIVITIES.has(doctype),
     updateField,
   }
 }

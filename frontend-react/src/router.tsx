@@ -13,11 +13,13 @@ import { ForgotPasswordPage } from '@/pages/auth/ForgotPassword'
 import { LoginPage } from '@/pages/auth/Login'
 import { UpdatePasswordPage } from '@/pages/auth/UpdatePassword'
 import { CallLogsPage } from '@/pages/CallLogs'
+import { ContactPage } from '@/pages/Contact'
 import { ContactsPage } from '@/pages/Contacts'
 import { DealPage } from '@/pages/Deal'
 import { DealsPage } from '@/pages/Deals'
 import { LeadsPage } from '@/pages/Leads'
 import { NotesPage } from '@/pages/Notes'
+import { OrganizationPage } from '@/pages/Organization'
 import { OrganizationsPage } from '@/pages/Organizations'
 import { TasksPage } from '@/pages/Tasks'
 
@@ -196,11 +198,29 @@ function safeParse(value: string): unknown {
   }
 }
 
-/** Record screens: `/deals/CRM-DEAL-2026-00006`, matching the Vue route shape. */
+/**
+ * Record screens: `/deals/CRM-DEAL-2026-00006`, matching the Vue route shape.
+ *
+ * Not folded into a helper the way `listRoutes` is: three routes with different param
+ * names and no shared search schema is not yet a pattern, and naming the param `$dealId`
+ * rather than `$name` is what makes `useParams` read well in the page.
+ */
 const dealRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: '/deals/$dealId',
   component: DealPage,
+})
+
+const contactRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: '/contacts/$contactId',
+  component: ContactPage,
+})
+
+const organizationRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: '/organizations/$organizationId',
+  component: OrganizationPage,
 })
 
 const listScreenRoutes = [
@@ -220,7 +240,13 @@ const routeTree = rootRoute.addChildren([
     updatePasswordRoute,
     acceptInvitationRoute,
   ]),
-  authedRoute.addChildren([indexRoute, dealRoute, ...listScreenRoutes]),
+  authedRoute.addChildren([
+    indexRoute,
+    dealRoute,
+    contactRoute,
+    organizationRoute,
+    ...listScreenRoutes,
+  ]),
 ])
 
 export const router = createRouter({
