@@ -14,6 +14,10 @@ export function DealPage() {
 
   return (
     <RecordScreen
+      // Remount per record so no state carries across. Without it, opening a deal while
+      // the Attachments tab is selected opens the *next* deal on Attachments too —
+      // React's documented way to reset state when the identity of the thing changes.
+      key={dealId}
       doctype="CRM Deal"
       name={dealId}
       statusDoctype="CRM Deal Status"

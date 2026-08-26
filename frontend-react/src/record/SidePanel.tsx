@@ -13,9 +13,12 @@ import type { PanelSection } from './types'
  * layout changes this panel with no code change, which is the whole point of the endpoint.
  * Contact and Organization screens get their panels from the same component.
  *
- * A section with no `columns` is rendered as an empty section rather than skipped: the
- * Deal layout's `contacts_section` carries `contacts` instead (`crm/install.py:200`), and
- * silently dropping it would hide a heading the user can see in the Vue app.
+ * A section with no `columns` renders its heading and nothing else. The Deal layout's
+ * `contacts_section` is exactly that — it carries `contacts` instead
+ * (`crm/install.py:200`) and this conversion does not render contacts yet. Dropping the
+ * section would hide a heading the Vue app shows; filling it with "nothing here yet"
+ * would invent content for a section that has a real body we have not built. An empty
+ * heading is the honest middle.
  */
 export function SidePanel({
   sections,
@@ -63,9 +66,7 @@ export function SidePanel({
                 ))}
               </div>
             ))
-          ) : (
-            <p className="text-sm text-ink-gray-4">Nothing in this section yet.</p>
-          )}
+          ) : null}
         </Section>
       ))}
     </div>

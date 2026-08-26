@@ -62,6 +62,10 @@ export function useRecord(doctype: string, name: string) {
       // A status or owner change reorders the list this record was opened from.
       queryClient.invalidateQueries({ queryKey: keys.list.doctype(doctype) })
       queryClient.invalidateQueries({ queryKey: ['activities', name] })
+      // Assignment is a server-side consequence of some field writes, not only of an
+      // explicit assign — an owner change can rewrite `_assign` — so the header's avatars
+      // have to be refetched too.
+      queryClient.invalidateQueries({ queryKey: ['assignees', doctype, name] })
     },
   })
 

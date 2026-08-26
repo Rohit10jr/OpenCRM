@@ -68,8 +68,8 @@ export function FieldInput({
         <TextLike
           field={field}
           type="datetime-local"
-          value={String(value ?? '').slice(0, 16)}
-          onCommit={onCommit}
+          value={toLocalInput(value)}
+          onCommit={(next) => onCommit(next ? new Date(next).toISOString() : null)}
           disabled={readOnly}
         />
       )
@@ -99,6 +99,24 @@ export function FieldInput({
         />
       )
   }
+}
+
+/**
+ * A stored UTC timestamp as the local wall-clock value `<input type="datetime-local">`
+ * expects.
+ *
+ * **Slicing the ISO string would have been wrong**, and quietly: the API stores and
+ * returns UTC (`2026-09-01T14:30:00Z`), while `datetime-local` has no timezone at all. A
+ * `.slice(0, 16)` shows 14:30 to a reader in Berlin whose deadline is really 16:30, and
+ * saving it back writes their local 14:30 as 14:30 UTC. It round-trips consistently and
+ * is off by the offset for everyone outside UTC.
+ */
+function toLocalInput(value: unknown): string {
+  if (!value) return ''
+  const date = new Date(String(value))
+  if (Number.isNaN(date.getTime())) return ''
+  const offsetMs = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16)
 }
 
 /** The shared text-ish input: draft locally, commit on blur or Enter. */
@@ -174,10 +192,14 @@ function SelectInput({
  * A Link field's `options` names the target doctype, so the choices are that doctype's
  * documents.
  *
- * A `<select>` of every row, not a searchable combobox. That is a real difference from
- * the Vue `Link` component, which searches server-side and pages — fine for a Territory
- * with six rows, wrong for an Organization list with thousands. It is called out in the
- * run report rather than hidden here.
+ * A `<select>` of the 100 most recently modified rows, not a searchable combobox. That is
+ * a real difference from the Vue `Link` component, which searches server-side and pages.
+ *
+ * **Concretely, what breaks:** with more than 100 rows in the target doctype, the 101st
+ * cannot be chosen at all. The current value is prepended so it never *displays* wrong,
+ * but a user cannot link a deal to an organization outside the recent hundred. Fine for
+ * Territory with six rows; wrong for Organization at scale. It needs the combobox, and it
+ * is in the run report as such rather than hidden behind an ellipsis here.
  */
 function LinkInput({
   field,
