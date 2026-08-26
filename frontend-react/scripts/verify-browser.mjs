@@ -296,6 +296,23 @@ await step('filters survive a trip to a record and back', async () => {
   if (afterBack !== filtered) throw new Error('the filter was lost on the way back')
 })
 
+await step('a lead record opens with its status and activity', async () => {
+  await page.goto(`${BASE}/leads/view`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table tbody tr', { timeout: 15000 })
+  await page.click('table tbody tr td:nth-child(2)')
+  await page.waitForFunction(() => /^\/leads\/CRM-LEAD/.test(location.pathname), {
+    timeout: 15000,
+  })
+  await page.waitForSelector('aside label', { timeout: 15000 })
+  const tabs = await page.$$eval('[role="tab"]', (ts) => ts.map((t) => t.innerText))
+  const status = await page.$eval('header button', (b) => b.innerText.trim())
+  console.log(`        status ${JSON.stringify(status)}, tabs: ${tabs.join(', ')}`)
+  if (!tabs.some((t) => t.startsWith('Activity'))) {
+    throw new Error('a lead should have an activity feed')
+  }
+  await shot(page, '15-lead-record')
+})
+
 console.log('the other two record screens')
 // The expected field is whatever the *server's* layout resolves to, capitalisation
 // included — Contact's labels come back lowercase and Organization's do not, and guessing

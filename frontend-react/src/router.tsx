@@ -17,6 +17,7 @@ import { ContactPage } from '@/pages/Contact'
 import { ContactsPage } from '@/pages/Contacts'
 import { DealPage } from '@/pages/Deal'
 import { DealsPage } from '@/pages/Deals'
+import { LeadPage } from '@/pages/Lead'
 import { LeadsPage } from '@/pages/Leads'
 import { NotesPage } from '@/pages/Notes'
 import { OrganizationPage } from '@/pages/Organization'
@@ -212,6 +213,12 @@ const dealRoute = createRoute({
   component: DealPage,
 })
 
+const leadRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: '/leads/$leadId',
+  component: LeadPage,
+})
+
 const contactRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: '/contacts/$contactId',
@@ -250,6 +257,7 @@ const routeTree = rootRoute.addChildren([
   authedRoute.addChildren([
     indexRoute,
     dealRoute,
+    leadRoute,
     contactRoute,
     organizationRoute,
     usersSettingsRoute,
