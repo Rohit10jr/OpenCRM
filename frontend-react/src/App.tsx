@@ -3,6 +3,7 @@ import { RouterProvider } from '@tanstack/react-router'
 import { Toaster } from 'sonner'
 import { SessionProvider } from '@/auth/session'
 import { TooltipProvider } from '@/components/ui/primitives'
+import { SocketProvider } from '@/realtime/useSocket'
 import { router } from '@/router'
 
 const queryClient = new QueryClient({
@@ -21,12 +22,14 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <SessionProvider>
+        <SocketProvider>
         <TooltipProvider delayDuration={300}>
           {/* The router's auth guard reads token storage directly (`isAuthenticated`),
               so it needs nothing from React here. */}
           <RouterProvider router={router} />
           <Toaster position="bottom-right" />
         </TooltipProvider>
+        </SocketProvider>
       </SessionProvider>
     </QueryClientProvider>
   )

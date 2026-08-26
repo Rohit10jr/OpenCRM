@@ -32,6 +32,29 @@ const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox']
 const page = await browser.newPage()
 await page.setViewport({ width: 1440, height: 900 })
 
+/**
+ * WebSocket handshakes, watched through CDP.
+ *
+ * The alternative was exporting connection state from the app purely so a test could read
+ * it. This asks the browser what actually happened on the wire instead, which is both
+ * stronger evidence and no change to the product.
+ */
+// Only `/ws/realtime` counts. Vite's own HMR socket is also `ws://127.0.0.1:5174/?token=…`,
+// which is close enough to ours to have passed this assertion for the wrong reason once.
+const REALTIME_PATH = '/ws/realtime'
+const sockets = { created: [], accepted: [], byId: new Map() }
+const cdp = await page.target().createCDPSession()
+await cdp.send('Network.enable')
+cdp.on('Network.webSocketCreated', ({ requestId, url }) => {
+  sockets.byId.set(requestId, url)
+  if (url.includes(REALTIME_PATH)) sockets.created.push(url)
+})
+cdp.on('Network.webSocketHandshakeResponseReceived', ({ requestId, response }) => {
+  if ((sockets.byId.get(requestId) ?? '').includes(REALTIME_PATH)) {
+    sockets.accepted.push(response.status)
+  }
+})
+
 page.on('console', (message) => {
   if (message.type() === 'error') problems.push(`console: ${message.text()}`)
 })
@@ -271,6 +294,20 @@ await step('filters survive a trip to a record and back', async () => {
   const afterBack = await page.$$eval('table tbody tr', (trs) => trs.length)
   console.log(`        ${filtered} rows filtered, ${afterBack} after back`)
   if (afterBack !== filtered) throw new Error('the filter was lost on the way back')
+})
+
+console.log('realtime')
+await step('the socket opens against the real server', async () => {
+  // The record screen subscribes, so by now a socket should have been created. Give the
+  // handshake a moment; it is the only step here that races the page.
+  await new Promise((r) => setTimeout(r, 3000))
+  if (!sockets.created.length) throw new Error('no WebSocket was ever created')
+  console.log(`        opened ${sockets.created[0].replace(/token=[^&]+/, 'token=…')}`)
+  if (!sockets.accepted.includes(101)) {
+    throw new Error(
+      `handshake not accepted (statuses seen: ${sockets.accepted.join(', ') || 'none'})`,
+    )
+  }
 })
 
 console.log('creating a record')

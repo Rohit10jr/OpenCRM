@@ -14,6 +14,7 @@ import { Avatar, Tooltip } from '@/components/ui/primitives'
 import { statusDotClass } from '@/list/statusColor'
 import { useStatuses, useUsers } from '@/list/useLookups'
 import { cn } from '@/lib/utils'
+import { useDocSubscription } from '@/realtime/useSocket'
 import { ActivityTimeline, RecordList } from './ActivityTimeline'
 import { SidePanel } from './SidePanel'
 import { useRecord } from './useRecord'
@@ -52,6 +53,9 @@ export function RecordScreen({
   backLabel: string
 }) {
   const record = useRecord(doctype, name)
+  // An open record is the one place realtime earns its keep: two people editing the same
+  // deal is the normal case this exists for.
+  useDocSubscription(doctype, name)
   const { statuses, getStatus } = useStatuses(statusDoctype)
   const { getUser } = useUsers()
   const [tab, setTab] = useState('activity')

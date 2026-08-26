@@ -20,7 +20,11 @@ export default defineConfig({
     proxy: {
       '/api': { target: 'http://127.0.0.1:8000', changeOrigin: true },
       '/files': { target: 'http://127.0.0.1:8000', changeOrigin: true },
-      '/socket.io': { target: 'http://127.0.0.1:8000', ws: true },
+      // `/ws`, not `/socket.io`. This port's realtime layer is Django Channels over a raw
+      // WebSocket at `/ws/realtime` (`socket.js`, phase 6); `/socket.io` is upstream
+      // Frappe's path and nothing here serves or requests it. Run 1 copied the wrong one,
+      // which went unnoticed because nothing had a socket yet.
+      '/ws': { target: 'http://127.0.0.1:8000', ws: true },
     },
   },
 })
