@@ -273,6 +273,63 @@ await step('filters survive a trip to a record and back', async () => {
   if (afterBack !== filtered) throw new Error('the filter was lost on the way back')
 })
 
+console.log('saved views')
+await step('save the current filter as a view, then reload into it', async () => {
+  // Start clean, then filter to exactly one row.
+  await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table tbody tr', { timeout: 15000 })
+  const total = await page.$$eval('table tbody tr', (trs) => trs.length)
+
+  const [filterButton] = await page.$$('xpath/.//button[contains(., "Filter")]')
+  await filterButton.click()
+  const [addButton] = await page.$$('xpath/.//button[contains(., "Add filter")]')
+  await addButton.click()
+  await page.waitForSelector('input[placeholder="Value"]', { timeout: 5000 })
+  const [fieldSelect] = await page.$$('select')
+  await fieldSelect.select('email')
+  await page.type('input[placeholder="Value"]', 'buyer1')
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => location.search.includes('filters='), { timeout: 8000 })
+  await page.keyboard.press('Escape')
+  await new Promise((r) => setTimeout(r, 1500))
+
+  const viewLabel = `verify-view-${Date.now() % 100000}`
+  const [picker] = await page.$$('xpath/.//button[normalize-space()="All"]')
+  await picker.click()
+  const [saveItem] = await page.$$('xpath/.//div[@role="menuitem"][contains(., "Save current view")]')
+  await saveItem.click()
+  await page.waitForSelector('input[name], [role="dialog"] input', { timeout: 5000 })
+  await page.type('[role="dialog"] input', viewLabel)
+  const [submit] = await page.$$('xpath/.//button[contains(., "Save view")]')
+  await submit.click()
+  await page.waitForFunction(() => location.search.includes('view='), { timeout: 10000 })
+  await new Promise((r) => setTimeout(r, 1500))
+
+  // The real assertion: land on the saved view's URL from cold, with no `filters=` in it,
+  // and still get the filtered rows. That is the gap run 1 had — the server does not
+  // hydrate a view from its name, so this only passes if the client sends its filters.
+  const url = await page.evaluate(() => location.pathname + location.search)
+  if (url.includes('filters=')) throw new Error(`view URL still carries filters: ${url}`)
+  await page.goto(`${BASE}${url}`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table tbody tr', { timeout: 15000 })
+  await new Promise((r) => setTimeout(r, 1500))
+  const rows = await page.$$eval('table tbody tr', (trs) => trs.length)
+  console.log(`        ${total} rows unfiltered, ${rows} from the saved view alone`)
+  if (rows !== 1) throw new Error(`saved view returned ${rows} rows, expected 1`)
+  await shot(page, '11-saved-view')
+})
+
+await step('delete the saved view', async () => {
+  const [picker] = await page.$$('xpath/.//button[contains(@class,"inline-flex")][contains(., "verify-view-")]')
+  if (!picker) throw new Error('the saved view is not the current one')
+  await picker.click()
+  const [del] = await page.$$('xpath/.//button[starts-with(@aria-label, "Delete verify-view-")]')
+  await del.click()
+  await page.waitForFunction(() => !location.search.includes('view='), { timeout: 10000 })
+  await page.keyboard.press('Escape')
+  console.log('        deleted, back to All')
+})
+
 await step('sign out returns to login', async () => {
   await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('button[title="Sign out"]', { timeout: 10000 })

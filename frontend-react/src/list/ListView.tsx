@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import type { RowSelectionState } from '@tanstack/react-table'
 import { AlertCircle, Loader2, type LucideIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import { errorMessage } from '@/api/client'
 import type { DocRow, Filters, ViewType } from '@/api/types'
 import { Button } from '@/components/ui/button'
@@ -9,6 +10,7 @@ import type { CellOverride } from './Cell'
 import { KanbanBoard } from './KanbanBoard'
 import { ListTable, ListTableHeader } from './ListTable'
 import { DEFAULT_ORDER_BY, useListView, type ListFilter } from './useListView'
+import { useViewMutations } from './useViews'
 import type { ListSearch } from '@/router'
 
 /** A stable empty array: a fresh `[]` per render would change the query key every time. */
@@ -86,6 +88,7 @@ export function ListView({
     orderBy,
   })
   const { getStatus } = useStatuses(statusDoctype)
+  const viewMutations = useViewMutations(doctype)
   const [selection, setSelection] = useState<RowSelectionState>({})
 
   const getStatusColor = statusDoctype
@@ -113,6 +116,32 @@ export function ListView({
         onFiltersChange={(next) => setSearch({ filters: next.length ? next : undefined })}
         orderBy={orderBy}
         onOrderByChange={(next) => setSearch({ order_by: next })}
+        views={list.views}
+        savedViewName={savedViewName}
+        // Selecting a view drops the ad-hoc filters, because the view carries its own and
+        // `getParams()` reads them from the view — keeping both would silently AND a
+        // saved view with whatever the user last typed.
+        onSelectView={(name) =>
+          setSearch({ view: name, filters: undefined, order_by: undefined })
+        }
+        onSaveView={(label) =>
+          viewMutations.create.mutate(
+            { label, type: list.viewType, filters: list.params.filters ?? {}, order_by: orderBy },
+            {
+              onSuccess: (view) =>
+                setSearch({ view: String(view.name), filters: undefined }),
+              onError: (error) => toast.error(errorMessage(error, 'Could not save the view')),
+            },
+          )
+        }
+        onDeleteView={(name) =>
+          viewMutations.remove.mutate(name, {
+            onSuccess: () => {
+              if (String(name) === String(savedViewName)) setSearch({ view: undefined })
+            },
+            onError: (error) => toast.error(errorMessage(error, 'Could not delete the view')),
+          })
+        }
         totalCount={list.totalCount}
         isFetching={list.isFetching}
         onRefresh={() => void list.refetch()}

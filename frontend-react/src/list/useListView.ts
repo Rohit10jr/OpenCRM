@@ -6,9 +6,9 @@ import type {
   GetDataResponse,
   KanbanGroup,
   DocRow,
-  SavedView,
   ViewType,
 } from '@/api/types'
+import { useViews, viewParams } from './useViews'
 
 /**
  * The list engine's state. This is `ViewControls.vue` (1,365 lines) minus its markup —
@@ -85,23 +85,47 @@ export function useListView({
   /** Column keys the user has hidden. Empty means "whatever the server sends". */
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([])
 
+  const { views, getView } = useViews(doctype)
+  const savedView = getView(savedViewName)
+  const saved = useMemo(() => viewParams(savedView), [savedView])
+
   const currentViewType: ViewType =
     viewType === 'kanban' || viewType === 'group_by' ? viewType : 'list'
 
   const params = useMemo<GetDataParams>(
     () => ({
       doctype,
-      filters: toFilterDict(filters),
-      order_by: orderBy,
+      // The saved view's stored filters are the baseline; the user's own filters, which
+      // live in the URL, replace them. `getParams()` reads the view's filters and the Vue
+      // filter UI writes back into the same object, so this is the same precedence
+      // expressed with two sources instead of one.
+      filters: filters.length ? toFilterDict(filters) : saved.filters,
+      order_by: orderBy !== DEFAULT_ORDER_BY ? orderBy : (saved.orderBy ?? orderBy),
       default_filters: defaultFilters,
       view: {
         custom_view_name: savedViewName ?? '',
         view_type: currentViewType,
-        group_by_field: groupByField,
+        group_by_field: saved.groupByField ?? groupByField,
       },
+      // `columns` and `rows` set `custom_view = True` server-side, which is what makes it
+      // skip the default-view lookup and honour the saved view's column set
+      // (`doc.py:258`). Sending them is the whole point of resolving the view here.
+      ...(saved.columns ? { columns: saved.columns as GetDataParams['columns'] } : {}),
+      ...(saved.rows ? { rows: saved.rows as GetDataParams['rows'] } : {}),
+      ...(saved.titleField ? { title_field: saved.titleField } : {}),
       // Only in kanban mode: `_kanban` uses it to build the columns, and sending it for a
       // list view would put a `column_field` the list does not use into the query key.
-      ...(currentViewType === 'kanban' ? { column_field: columnField } : {}),
+      ...(currentViewType === 'kanban'
+        ? {
+            column_field: saved.columnField ?? columnField,
+            ...(saved.kanbanColumns
+              ? { kanban_columns: saved.kanbanColumns as GetDataParams['kanban_columns'] }
+              : {}),
+            ...(saved.kanbanFields
+              ? { kanban_fields: saved.kanbanFields as GetDataParams['kanban_fields'] }
+              : {}),
+          }
+        : {}),
       page_length: pageLength,
       page_length_count: pageLengthCount,
     }),
@@ -111,6 +135,7 @@ export function useListView({
       orderBy,
       defaultFilters,
       savedViewName,
+      saved,
       currentViewType,
       columnField,
       groupByField,
@@ -190,7 +215,13 @@ export function useListView({
     allColumns: payload?.columns ?? [],
     fields: payload?.fields ?? [],
     totalCount: payload?.total_count ?? 0,
-    views: (payload?.views ?? []) as SavedView[],
+    /**
+     * From `crm.api.views.get_views`, not from the payload's `views`. The payload's copy
+     * arrives too late to be useful — the view's filters are an input to the request that
+     * returns it.
+     */
+    views,
+    savedView,
     viewType: currentViewType,
     isPending: query.isPending,
     isFetching: query.isFetching,
