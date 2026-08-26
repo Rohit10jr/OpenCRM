@@ -273,6 +273,42 @@ await step('filters survive a trip to a record and back', async () => {
   if (afterBack !== filtered) throw new Error('the filter was lost on the way back')
 })
 
+console.log('creating a record')
+await step('the Create modal makes a deal and opens it', async () => {
+  await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table tbody tr', { timeout: 15000 })
+  const before = await page.$$eval('table tbody tr', (trs) => trs.length)
+
+  const [createButton] = await page.$$('xpath/.//button[contains(., "Create")]')
+  await createButton.click()
+  await page.waitForSelector('[role="dialog"] input', { timeout: 10000 })
+
+  const stamp = `Verify Co ${Date.now() % 100000}`
+  const [orgName] = await page.$$(
+    'xpath/.//div[@role="dialog"]//label[contains(., "Organization Name")]/following::input[1]',
+  )
+  if (!orgName) throw new Error('the Quick Entry layout has no Organization Name field')
+  await orgName.type(stamp)
+  await page.keyboard.press('Tab')
+
+  const [submit] = await page.$$('xpath/.//div[@role="dialog"]//button[normalize-space()="Create"]')
+  await submit.click()
+  await page.waitForFunction(() => /^\/deals\/CRM-DEAL/.test(location.pathname), {
+    timeout: 20000,
+  })
+  console.log(`        created and opened ${await page.evaluate(() => location.pathname)}`)
+
+  // Back to the list: the new row must be there, which is the only proof it was inserted
+  // rather than merely navigated to.
+  await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table tbody tr', { timeout: 15000 })
+  await new Promise((r) => setTimeout(r, 1000))
+  const after = await page.$$eval('table tbody tr', (trs) => trs.length)
+  console.log(`        ${before} rows before, ${after} after`)
+  if (after !== before + 1) throw new Error(`expected ${before + 1} rows, got ${after}`)
+  await shot(page, '12-created')
+})
+
 console.log('saved views')
 await step('save the current filter as a view, then reload into it', async () => {
   // Start clean, then filter to exactly one row.

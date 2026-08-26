@@ -213,11 +213,32 @@ function LinkInput({
   disabled?: boolean
 }) {
   const target = field.options ?? ''
+  const unmodelled = UNMODELLED_LINK_TARGETS.has(target)
   const options = useDocList<{ name: string }>(
     target,
     { fields: ['name'], limit_page_length: 100, order_by: 'modified desc' },
-    { enabled: Boolean(target) && !disabled },
+    { enabled: Boolean(target) && !disabled && !unmodelled },
   )
+
+  /**
+   * A Link target this backend does not serve falls back to free text, which is what the
+   * value is anyway — an empty dropdown would be a field the user cannot fill.
+   *
+   * Both conditions, deliberately: the list below skips the request so the console stays
+   * clean, and `isError` catches anything the list has not heard of, so the list going
+   * stale degrades instead of breaking.
+   */
+  if (unmodelled || options.isError) {
+    return (
+      <TextLike
+        field={field}
+        type="text"
+        value={value == null ? '' : String(value)}
+        onCommit={onCommit}
+        disabled={disabled}
+      />
+    )
+  }
 
   const current = String(value ?? '')
   const names = options.data?.map((row) => row.name) ?? []
@@ -241,6 +262,16 @@ function LinkInput({
     </select>
   )
 }
+
+/**
+ * Frappe core doctypes the stock layouts link to and this port deliberately does not
+ * model (`PORT_PLAN.md` section 3: *"Link to Frappe's Currency / Address — not
+ * modelled"*). All three appear in the stock Quick Entry layout and all three 404.
+ *
+ * A list rather than a probe only so the console stays clean; the `isError` branch above
+ * is what actually makes it safe.
+ */
+const UNMODELLED_LINK_TARGETS = new Set(['Salutation', 'Gender', 'Currency', 'Address'])
 
 const selectClass = cn(
   'h-8 w-full truncate rounded border border-transparent bg-transparent px-2 text-base text-ink-gray-8',
