@@ -16,6 +16,7 @@ import { useStatuses, useUsers } from '@/list/useLookups'
 import { cn } from '@/lib/utils'
 import { useDocSubscription } from '@/realtime/useSocket'
 import { ActivityTimeline, RecordList } from './ActivityTimeline'
+import { CommentBox } from './CommentBox'
 import { SidePanel } from './SidePanel'
 import { useRecord } from './useRecord'
 
@@ -64,9 +65,12 @@ export function RecordScreen({
 
   // Only deals and leads have an activity feed. A contact showing five empty tabs would
   // read as a record with no history rather than a doctype the endpoint does not serve.
+  const comments = record.activities.filter((entry) => entry.activity_type === 'comment')
+
   const tabs: Tab[] = record.hasActivities
     ? [
         { id: 'activity', label: 'Activity' },
+        { id: 'comments', label: `Comments (${comments.length})` },
         { id: 'calls', label: `Calls (${record.calls.length})` },
         { id: 'tasks', label: `Tasks (${record.tasks.length})` },
         { id: 'notes', label: `Notes (${record.notes.length})` },
@@ -83,6 +87,53 @@ export function RecordScreen({
         onError: (error) => toast.error(errorMessage(error, `Could not save ${fieldname}`)),
       },
     )
+  }
+
+  const tabBodies: Record<string, React.ReactNode> = {
+    activity: (
+      <ActivityTimeline
+        activities={record.activities}
+        isPending={record.activitiesPending}
+      />
+    ),
+    comments: (
+      <ActivityTimeline
+        activities={comments}
+        isPending={record.activitiesPending}
+        emptyText="No comments yet."
+      />
+    ),
+    calls: (
+      <RecordList
+        rows={record.calls}
+        titleField="medium"
+        subtitleField="status"
+        emptyText="No calls logged against this record."
+      />
+    ),
+    tasks: (
+      <RecordList
+        rows={record.tasks}
+        titleField="title"
+        subtitleField="status"
+        emptyText="No tasks yet."
+      />
+    ),
+    notes: (
+      <RecordList
+        rows={record.notes}
+        titleField="title"
+        subtitleField="content"
+        emptyText="No notes yet."
+      />
+    ),
+    attachments: (
+      <RecordList
+        rows={record.attachments}
+        titleField="file_name"
+        emptyText="No attachments."
+      />
+    ),
   }
 
   if (record.error) {
@@ -173,44 +224,22 @@ export function RecordScreen({
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto">
-            {!record.hasActivities ? (
+            {record.hasActivities ? (
+              // A lookup rather than a ternary chain: this was five branches when it was
+              // written, six once comments arrived, and a chain that long stops being
+              // readable well before it stops working.
+              (tabBodies[tab] ?? tabBodies.activity)
+            ) : (
               <div className="flex h-full items-center justify-center p-10 text-base text-ink-gray-4">
                 This doctype has no activity feed. Edit its fields in the panel.
               </div>
-            ) : tab === 'activity' ? (
-              <ActivityTimeline
-                activities={record.activities}
-                isPending={record.activitiesPending}
-              />
-            ) : tab === 'calls' ? (
-              <RecordList
-                rows={record.calls}
-                titleField="medium"
-                subtitleField="status"
-                emptyText="No calls logged against this record."
-              />
-            ) : tab === 'tasks' ? (
-              <RecordList
-                rows={record.tasks}
-                titleField="title"
-                subtitleField="status"
-                emptyText="No tasks yet."
-              />
-            ) : tab === 'notes' ? (
-              <RecordList
-                rows={record.notes}
-                titleField="title"
-                subtitleField="content"
-                emptyText="No notes yet."
-              />
-            ) : (
-              <RecordList
-                rows={record.attachments}
-                titleField="file_name"
-                emptyText="No attachments."
-              />
             )}
           </div>
+
+          {/* Only where a comment can actually be written. */}
+          {record.hasActivities && (tab === 'activity' || tab === 'comments') ? (
+            <CommentBox doctype={doctype} name={name} onAdded={() => setTab('comments')} />
+          ) : null}
         </div>
 
         <aside className="w-96 shrink-0 overflow-y-auto border-l border-outline-gray-1">

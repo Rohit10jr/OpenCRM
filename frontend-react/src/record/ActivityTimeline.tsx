@@ -15,9 +15,11 @@ import type { ActivityEntry } from './types'
 export function ActivityTimeline({
   activities,
   isPending,
+  emptyText = 'Nothing has happened here yet.',
 }: {
   activities: ActivityEntry[]
   isPending?: boolean
+  emptyText?: string
 }) {
   const { getUser } = useUsers()
 
@@ -25,7 +27,7 @@ export function ActivityTimeline({
     return <Empty text="Loading activity…" />
   }
   if (!activities.length) {
-    return <Empty text="Nothing has happened here yet." />
+    return <Empty text={emptyText} />
   }
 
   return (
@@ -52,6 +54,20 @@ export function ActivityTimeline({
 }
 
 function describe(entry: ActivityEntry): React.ReactNode {
+  if (entry.activity_type === 'comment') {
+    return (
+      <>
+        commented
+        <div className="mt-1 whitespace-pre-wrap rounded border border-outline-gray-1 bg-surface-gray-1 p-2 text-ink-gray-8">
+          {/* `content` is stored verbatim as whatever the client sent (`comment.py:118`).
+              Ours sends plain text, so it is rendered as text — never as HTML, because a
+              comment written by the Vue client *is* HTML and would be an injection here. */}
+          {String(entry.content ?? '')}
+        </div>
+      </>
+    )
+  }
+
   if (entry.activity_type === 'changed' && entry.data && typeof entry.data === 'object') {
     const change = entry.data as {
       field_label?: string

@@ -313,6 +313,39 @@ await step('a lead record opens with its status and activity', async () => {
   await shot(page, '15-lead-record')
 })
 
+await step('a comment posts and appears in the timeline', async () => {
+  await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table tbody tr', { timeout: 15000 })
+  await page.click('table tbody tr td:nth-child(2)')
+  await page.waitForFunction(() => /^\/deals\/CRM-DEAL/.test(location.pathname), {
+    timeout: 15000,
+  })
+  await page.waitForSelector('textarea[name="comment"]', { timeout: 15000 })
+
+  const stamp = `verify comment ${Date.now() % 100000}`
+  await page.type('textarea[name="comment"]', stamp)
+  // The submit button inside the comment form — not `button[contains(., "Comment")]`,
+  // which also matches the "Comments (N)" tab and clicked that instead.
+  const [send] = await page.$$('form button[type="submit"]')
+  await send.click()
+  await page.waitForFunction(
+    (text) => document.body.innerText.includes(text),
+    { timeout: 15000 },
+    stamp,
+  )
+
+  // Reload: proves it reached the server rather than staying in React state.
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('textarea[name="comment"]', { timeout: 15000 })
+  await page.waitForFunction(
+    (text) => document.body.innerText.includes(text),
+    { timeout: 15000 },
+    stamp,
+  )
+  console.log(`        "${stamp}" survived a reload`)
+  await shot(page, '16-comment')
+})
+
 console.log('the other two record screens')
 // The expected field is whatever the *server's* layout resolves to, capitalisation
 // included — Contact's labels come back lowercase and Organization's do not, and guessing
