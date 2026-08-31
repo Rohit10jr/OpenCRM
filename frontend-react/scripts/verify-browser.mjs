@@ -72,6 +72,21 @@ const step = async (label, fn) => {
 
 const text = () => page.evaluate(() => document.body.innerText)
 
+/**
+ * The toolbar's total, not the rendered row count.
+ *
+ * The table is capped at `page_length`, so "one more row than before" stopped being true
+ * the moment repeated runs pushed the list past 20 — an assertion that broke on its own
+ * success.
+ */
+const totalRows = () =>
+  page.evaluate(() => {
+    const span = [...document.querySelectorAll('span')].find((el) =>
+      /^\d+ rows?$/.test(el.innerText.trim()),
+    )
+    return span ? Number(span.innerText.trim().split(' ')[0]) : NaN
+  })
+
 console.log('login')
 await step('login page renders', async () => {
   await page.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' })
@@ -314,10 +329,13 @@ await step('a lead record opens with its status and activity', async () => {
 })
 
 await step('assigning a user persists, and unassigning removes them', async () => {
-  await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
+  // On a **lead**, not a deal. Other steps create and bulk-delete deals, so "the first
+  // deal" is a different record on every run and this step was intermittently asserting
+  // against one that had just moved. Leads are read-only to the rest of the harness.
+  await page.goto(`${BASE}/leads/view`, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('table tbody tr', { timeout: 15000 })
   await page.click('table tbody tr td:nth-child(2)')
-  await page.waitForFunction(() => /^\/deals\/CRM-DEAL/.test(location.pathname), {
+  await page.waitForFunction(() => /^\/leads\/CRM-LEAD/.test(location.pathname), {
     timeout: 15000,
   })
   await page.waitForSelector('aside label', { timeout: 15000 })
@@ -328,32 +346,50 @@ await step('assigning a user persists, and unassigning removes them', async () =
     await page.waitForSelector('[role="menu"] button', { timeout: 5000 })
   }
 
+  // Wait for the *effect*, never a fixed sleep: the trigger reads "Assign" with nobody on
+  // it and shows avatars otherwise, so that text is the signal the write landed. Sleeping
+  // instead made this step flaky, and a flaky assertion is worse than no assertion.
+  const triggerText = () =>
+    page.$eval('header button[title="Assigned to"]', (b) => b.innerText.trim())
+
   await openPicker()
   const [firstUser] = await page.$$('[role="menu"] button')
-  const who = await firstUser.evaluate((el) => el.innerText.trim())
+  const who = await firstUser.evaluate((el) => el.innerText.trim().split('\n')[0])
   await firstUser.click()
-  await new Promise((r) => setTimeout(r, 2000))
+  await page.waitForFunction(
+    () =>
+      !document
+        .querySelector('header button[title="Assigned to"]')
+        ?.innerText.includes('Assign'),
+    { timeout: 15000 },
+  )
   await page.keyboard.press('Escape')
 
+  const where = await page.evaluate(() => location.pathname)
   await page.reload({ waitUntil: 'domcontentloaded' })
   await page.waitForSelector('header button[title="Assigned to"]', { timeout: 15000 })
-  const assignedAfter = await page.$$eval(
-    'header button[title="Assigned to"] .rounded-full',
-    (els) => els.length,
-  )
-  if (assignedAfter === 0) throw new Error(`assigning ${who} did not survive a reload`)
-  console.log(`        assigned ${who}, ${assignedAfter} avatar(s) after reload`)
+  if ((await triggerText()).includes('Assign')) {
+    throw new Error(`assigning ${who} to ${where} did not survive a reload`)
+  }
+  console.log(`        assigned ${who}, still assigned after a reload`)
 
   // Unassign, so the run is repeatable and the cancel path is exercised too.
   await openPicker()
   const [sameUser] = await page.$$('[role="menu"] button')
   await sameUser.click()
-  await new Promise((r) => setTimeout(r, 2000))
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector('header button[title="Assigned to"]')
+        ?.innerText.includes('Assign'),
+    { timeout: 15000 },
+  )
   await page.keyboard.press('Escape')
   await page.reload({ waitUntil: 'domcontentloaded' })
   await page.waitForSelector('header button[title="Assigned to"]', { timeout: 15000 })
-  const body = await text()
-  if (!/Assign/.test(body)) throw new Error('unassigning did not survive a reload')
+  if (!(await triggerText()).includes('Assign')) {
+    throw new Error('unassigning did not survive a reload')
+  }
   console.log('        unassigned, back to "Assign"')
   await shot(page, '17-assign')
 })
@@ -436,16 +472,6 @@ console.log('creating a record')
 await step('the Create modal makes a deal and opens it', async () => {
   await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('table tbody tr', { timeout: 15000 })
-  // The toolbar's total, not the row count: the table is capped at `page_length` and this
-  // assertion used to compare rendered rows, which stopped being true the moment repeated
-  // runs pushed the list past 20.
-  const totalRows = () =>
-    page.evaluate(() => {
-      const span = [...document.querySelectorAll('span')].find((el) =>
-        /^\d+ rows?$/.test(el.innerText.trim()),
-      )
-      return span ? Number(span.innerText.trim().split(' ')[0]) : NaN
-    })
   const before = await totalRows()
 
   const [createButton] = await page.$$('xpath/.//button[contains(., "Create")]')
@@ -476,6 +502,40 @@ await step('the Create modal makes a deal and opens it', async () => {
   console.log(`        ${before} deals before, ${after} after`)
   if (after !== before + 1) throw new Error(`expected ${before + 1} deals, got ${after}`)
   await shot(page, '12-created')
+})
+
+await step('bulk delete removes the selected rows', async () => {
+  await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table tbody tr', { timeout: 15000 })
+  const before = await totalRows()
+
+  // Select the first two rows. Re-queried between clicks: selecting one re-renders the
+  // table, which detaches any handle taken before it.
+  const selectRow = async (index) => {
+    const boxes = await page.$$('table tbody tr td:first-child button[role="checkbox"]')
+    await boxes[index].click()
+  }
+  await selectRow(0)
+  await selectRow(1)
+  await page.waitForFunction(() => /2 rows selected/.test(document.body.innerText), {
+    timeout: 5000,
+  })
+
+  const [del] = await page.$$('xpath/.//button[normalize-space()="Delete"]')
+  await del.click()
+  await page.waitForSelector('[role="dialog"]', { timeout: 5000 })
+  const [confirm] = await page.$$('xpath/.//div[@role="dialog"]//button[normalize-space()="Delete"]')
+  await confirm.click()
+  // The selection bar disappears when the delete succeeds and the selection is cleared.
+  await page.waitForFunction(() => !/rows selected/.test(document.body.innerText), {
+    timeout: 20000,
+  })
+  await new Promise((r) => setTimeout(r, 1500))
+
+  const after = await totalRows()
+  console.log(`        ${before} deals before, ${after} after`)
+  if (after !== before - 2) throw new Error(`expected ${before - 2} deals, got ${after}`)
+  await shot(page, '18-bulk-delete')
 })
 
 console.log('saved views')

@@ -6,17 +6,18 @@ import { toast } from 'sonner'
 import { errorMessage } from '@/api/client'
 import type { DocRow, Filters, ViewType } from '@/api/types'
 import { Button } from '@/components/ui/button'
+import { BulkActions } from './BulkActions'
 import type { CellOverride } from './Cell'
 import { KanbanBoard } from './KanbanBoard'
 import { ListTable, ListTableHeader } from './ListTable'
 import { useListView, type ListFilter } from './useListView'
+import { useStatuses } from './useLookups'
 import { useViewMutations } from './useViews'
+import { ViewControls } from './ViewControls'
 import type { ListSearch } from '@/router'
 
 /** A stable empty array: a fresh `[]` per render would change the query key every time. */
 const EMPTY_FILTERS: ListFilter[] = []
-import { useStatuses } from './useLookups'
-import { ViewControls } from './ViewControls'
 
 /**
  * A whole list screen: header, toolbar, table or kanban, load-more.
@@ -155,6 +156,12 @@ export function ListView({
           <Button variant="ghost" size="sm" onClick={() => setSelection({})}>
             Clear
           </Button>
+          {/* `getRowId` is the document name, so the selection keys *are* the ids. */}
+          <BulkActions
+            doctype={doctype}
+            selected={Object.keys(selection)}
+            onDone={() => setSelection({})}
+          />
         </div>
       ) : null}
 
