@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/primitives'
+import { toLocalInput } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { LinkCombobox } from './LinkCombobox'
 import type { PanelField, SelectChoice } from './types'
@@ -99,24 +100,6 @@ export function FieldInput({
         />
       )
   }
-}
-
-/**
- * A stored UTC timestamp as the local wall-clock value `<input type="datetime-local">`
- * expects.
- *
- * **Slicing the ISO string would have been wrong**, and quietly: the API stores and
- * returns UTC (`2026-09-01T14:30:00Z`), while `datetime-local` has no timezone at all. A
- * `.slice(0, 16)` shows 14:30 to a reader in Berlin whose deadline is really 16:30, and
- * saving it back writes their local 14:30 as 14:30 UTC. It round-trips consistently and
- * is off by the offset for everyone outside UTC.
- */
-function toLocalInput(value: unknown): string {
-  if (!value) return ''
-  const date = new Date(String(value))
-  if (Number.isNaN(date.getTime())) return ''
-  const offsetMs = date.getTimezoneOffset() * 60_000
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16)
 }
 
 /** The shared text-ish input: draft locally, commit on blur or Enter. */

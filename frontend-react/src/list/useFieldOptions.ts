@@ -22,7 +22,7 @@ const STALE = { staleTime: Infinity }
  * warns about duplicate keys and may drop one. First occurrence wins, which keeps the
  * server's ordering.
  */
-function byFieldname<T extends { fieldname: string }>(rows: T[] | undefined): T[] {
+export function byFieldname<T extends { fieldname: string }>(rows: T[] | undefined): T[] {
   const seen = new Set<string>()
   return (rows ?? []).filter((row) =>
     seen.has(row.fieldname) ? false : (seen.add(row.fieldname), true),

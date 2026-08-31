@@ -348,12 +348,17 @@ await step('the activity timeline renders', async () => {
   // "at least one entry" was really asserting "row one is old", which is not a fact about
   // the product. That entries appear when there is data is proved by the comment step,
   // which creates the data it then looks for.
+  // Wait for the feed to settle first. `activitiesPending` follows `isFetching`, so the
+  // timeline shows "Loading activity…" through any refetch — asserting straight after the
+  // panel appears was asserting against a spinner.
+  await page.waitForFunction(
+    () =>
+      document.querySelectorAll('ol li').length > 0 ||
+      /Nothing has happened here yet/.test(document.body.innerText),
+    { timeout: 15000 },
+  )
   const entries = await page.$$eval('ol li', (ls) => ls.length)
-  const body = await text()
   console.log(`        ${entries} activity entries`)
-  if (entries === 0 && !/Nothing has happened here yet/.test(body)) {
-    throw new Error('the timeline rendered neither entries nor its empty state')
-  }
 })
 
 await step('switching a tab shows that tab', async () => {

@@ -259,7 +259,7 @@ export function useListView({
  * Incomplete rows are dropped rather than sent: `{"status": ["like", ""]}` matches
  * everything, so a half-typed filter would silently look like no filter at all.
  */
-function toFilterDict(filters: ListFilter[]): Filters {
+export function toFilterDict(filters: ListFilter[]): Filters {
   const out: Record<string, unknown> = {}
   for (const filter of filters) {
     if (!filter.fieldname || filter.value === '') continue
@@ -280,7 +280,7 @@ function toFilterDict(filters: ListFilter[]): Filters {
  * value does not search for "contains foo", it searches for exactly "foo", and a
  * search box that looks like it works returns nothing.
  */
-function likeWrap(operator: string, value: string): string {
+export function likeWrap(operator: string, value: string): string {
   if (!operator.includes('like') || value.includes('%')) return value
   return `%${value}%`
 }

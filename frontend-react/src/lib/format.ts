@@ -40,6 +40,28 @@ export function timeAgo(value: unknown): string {
   return RELATIVE.format(Math.round(elapsed / 1000), 'second')
 }
 
+/**
+ * A stored UTC timestamp as the local wall-clock value `<input type="datetime-local">`
+ * expects.
+ *
+ * **Slicing the ISO string would have been wrong**, and quietly: the API stores and
+ * returns UTC (`2026-09-01T14:30:00Z`), while `datetime-local` has no timezone at all. A
+ * `.slice(0, 16)` shows 14:30 to a reader in Berlin whose deadline is really 16:30, and
+ * saving it back writes their local 14:30 as 14:30 UTC. It round-trips consistently and is
+ * off by the offset for everyone outside UTC.
+ *
+ * Lives here rather than in `FieldInput.tsx` because it is a date utility like the two
+ * above it, and because a pure function in a component file is a pure function nobody
+ * tests.
+ */
+export function toLocalInput(value: unknown): string {
+  if (!value) return ''
+  const date = new Date(String(value))
+  if (Number.isNaN(date.getTime())) return ''
+  const offsetMs = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16)
+}
+
 export function formatCurrency(value: unknown, currency = 'USD'): string {
   const amount = Number(value)
   if (value === null || value === undefined || value === '' || Number.isNaN(amount)) {
