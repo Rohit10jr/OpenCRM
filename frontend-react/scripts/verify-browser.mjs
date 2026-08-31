@@ -224,6 +224,37 @@ await step('the record shows its side panel fields', async () => {
   await shot(page, '09-deal-record')
 })
 
+await step('a Link field searches the server and saves', async () => {
+  // Organization is a Link to CRM Organization; the picker must find one by typing.
+  const [trigger] = await page.$$(
+    'xpath/.//aside//label[normalize-space()="Organization"]/following::button[1]',
+  )
+  await trigger.click()
+  await page.waitForSelector('[data-radix-popper-content-wrapper] input', { timeout: 5000 })
+  await page.type('[data-radix-popper-content-wrapper] input', 'Umb')
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[data-radix-popper-content-wrapper] li button')].some(
+        (b) => /Umbrella/.test(b.innerText),
+      ),
+    { timeout: 10000 },
+  )
+  const [match] = await page.$$(
+    'xpath/.//div[@data-radix-popper-content-wrapper]//li/button[contains(., "Umbrella")]',
+  )
+  const chosen = await match.evaluate((el) => el.innerText.trim())
+  await match.click()
+
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('aside label', { timeout: 15000 })
+  const body = await text()
+  if (!body.includes('Umbrella')) {
+    throw new Error(`"${chosen}" did not survive a reload`)
+  }
+  console.log(`        picked ${chosen} by search, survived a reload`)
+  await shot(page, '19-link-combobox')
+})
+
 await step('the activity timeline renders entries', async () => {
   const entries = await page.$$eval('ol li', (ls) => ls.length)
   console.log(`        ${entries} activity entries`)

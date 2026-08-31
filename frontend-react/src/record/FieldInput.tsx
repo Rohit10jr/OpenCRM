@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useDocList } from '@/api/hooks'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/primitives'
 import { cn } from '@/lib/utils'
+import { LinkCombobox } from './LinkCombobox'
 import type { PanelField, SelectChoice } from './types'
 
 /**
@@ -207,16 +207,11 @@ function SelectInput({
 
 /**
  * A Link field's `options` names the target doctype, so the choices are that doctype's
- * documents.
+ * documents — searched server-side through `LinkCombobox`.
  *
- * A `<select>` of the 100 most recently modified rows, not a searchable combobox. That is
- * a real difference from the Vue `Link` component, which searches server-side and pages.
- *
- * **Concretely, what breaks:** with more than 100 rows in the target doctype, the 101st
- * cannot be chosen at all. The current value is prepended so it never *displays* wrong,
- * but a user cannot link a deal to an organization outside the recent hundred. Fine for
- * Territory with six rows; wrong for Organization at scale. It needs the combobox, and it
- * is in the run report as such rather than hidden behind an ellipsis here.
+ * This was a `<select>` of the 100 most recently modified rows until run 3. Past a hundred
+ * rows the 101st could not be selected at all, which is fine for Territory with six and
+ * wrong for Organization at scale.
  */
 function LinkInput({
   field,
@@ -231,22 +226,13 @@ function LinkInput({
 }) {
   // A Link's `options` is always the target doctype name; the array shape is Select's.
   const target = typeof field.options === 'string' ? field.options : ''
-  const unmodelled = UNMODELLED_LINK_TARGETS.has(target)
-  const options = useDocList<{ name: string }>(
-    target,
-    { fields: ['name'], limit_page_length: 100, order_by: 'modified desc' },
-    { enabled: Boolean(target) && !disabled && !unmodelled },
-  )
 
   /**
-   * A Link target this backend does not serve falls back to free text, which is what the
-   * value is anyway — an empty dropdown would be a field the user cannot fill.
-   *
-   * Both conditions, deliberately: the list below skips the request so the console stays
-   * clean, and `isError` catches anything the list has not heard of, so the list going
-   * stale degrades instead of breaking.
+   * A Link target this backend does not model falls back to free text, which is what the
+   * value is anyway — a picker that can never return a result is a field the user cannot
+   * fill.
    */
-  if (unmodelled || options.isError) {
+  if (!target || UNMODELLED_LINK_TARGETS.has(target)) {
     return (
       <TextLike
         field={field}
@@ -258,26 +244,14 @@ function LinkInput({
     )
   }
 
-  const current = String(value ?? '')
-  const names = options.data?.map((row) => row.name) ?? []
-  // The saved value may sit outside the first 100 rows; without this the select would
-  // silently show a different record's name.
-  const choices = current && !names.includes(current) ? [current, ...names] : names
-
   return (
-    <select
-      value={current}
+    <LinkCombobox
+      doctype={target}
+      value={String(value ?? '')}
+      placeholder={field.placeholder}
       disabled={disabled}
-      onChange={(e) => onCommit(e.target.value || null)}
-      className={selectClass}
-    >
-      <option value="">{field.placeholder ?? '—'}</option>
-      {choices.map((name) => (
-        <option key={name} value={name}>
-          {name}
-        </option>
-      ))}
-    </select>
+      onChange={onCommit}
+    />
   )
 }
 
