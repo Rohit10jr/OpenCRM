@@ -42,6 +42,12 @@ export function BulkActions({
     onError: (error) => {
       toast.error(errorMessage(error, 'Could not delete'))
       setConfirming(false)
+      // Refetch and clear on failure too. The batch is all-or-nothing server-side, but the
+      // *selection* can already be stale — a row filtered away or deleted elsewhere is
+      // still in it — and leaving that selection sitting there invites a second attempt at
+      // exactly the same doomed list.
+      queryClient.invalidateQueries({ queryKey: keys.list.doctype(doctype) })
+      onDone()
     },
   })
 

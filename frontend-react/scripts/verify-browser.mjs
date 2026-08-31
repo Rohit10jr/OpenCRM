@@ -659,40 +659,47 @@ await step('bulk delete removes the selected rows', async () => {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ organization_name: `${label} ${suffix}` }),
+          body: JSON.stringify({ organization_name: `Verify Bulk ${suffix}` }),
         })
       }
     },
     marker,
   )
 
+  // `Verify`, not this step's own marker: every deal the harness has ever made carries it,
+  // the Create step's included. Deleting all of them stops the run leaving residue —
+  // without that, harness deals (which have no email) accumulated until they filled page
+  // one and the filter steps could not find a row to filter on.
   const mine = encodeURIComponent(
-    JSON.stringify([
-      { fieldname: 'organization_name', operator: 'like', value: marker },
-    ]),
+    JSON.stringify([{ fieldname: 'organization_name', operator: 'like', value: 'Verify' }]),
   )
   await page.goto(`${BASE}/deals/view?filters=${mine}`, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('table tbody tr', { timeout: 15000 })
   const before = await totalRows()
-  if (before !== 2) throw new Error(`expected exactly the 2 deals just made, saw ${before}`)
+  if (before < 2) throw new Error(`expected at least the 2 deals just made, saw ${before}`)
 
-  // Select the first two. Re-queried between clicks: selecting one re-renders the table,
-  // which detaches any handle taken before it.
-  const selectRow = async (index) => {
-    const boxes = await page.$$('table tbody tr td:first-child button[role="checkbox"]')
-    await boxes[index].click()
-  }
-  await selectRow(0)
-  await selectRow(1)
-  await page.waitForFunction(() => /2 rows selected/.test(document.body.innerText), {
+  // Select-all from the header checkbox, which exercises that path too.
+  await page.click('table thead th:first-child button[role="checkbox"]')
+  await page.waitForFunction(() => /rows? selected/.test(document.body.innerText), {
     timeout: 5000,
   })
+  const selected = await page.$$eval('table tbody tr', (trs) => trs.length)
 
-  const [del] = await page.$$('xpath/.//button[normalize-space()="Delete"]')
-  await del.click()
+  // Clicked in-page rather than through a handle: the selection bar re-renders as rows are
+  // ticked, and a handle taken before that is detached by the time it is used.
+  const clickDelete = (withinDialog) =>
+    page.evaluate((inDialog) => {
+      const root = inDialog ? document.querySelector('[role="dialog"]') : document
+      const button = [...root.querySelectorAll('button')].find(
+        (b) => b.innerText.trim() === 'Delete',
+      )
+      if (!button) throw new Error('no Delete button')
+      button.click()
+    }, withinDialog)
+
+  await clickDelete(false)
   await page.waitForSelector('[role="dialog"]', { timeout: 5000 })
-  const [confirm] = await page.$$('xpath/.//div[@role="dialog"]//button[normalize-space()="Delete"]')
-  await confirm.click()
+  await clickDelete(true)
   // The selection bar disappears when the delete succeeds and the selection is cleared.
   await page.waitForFunction(() => !/rows selected/.test(document.body.innerText), {
     timeout: 20000,
@@ -700,8 +707,10 @@ await step('bulk delete removes the selected rows', async () => {
   await new Promise((r) => setTimeout(r, 1500))
 
   const after = await totalRows()
-  console.log(`        ${before} deals before, ${after} after`)
-  if (after !== before - 2) throw new Error(`expected ${before - 2} deals, got ${after}`)
+  console.log(`        ${before} harness deals, ${selected} selected, ${after} left`)
+  if (after !== before - selected) {
+    throw new Error(`expected ${before - selected} left, got ${after}`)
+  }
   await shot(page, '18-bulk-delete')
 })
 

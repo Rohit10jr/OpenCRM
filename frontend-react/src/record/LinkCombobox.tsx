@@ -62,38 +62,47 @@ export function LinkCombobox({
       open={open}
       onOpenChange={(next) => {
         setOpen(next)
-        if (!next) setSearch('')
+        if (!next) {
+          // Both, not just `search`: leaving the debounced term behind meant reopening
+          // within 250ms rendered results for the *previous* search under an empty input.
+          setSearch('')
+          setDebounced('')
+        }
       }}
     >
-      <PopoverTrigger asChild disabled={disabled}>
-        <button
-          type="button"
-          disabled={disabled}
-          className={cn(
-            'flex h-8 w-full items-center gap-1 rounded border border-transparent bg-transparent px-2 text-left text-base',
-            'hover:border-outline-gray-2 focus:border-outline-gray-2 focus:outline-none disabled:opacity-50',
-            value ? 'text-ink-gray-8' : 'text-ink-gray-4',
-          )}
-        >
-          <span className="flex-1 truncate">{value || placeholder || 'Select…'}</span>
-          {value ? (
-            <span
-              role="button"
-              aria-label="Clear"
-              className="shrink-0 text-ink-gray-4 hover:text-ink-gray-7"
-              onClick={(event) => {
-                // Clearing must not also open the picker.
-                event.preventDefault()
-                event.stopPropagation()
-                onChange(null)
-              }}
-            >
-              <X className="h-3.5 w-3.5" />
-            </span>
-          ) : null}
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-gray-4" />
-        </button>
-      </PopoverTrigger>
+      {/* Clear is a sibling of the trigger, not a child. A `role="button"` nested inside a
+          real `<button>` is invalid interactive content and is not reachable by keyboard
+          as its own control, however well the click handler behaves. */}
+      <div className="relative flex w-full items-center">
+        <PopoverTrigger asChild disabled={disabled}>
+          <button
+            type="button"
+            disabled={disabled}
+            className={cn(
+              'flex h-8 w-full items-center gap-1 rounded border border-transparent bg-transparent py-0 pl-2 text-left text-base',
+              value ? 'pr-12' : 'pr-7',
+              'hover:border-outline-gray-2 focus:border-outline-gray-2 focus:outline-none disabled:opacity-50',
+              value ? 'text-ink-gray-8' : 'text-ink-gray-4',
+            )}
+          >
+            <span className="flex-1 truncate">{value || placeholder || 'Select…'}</span>
+          </button>
+        </PopoverTrigger>
+
+        <span className="pointer-events-none absolute right-2 text-ink-gray-4">
+          <ChevronDown className="h-3.5 w-3.5" />
+        </span>
+        {value && !disabled ? (
+          <button
+            type="button"
+            aria-label="Clear"
+            onClick={() => onChange(null)}
+            className="absolute right-7 text-ink-gray-4 hover:text-ink-gray-7"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+      </div>
 
       <PopoverContent className="w-72 p-1.5">
         <Input

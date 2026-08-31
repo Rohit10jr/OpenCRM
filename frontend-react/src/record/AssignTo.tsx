@@ -41,6 +41,8 @@ export function AssignTo({
     queryClient.invalidateQueries({ queryKey: ['assignees', doctype, name] })
     // `_assign` is a column on the list, so the row's avatars are stale too.
     queryClient.invalidateQueries({ queryKey: ['list', doctype] })
+    // An assignment is a tracked field change, so it also lands in the record's timeline.
+    queryClient.invalidateQueries({ queryKey: ['activities', name] })
   }
 
   const assign = useMutation({
