@@ -251,8 +251,8 @@ await step('editing a side panel field saves to the server', async () => {
 })
 
 await step('a status change persists', async () => {
-  const before = await page.$eval('header button', (b) => b.innerText)
-  await page.click('header button')
+  const before = await page.$eval('header button[title="Status"]', (b) => b.innerText)
+  await page.click('header button[title="Status"]')
   await page.waitForSelector('[role="menuitem"]', { timeout: 5000 })
   const items = await page.$$('[role="menuitem"]')
   const labels = await Promise.all(items.map((i) => i.evaluate((e) => e.innerText)))
@@ -261,8 +261,8 @@ await step('a status change persists', async () => {
   await items[target].click()
   await new Promise((r) => setTimeout(r, 2500))
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await page.waitForSelector('header button', { timeout: 15000 })
-  const after = await page.$eval('header button', (b) => b.innerText)
+  await page.waitForSelector('header button[title="Status"]', { timeout: 15000 })
+  const after = await page.$eval('header button[title="Status"]', (b) => b.innerText)
   if (after.trim() === before.trim()) throw new Error(`status stayed "${before}"`)
   console.log(`        ${before.trim()} -> ${after.trim()}`)
 })
@@ -305,12 +305,57 @@ await step('a lead record opens with its status and activity', async () => {
   })
   await page.waitForSelector('aside label', { timeout: 15000 })
   const tabs = await page.$$eval('[role="tab"]', (ts) => ts.map((t) => t.innerText))
-  const status = await page.$eval('header button', (b) => b.innerText.trim())
+  const status = await page.$eval('header button[title="Status"]', (b) => b.innerText.trim())
   console.log(`        status ${JSON.stringify(status)}, tabs: ${tabs.join(', ')}`)
   if (!tabs.some((t) => t.startsWith('Activity'))) {
     throw new Error('a lead should have an activity feed')
   }
   await shot(page, '15-lead-record')
+})
+
+await step('assigning a user persists, and unassigning removes them', async () => {
+  await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table tbody tr', { timeout: 15000 })
+  await page.click('table tbody tr td:nth-child(2)')
+  await page.waitForFunction(() => /^\/deals\/CRM-DEAL/.test(location.pathname), {
+    timeout: 15000,
+  })
+  await page.waitForSelector('aside label', { timeout: 15000 })
+
+  const openPicker = async () => {
+    const [button] = await page.$$('header button[title="Assigned to"]')
+    await button.click()
+    await page.waitForSelector('[role="menu"] button', { timeout: 5000 })
+  }
+
+  await openPicker()
+  const [firstUser] = await page.$$('[role="menu"] button')
+  const who = await firstUser.evaluate((el) => el.innerText.trim())
+  await firstUser.click()
+  await new Promise((r) => setTimeout(r, 2000))
+  await page.keyboard.press('Escape')
+
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('header button[title="Assigned to"]', { timeout: 15000 })
+  const assignedAfter = await page.$$eval(
+    'header button[title="Assigned to"] .rounded-full',
+    (els) => els.length,
+  )
+  if (assignedAfter === 0) throw new Error(`assigning ${who} did not survive a reload`)
+  console.log(`        assigned ${who}, ${assignedAfter} avatar(s) after reload`)
+
+  // Unassign, so the run is repeatable and the cancel path is exercised too.
+  await openPicker()
+  const [sameUser] = await page.$$('[role="menu"] button')
+  await sameUser.click()
+  await new Promise((r) => setTimeout(r, 2000))
+  await page.keyboard.press('Escape')
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('header button[title="Assigned to"]', { timeout: 15000 })
+  const body = await text()
+  if (!/Assign/.test(body)) throw new Error('unassigning did not survive a reload')
+  console.log('        unassigned, back to "Assign"')
+  await shot(page, '17-assign')
 })
 
 await step('a comment posts and appears in the timeline', async () => {

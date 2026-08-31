@@ -10,12 +10,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Avatar, Tooltip } from '@/components/ui/primitives'
 import { statusDotClass } from '@/list/statusColor'
-import { useStatuses, useUsers } from '@/list/useLookups'
+import { useStatuses } from '@/list/useLookups'
 import { cn } from '@/lib/utils'
 import { useDocSubscription } from '@/realtime/useSocket'
 import { ActivityTimeline, RecordList } from './ActivityTimeline'
+import { AssignTo } from './AssignTo'
 import { CommentBox } from './CommentBox'
 import { SidePanel } from './SidePanel'
 import { useRecord } from './useRecord'
@@ -58,15 +58,16 @@ export function RecordScreen({
   // deal is the normal case this exists for.
   useDocSubscription(doctype, name)
   const { statuses, getStatus } = useStatuses(statusDoctype)
-  const { getUser } = useUsers()
   const [tab, setTab] = useState('activity')
 
   const doc = record.doc as Record<string, unknown> | undefined
 
-  // Only deals and leads have an activity feed. A contact showing five empty tabs would
-  // read as a record with no history rather than a doctype the endpoint does not serve.
+  // Comments arrive inside the activity feed rather than from their own endpoint
+  // (`activities.py:259`), so the Comments tab is a filter over what is already fetched.
   const comments = record.activities.filter((entry) => entry.activity_type === 'comment')
 
+  // Only deals and leads have an activity feed. A contact showing six empty tabs would
+  // read as a record with no history rather than a doctype the endpoint does not serve.
   const tabs: Tab[] = record.hasActivities
     ? [
         { id: 'activity', label: 'Activity' },
@@ -169,12 +170,17 @@ export function RecordScreen({
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
-          <Assignees names={record.assignees} getUser={getUser} />
+          <AssignTo doctype={doctype} name={name} assignees={record.assignees} />
 
           {statusDoctype && status ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="md" loading={record.updateField.isPending}>
+                <Button
+                  variant="outline"
+                  size="md"
+                  title="Status"
+                  loading={record.updateField.isPending}
+                >
                   <span className={statusDotClass(getStatus(status)?.color)} />
                   {status}
                   <ChevronDown className="h-4 w-4" />
@@ -251,30 +257,6 @@ export function RecordScreen({
           />
         </aside>
       </div>
-    </div>
-  )
-}
-
-function Assignees({
-  names,
-  getUser,
-}: {
-  names: string[]
-  getUser: ReturnType<typeof useUsers>['getUser']
-}) {
-  if (!names.length) return null
-  return (
-    <div className="flex -space-x-1">
-      {names.map((id) => {
-        const user = getUser(id)
-        return (
-          <Tooltip key={id} text={user.full_name}>
-            <span>
-              <Avatar image={user.user_image} label={user.full_name} size="md" />
-            </span>
-          </Tooltip>
-        )
-      })}
     </div>
   )
 }

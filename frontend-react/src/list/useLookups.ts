@@ -55,7 +55,8 @@ export function useUsers() {
   const getUser = (name?: string | null): CrmUser =>
     (name && byName.get(name)) || { name: name ?? '', full_name: name ?? '' }
 
-  return { getUser, isPending: query.isPending }
+  // The list itself, for anything that offers a choice of user rather than resolving one.
+  return { users: crmUsers, getUser, isPending: query.isPending }
 }
 
 /**
