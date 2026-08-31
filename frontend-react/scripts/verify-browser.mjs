@@ -466,6 +466,34 @@ await step('assigning a user persists, and unassigning removes them', async () =
     await page.waitForSelector('[role="menu"] button', { timeout: 5000 })
   }
 
+  /**
+   * Toggle one *named* person, never "the first button".
+   *
+   * With nine people in the list, position means nothing: after a reload the first entry is
+   * somebody else, so clicking it assigned a second user instead of unassigning the first.
+   * The search box exists precisely so a name can be addressed directly.
+   */
+  const WHO = 'Grace'
+  const togglePerson = async () => {
+    await openPicker()
+    const search = await page.$('[role="menu"] input')
+    if (search) {
+      await search.type(WHO)
+      await page.waitForFunction(
+        (name) => {
+          const buttons = [...document.querySelectorAll('[role="menu"] button')]
+          // `every` alone is true for an empty list, which let this proceed to click
+          // nothing. At least one match, and all of them matching.
+          return buttons.length > 0 && buttons.every((b) => b.innerText.includes(name))
+        },
+        { timeout: 5000 },
+        WHO,
+      )
+    }
+    const [match] = await page.$$('[role="menu"] button')
+    await match.click()
+  }
+
   // Wait for the *effect*, never a fixed sleep: the trigger reads "Assign" with nobody on
   // it and shows avatars otherwise, so that text is the signal the write landed. Sleeping
   // instead made this step flaky, and a flaky assertion is worse than no assertion.
@@ -481,9 +509,7 @@ await step('assigning a user persists, and unassigning removes them', async () =
    * state is a step that reports on its own history.
    */
   if (!(await triggerText()).includes('Assign')) {
-    await openPicker()
-    const [assignedUser] = await page.$$('[role="menu"] button')
-    await assignedUser.click()
+    await togglePerson()
     await page.waitForFunction(
       () =>
         document
@@ -494,10 +520,8 @@ await step('assigning a user persists, and unassigning removes them', async () =
     await page.keyboard.press('Escape')
   }
 
-  await openPicker()
-  const [firstUser] = await page.$$('[role="menu"] button')
-  const who = await firstUser.evaluate((el) => el.innerText.trim().split('\n')[0])
-  await firstUser.click()
+  const who = WHO
+  await togglePerson()
   await page.waitForFunction(
     () =>
       !document
@@ -516,9 +540,7 @@ await step('assigning a user persists, and unassigning removes them', async () =
   console.log(`        assigned ${who}, still assigned after a reload`)
 
   // Unassign, so the run is repeatable and the cancel path is exercised too.
-  await openPicker()
-  const [sameUser] = await page.$$('[role="menu"] button')
-  await sameUser.click()
+  await togglePerson()
   await page.waitForFunction(
     () =>
       document

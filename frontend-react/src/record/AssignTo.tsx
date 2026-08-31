@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Check, Plus } from 'lucide-react'
 import { toast } from 'sonner'
@@ -9,6 +10,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
 import { Avatar, Tooltip } from '@/components/ui/primitives'
 import { useUsers } from '@/list/useLookups'
 import { cn } from '@/lib/utils'
@@ -36,6 +38,7 @@ export function AssignTo({
 }) {
   const { users, getUser } = useUsers()
   const queryClient = useQueryClient()
+  const [search, setSearch] = useState('')
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['assignees', doctype, name] })
@@ -63,6 +66,13 @@ export function AssignTo({
 
   const assigned = new Set(assignees)
   const busy = assign.isPending || unassign.isPending
+
+  const needle = search.trim().toLowerCase()
+  const matching = needle
+    ? users.filter((user) =>
+        `${user.full_name ?? ''} ${user.name}`.toLowerCase().includes(needle),
+      )
+    : users
 
   return (
     <DropdownMenu>
@@ -92,7 +102,29 @@ export function AssignTo({
 
       <DropdownMenuContent align="end" className="max-h-80 w-64 overflow-y-auto">
         <DropdownMenuLabel>Assign to</DropdownMenuLabel>
-        {users.map((user) => {
+
+        {/*
+          Filtered in the browser, not through `search_link` the way the Link picker is.
+          `get_users` returns the CRM users — tens, not thousands — and they are already
+          fetched and cached for every avatar on screen. Searching the server for a list we
+          are holding would be a round trip to answer a question we can answer.
+
+          `onKeyDown` stops Radix's typeahead stealing the keystrokes: a menu treats letters
+          as jump-to-item, which would move focus off the input mid-word.
+        */}
+        {users.length > 8 ? (
+          <div className="px-1.5 pb-1.5">
+            <Input
+              autoFocus
+              value={search}
+              placeholder="Search people…"
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => event.stopPropagation()}
+            />
+          </div>
+        ) : null}
+
+        {matching.map((user) => {
           const isAssigned = assigned.has(user.name)
           return (
             <button
@@ -114,8 +146,10 @@ export function AssignTo({
             </button>
           )
         })}
-        {users.length === 0 ? (
-          <p className="px-2 py-1.5 text-sm text-ink-gray-4">No CRM users to assign to.</p>
+        {matching.length === 0 ? (
+          <p className="px-2 py-1.5 text-sm text-ink-gray-4">
+            {users.length ? 'Nobody matches that.' : 'No CRM users to assign to.'}
+          </p>
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
