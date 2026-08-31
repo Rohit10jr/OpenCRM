@@ -128,10 +128,10 @@ export function ListView({
       </header>
 
       <ViewControls
+        doctype={doctype}
         basePath={basePath}
         allowedViews={allowedViews}
         viewType={list.viewType}
-        fields={list.fields}
         allColumns={list.allColumns}
         hiddenColumns={list.hiddenColumns}
         onToggleColumn={list.toggleColumn}

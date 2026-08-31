@@ -10,7 +10,7 @@ import {
   RefreshCw,
   Trash2,
 } from 'lucide-react'
-import type { DocField, ListColumn, SavedView, ViewType } from '@/api/types'
+import type { ListColumn, SavedView, ViewType } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -33,22 +33,27 @@ import {
 } from '@/components/ui/primitives'
 import { cn } from '@/lib/utils'
 import { FilterEditor } from './FilterEditor'
+import { useFilterableFields, useSortOptions } from './useFieldOptions'
 import type { ListFilter } from './useListView'
 
 /**
  * The list toolbar: view switch, saved views, filters, sort, columns, refresh.
  *
  * This is the visible half of `ViewControls.vue`. It renders nothing doctype-specific —
- * every option comes from the `fields` and `columns` the server sent — so the seven pages
- * that share it get the same controls without any of them configuring it.
+ * every option comes from the server, keyed on the doctype — so the seven pages that share
+ * it get the same controls without any of them configuring it.
+ *
+ * Sort and filter options come from `sort_options` and `get_filterable_fields`, the
+ * curated subsets, rather than from `get_data`'s `fields`, which is every field on the
+ * doctype. Columns still come from the payload, because the column set *is* the payload's.
  *
  * `FilterEditor` moved to its own file when this one reached 340 lines doing three jobs.
  */
 export function ViewControls({
+  doctype,
   basePath,
   allowedViews,
   viewType,
-  fields,
   allColumns,
   hiddenColumns,
   onToggleColumn,
@@ -65,11 +70,11 @@ export function ViewControls({
   isFetching,
   onRefresh,
 }: {
+  doctype: string
   /** e.g. `/deals/view` — the view type is appended to it. */
   basePath: string
   allowedViews: ViewType[]
   viewType: ViewType
-  fields: DocField[]
   allColumns: ListColumn[]
   hiddenColumns: string[]
   onToggleColumn: (key: string) => void
@@ -87,6 +92,9 @@ export function ViewControls({
   onRefresh: () => void
 }) {
   const [sortField, sortDirection] = orderBy.split(' ')
+  // The curated subsets, not `get_data`'s `fields` — see `useFieldOptions.ts`.
+  const sortOptions = useSortOptions(doctype)
+  const filterableFields = useFilterableFields(doctype)
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-outline-gray-1 px-4 py-2">
@@ -120,7 +128,7 @@ export function ViewControls({
           </PopoverTrigger>
           <PopoverContent className="w-[28rem]">
             <FilterEditor
-              fields={fields}
+              fields={filterableFields}
               filters={filters}
               onChange={onFiltersChange}
             />
@@ -143,7 +151,7 @@ export function ViewControls({
                 onOrderByChange(`${fieldname} ${sortDirection || 'desc'}`)
               }
             >
-              {fields.map((field) => (
+              {sortOptions.map((field) => (
                 <DropdownMenuRadioItem key={field.fieldname} value={field.fieldname}>
                   {field.label}
                 </DropdownMenuRadioItem>

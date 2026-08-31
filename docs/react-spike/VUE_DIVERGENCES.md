@@ -78,15 +78,19 @@ Login on the next navigation. React redirects to `/login` from the interceptor.
 equivalent always-mounted guard here. Recorded because the *mechanism* differs, and anyone
 tracing "why did I end up at Login" should find this rather than reverse-engineer it.
 
-## 5. Kanban is read-only
+## 5. Kanban cards move between columns but cannot be reordered within one
 
-**Where:** `frontend-react/src/list/` vs `frontend/src/components/Kanban/KanbanView.vue`
+**Where:** `frontend-react/src/list/KanbanBoard.tsx` vs `frontend/src/components/Kanban/KanbanView.vue`
 
-The Vue board reorders cards by drag and persists the order through `CRM View Settings`.
-React renders the board and does not.
+Run 3 added cross-column drag: dropping a card writes the board's `column_field` on that
+record, which is what a user means by moving a card.
 
-**Us:** *Gap.* It needs the same write path as saved views (entry 1), which is why the two are
-adjacent in run 2's order. An inert drag handle would have been worse than none.
+**Still a gap:** the Vue board also *reorders* cards inside a column and persists that order
+into `CRM View Settings`, which the server honours through `get_records_based_on_order`
+(`doc.py:531`). React does not.
+
+**Us:** *Partial.* The useful half is done and stands alone; the ordering half is cosmetic
+until someone asks for it.
 
 ## 6. Currency is formatted client-side from the row's own currency field
 
@@ -129,15 +133,30 @@ context, the recipient list, the activity feed it writes into — already exists
 
 **To unblock:** a multipart upload route plus a `File` doctype write path.
 
-## 9. Sort and filter options come from `fields`, not the dedicated endpoints
+## 9. ~~Sort and filter options come from `fields`~~ — CLOSED in run 3
 
-**Where:** `frontend-react/src/list/ViewControls.tsx` vs `crm.api.doc.sort_options`,
-`get_filterable_fields`, `get_quick_filters`, `get_group_by_fields`
+`ViewControls` calls `crm.api.doc.sort_options` and `crm.api.doc.get_filterable_fields`
+now, which are the curated subsets Vue has always used. Columns still come from the
+payload, because the column set *is* the payload's.
 
-The React toolbar builds its sort and filter menus from the `fields` array `get_data`
-already returns. Vue calls four dedicated endpoints, all of which this backend serves.
+**One thing found doing it, still true:** both endpoints can return the same `fieldname`
+twice — `name` appears in the standard fields and again in the doctype's own, and the
+server does not merge them. `useFieldOptions.ts` dedupes, first occurrence winning.
+Without it React warns about duplicate keys and may drop one.
 
-**Us:** *Diverge, and it is a real difference.* `fields` is every field on the doctype;
-`get_filterable_fields` is the subset the CRM means you to filter on. So the React menus are
-longer than Vue's and offer fields that filter badly. It costs one request per menu to fix
-and is worth doing — it is not a blocker, just unfinished.
+**Still open from that entry:** `get_quick_filters` and `get_group_by_fields` are served and
+unused. Quick filters are a row of one-click filters above the list that React has no
+equivalent of at all; group_by uses a hardcoded `owner` rather than offering the fields the
+endpoint returns.
+
+## 10. Comments are plain text; the Vue client writes HTML
+
+**Where:** `frontend-react/src/record/CommentBox.tsx`, `ActivityTimeline.tsx`
+
+`add_comment` stores `content` verbatim. Vue posts HTML from a TipTap editor; React posts
+plain text from a textarea, and **renders every comment as text**, never as HTML.
+
+**Us:** *Diverge, deliberately, and do not "fix" the rendering half.* A comment written in
+the Vue client is HTML authored by another user, so `dangerouslySetInnerHTML` here would be
+stored XSS with a Vue-shaped delivery mechanism. The visible cost is that a Vue-written
+comment shows its tags. The fix is a sanitiser plus the editor, not an unescape.
