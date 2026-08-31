@@ -31,20 +31,15 @@ it can be read on its own without reading every report that preceded it.
 
 ---
 
-## 1. A named saved view renders with default parameters
+## 1. ~~A named saved view renders with default parameters~~ — CLOSED in run 2
 
-**Where:** `frontend-react/src/list/` vs `frontend/src/components/ViewControls.vue:459`
+Both halves landed: `frontend-react/src/list/useViews.ts` resolves the view client-side and
+sends its stored parameters, and the picker creates and deletes `CRM View Settings` rows.
+Asserted in the harness by loading a saved view's URL cold, with no `filters=` in it, and
+getting the filtered rows back.
 
-**Vue** resolves the selected view in the browser and sends its `filters`, `order_by`,
-`columns`, `rows` and `kanban_columns` with the request. **React** sends only
-`custom_view_name`, which the backend uses solely for a default-columns flag
-(`frappe_core/api/doc.py:343`).
-
-So selecting a saved view gives you the *default* list, not the saved one.
-
-**Us:** *Gap, not a decision.* This is the front half of the saved-view feature; the write
-path against `CRM View Settings` is missing too. It is **the single largest known gap** in
-the conversion and is item 3–4 in run 2's order. Remove this entry when both halves land.
+Kept rather than deleted because the entry above it explains what "closed" means, and a
+reader who remembers this gap needs to find that it is gone.
 
 ## 2. A revisited filter state can serve from cache
 
@@ -103,3 +98,46 @@ Frappe formats currency server-side with per-user precision settings. React read
 **Us:** *Diverge, knowingly incomplete.* Better than the hardcoded USD it replaced, and wrong
 for any user whose precision settings differ from the default. Fix it when a real user has
 non-default precision, not before.
+
+## 7. There is no email composer, because the backend does not serve the send
+
+**Where:** `frontend/src/components/CommunicationArea.vue:216` — `call('frappe.core.doctype.communication.email.make', …)`
+
+That dotted path is **not in this backend's whitelist**. Checked against
+`frappe_core.whitelist.all_methods()` in run 3, not inferred: the registry has
+`crm.api.settings.create_email_account` and `crm.api.contact.search_emails`, and nothing that
+sends a message.
+
+**Us:** *Blocked, not deferred.* A composer could be built and would 404 on the Send button,
+which is worse than its absence. Run 2's report made "build the email composer" the condition
+on run 3; that condition **cannot be met without a backend change**, and `backend/` is fixed
+in this worktree.
+
+**To unblock:** whitelist a send endpoint. Everything else the composer needs — the record
+context, the recipient list, the activity feed it writes into — already exists.
+
+## 8. Attachments can be listed and deleted, but not uploaded
+
+**Where:** `frontend/src/components/Activities/AttachmentArea.vue`, `composables/useAttachments.js`
+
+`crm.api.delete_attachment` and `crm.api.get_file_uploader_defaults` are whitelisted.
+**Frappe's `upload_file` is not**, and `config/urls.py` routes only `/api/resource/*` and
+`/api/method/*` — there is no upload route at all.
+
+**Us:** *Blocked, same shape as entry 7.* The Attachments tab lists what
+`get_activities` returns and offers no way to add one.
+
+**To unblock:** a multipart upload route plus a `File` doctype write path.
+
+## 9. Sort and filter options come from `fields`, not the dedicated endpoints
+
+**Where:** `frontend-react/src/list/ViewControls.tsx` vs `crm.api.doc.sort_options`,
+`get_filterable_fields`, `get_quick_filters`, `get_group_by_fields`
+
+The React toolbar builds its sort and filter menus from the `fields` array `get_data`
+already returns. Vue calls four dedicated endpoints, all of which this backend serves.
+
+**Us:** *Diverge, and it is a real difference.* `fields` is every field on the doctype;
+`get_filterable_fields` is the subset the CRM means you to filter on. So the React menus are
+longer than Vue's and offer fields that filter badly. It costs one request per menu to fix
+and is worth doing — it is not a blocker, just unfinished.

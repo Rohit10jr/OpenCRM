@@ -358,7 +358,17 @@ console.log('creating a record')
 await step('the Create modal makes a deal and opens it', async () => {
   await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('table tbody tr', { timeout: 15000 })
-  const before = await page.$$eval('table tbody tr', (trs) => trs.length)
+  // The toolbar's total, not the row count: the table is capped at `page_length` and this
+  // assertion used to compare rendered rows, which stopped being true the moment repeated
+  // runs pushed the list past 20.
+  const totalRows = () =>
+    page.evaluate(() => {
+      const span = [...document.querySelectorAll('span')].find((el) =>
+        /^\d+ rows?$/.test(el.innerText.trim()),
+      )
+      return span ? Number(span.innerText.trim().split(' ')[0]) : NaN
+    })
+  const before = await totalRows()
 
   const [createButton] = await page.$$('xpath/.//button[contains(., "Create")]')
   await createButton.click()
@@ -384,9 +394,9 @@ await step('the Create modal makes a deal and opens it', async () => {
   await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('table tbody tr', { timeout: 15000 })
   await new Promise((r) => setTimeout(r, 1000))
-  const after = await page.$$eval('table tbody tr', (trs) => trs.length)
-  console.log(`        ${before} rows before, ${after} after`)
-  if (after !== before + 1) throw new Error(`expected ${before + 1} rows, got ${after}`)
+  const after = await totalRows()
+  console.log(`        ${before} deals before, ${after} after`)
+  if (after !== before + 1) throw new Error(`expected ${before + 1} deals, got ${after}`)
   await shot(page, '12-created')
 })
 
