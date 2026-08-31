@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import type { RowSelectionState } from '@tanstack/react-table'
 import { AlertCircle, Loader2, type LucideIcon } from 'lucide-react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { errorMessage } from '@/api/client'
+import { call, errorMessage } from '@/api/client'
+import { keys } from '@/api/queryKeys'
 import type { DocRow, Filters, ViewType } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { BulkActions } from './BulkActions'
@@ -90,7 +92,27 @@ export function ListView({
   })
   const { getStatus } = useStatuses(statusDoctype)
   const viewMutations = useViewMutations(doctype)
+  const queryClient = useQueryClient()
   const [selection, setSelection] = useState<RowSelectionState>({})
+
+  /**
+   * Moving a kanban card writes the board's `column_field` on that record — one
+   * `set_value`, the same call the record screen's status dropdown makes. The board's
+   * grouping *is* that field, so there is nothing else to persist for a cross-column move.
+   */
+  const moveCard = useMutation({
+    mutationFn: ({ name, toColumn }: { name: string; toColumn: string }) =>
+      call('frappe.client.set_value', {
+        doctype,
+        name,
+        fieldname: list.payload?.column_field ?? 'status',
+        value: toColumn,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: keys.list.doctype(doctype) })
+      queryClient.invalidateQueries({ queryKey: keys.doc.all })
+    },
+  })
 
   const getStatusColor = statusDoctype
     ? (value: string) => getStatus(value)?.color
@@ -175,7 +197,14 @@ export function ListView({
             groups={list.kanbanGroups}
             fields={list.fields}
             titleField={list.payload?.title_field || kanbanTitleField}
+            columnField={list.payload?.column_field ?? undefined}
             onCardClick={onRowClick}
+            onCardMove={(name, toColumn) =>
+              moveCard.mutate({ name, toColumn }, {
+                onError: (error) =>
+                  toast.error(errorMessage(error, 'Could not move the card')),
+              })
+            }
             getStatusColor={getStatusColor}
           />
         ) : list.rows.length === 0 ? (

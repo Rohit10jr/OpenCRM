@@ -11,32 +11,63 @@ import { statusDotClass } from './statusColor'
  * single most surprising thing about `get_data`, so the board takes `KanbanGroup[]`
  * explicitly instead of pretending both modes look alike.
  *
- * Cards are read-only. Dragging a card between columns is a `CRM View Settings` write
- * plus a status change, and neither the settings write path nor the edit modal exists in
- * this conversion yet — an inert drag handle would be worse than none.
+ * **Dragging a card to another column changes the record's `column_field`** — the field
+ * the board groups on, `status` for deals and leads. That is one `set_value`, and it is
+ * what a user means by moving a card.
+ *
+ * *Re*ordering within a column is not built: it persists a card order into
+ * `CRM View Settings` and the server only honours it through `get_records_based_on_order`
+ * (`doc.py:531`). Cross-column is the useful half and it stands alone.
+ *
+ * Native HTML5 drag-and-drop rather than a library: a board with columns and cards is what
+ * the API was designed for, and dnd-kit would be a dependency for two event handlers.
  */
 export function KanbanBoard({
   groups,
   fields,
   titleField,
+  columnField,
   onCardClick,
+  onCardMove,
   getStatusColor,
 }: {
   groups: KanbanGroup[]
   /** Field metadata, for card labels. */
   fields: DocField[]
   titleField: string
+  /** The field the board groups on — what a drop writes to. */
+  columnField?: string
   onCardClick?: (row: DocRow) => void
+  onCardMove?: (name: string, toColumn: string) => void
   getStatusColor?: (value: string) => string | undefined
 }) {
   const labelOf = (fieldname: string) =>
     fields.find((f) => f.fieldname === fieldname)?.label ?? fieldname
+
+  const canDrag = Boolean(onCardMove && columnField)
 
   return (
     <div className="flex h-full gap-3 overflow-x-auto p-4">
       {groups.map(({ column, fields: cardFields, data }) => (
         <div
           key={column.name}
+          data-kanban-column={column.name}
+          // `preventDefault` on dragover is what makes an element a drop target at all —
+          // the one piece of the HTML5 API that reads as backwards.
+          onDragOver={canDrag ? (event) => event.preventDefault() : undefined}
+          onDrop={
+            canDrag
+              ? (event) => {
+                  event.preventDefault()
+                  const name = event.dataTransfer.getData('text/plain')
+                  // Dropping a card back where it started is not a change; writing it
+                  // anyway would bump `modified` and reorder the list for nothing.
+                  if (name && !data.some((row) => row.name === name)) {
+                    onCardMove?.(name, column.name)
+                  }
+                }
+              : undefined
+          }
           className="flex w-72 shrink-0 flex-col rounded-lg bg-surface-gray-1 p-2"
         >
           <div className="mb-2 flex items-center gap-2 px-1">
@@ -54,8 +85,14 @@ export function KanbanBoard({
               <button
                 key={row.name}
                 type="button"
+                draggable={canDrag}
+                onDragStart={
+                  canDrag
+                    ? (event) => event.dataTransfer.setData('text/plain', row.name)
+                    : undefined
+                }
                 onClick={() => onCardClick?.(row)}
-                className="rounded-lg border border-outline-gray-1 bg-surface-white p-3 text-left shadow-sm hover:border-outline-gray-2"
+                className="cursor-pointer rounded-lg border border-outline-gray-1 bg-surface-white p-3 text-left shadow-sm hover:border-outline-gray-2"
               >
                 <div className="truncate text-base font-medium text-ink-gray-8">
                   {String(row[titleField] ?? row.name)}

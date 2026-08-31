@@ -133,7 +133,29 @@ await step('sort by a different field refetches', async () => {
   await shot(page, '04-sorted')
 })
 
-await step('filter narrows the list', async () => {
+/**
+ * Filter the deals list on an email taken from the table itself.
+ *
+ * It used to hardcode a seeded value (`buyer1`). That coupled every filter assertion to a
+ * fixture the harness's own destructive steps could delete — and when they did, three
+ * steps failed far from the cause. Reading the value out of row one cannot go stale.
+ */
+async function filterDealsByFirstEmail() {
+  const emailColumn = await page.$$eval('table thead th', (ths) =>
+    ths.findIndex((th) => /email/i.test(th.innerText)),
+  )
+  if (emailColumn < 1) throw new Error('no Email column to filter on')
+
+  // The *first non-empty* email. Row one is the most recently modified, which is usually a
+  // deal this harness just created and which has no email — an empty filter value is
+  // dropped by `toFilterDict`, so the filter silently did nothing and the assertion
+  // reported "22 rows narrowed to 22" instead of anything useful.
+  const value = await page.$$eval(
+    `table tbody tr td:nth-child(${emailColumn + 1})`,
+    (tds) => tds.map((td) => td.innerText.trim()).find(Boolean) ?? '',
+  )
+  if (!value) throw new Error('no row on this page has an email to filter on')
+
   const [filterButton] = await page.$$('xpath/.//button[contains(., "Filter")]')
   await filterButton.click()
   const [addButton] = await page.$$('xpath/.//button[contains(., "Add filter")]')
@@ -141,14 +163,23 @@ await step('filter narrows the list', async () => {
   await page.waitForSelector('input[placeholder="Value"]', { timeout: 5000 })
   const [fieldSelect] = await page.$$('select')
   await fieldSelect.select('email')
-  await page.type('input[placeholder="Value"]', 'buyer1')
+  await page.type('input[placeholder="Value"]', value)
   await page.keyboard.press('Enter')
-  await new Promise((r) => setTimeout(r, 2000))
-  await shot(page, '05-filtered')
-  const rows = await page.$$eval('table tbody tr', (trs) => trs.length).catch(() => 0)
-  console.log(`        ${rows} rows after filtering email like buyer1`)
-  if (rows !== 1) throw new Error(`expected exactly 1 row, got ${rows}`)
+  await page.waitForFunction(() => location.search.includes('filters='), { timeout: 8000 })
   await page.keyboard.press('Escape')
+  await new Promise((r) => setTimeout(r, 1500))
+  return value
+}
+
+await step('filter narrows the list', async () => {
+  const before = await totalRows()
+  const value = await filterDealsByFirstEmail()
+  const after = await totalRows()
+  console.log(`        ${before} rows, ${after} after filtering email like ${value}`)
+  if (!(after >= 1 && after < before)) {
+    throw new Error(`expected the filter to narrow ${before} rows, got ${after}`)
+  }
+  await shot(page, '05-filtered')
 })
 
 await step('group_by view renders sections', async () => {
@@ -168,6 +199,62 @@ await step('kanban board renders columns', async () => {
     timeout: 20000,
   })
   await shot(page, '06-kanban')
+})
+
+await step('dragging a kanban card changes its status', async () => {
+  await page.goto(`${BASE}/deals/view/kanban`, { waitUntil: 'domcontentloaded' })
+  await page.waitForFunction(() => /Qualification/.test(document.body.innerText), {
+    timeout: 20000,
+  })
+
+  // Find a column that has a card, and a different column to drop it into.
+  const plan = await page.evaluate(() => {
+    const columns = [...document.querySelectorAll('[data-kanban-column]')]
+    const from = columns.find((c) => c.querySelectorAll('button[draggable="true"]').length)
+    if (!from) return null
+    const to = columns.find((c) => c !== from)
+    if (!to) return null
+    const card = from.querySelector('button[draggable="true"]')
+    return {
+      fromColumn: from.getAttribute('data-kanban-column'),
+      toColumn: to.getAttribute('data-kanban-column'),
+      cardText: card.innerText.split('\n')[0],
+    }
+  })
+  if (!plan) throw new Error('no draggable card on the board')
+
+  // HTML5 drag-and-drop is not synthesisable with mouse events, so the DataTransfer is
+  // built and the three events dispatched directly. This exercises the app's handlers —
+  // dragstart writes the id, drop reads it — which is the part worth asserting.
+  await page.evaluate(({ toColumn, cardText }) => {
+    const card = [...document.querySelectorAll('button[draggable="true"]')].find((b) =>
+      b.innerText.startsWith(cardText),
+    )
+    const target = document.querySelector(`[data-kanban-column="${toColumn}"]`)
+    const dataTransfer = new DataTransfer()
+    card.dispatchEvent(new DragEvent('dragstart', { dataTransfer, bubbles: true }))
+    target.dispatchEvent(new DragEvent('dragover', { dataTransfer, bubbles: true }))
+    target.dispatchEvent(new DragEvent('drop', { dataTransfer, bubbles: true }))
+  }, plan)
+
+  await new Promise((r) => setTimeout(r, 3000))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForFunction(() => /Qualification/.test(document.body.innerText), {
+    timeout: 20000,
+  })
+
+  const landed = await page.evaluate(
+    ({ toColumn, cardText }) => {
+      const target = document.querySelector(`[data-kanban-column="${toColumn}"]`)
+      return [...target.querySelectorAll('button')].some((b) =>
+        b.innerText.startsWith(cardText),
+      )
+    },
+    plan,
+  )
+  console.log(`        ${plan.cardText}: ${plan.fromColumn} -> ${plan.toColumn}`)
+  if (!landed) throw new Error(`the card is not in ${plan.toColumn} after a reload`)
+  await shot(page, '20-kanban-drag')
 })
 
 console.log('leads')
@@ -255,10 +342,18 @@ await step('a Link field searches the server and saves', async () => {
   await shot(page, '19-link-combobox')
 })
 
-await step('the activity timeline renders entries', async () => {
+await step('the activity timeline renders', async () => {
+  // Entries *or* the honest empty state. Which record row one is changes as the harness
+  // creates and deletes deals, and a freshly made one has nothing in its feed — asserting
+  // "at least one entry" was really asserting "row one is old", which is not a fact about
+  // the product. That entries appear when there is data is proved by the comment step,
+  // which creates the data it then looks for.
   const entries = await page.$$eval('ol li', (ls) => ls.length)
+  const body = await text()
   console.log(`        ${entries} activity entries`)
-  if (entries === 0) throw new Error('no activity entries')
+  if (entries === 0 && !/Nothing has happened here yet/.test(body)) {
+    throw new Error('the timeline rendered neither entries nor its empty state')
+  }
 })
 
 await step('switching a tab shows that tab', async () => {
@@ -316,18 +411,7 @@ await step('a status change persists', async () => {
 await step('filters survive a trip to a record and back', async () => {
   await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('table tbody tr', { timeout: 15000 })
-  const [filterButton] = await page.$$('xpath/.//button[contains(., "Filter")]')
-  await filterButton.click()
-  const [addButton] = await page.$$('xpath/.//button[contains(., "Add filter")]')
-  await addButton.click()
-  await page.waitForSelector('input[placeholder="Value"]', { timeout: 5000 })
-  const [fieldSelect] = await page.$$('select')
-  await fieldSelect.select('email')
-  await page.type('input[placeholder="Value"]', 'buyer1')
-  await page.keyboard.press('Enter')
-  await page.waitForFunction(() => location.search.includes('filters='), { timeout: 8000 })
-  await page.keyboard.press('Escape')
-  await new Promise((r) => setTimeout(r, 1500))
+  await filterDealsByFirstEmail()
 
   const filtered = await page.$$eval('table tbody tr', (trs) => trs.length)
   await page.click('table tbody tr td:nth-child(2)')
@@ -382,6 +466,28 @@ await step('assigning a user persists, and unassigning removes them', async () =
   // instead made this step flaky, and a flaky assertion is worse than no assertion.
   const triggerText = () =>
     page.$eval('header button[title="Assigned to"]', (b) => b.innerText.trim())
+
+  /**
+   * Start unassigned, whatever the last run left behind.
+   *
+   * The picker toggles, so a record that arrives already assigned turns the first click
+   * into an *un*assign — and the step then correctly reported "not assigned" while the
+   * server log showed no `assign_to.add` at all. A step that only works from one starting
+   * state is a step that reports on its own history.
+   */
+  if (!(await triggerText()).includes('Assign')) {
+    await openPicker()
+    const [assignedUser] = await page.$$('[role="menu"] button')
+    await assignedUser.click()
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('header button[title="Assigned to"]')
+          ?.innerText.includes('Assign'),
+      { timeout: 15000 },
+    )
+    await page.keyboard.press('Escape')
+  }
 
   await openPicker()
   const [firstUser] = await page.$$('[role="menu"] button')
@@ -536,12 +642,42 @@ await step('the Create modal makes a deal and opens it', async () => {
 })
 
 await step('bulk delete removes the selected rows', async () => {
-  await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
+  /**
+   * **Creates the two rows it deletes.** Earlier versions selected "the first two rows",
+   * which ate the seeded fixtures that later steps filter on — the harness quietly
+   * destroying its own preconditions, and failing several steps down the file where the
+   * cause was invisible. A destructive step has to bring its own data.
+   */
+  const marker = `BulkDelete ${Date.now() % 100000}`
+  await page.evaluate(
+    async (label) => {
+      const token = localStorage.getItem('crm:access_token')
+      for (const suffix of ['A', 'B']) {
+        await fetch('/api/resource/CRM%20Deal', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ organization_name: `${label} ${suffix}` }),
+        })
+      }
+    },
+    marker,
+  )
+
+  const mine = encodeURIComponent(
+    JSON.stringify([
+      { fieldname: 'organization_name', operator: 'like', value: marker },
+    ]),
+  )
+  await page.goto(`${BASE}/deals/view?filters=${mine}`, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('table tbody tr', { timeout: 15000 })
   const before = await totalRows()
+  if (before !== 2) throw new Error(`expected exactly the 2 deals just made, saw ${before}`)
 
-  // Select the first two rows. Re-queried between clicks: selecting one re-renders the
-  // table, which detaches any handle taken before it.
+  // Select the first two. Re-queried between clicks: selecting one re-renders the table,
+  // which detaches any handle taken before it.
   const selectRow = async (index) => {
     const boxes = await page.$$('table tbody tr td:first-child button[role="checkbox"]')
     await boxes[index].click()
@@ -571,23 +707,12 @@ await step('bulk delete removes the selected rows', async () => {
 
 console.log('saved views')
 await step('save the current filter as a view, then reload into it', async () => {
-  // Start clean, then filter to exactly one row.
+  // Start clean, then narrow the list.
   await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('table tbody tr', { timeout: 15000 })
   const total = await page.$$eval('table tbody tr', (trs) => trs.length)
-
-  const [filterButton] = await page.$$('xpath/.//button[contains(., "Filter")]')
-  await filterButton.click()
-  const [addButton] = await page.$$('xpath/.//button[contains(., "Add filter")]')
-  await addButton.click()
-  await page.waitForSelector('input[placeholder="Value"]', { timeout: 5000 })
-  const [fieldSelect] = await page.$$('select')
-  await fieldSelect.select('email')
-  await page.type('input[placeholder="Value"]', 'buyer1')
-  await page.keyboard.press('Enter')
-  await page.waitForFunction(() => location.search.includes('filters='), { timeout: 8000 })
-  await page.keyboard.press('Escape')
-  await new Promise((r) => setTimeout(r, 1500))
+  await filterDealsByFirstEmail()
+  const narrowed = await page.$$eval('table tbody tr', (trs) => trs.length)
 
   const viewLabel = `verify-view-${Date.now() % 100000}`
   const [picker] = await page.$$('xpath/.//button[normalize-space()="All"]')
@@ -611,7 +736,9 @@ await step('save the current filter as a view, then reload into it', async () =>
   await new Promise((r) => setTimeout(r, 1500))
   const rows = await page.$$eval('table tbody tr', (trs) => trs.length)
   console.log(`        ${total} rows unfiltered, ${rows} from the saved view alone`)
-  if (rows !== 1) throw new Error(`saved view returned ${rows} rows, expected 1`)
+  if (rows !== narrowed) {
+    throw new Error(`saved view returned ${rows} rows, expected the filtered ${narrowed}`)
+  }
   await shot(page, '11-saved-view')
 })
 
