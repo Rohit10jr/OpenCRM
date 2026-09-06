@@ -7,12 +7,15 @@ import { callGet, errorMessage } from '@/api/client'
 import { useStatuses } from '@/list/useLookups'
 import { cn } from '@/lib/utils'
 import { useDocSubscription } from '@/realtime/useSocket'
+import { useSession } from '@/auth/session'
 import { ActivityTimeline, RecordList } from './ActivityTimeline'
 import { AssignTo } from './AssignTo'
 import { Attachments } from './Attachments'
 import { CallButton } from './CallButton'
 import { CommentBox } from './CommentBox'
+import { ContactsSection } from './ContactsSection'
 import { EmailComposer } from './EmailComposer'
+import { LikeButton, LinkedDocs } from './LinkedDocs'
 import { SidePanel } from './SidePanel'
 import { ConvertToDealButton, StatusChange } from './StatusChange'
 import { useRecord } from './useRecord'
@@ -56,6 +59,7 @@ export function RecordScreen({
   // deal is the normal case this exists for.
   useDocSubscription(doctype, name)
   const { statuses, getStatus } = useStatuses(statusDoctype)
+  const { user: sessionUser } = useSession()
   const [tab, setTab] = useState('activity')
 
   // The WhatsApp tab only exists where the workspace has WhatsApp; the server is the only
@@ -177,6 +181,12 @@ export function RecordScreen({
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
+          <LikeButton
+            doctype={doctype}
+            name={name}
+            likedBy={doc._liked_by}
+            currentUser={sessionUser}
+          />
           <CallButton phone={doc.mobile_no ?? doc.phone} />
           <AssignTo doctype={doctype} name={name} assignees={record.assignees} />
 
@@ -252,7 +262,13 @@ export function RecordScreen({
             doc={record.doc as never}
             onFieldChange={saveField}
             isSaving={record.updateField.isPending}
+            customSections={
+              doctype === 'CRM Deal'
+                ? { contacts_section: <ContactsSection dealId={name} /> }
+                : undefined
+            }
           />
+          <LinkedDocs doctype={doctype} name={name} />
         </aside>
       </div>
     </div>

@@ -25,11 +25,21 @@ export function SidePanel({
   doc,
   onFieldChange,
   isSaving,
+  customSections,
 }: {
   sections: PanelSection[]
   doc: DocRow | undefined
   onFieldChange: (fieldname: string, value: unknown) => void
   isSaving?: boolean
+  /**
+   * Bodies for sections the layout declares with no columns, keyed by section name.
+   *
+   * The Deal layout's `contacts_section` is the case this exists for: it carries `contacts`
+   * rather than `columns` (`crm/install.py:200`), so there are no fields to render and the
+   * page supplies the body. Keeping it a prop rather than a branch in here means this file
+   * still knows nothing about deals.
+   */
+  customSections?: Record<string, React.ReactNode>
 }) {
   if (!sections.length) {
     return (
@@ -43,7 +53,9 @@ export function SidePanel({
     <div className="flex flex-col">
       {sections.map((section) => (
         <Section key={section.name} section={section}>
-          {section.columns?.length ? (
+          {customSections?.[section.name] ? (
+            customSections[section.name]
+          ) : section.columns?.length ? (
             section.columns.map((column) => (
               <div key={column.name} className="flex flex-col gap-1.5">
                 {column.fields.map((field) => (
