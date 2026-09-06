@@ -96,17 +96,19 @@ list and the one with the most behind it already.
 
 ---
 
-## 6. Rich text everywhere — no TipTap yet
+## 6. ~~Rich text everywhere — no TipTap yet~~ — CLOSED in run 5
 
-Not a backend gap, but it belongs beside them because it shapes the same screens.
+`@tiptap/react` and `dompurify` are in, and `components/RichText.tsx` holds both halves:
+`RichTextEditor` for composing and `RichTextView` for rendering. Comments and the email body
+are HTML now, matching what the Vue client stores.
 
-The Vue app composes emails, comments and notes in a TipTap editor and stores **HTML**.
-React sends plain text from a textarea in all three places, and **renders comments as text
-rather than HTML** — a comment written by the Vue client is HTML authored by another user,
-so unescaping it would be stored XSS with a Vue-shaped delivery mechanism.
+**`RichTextView` sanitises every render, and there is no unsanitised path in that file on
+purpose.** The content in these fields is HTML authored by other users, some of them on the
+Vue client; rendering it raw is stored XSS with a Vue-shaped delivery mechanism. If a future
+change wants a raw render, that wanting is the bug.
 
-**To close:** `@tiptap/react` plus a sanitiser on the render side. Contained, and it wants
-doing before either client is used against the other's data in anger.
+**Still plain text:** the email signature (`get_user_signature` returns whatever the user
+saved and nothing says which format), and notes.
 
 ---
 

@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { call, callGet, errorMessage } from '@/api/client'
 import { useDocList } from '@/api/hooks'
 import { MissingEndpoint } from '@/components/MissingEndpoint'
+import { isRichTextEmpty, RichTextEditor } from '@/components/RichText'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -27,9 +28,9 @@ import {
  * recipients, `crm.api.get_user_signature` for the signature, and `Email Template` rows for
  * the template picker.
  *
- * A plain textarea rather than TipTap. The Vue composer is a rich editor and the body it
- * sends is HTML; this sends text. Swapping in TipTap is a contained change once there is a
- * send endpoint to justify it — see the run report.
+ * The body is TipTap and the content sent is HTML, matching the Vue composer. The signature
+ * is appended as text, which is a small inconsistency: `get_user_signature` returns whatever
+ * the user saved, and this run has no way to know whether that is HTML or plain.
  */
 export function EmailComposer({
   doctype,
@@ -145,15 +146,7 @@ export function EmailComposer({
           />
         </div>
 
-        <textarea
-          name="body"
-          rows={6}
-          required
-          placeholder="Write your message…"
-          value={body}
-          onChange={(event) => setBody(event.target.value)}
-          className="min-h-32 resize-y rounded border border-outline-gray-2 bg-surface-white px-2 py-1.5 text-base text-ink-gray-8 placeholder:text-ink-gray-4 focus:outline-none focus:ring-2 focus:ring-ink-gray-4"
-        />
+        <RichTextEditor value={body} placeholder="Write your message…" onChange={setBody} />
 
         {signature.data ? (
           <p className="whitespace-pre-wrap border-l-2 border-outline-gray-2 pl-2 text-sm text-ink-gray-4">
@@ -200,7 +193,13 @@ export function EmailComposer({
             Attach
           </Button>
 
-          <Button type="submit" variant="solid" className="ml-auto" loading={send.isPending}>
+          <Button
+            type="submit"
+            variant="solid"
+            className="ml-auto"
+            loading={send.isPending}
+            disabled={isRichTextEmpty(body)}
+          >
             <Send className="h-4 w-4" />
             Send
           </Button>

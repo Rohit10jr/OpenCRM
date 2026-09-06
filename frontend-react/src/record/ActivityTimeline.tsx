@@ -1,3 +1,4 @@
+import { RichTextView } from '@/components/RichText'
 import { Avatar, Tooltip } from '@/components/ui/primitives'
 import { formatDate, timeAgo } from '@/lib/format'
 import { useUsers } from '@/list/useLookups'
@@ -58,11 +59,12 @@ function describe(entry: ActivityEntry): React.ReactNode {
     return (
       <>
         commented
-        <div className="mt-1 whitespace-pre-wrap rounded border border-outline-gray-1 bg-surface-gray-1 p-2 text-ink-gray-8">
-          {/* `content` is stored verbatim as whatever the client sent (`comment.py:118`).
-              Ours sends plain text, so it is rendered as text — never as HTML, because a
-              comment written by the Vue client *is* HTML and would be an injection here. */}
-          {String(entry.content ?? '')}
+        <div className="mt-1 rounded border border-outline-gray-1 bg-surface-gray-1 p-2">
+          {/* `content` is stored verbatim as whatever the client sent (`comment.py:118`),
+              and both clients now send HTML. `RichTextView` sanitises every render — the
+              author of a comment is another user, and some of them are on the Vue client,
+              so an unsanitised render here is stored XSS. */}
+          <RichTextView html={entry.content} />
         </div>
       </>
     )
