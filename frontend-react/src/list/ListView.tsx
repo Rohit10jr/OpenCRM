@@ -155,6 +155,11 @@ export function ListView({
         onDeleteView={(name) => {
           if (String(name) === String(savedViewName)) setSearch({ view: undefined })
         }}
+        fields={list.fields}
+        columnField={list.payload?.column_field ?? undefined}
+        // In kanban mode every group repeats the same `fields` list (`doc.py:526`), so the
+        // first group is as good as any and the board is empty when there is no group.
+        cardFields={list.kanbanGroups[0]?.fields ?? []}
         totalCount={list.totalCount}
         isFetching={list.isFetching}
         onRefresh={() => void list.refetch()}

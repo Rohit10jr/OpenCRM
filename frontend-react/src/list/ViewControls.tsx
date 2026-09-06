@@ -8,7 +8,7 @@ import {
   RefreshCw,
   Rows3,
 } from 'lucide-react'
-import type { Filters, ListColumn, SavedView, ViewType } from '@/api/types'
+import type { DocField, Filters, ListColumn, SavedView, ViewType } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -34,6 +34,7 @@ import {
   useSortOptions,
 } from './useFieldOptions'
 import type { ListFilter } from './useListView'
+import { KanbanSettings } from './KanbanSettings'
 import { ViewPicker } from './ViewPicker'
 
 /**
@@ -68,6 +69,9 @@ export function ViewControls({
   onSelectView,
   savedFilters,
   onDeleteView,
+  fields,
+  columnField,
+  cardFields,
   totalCount,
   isFetching,
   onRefresh,
@@ -91,6 +95,12 @@ export function ViewControls({
   onSelectView: (name?: string) => void
   savedFilters: Filters
   onDeleteView: (name: string) => void
+  /** Field metadata from the payload — the kanban card's candidates. */
+  fields: DocField[]
+  /** What the board currently groups on. */
+  columnField?: string
+  /** What a card currently shows. */
+  cardFields: string[]
   totalCount: number
   isFetching: boolean
   onRefresh: () => void
@@ -203,6 +213,16 @@ export function ViewControls({
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
+        ) : null}
+
+        {viewType === 'kanban' ? (
+          <KanbanSettings
+            doctype={doctype}
+            view={views.find((view) => String(view.name) === String(savedViewName))}
+            fields={fields}
+            columnField={columnField}
+            cardFields={cardFields}
+          />
         ) : null}
 
         <DropdownMenu>
