@@ -1,17 +1,14 @@
-import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import {
   ArrowDownUp,
-  BookmarkPlus,
   Columns3,
   Filter,
   LayoutGrid,
   List as ListIcon,
   RefreshCw,
   Rows3,
-  Trash2,
 } from 'lucide-react'
-import type { ListColumn, SavedView, ViewType } from '@/api/types'
+import type { Filters, ListColumn, SavedView, ViewType } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -24,10 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { FormControl } from '@/components/ui/input'
 import {
-  Dialog,
-  DialogContent,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -40,6 +34,7 @@ import {
   useSortOptions,
 } from './useFieldOptions'
 import type { ListFilter } from './useListView'
+import { ViewPicker } from './ViewPicker'
 
 /**
  * The list toolbar: view switch, saved views, filters, sort, columns, refresh.
@@ -71,7 +66,7 @@ export function ViewControls({
   views,
   savedViewName,
   onSelectView,
-  onSaveView,
+  savedFilters,
   onDeleteView,
   totalCount,
   isFetching,
@@ -94,7 +89,7 @@ export function ViewControls({
   views: SavedView[]
   savedViewName?: string
   onSelectView: (name?: string) => void
-  onSaveView: (label: string) => void
+  savedFilters: Filters
   onDeleteView: (name: string) => void
   totalCount: number
   isFetching: boolean
@@ -111,11 +106,15 @@ export function ViewControls({
       <ViewTypeTabs basePath={basePath} allowed={allowedViews} current={viewType} />
 
       <ViewPicker
+        doctype={doctype}
         views={views}
         current={savedViewName}
+        viewType={viewType}
+        // What "save this view" would capture: the filters and sort on screen right now.
+        filters={savedFilters}
+        orderBy={orderBy}
         onSelect={onSelectView}
-        onSave={onSaveView}
-        onDelete={onDeleteView}
+        onDeleted={onDeleteView}
         canSave={filters.length > 0}
       />
 
@@ -245,101 +244,6 @@ export function ViewControls({
  * filters are `{}` renders the same list as no view at all, and offering to create one is
  * offering to make a row that does nothing.
  */
-function ViewPicker({
-  views,
-  current,
-  onSelect,
-  onSave,
-  onDelete,
-  canSave,
-}: {
-  views: SavedView[]
-  current?: string
-  onSelect: (name?: string) => void
-  onSave: (label: string) => void
-  onDelete: (name: string) => void
-  canSave: boolean
-}) {
-  const selected = views.find((view) => String(view.name) === String(current))
-  const [naming, setNaming] = useState(false)
-  const [label, setLabel] = useState('')
-
-  return (
-    <>
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm">
-          {selected?.label ?? 'All'}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="max-h-80 w-56 overflow-y-auto">
-        <DropdownMenuLabel>Views</DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          value={current ?? ''}
-          onValueChange={(value) => onSelect(value || undefined)}
-        >
-          <DropdownMenuRadioItem value="">All</DropdownMenuRadioItem>
-          {views.map((view) => (
-            <DropdownMenuRadioItem key={view.name} value={String(view.name)}>
-              <span className="flex-1 truncate">{view.label || view.name}</span>
-              <button
-                type="button"
-                aria-label={`Delete ${view.label || view.name}`}
-                className="text-ink-gray-4 hover:text-red-600"
-                onClick={(event) => {
-                  // Without this the radio item selects the view it is about to delete.
-                  event.preventDefault()
-                  event.stopPropagation()
-                  onDelete(String(view.name))
-                }}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-
-        {canSave ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => setNaming(true)}>
-              <BookmarkPlus className="h-4 w-4" />
-              Save current view
-            </DropdownMenuItem>
-          </>
-        ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
-
-    <Dialog open={naming} onOpenChange={setNaming}>
-      <DialogContent title="Save this view">
-        <form
-          className="flex flex-col gap-3"
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (!label.trim()) return
-            onSave(label.trim())
-            setLabel('')
-            setNaming(false)
-          }}
-        >
-          <FormControl
-            label="Name"
-            value={label}
-            autoFocus
-            required
-            onChange={(event) => setLabel(event.target.value)}
-          />
-          <Button type="submit" variant="solid" className="self-end">
-            Save view
-          </Button>
-        </form>
-      </DialogContent>
-    </Dialog>
-    </>
-  )
-}
-
 function ViewTypeTabs({
   basePath,
   allowed,

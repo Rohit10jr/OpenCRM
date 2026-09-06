@@ -15,7 +15,6 @@ import { QuickFilters } from './QuickFilters'
 import { ListTable, ListTableHeader } from './ListTable'
 import { useListView, type ListFilter } from './useListView'
 import { useStatuses } from './useLookups'
-import { useViewMutations } from './useViews'
 import { ViewControls } from './ViewControls'
 import type { ListSearch } from '@/router'
 
@@ -93,7 +92,6 @@ export function ListView({
     groupBy: search.group_by,
   })
   const { getStatus } = useStatuses(statusDoctype)
-  const viewMutations = useViewMutations(doctype)
   const queryClient = useQueryClient()
   const [selection, setSelection] = useState<RowSelectionState>({})
 
@@ -151,24 +149,12 @@ export function ListView({
         onSelectView={(name) =>
           setSearch({ view: name, filters: undefined, order_by: undefined })
         }
-        onSaveView={(label) =>
-          viewMutations.create.mutate(
-            { label, type: list.viewType, filters: list.params.filters ?? {}, order_by: list.orderBy },
-            {
-              onSuccess: (view) =>
-                setSearch({ view: String(view.name), filters: undefined }),
-              onError: (error) => toast.error(errorMessage(error, 'Could not save the view')),
-            },
-          )
-        }
-        onDeleteView={(name) =>
-          viewMutations.remove.mutate(name, {
-            onSuccess: () => {
-              if (String(name) === String(savedViewName)) setSearch({ view: undefined })
-            },
-            onError: (error) => toast.error(errorMessage(error, 'Could not delete the view')),
-          })
-        }
+        savedFilters={list.params.filters ?? {}}
+        // The picker owns the mutation; this only has to keep the URL honest when the view
+        // that just went away is the one the URL names.
+        onDeleteView={(name) => {
+          if (String(name) === String(savedViewName)) setSearch({ view: undefined })
+        }}
         totalCount={list.totalCount}
         isFetching={list.isFetching}
         onRefresh={() => void list.refetch()}
