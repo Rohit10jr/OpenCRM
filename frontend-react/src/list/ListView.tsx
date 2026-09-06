@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { BulkActions } from './BulkActions'
 import type { CellOverride } from './Cell'
 import { KanbanBoard } from './KanbanBoard'
+import { QuickFilters } from './QuickFilters'
 import { ListTable, ListTableHeader } from './ListTable'
 import { useListView, type ListFilter } from './useListView'
 import { useStatuses } from './useLookups'
@@ -168,6 +169,12 @@ export function ListView({
         totalCount={list.totalCount}
         isFetching={list.isFetching}
         onRefresh={() => void list.refetch()}
+      />
+
+      <QuickFilters
+        doctype={doctype}
+        filters={filters}
+        onChange={(next) => setSearch({ filters: next.length ? next : undefined })}
       />
 
       {selectedCount > 0 ? (

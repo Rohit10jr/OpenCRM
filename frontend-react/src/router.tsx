@@ -15,7 +15,9 @@ import { UpdatePasswordPage } from '@/pages/auth/UpdatePassword'
 import { CallLogsPage } from '@/pages/CallLogs'
 import { ContactPage } from '@/pages/Contact'
 import { DashboardPage } from '@/pages/Dashboard'
+import { DataImportPage } from '@/pages/DataImport'
 import { NotificationsPage } from '@/pages/Notifications'
+import { InvalidPage, NotPermittedPage, WelcomePage } from '@/pages/Welcome'
 import { ContactsPage } from '@/pages/Contacts'
 import { DealPage } from '@/pages/Deal'
 import { DealsPage } from '@/pages/Deals'
@@ -292,6 +294,34 @@ const settingsChildren = (
   createRoute({ getParentRoute: () => settingsRoute, path, component }),
 )
 
+const welcomeRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: '/welcome',
+  component: WelcomePage,
+})
+
+const notPermittedRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: '/not-permitted',
+  component: NotPermittedPage,
+})
+
+const dataImportRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: '/data-import',
+  component: DataImportPage,
+})
+
+/**
+ * A single import's detail. The mapping UI is not built (`BACKEND_GAPS.md` §2), so this
+ * route exists to be linked to from the history list and says as much.
+ */
+const dataImportDetailRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: '/data-import/$importName',
+  component: DataImportPage,
+})
+
 const notificationsRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: '/notifications',
@@ -329,6 +359,10 @@ const routeTree = rootRoute.addChildren([
     organizationRoute,
     notificationsRoute,
     dashboardRoute,
+    welcomeRoute,
+    notPermittedRoute,
+    dataImportRoute,
+    dataImportDetailRoute,
     settingsRoute.addChildren(settingsChildren),
     ...listScreenRoutes,
   ]),
@@ -337,6 +371,9 @@ const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   routeTree,
   context: { isLoggedIn: isAuthenticated },
+  // Without this an unmatched URL renders nothing at all, which reads as a broken app
+  // rather than a wrong address.
+  defaultNotFoundComponent: InvalidPage,
 })
 
 declare module '@tanstack/react-router' {
