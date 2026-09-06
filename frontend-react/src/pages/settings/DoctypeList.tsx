@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { errorMessage } from '@/api/client'
 import { useDocList, useDocMutations } from '@/api/hooks'
@@ -21,8 +21,11 @@ import { SettingsPage } from './SettingsLayout'
  * sixth caller should not be the sixth copy. Anything genuinely per-screen goes in
  * `columns` or `fields`.
  *
- * Editing an existing row is not built — these screens create and delete, and the Vue
- * versions open a per-doctype editor for the middle case. Flagged in the run report.
+ * Editing goes through the same form as creating, which is the whole reason it was cheap to
+ * add to all six at once: the fields a screen declares are the fields it edits. The Vue app
+ * has a hand-written editor per doctype — `EditEmailTemplate.vue` alone is 246 lines — and
+ * those editors do carry per-doctype affordances this does not, chiefly the rich-text body
+ * on an email template. Recorded in `VUE_DIVERGENCES.md`.
  */
 
 export type DoctypeListField = {
@@ -46,19 +49,27 @@ export function DoctypeListSettings({
   description?: string
   /** Fieldnames to show per row; the first is the heading, the rest are the subtitle. */
   columns: string[]
-  /** The create form. */
+  /** The form, used for both create and edit. */
   fields: DoctypeListField[]
   emptyText: string
 }) {
   const [creating, setCreating] = useState(false)
+  const [editing, setEditing] = useState<string>()
   const [draft, setDraft] = useState<Record<string, unknown>>({})
 
+  // The editable fields are fetched too, not just the ones shown: the edit form asks for
+  // whatever the screen declared, and a row that arrived without those would open blank
+  // and then blank them on save.
+  const fieldnames = Array.from(
+    new Set(['name', ...columns, ...fields.map((field) => field.fieldname)]),
+  )
+
   const rows = useDocList<Record<string, unknown>>(doctype, {
-    fields: ['name', ...columns],
+    fields: fieldnames,
     limit_page_length: 100,
     order_by: 'modified desc',
   })
-  const { create, remove } = useDocMutations(doctype)
+  const { create, update, remove } = useDocMutations(doctype)
 
   const [heading, ...rest] = columns
 
@@ -67,7 +78,14 @@ export function DoctypeListSettings({
       title={title}
       description={description}
       actions={
-        <Button variant="solid" onClick={() => setCreating(true)}>
+        <Button
+          variant="solid"
+          onClick={() => {
+            setDraft({})
+            setEditing(undefined)
+            setCreating(true)
+          }}
+        >
           <Plus className="h-4 w-4" />
           New
         </Button>
@@ -100,6 +118,18 @@ export function DoctypeListSettings({
               </div>
               <Button
                 variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setDraft({ ...row })
+                  setEditing(String(row.name))
+                  setCreating(true)
+                }}
+              >
+                <Pencil className="h-4 w-4" />
+                Edit
+              </Button>
+              <Button
+                variant="ghost"
                 size="icon"
                 title={`Delete ${row.name}`}
                 loading={remove.isPending}
@@ -118,17 +148,33 @@ export function DoctypeListSettings({
       )}
 
       <Dialog open={creating} onOpenChange={setCreating}>
-        <DialogContent title={`New ${title.replace(/s$/, '')}`}>
+        <DialogContent
+          title={`${editing ? 'Edit' : 'New'} ${title.replace(/s$/, '').toLowerCase()}`}
+        >
           <form
             className="flex flex-col gap-1"
             onSubmit={(event) => {
               event.preventDefault()
+              const done = (message: string) => () => {
+                toast.success(message)
+                setDraft({})
+                setEditing(undefined)
+                setCreating(false)
+              }
+
+              if (editing) {
+                update.mutate(
+                  { name: editing, changes: draft },
+                  {
+                    onSuccess: done('Saved'),
+                    onError: (error) => toast.error(errorMessage(error, 'Could not save')),
+                  },
+                )
+                return
+              }
+
               create.mutate(draft, {
-                onSuccess: () => {
-                  toast.success('Created')
-                  setDraft({})
-                  setCreating(false)
-                },
+                onSuccess: done('Created'),
                 onError: (error) =>
                   toast.error(errorMessage(error, 'Could not create')),
               })
@@ -141,6 +187,9 @@ export function DoctypeListSettings({
                 hint={field.hint}
                 type={field.type}
                 placeholder={field.placeholder}
+                // A document's name is set at insert and renaming is a different operation
+                // entirely, so the field that names the row is read-only once it exists.
+                disabled={Boolean(editing) && field.fieldname === 'name'}
                 value={draft[field.fieldname]}
                 onCommit={(value) =>
                   setDraft((current) => ({ ...current, [field.fieldname]: value }))
@@ -151,9 +200,9 @@ export function DoctypeListSettings({
               type="submit"
               variant="solid"
               className="mt-3 self-end"
-              loading={create.isPending}
+              loading={create.isPending || update.isPending}
             >
-              Create
+              {editing ? 'Save' : 'Create'}
             </Button>
           </form>
         </DialogContent>

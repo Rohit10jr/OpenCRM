@@ -149,14 +149,40 @@ unused. Quick filters are a row of one-click filters above the list that React h
 equivalent of at all; group_by uses a hardcoded `owner` rather than offering the fields the
 endpoint returns.
 
-## 10. Comments are plain text; the Vue client writes HTML
+## 10. ~~Comments are plain text; the Vue client writes HTML~~ — CLOSED in run 5
 
 **Where:** `frontend-react/src/record/CommentBox.tsx`, `ActivityTimeline.tsx`
 
-`add_comment` stores `content` verbatim. Vue posts HTML from a TipTap editor; React posts
-plain text from a textarea, and **renders every comment as text**, never as HTML.
+`add_comment` stores `content` verbatim. React used to post plain text from a textarea and
+render every comment as text, never as HTML, because a comment written in the Vue client is
+HTML authored by another user and `dangerouslySetInnerHTML` on it is stored XSS.
 
-**Us:** *Diverge, deliberately, and do not "fix" the rendering half.* A comment written in
-the Vue client is HTML authored by another user, so `dangerouslySetInnerHTML` here would be
-stored XSS with a Vue-shaped delivery mechanism. The visible cost is that a Vue-written
-comment shows its tags. The fix is a sanitiser plus the editor, not an unescape.
+**Closed the way the entry said it had to be closed** — a sanitiser *plus* the editor,
+never an unescape. `components/RichText.tsx` holds both halves; `RichTextView` runs
+DOMPurify on every render and there is no unsanitised path in that file on purpose.
+
+---
+
+## 11. Settings rows are edited through one generic form, not a per-doctype editor
+
+**Where:** `frontend-react/src/pages/settings/DoctypeList.tsx`
+
+Six Vue settings screens have a hand-written editor each — `EditEmailTemplate.vue` is 246
+lines, and `EmailTemplate/`, `Sla/`, `Hierarchy/`, `LeadSyncing/`, `AssignmentRules/` and
+`EmailAccountList.vue` come to roughly 1,400 lines between them, most of it the same
+list-and-dialog. `DoctypeListSettings` is one component behind all six, and editing goes
+through the same field list as creating.
+
+**Us:** *Diverge.* The shared form is the right trade for six screens that are the same
+shape, and it is why editing arrived on all of them in one change rather than six.
+
+**What is genuinely lost**, and worth knowing before someone calls it a bug:
+
+* **The email template body is a plain textarea**, where `EditEmailTemplate.vue` gives it a
+  rich-text editor with `{{ doc.field }}` variable insertion. `RichTextEditor` exists now,
+  so this is a small change — but the variable picker is not, and a template body written
+  as plain text will render as plain text in the composer.
+* **No per-doctype validation before save.** The server still validates; the difference is
+  that the message arrives as a toast after the round trip rather than beside the field.
+* **`name` is read-only once a row exists.** Renaming a document is a separate operation in
+  Frappe and this form does not do it.
