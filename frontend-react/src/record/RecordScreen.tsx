@@ -14,9 +14,15 @@ import { statusDotClass } from '@/list/statusColor'
 import { useStatuses } from '@/list/useLookups'
 import { cn } from '@/lib/utils'
 import { useDocSubscription } from '@/realtime/useSocket'
+import { useQuery } from '@tanstack/react-query'
+import { callGet } from '@/api/client'
 import { ActivityTimeline, RecordList } from './ActivityTimeline'
 import { AssignTo } from './AssignTo'
+import { Attachments } from './Attachments'
+import { CallButton } from './CallButton'
 import { CommentBox } from './CommentBox'
+import { EmailComposer } from './EmailComposer'
+import { WhatsAppTab } from './WhatsAppTab'
 import { SidePanel } from './SidePanel'
 import { useRecord } from './useRecord'
 
@@ -60,6 +66,15 @@ export function RecordScreen({
   const { statuses, getStatus } = useStatuses(statusDoctype)
   const [tab, setTab] = useState('activity')
 
+  // The WhatsApp tab only exists where the workspace has WhatsApp; the server is the only
+  // thing that knows.
+  const whatsappEnabled = useQuery({
+    queryKey: ['whatsapp-enabled'],
+    queryFn: () => callGet<boolean>('crm.api.whatsapp.is_whatsapp_enabled'),
+    staleTime: Infinity,
+    retry: false,
+  })
+
   const doc = record.doc as Record<string, unknown> | undefined
 
   // Comments arrive inside the activity feed rather than from their own endpoint
@@ -71,11 +86,15 @@ export function RecordScreen({
   const tabs: Tab[] = record.hasActivities
     ? [
         { id: 'activity', label: 'Activity' },
+        { id: 'emails', label: 'Emails' },
         { id: 'comments', label: `Comments (${comments.length})` },
         { id: 'calls', label: `Calls (${record.calls.length})` },
         { id: 'tasks', label: `Tasks (${record.tasks.length})` },
         { id: 'notes', label: `Notes (${record.notes.length})` },
         { id: 'attachments', label: `Attachments (${record.attachments.length})` },
+        // Only when the server says the integration is live — the Vue app does the same,
+        // and a WhatsApp tab on a workspace without WhatsApp is a dead end.
+        ...(whatsappEnabled.data ? [{ id: 'whatsapp', label: 'WhatsApp' }] : []),
       ]
     : []
 
@@ -128,13 +147,9 @@ export function RecordScreen({
         emptyText="No notes yet."
       />
     ),
-    attachments: (
-      <RecordList
-        rows={record.attachments}
-        titleField="file_name"
-        emptyText="No attachments."
-      />
-    ),
+    attachments: <Attachments name={name} rows={record.attachments} />,
+    emails: <EmailComposer doctype={doctype} name={name} />,
+    whatsapp: <WhatsAppTab name={name} />,
   }
 
   if (record.error) {
@@ -170,6 +185,7 @@ export function RecordScreen({
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
+          <CallButton phone={doc.mobile_no ?? doc.phone} />
           <AssignTo doctype={doctype} name={name} assignees={record.assignees} />
 
           {statusDoctype && status ? (

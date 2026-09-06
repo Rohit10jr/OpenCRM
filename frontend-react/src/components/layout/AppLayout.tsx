@@ -1,9 +1,11 @@
 import { Link, Outlet, useNavigate } from '@tanstack/react-router'
 import {
+  Bell,
   Briefcase,
   Building2,
   CheckSquare,
   Contact,
+  LayoutDashboard,
   LogOut,
   Phone,
   Settings,
@@ -22,6 +24,8 @@ import { Button } from '@/components/ui/button'
  * them here would be inventing an abstraction for callers that do not exist.
  */
 const NAV = [
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/notifications', label: 'Notifications', icon: Bell },
   { to: '/leads/view', label: 'Leads', icon: Users },
   { to: '/deals/view', label: 'Deals', icon: Briefcase },
   { to: '/contacts/view', label: 'Contacts', icon: Contact },

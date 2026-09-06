@@ -14,6 +14,8 @@ import { LoginPage } from '@/pages/auth/Login'
 import { UpdatePasswordPage } from '@/pages/auth/UpdatePassword'
 import { CallLogsPage } from '@/pages/CallLogs'
 import { ContactPage } from '@/pages/Contact'
+import { DashboardPage } from '@/pages/Dashboard'
+import { NotificationsPage } from '@/pages/Notifications'
 import { ContactsPage } from '@/pages/Contacts'
 import { DealPage } from '@/pages/Deal'
 import { DealsPage } from '@/pages/Deals'
@@ -290,6 +292,18 @@ const settingsChildren = (
   createRoute({ getParentRoute: () => settingsRoute, path, component }),
 )
 
+const notificationsRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: '/notifications',
+  component: NotificationsPage,
+})
+
+const dashboardRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: '/dashboard',
+  component: DashboardPage,
+})
+
 const listScreenRoutes = [
   ...listRoutes('/deals/view', DealsPage),
   ...listRoutes('/leads/view', LeadsPage),
@@ -313,6 +327,8 @@ const routeTree = rootRoute.addChildren([
     leadRoute,
     contactRoute,
     organizationRoute,
+    notificationsRoute,
+    dashboardRoute,
     settingsRoute.addChildren(settingsChildren),
     ...listScreenRoutes,
   ]),
