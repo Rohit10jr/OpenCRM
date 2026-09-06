@@ -15,6 +15,7 @@ import {
 import { useSession } from '@/auth/session'
 import { Avatar } from '@/components/ui/primitives'
 import { Button } from '@/components/ui/button'
+import { CallPanel } from '@/telephony/CallPanel'
 
 /**
  * The signed-in chrome: a sidebar and the routed page.
@@ -79,6 +80,9 @@ export function AppLayout() {
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Outlet />
       </main>
+
+      {/* A call arrives without anyone clicking, so its panel cannot live on a route. */}
+      <CallPanel />
     </div>
   )
 }

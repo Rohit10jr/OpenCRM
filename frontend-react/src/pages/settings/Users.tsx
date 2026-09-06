@@ -1,13 +1,20 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { UserPlus } from 'lucide-react'
+import { MoreHorizontal, UserPlus, Users as UsersIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { call, callGet, errorMessage } from '@/api/client'
 import { keys } from '@/api/queryKeys'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { ErrorMessage, FormControl } from '@/components/ui/input'
 import { Avatar, Badge, Dialog, DialogContent } from '@/components/ui/primitives'
 import { useSession } from '@/auth/session'
+import { AddExistingUsersDialog, PendingInvitations } from './UserActions'
 
 /**
  * Settings → Users. The first settings screen, and the third kind of screen in this app
@@ -41,6 +48,7 @@ export function UsersSettingsPage() {
   const queryClient = useQueryClient()
   const { user: sessionUser } = useSession()
   const [inviting, setInviting] = useState(false)
+  const [addingExisting, setAddingExisting] = useState(false)
 
   const users = useQuery({
     queryKey: keys.users,
@@ -59,13 +67,28 @@ export function UsersSettingsPage() {
     onError: (error) => toast.error(errorMessage(error, 'Could not change the role')),
   })
 
-  const [, crmUsers = []] = users.data ?? []
+  // Removing strips the CRM roles; the account itself survives, which is why the label says
+  // "Remove from CRM" and not "Delete". `user.py:191` refuses to let you remove yourself.
+  const removeFromCrm = useMutation({
+    mutationFn: (user: string) => call('crm.api.user.remove_crm_roles_from_user', { user }),
+    onSuccess: () => {
+      toast.success('Removed from the CRM')
+      queryClient.invalidateQueries({ queryKey: keys.users })
+    },
+    onError: (error) => toast.error(errorMessage(error, 'Could not remove them')),
+  })
+
+  const [allUsers = [], crmUsers = []] = users.data ?? []
 
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-2 border-b border-outline-gray-1 px-4 py-3">
         <h1 className="text-lg font-semibold text-ink-gray-8">Users</h1>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="subtle" size="md" onClick={() => setAddingExisting(true)}>
+            <UsersIcon className="h-4 w-4" />
+            Add existing
+          </Button>
           <Button variant="solid" size="md" onClick={() => setInviting(true)}>
             <UserPlus className="h-4 w-4" />
             Invite
@@ -113,13 +136,40 @@ export function UsersSettingsPage() {
                     </option>
                   ))}
                 </select>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" aria-label={`Actions for ${user.name}`}>
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      // The server refuses this for the current user anyway; disabling it
+                      // here means the refusal never has to be explained.
+                      disabled={user.name === sessionUser}
+                      onSelect={() => removeFromCrm.mutate(user.name)}
+                    >
+                      Remove from CRM
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </li>
             ))}
           </ul>
         )}
+
+        <PendingInvitations />
       </div>
 
       <InviteDialog open={inviting} onOpenChange={setInviting} />
+      <AddExistingUsersDialog
+        open={addingExisting}
+        onOpenChange={setAddingExisting}
+        allUsers={allUsers}
+        crmUsers={crmUsers}
+        roles={ASSIGNABLE_ROLES}
+      />
     </div>
   )
 }

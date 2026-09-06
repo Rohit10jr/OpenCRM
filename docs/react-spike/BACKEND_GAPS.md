@@ -112,6 +112,29 @@ saved and nothing says which format), and notes.
 
 ---
 
+## 7. Twilio's browser softphone — `crm.integrations.twilio.api.generate_access_token`
+
+**Not a backend gap. A frontend dependency this port has not taken on.** Recorded here
+because the symptom looks identical from the UI: Twilio users get no call panel.
+
+Exotel and Twilio are two different features wearing one name. Exotel places the call
+server-side and rings the agent's real handset, so the browser only has to *display* the
+call — `telephony/CallPanel.tsx` does that, driven by the `exotel_call` socket event that
+`exotel/handler.py:209` publishes. Nothing to install.
+
+Twilio is an in-browser softphone. The audio runs through WebRTC in the tab, which means
+`@twilio/voice-sdk`, an access token from the endpoint above, a device registration
+lifecycle, and mute / hold / hang-up controls that talk to the SDK rather than to us —
+`TwilioCallUI.vue` is 523 lines and most of them are SDK plumbing. `twilio_call_status` is
+published (`twilio/handler.py:444`) so the *status* half would work today; it is the audio
+half that needs the dependency.
+
+**What to do:** decide whether this deployment uses Twilio at all before spending on it. If
+it does, it is a self-contained piece of work — add the SDK, add a second panel, reuse
+nothing from the Exotel one because the state machines have nothing in common.
+
+---
+
 ## Things earlier runs assumed were missing and are not
 
 Recorded because two runs planned around the wrong assumption:
