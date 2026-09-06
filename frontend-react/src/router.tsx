@@ -14,10 +14,6 @@ import { LoginPage } from '@/pages/auth/Login'
 import { UpdatePasswordPage } from '@/pages/auth/UpdatePassword'
 import { CallLogsPage } from '@/pages/CallLogs'
 import { ContactPage } from '@/pages/Contact'
-import { DashboardPage } from '@/pages/Dashboard'
-import { DataImportPage } from '@/pages/DataImport'
-import { NotificationsPage } from '@/pages/Notifications'
-import { InvalidPage, NotPermittedPage, WelcomePage } from '@/pages/Welcome'
 import { ContactsPage } from '@/pages/Contacts'
 import { DealPage } from '@/pages/Deal'
 import { DealsPage } from '@/pages/Deals'
@@ -26,30 +22,33 @@ import { LeadsPage } from '@/pages/Leads'
 import { NotesPage } from '@/pages/Notes'
 import { OrganizationPage } from '@/pages/Organization'
 import { OrganizationsPage } from '@/pages/Organizations'
-import { AssignmentRulesSettingsPage } from '@/pages/settings/AssignmentRules'
-import {
-  ERPNextSettingsPage,
-  WhatsAppSettingsPage,
-} from '@/pages/settings/Integrations'
-import {
-  EmailAccountsSettingsPage,
-  EmailTemplatesSettingsPage,
-  HierarchySettingsPage,
-  HomeActionsSettingsPage,
-  LeadSyncingSettingsPage,
-  SlaSettingsPage,
-} from '@/pages/settings/Lists'
-import { ProfileSettingsPage } from '@/pages/settings/Profile'
-import { SettingsLayout } from '@/pages/settings/SettingsLayout'
-import { TelephonySettingsPage } from '@/pages/settings/Telephony'
-import { UsersSettingsPage } from '@/pages/settings/Users'
-import {
-  BrandSettingsPage,
-  DefaultsSettingsPage,
-  GeneralSettingsPage,
-  PreferencesSettingsPage,
-} from '@/pages/settings/Workspace'
 import { TasksPage } from '@/pages/Tasks'
+// The error pages are tiny and one of them is the router's fallback, so they stay eager.
+import { InvalidPage, NotPermittedPage } from '@/pages/ErrorPages'
+// Everything reached after the first screen is a separate chunk — see `lazy.ts`.
+import {
+  LazyAssignmentRules,
+  LazyBrand,
+  LazyDashboard,
+  LazyDataImport,
+  LazyDefaults,
+  LazyEmailAccounts,
+  LazyEmailTemplates,
+  LazyERPNext,
+  LazyGeneral,
+  LazyHierarchy,
+  LazyHomeActions,
+  LazyLeadSyncing,
+  LazyNotifications,
+  LazyPreferences,
+  LazyProfile,
+  LazySettingsLayout,
+  LazySla,
+  LazyTelephony,
+  LazyUsers,
+  LazyWelcome,
+  LazyWhatsApp,
+} from '@/lazy'
 
 /**
  * Routes. The Vue app's `router.js`, minus what this conversion has not reached yet.
@@ -270,27 +269,27 @@ const organizationRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => authedRoute,
   id: 'settings',
-  component: SettingsLayout,
+  component: LazySettingsLayout,
 })
 
 const settingsChildren = (
   [
-    ['/settings/profile', ProfileSettingsPage],
-    ['/settings/preferences', PreferencesSettingsPage],
-    ['/settings/general', GeneralSettingsPage],
-    ['/settings/brand', BrandSettingsPage],
-    ['/settings/defaults', DefaultsSettingsPage],
-    ['/settings/home-actions', HomeActionsSettingsPage],
-    ['/settings/users', UsersSettingsPage],
-    ['/settings/hierarchy', HierarchySettingsPage],
-    ['/settings/assignment-rules', AssignmentRulesSettingsPage],
-    ['/settings/email-accounts', EmailAccountsSettingsPage],
-    ['/settings/email-templates', EmailTemplatesSettingsPage],
-    ['/settings/telephony', TelephonySettingsPage],
-    ['/settings/whatsapp', WhatsAppSettingsPage],
-    ['/settings/erpnext', ERPNextSettingsPage],
-    ['/settings/lead-syncing', LeadSyncingSettingsPage],
-    ['/settings/sla', SlaSettingsPage],
+    ['/settings/profile', LazyProfile],
+    ['/settings/preferences', LazyPreferences],
+    ['/settings/general', LazyGeneral],
+    ['/settings/brand', LazyBrand],
+    ['/settings/defaults', LazyDefaults],
+    ['/settings/home-actions', LazyHomeActions],
+    ['/settings/users', LazyUsers],
+    ['/settings/hierarchy', LazyHierarchy],
+    ['/settings/assignment-rules', LazyAssignmentRules],
+    ['/settings/email-accounts', LazyEmailAccounts],
+    ['/settings/email-templates', LazyEmailTemplates],
+    ['/settings/telephony', LazyTelephony],
+    ['/settings/whatsapp', LazyWhatsApp],
+    ['/settings/erpnext', LazyERPNext],
+    ['/settings/lead-syncing', LazyLeadSyncing],
+    ['/settings/sla', LazySla],
   ] as const
 ).map(([path, component]) =>
   createRoute({ getParentRoute: () => settingsRoute, path, component }),
@@ -299,7 +298,7 @@ const settingsChildren = (
 const welcomeRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: '/welcome',
-  component: WelcomePage,
+  component: LazyWelcome,
 })
 
 const notPermittedRoute = createRoute({
@@ -311,7 +310,7 @@ const notPermittedRoute = createRoute({
 const dataImportRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: '/data-import',
-  component: DataImportPage,
+  component: LazyDataImport,
 })
 
 /**
@@ -321,19 +320,19 @@ const dataImportRoute = createRoute({
 const dataImportDetailRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: '/data-import/$importName',
-  component: DataImportPage,
+  component: LazyDataImport,
 })
 
 const notificationsRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: '/notifications',
-  component: NotificationsPage,
+  component: LazyNotifications,
 })
 
 const dashboardRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: '/dashboard',
-  component: DashboardPage,
+  component: LazyDashboard,
 })
 
 const listScreenRoutes = [
