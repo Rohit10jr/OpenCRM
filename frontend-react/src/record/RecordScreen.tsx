@@ -8,7 +8,9 @@ import { useStatuses } from '@/list/useLookups'
 import { cn } from '@/lib/utils'
 import { useDocSubscription } from '@/realtime/useSocket'
 import { useSession } from '@/auth/session'
-import { ActivityTimeline, RecordList } from './ActivityTimeline'
+import { ActivityTimeline } from './ActivityTimeline'
+import { CallsTab } from './CallsTab'
+import { LinkedRecords, NoteRow, TaskRow } from './LinkedRecords'
 import { AssignTo } from './AssignTo'
 import { Attachments } from './Attachments'
 import { CallButton } from './CallButton'
@@ -28,11 +30,10 @@ import { WhatsAppTab } from './WhatsAppTab'
  * 832 lines and `Contact.vue`/`Organization.vue` repeat most of its structure with a
  * different doctype; here they pass a doctype and a title field.
  *
- * What is deliberately not here: the email composer, the WhatsApp tab, telephony, file
- * upload and the contacts sub-panel. Each needs an endpoint or a component this
- * conversion has not reached — `get_deal_contacts` is not even served by this backend.
- * They are listed in the run report rather than stubbed, because a tab that renders an
- * empty box reads as a working feature with no data.
+ * The email composer, WhatsApp tab, telephony, attachments and the contacts sub-panel were
+ * all absent through run 4 and are here now. Two of them call endpoints this backend does
+ * not serve and will fail visibly rather than quietly: that is the run-5 policy, and each
+ * one names the missing dotted path on screen. `BACKEND_GAPS.md` is the register.
  */
 
 type Tab = { id: string; label: string }
@@ -119,28 +120,27 @@ export function RecordScreen({
         emptyText="No comments yet."
       />
     ),
-    calls: (
-      <RecordList
-        rows={record.calls}
-        titleField="medium"
-        subtitleField="status"
-        emptyText="No calls logged against this record."
-      />
-    ),
+    calls: <CallsTab rows={record.calls} />,
     tasks: (
-      <RecordList
+      <LinkedRecords
+        doctype="CRM Task"
+        label="Task"
         rows={record.tasks}
-        titleField="title"
-        subtitleField="status"
+        parentDoctype={doctype}
+        parentName={name}
         emptyText="No tasks yet."
+        render={(row) => <TaskRow row={row} />}
       />
     ),
     notes: (
-      <RecordList
+      <LinkedRecords
+        doctype="FCRM Note"
+        label="Note"
         rows={record.notes}
-        titleField="title"
-        subtitleField="content"
+        parentDoctype={doctype}
+        parentName={name}
         emptyText="No notes yet."
+        render={(row) => <NoteRow row={row} />}
       />
     ),
     attachments: <Attachments name={name} rows={record.attachments} />,

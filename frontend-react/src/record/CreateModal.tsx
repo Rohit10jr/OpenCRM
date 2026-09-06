@@ -34,15 +34,36 @@ export function CreateModal({
   open,
   onOpenChange,
   onCreated,
+  defaults,
+  editName,
 }: {
   doctype: string
   title: string
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreated?: (name: string) => void
+  /**
+   * Fields the form starts with. Used to link a new task or note to the record it is being
+   * created from — `reference_doctype` and `reference_docname` are not on the Quick Entry
+   * layout, and should not be: they are context, not something to type.
+   */
+  defaults?: Record<string, unknown>
+  /** When set, the form edits that document instead of creating one. */
+  editName?: string
 }) {
-  const [draft, setDraft] = useState<Record<string, unknown>>({})
-  const { create } = useDocMutations(doctype)
+  const [draft, setDraft] = useState<Record<string, unknown>>(defaults ?? {})
+  const { create, update } = useDocMutations(doctype)
+  const editing = Boolean(editName)
+
+  // Re-seed whenever the dialog opens, not on mount: the same modal instance is reused for
+  // "new" and for each row you edit, so a draft left over from last time would show up as
+  // someone else's task.
+  const [seeded, setSeeded] = useState(false)
+  if (open && !seeded) {
+    setSeeded(true)
+    setDraft(defaults ?? {})
+  }
+  if (!open && seeded) setSeeded(false)
 
   const layout = useQuery({
     queryKey: ['quick-entry', doctype],
@@ -64,6 +85,22 @@ export function CreateModal({
 
   function submit(event: React.FormEvent) {
     event.preventDefault()
+
+    if (editName) {
+      update.mutate(
+        { name: editName, changes: draft },
+        {
+          onSuccess: () => {
+            toast.success(`${title} saved`)
+            onOpenChange(false)
+            onCreated?.(editName)
+          },
+          onError: (error) => toast.error(errorMessage(error, `Could not save the ${title}`)),
+        },
+      )
+      return
+    }
+
     create.mutate(draft, {
       onSuccess: (created) => {
         const name = String((created as { name?: string })?.name ?? '')
@@ -78,7 +115,7 @@ export function CreateModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title={`New ${title}`} className="max-w-2xl">
+      <DialogContent title={editing ? `Edit ${title}` : `New ${title}`} className="max-w-2xl">
         <form className="flex flex-col gap-4" onSubmit={submit}>
           <div className="max-h-[60vh] overflow-y-auto pr-1">
             {layout.isPending ? (
@@ -123,8 +160,12 @@ export function CreateModal({
             <Button type="button" variant="subtle" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" variant="solid" loading={create.isPending}>
-              Create
+            <Button
+              type="submit"
+              variant="solid"
+              loading={create.isPending || update.isPending}
+            >
+              {editing ? 'Save' : 'Create'}
             </Button>
           </div>
         </form>

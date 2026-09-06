@@ -93,49 +93,6 @@ function Value({ value }: { value: unknown }) {
   return <span className="rounded bg-surface-gray-2 px-1 text-ink-gray-8">{text}</span>
 }
 
-/**
- * The Calls / Tasks / Notes / Attachments tabs.
- *
- * `get_activities` returns all four alongside the timeline, so they are already fetched;
- * these render what came back rather than asking again.
- */
-export function RecordList({
-  rows,
-  titleField,
-  subtitleField,
-  emptyText,
-}: {
-  rows: Record<string, unknown>[]
-  titleField: string
-  subtitleField?: string
-  emptyText: string
-}) {
-  if (!rows.length) return <Empty text={emptyText} />
-
-  return (
-    <ul className="flex flex-col p-5">
-      {rows.map((row, index) => (
-        <li
-          key={String(row.name ?? index)}
-          className="border-b border-outline-gray-1 py-2.5 last:border-0"
-        >
-          <div className="truncate text-base text-ink-gray-8">
-            {String(row[titleField] ?? row.name ?? '')}
-          </div>
-          {subtitleField && row[subtitleField] ? (
-            <div className="truncate text-sm text-ink-gray-5">
-              {String(row[subtitleField])}
-            </div>
-          ) : null}
-          {row.creation ? (
-            <div className="text-sm text-ink-gray-4">{timeAgo(row.creation)}</div>
-          ) : null}
-        </li>
-      ))}
-    </ul>
-  )
-}
-
 function Empty({ text }: { text: string }) {
   return (
     <div className="flex h-full items-center justify-center p-10 text-base text-ink-gray-4">
