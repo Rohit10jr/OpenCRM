@@ -19,6 +19,7 @@ import { ContactsSection } from './ContactsSection'
 import { EmailComposer } from './EmailComposer'
 import { LikeButton, LinkedDocs } from './LinkedDocs'
 import { SidePanel } from './SidePanel'
+import { SlaSection } from './SlaSection'
 import { ConvertToDealButton, StatusChange } from './StatusChange'
 import { useRecord } from './useRecord'
 import { WhatsAppTab } from './WhatsAppTab'
@@ -45,6 +46,7 @@ export function RecordScreen({
   titleField,
   backTo,
   backLabel,
+  asideTop,
 }: {
   doctype: string
   name: string
@@ -54,6 +56,12 @@ export function RecordScreen({
   titleField?: string
   backTo: string
   backLabel: string
+  /**
+   * Rendered at the top of the side panel. For the one thing a doctype has that no other
+   * does and that no layout describes — a contact's deals, say. Passed in rather than
+   * branched on here, so this file stays doctype-agnostic.
+   */
+  asideTop?: React.ReactNode
 }) {
   const record = useRecord(doctype, name)
   // An open record is the one place realtime earns its keep: two people editing the same
@@ -257,6 +265,10 @@ export function RecordScreen({
         </div>
 
         <aside className="w-96 shrink-0 overflow-y-auto border-l border-outline-gray-1">
+          {/* Above the layout, not inside it: the SLA fields are not on the side-panel
+              layout the server returns, so no metadata would have placed them. */}
+          <SlaSection doc={doc} onUpdateField={saveField} />
+          {asideTop}
           <SidePanel
             sections={record.sections}
             doc={record.doc as never}
