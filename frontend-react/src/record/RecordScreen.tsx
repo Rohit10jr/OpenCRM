@@ -1,30 +1,22 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { AlertCircle, ChevronDown, Loader2 } from 'lucide-react'
+import { AlertCircle, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { errorMessage } from '@/api/client'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { statusDotClass } from '@/list/statusColor'
+import { callGet, errorMessage } from '@/api/client'
 import { useStatuses } from '@/list/useLookups'
 import { cn } from '@/lib/utils'
 import { useDocSubscription } from '@/realtime/useSocket'
-import { useQuery } from '@tanstack/react-query'
-import { callGet } from '@/api/client'
 import { ActivityTimeline, RecordList } from './ActivityTimeline'
 import { AssignTo } from './AssignTo'
 import { Attachments } from './Attachments'
 import { CallButton } from './CallButton'
 import { CommentBox } from './CommentBox'
 import { EmailComposer } from './EmailComposer'
-import { WhatsAppTab } from './WhatsAppTab'
 import { SidePanel } from './SidePanel'
+import { ConvertToDealButton, StatusChange } from './StatusChange'
 import { useRecord } from './useRecord'
+import { WhatsAppTab } from './WhatsAppTab'
 
 /**
  * A whole record screen: header, tabs, side panel.
@@ -188,32 +180,22 @@ export function RecordScreen({
           <CallButton phone={doc.mobile_no ?? doc.phone} />
           <AssignTo doctype={doctype} name={name} assignees={record.assignees} />
 
+          {doctype === 'CRM Lead' ? <ConvertToDealButton leadId={name} /> : null}
+
           {statusDoctype && status ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="md"
-                  title="Status"
-                  loading={record.updateField.isPending}
-                >
-                  <span className={statusDotClass(getStatus(status)?.color)} />
-                  {status}
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="max-h-80 overflow-y-auto">
-                {statuses.map((option) => (
-                  <DropdownMenuItem
-                    key={option.name}
-                    onSelect={() => saveField('status', option.name)}
-                  >
-                    <span className={statusDotClass(option.color)} />
-                    {option.name}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <StatusChange
+              statuses={statuses}
+              current={status}
+              colour={getStatus(status)?.color}
+              isSaving={record.updateField.isPending}
+              // A patch, not one field: moving to a Lost status carries the reason and
+              // notes with it, and the model refuses the status without them.
+              onChange={(patch) =>
+                Object.entries(patch).forEach(([fieldname, value]) =>
+                  saveField(fieldname, value),
+                )
+              }
+            />
           ) : null}
         </div>
       </header>

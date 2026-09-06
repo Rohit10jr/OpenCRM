@@ -80,6 +80,36 @@ that controller did beyond an insert is lost — nothing in the port depends on 
 
 ---
 
+## 5. Converting a lead to a deal — `crm.fcrm.doctype.crm_lead.crm_lead.convert_to_deal`
+
+**Wanted by:** the Convert button on a lead record (`ConvertToDealModal.vue:154`).
+
+**Implemented but not exposed.** `backend/crm_app/conversion.py:263` *is* `convert_to_deal`
+and looks complete — it carries the organization and contact across and marks the lead
+converted. Nothing whitelists it, so the client cannot reach it.
+
+**React does:** `ConvertToDealButton` opens a confirmation with the banner, and posts to the
+real path. It will 404.
+
+**To unblock:** one `@whitelist` decorator, most likely. This is the cheapest gap on the
+list and the one with the most behind it already.
+
+---
+
+## 6. Rich text everywhere — no TipTap yet
+
+Not a backend gap, but it belongs beside them because it shapes the same screens.
+
+The Vue app composes emails, comments and notes in a TipTap editor and stores **HTML**.
+React sends plain text from a textarea in all three places, and **renders comments as text
+rather than HTML** — a comment written by the Vue client is HTML authored by another user,
+so unescaping it would be stored XSS with a Vue-shaped delivery mechanism.
+
+**To close:** `@tiptap/react` plus a sanitiser on the render side. Contained, and it wants
+doing before either client is used against the other's data in anger.
+
+---
+
 ## Things earlier runs assumed were missing and are not
 
 Recorded because two runs planned around the wrong assumption:
