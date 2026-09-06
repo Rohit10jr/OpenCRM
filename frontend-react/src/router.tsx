@@ -193,12 +193,14 @@ export type ListSearch = {
   view?: string
   filters?: ListFilter[]
   order_by?: string
+  group_by?: string
 }
 
 function viewSearch(search: Record<string, unknown>): ListSearch {
   const out: ListSearch = {}
   if (typeof search.view === 'string') out.view = search.view
   if (typeof search.order_by === 'string') out.order_by = search.order_by
+  if (typeof search.group_by === 'string') out.group_by = search.group_by
 
   const filters = parseFilters(search.filters)
   if (filters.length) out.filters = filters

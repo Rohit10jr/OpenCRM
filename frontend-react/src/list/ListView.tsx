@@ -90,6 +90,7 @@ export function ListView({
     filters,
     // Undefined when the user has not chosen, so the saved view's sort wins.
     orderBy: search.order_by,
+    groupBy: search.group_by,
   })
   const { getStatus } = useStatuses(statusDoctype)
   const viewMutations = useViewMutations(doctype)
@@ -140,6 +141,8 @@ export function ListView({
         onFiltersChange={(next) => setSearch({ filters: next.length ? next : undefined })}
         orderBy={list.orderBy}
         onOrderByChange={(next) => setSearch({ order_by: next })}
+        groupBy={search.group_by}
+        onGroupByChange={(next) => setSearch({ group_by: next })}
         views={list.views}
         savedViewName={savedViewName}
         // Selecting a view drops the ad-hoc filters, because the view carries its own and

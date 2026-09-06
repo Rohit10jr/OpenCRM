@@ -58,6 +58,8 @@ export type UseListViewOptions = {
    * a record and pressing back.
    */
   filters: ListFilter[]
+  /** The field a group_by view groups on, when the user has picked one. */
+  groupBy?: string
   /**
    * `undefined` means the user has not chosen a sort, so the saved view's wins.
    *
@@ -81,6 +83,7 @@ export function useListView({
   groupByField = 'owner',
   filters,
   orderBy,
+  groupBy,
 }: UseListViewOptions) {
   const [pageLength, setPageLength] = useState(DEFAULT_PAGE_LENGTH)
   /**
@@ -116,7 +119,8 @@ export function useListView({
       view: {
         custom_view_name: savedViewName ?? '',
         view_type: currentViewType,
-        group_by_field: saved.groupByField ?? groupByField,
+        // The user's choice, else the saved view's, else the server's default of `owner`.
+        group_by_field: groupBy ?? saved.groupByField ?? groupByField,
       },
       // `columns` and `rows` set `custom_view = True` server-side, which is what makes it
       // skip the default-view lookup and honour the saved view's column set
@@ -150,6 +154,7 @@ export function useListView({
       currentViewType,
       columnField,
       groupByField,
+      groupBy,
       pageLength,
       pageLengthCount,
     ],

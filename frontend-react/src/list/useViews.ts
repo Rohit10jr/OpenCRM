@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { callGet } from '@/api/client'
+import { call, callGet } from '@/api/client'
 import { createDoc, deleteDoc, updateDoc } from '@/api/resource'
 import type { Filters, SavedView, ViewType } from '@/api/types'
 
@@ -139,5 +139,36 @@ export function useViewMutations(doctype: string) {
     onSuccess: invalidate,
   })
 
-  return { create, update, remove }
+  /**
+   * Pin, publish, and set-as-default.
+   *
+   * These go through the dedicated endpoints rather than `set_value` on the row, because
+   * two of them do more than write a field:
+   *
+   * * `public` is gated on Administrator or Sales Manager and **skips the usual permission
+   *   check** — making a view public is a stronger act than editing one (`view_settings.py:205`).
+   * * `set_as_default` clears the flag on the user's other views afterwards, because exactly
+   *   one view per user may be default (`view_settings.py:249`).
+   *
+   * Writing the columns directly would silently lose both behaviours.
+   */
+  const pin = useMutation({
+    mutationFn: ({ name, value }: { name: string; value: boolean }) =>
+      call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.pin', { name, value }),
+    onSuccess: invalidate,
+  })
+
+  const setPublic = useMutation({
+    mutationFn: ({ name, value }: { name: string; value: boolean }) =>
+      call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.public', { name, value }),
+    onSuccess: invalidate,
+  })
+
+  const setDefault = useMutation({
+    mutationFn: (name: string) =>
+      call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.set_as_default', { name }),
+    onSuccess: invalidate,
+  })
+
+  return { create, update, remove, pin, setPublic, setDefault }
 }

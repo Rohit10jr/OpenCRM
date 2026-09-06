@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   List as ListIcon,
   RefreshCw,
+  Rows3,
   Trash2,
 } from 'lucide-react'
 import type { ListColumn, SavedView, ViewType } from '@/api/types'
@@ -33,7 +34,11 @@ import {
 } from '@/components/ui/primitives'
 import { cn } from '@/lib/utils'
 import { FilterEditor } from './FilterEditor'
-import { useFilterableFields, useSortOptions } from './useFieldOptions'
+import {
+  useFilterableFields,
+  useGroupByFields,
+  useSortOptions,
+} from './useFieldOptions'
 import type { ListFilter } from './useListView'
 
 /**
@@ -61,6 +66,8 @@ export function ViewControls({
   onFiltersChange,
   orderBy,
   onOrderByChange,
+  groupBy,
+  onGroupByChange,
   views,
   savedViewName,
   onSelectView,
@@ -82,6 +89,8 @@ export function ViewControls({
   onFiltersChange: (filters: ListFilter[]) => void
   orderBy: string
   onOrderByChange: (orderBy: string) => void
+  groupBy?: string
+  onGroupByChange: (fieldname: string) => void
   views: SavedView[]
   savedViewName?: string
   onSelectView: (name?: string) => void
@@ -95,6 +104,7 @@ export function ViewControls({
   // The curated subsets, not `get_data`'s `fields` — see `useFieldOptions.ts`.
   const sortOptions = useSortOptions(doctype)
   const filterableFields = useFilterableFields(doctype)
+  const groupByFields = useGroupByFields(doctype)
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-outline-gray-1 px-4 py-2">
@@ -169,6 +179,32 @@ export function ViewControls({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Only where it means something. A group-by picker on a list view is a control
+            with nothing to control. */}
+        {viewType === 'group_by' ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm">
+                <Rows3 className="h-4 w-4" />
+                Group by
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="max-h-80 overflow-y-auto">
+              <DropdownMenuLabel>Group rows by</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={groupBy ?? 'owner'}
+                onValueChange={onGroupByChange}
+              >
+                {groupByFields.map((field) => (
+                  <DropdownMenuRadioItem key={field.fieldname} value={field.fieldname}>
+                    {field.label}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

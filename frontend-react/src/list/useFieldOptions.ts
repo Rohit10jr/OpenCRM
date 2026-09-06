@@ -29,6 +29,22 @@ export function byFieldname<T extends { fieldname: string }>(rows: T[] | undefin
   )
 }
 
+/**
+ * `crm.api.doc.get_group_by_fields` — the fields a group_by view may group on.
+ *
+ * The group_by view has been hardcoded to `owner` since run 1, which is the server's own
+ * default but not the only choice. This is what the Vue picker reads.
+ */
+export function useGroupByFields(doctype: string): DocField[] {
+  const query = useQuery({
+    queryKey: ['group_by_fields', doctype],
+    queryFn: () => callGet<DocField[]>('crm.api.doc.get_group_by_fields', { doctype }),
+    enabled: Boolean(doctype),
+    ...STALE,
+  })
+  return byFieldname(query.data)
+}
+
 /** `crm.api.doc.sort_options` — `{ label, value, fieldname }`. */
 export function useSortOptions(doctype: string) {
   const query = useQuery({
