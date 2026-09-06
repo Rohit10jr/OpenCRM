@@ -22,7 +22,29 @@ import { LeadsPage } from '@/pages/Leads'
 import { NotesPage } from '@/pages/Notes'
 import { OrganizationPage } from '@/pages/Organization'
 import { OrganizationsPage } from '@/pages/Organizations'
+import { AssignmentRulesSettingsPage } from '@/pages/settings/AssignmentRules'
+import {
+  ERPNextSettingsPage,
+  WhatsAppSettingsPage,
+} from '@/pages/settings/Integrations'
+import {
+  EmailAccountsSettingsPage,
+  EmailTemplatesSettingsPage,
+  HierarchySettingsPage,
+  HomeActionsSettingsPage,
+  LeadSyncingSettingsPage,
+  SlaSettingsPage,
+} from '@/pages/settings/Lists'
+import { ProfileSettingsPage } from '@/pages/settings/Profile'
+import { SettingsLayout } from '@/pages/settings/SettingsLayout'
+import { TelephonySettingsPage } from '@/pages/settings/Telephony'
 import { UsersSettingsPage } from '@/pages/settings/Users'
+import {
+  BrandSettingsPage,
+  DefaultsSettingsPage,
+  GeneralSettingsPage,
+  PreferencesSettingsPage,
+} from '@/pages/settings/Workspace'
 import { TasksPage } from '@/pages/Tasks'
 
 /**
@@ -231,11 +253,42 @@ const organizationRoute = createRoute({
   component: OrganizationPage,
 })
 
-const usersSettingsRoute = createRoute({
+/**
+ * Settings is a nested route with its own shell, not a modal.
+ *
+ * `Settings.vue` renders the whole thing as a dialog over the app and tracks the open page
+ * in a store. That is a router with worse ergonomics: you cannot link to a settings page,
+ * reload into one, or press back out of one. Here `/settings/*` is real navigation and
+ * `SettingsLayout` owns the section list.
+ */
+const settingsRoute = createRoute({
   getParentRoute: () => authedRoute,
-  path: '/settings/users',
-  component: UsersSettingsPage,
+  id: 'settings',
+  component: SettingsLayout,
 })
+
+const settingsChildren = (
+  [
+    ['/settings/profile', ProfileSettingsPage],
+    ['/settings/preferences', PreferencesSettingsPage],
+    ['/settings/general', GeneralSettingsPage],
+    ['/settings/brand', BrandSettingsPage],
+    ['/settings/defaults', DefaultsSettingsPage],
+    ['/settings/home-actions', HomeActionsSettingsPage],
+    ['/settings/users', UsersSettingsPage],
+    ['/settings/hierarchy', HierarchySettingsPage],
+    ['/settings/assignment-rules', AssignmentRulesSettingsPage],
+    ['/settings/email-accounts', EmailAccountsSettingsPage],
+    ['/settings/email-templates', EmailTemplatesSettingsPage],
+    ['/settings/telephony', TelephonySettingsPage],
+    ['/settings/whatsapp', WhatsAppSettingsPage],
+    ['/settings/erpnext', ERPNextSettingsPage],
+    ['/settings/lead-syncing', LeadSyncingSettingsPage],
+    ['/settings/sla', SlaSettingsPage],
+  ] as const
+).map(([path, component]) =>
+  createRoute({ getParentRoute: () => settingsRoute, path, component }),
+)
 
 const listScreenRoutes = [
   ...listRoutes('/deals/view', DealsPage),
@@ -260,7 +313,7 @@ const routeTree = rootRoute.addChildren([
     leadRoute,
     contactRoute,
     organizationRoute,
-    usersSettingsRoute,
+    settingsRoute.addChildren(settingsChildren),
     ...listScreenRoutes,
   ]),
 ])
