@@ -64,14 +64,27 @@ cdp.on('Network.webSocketHandshakeResponseReceived', ({ requestId, response }) =
  * is a dotted path you can look up in `BACKEND_GAPS.md`.
  */
 const apiFailures = []
-page.on('response', (response) => {
+page.on('response', async (response) => {
   const url = response.url()
   if (!url.includes('/api/')) return
   const status = response.status()
   if (status < 400) return
   // The dotted path is the useful half; the host and query string are noise.
   const path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0]
-  apiFailures.push({ path, status, step: currentStep })
+
+  // The body, because a bare "400" says a request was refused and not why. Frappe puts the
+  // reason in `exception` or `message`, and that sentence is usually the whole diagnosis.
+  let reason = ''
+  try {
+    const body = await response.text()
+    const parsed = JSON.parse(body)
+    reason = parsed.exception || parsed.message || parsed._error_message || ''
+    if (typeof reason !== 'string') reason = JSON.stringify(reason)
+    if (!reason) reason = body.slice(0, 160)
+  } catch {
+    // A redirect or an already-consumed body. The status and path still stand.
+  }
+  apiFailures.push({ path, status, step: currentStep, reason: reason.slice(0, 200) })
 })
 
 page.on('console', (message) => {
@@ -488,8 +501,12 @@ await step('assigning a user persists, and unassigning removes them', async () =
 
   const openPicker = async () => {
     const [button] = await page.$$('header button[title="Assigned to"]')
+    if (!button) throw new Error('no "Assigned to" button in the header')
     await button.click()
-    await page.waitForSelector('[role="menu"] button', { timeout: 5000 })
+    // 15s, not 5s. The menu opens immediately and its *entries* wait on the user list, and
+    // run 5 added several queries to a record open — enough that a five-second bound
+    // started failing here intermittently and nowhere else.
+    await page.waitForSelector('[role="menu"] button', { timeout: 15000 })
   }
 
   /**
@@ -861,6 +878,346 @@ await step('the invite dialog opens and validates', async () => {
   await page.keyboard.press('Escape')
 })
 
+/* ------------------------------------------------------------------ run 5 screens
+ *
+ * Everything below covers work that shipped in run 5 with no browser coverage at all —
+ * 16 settings screens, the dashboard, notifications, four record tabs, the toolbar
+ * controls, and the responsive layout.
+ *
+ * These are deliberately shallower than the steps above. The ones above assert a *round
+ * trip* — type something, reload, see it survive. Most of these assert that a screen
+ * renders its own content and asks for the right endpoints, because that is the failure
+ * that has actually been happening: a screen that looks fine while a 404 hides a feature.
+ * The API-failure list at the end of the run is doing half the work of these steps.
+ */
+console.log('run 5 — settings screens')
+
+// Every settings screen, by its route. A screen that throws takes its own step down and
+// leaves the rest running, which is the point of one step per screen rather than a loop
+// inside one step.
+for (const [path, marker] of [
+  ['/settings/profile', 'Profile'],
+  ['/settings/preferences', 'Preferences'],
+  ['/settings/general', 'General'],
+  ['/settings/brand', 'Brand'],
+  ['/settings/defaults', 'Defaults'],
+  ['/settings/home-actions', 'Home'],
+  ['/settings/hierarchy', 'hierarchy'],
+  ['/settings/assignment-rules', 'ssignment'],
+  ['/settings/email-accounts', 'mail'],
+  ['/settings/email-templates', 'emplate'],
+  ['/settings/telephony', 'wilio'],
+  ['/settings/whatsapp', 'WhatsApp'],
+  ['/settings/erpnext', 'RPNext'],
+  ['/settings/lead-syncing', 'ead'],
+  ['/settings/sla', 'ervice'],
+]) {
+  await step(`settings ${path} renders`, async () => {
+    await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' })
+    // The nav is always there, so waiting for it proves nothing. Wait for the pane.
+    await page.waitForFunction(
+      (text) => document.body.innerText.includes(text),
+      { timeout: 15000 },
+      marker,
+    )
+  })
+}
+
+console.log('run 5 — dashboard and notifications')
+await step('the dashboard renders tiles', async () => {
+  await page.goto(`${BASE}/dashboard`, { waitUntil: 'domcontentloaded' })
+  await page.waitForFunction(() => !/Loading/.test(document.body.innerText), {
+    timeout: 20000,
+  })
+  const body = await text()
+  if (/Could not|error/i.test(body)) throw new Error('the dashboard reported an error')
+
+  // Asserted, not just counted. The first version printed a line count and passed on zero,
+  // which is the exact shape of failure this harness exists to catch: a screen that fetches
+  // successfully, renders nothing, and reports success.
+  const main = await page.$eval('main', (el) => el.innerText.trim()).catch(() => '')
+  console.log(`        ${main.split('\n').filter(Boolean).length} lines in <main>`)
+  await shot(page, '30-dashboard')
+  if (!main) throw new Error('the dashboard fetched without error and rendered nothing')
+  void body
+})
+
+await step('notifications render', async () => {
+  await page.goto(`${BASE}/notifications`, { waitUntil: 'domcontentloaded' })
+  await page.waitForFunction(() => /Notifications/.test(document.body.innerText), {
+    timeout: 15000,
+  })
+})
+
+console.log('run 5 — record tabs')
+const openFirstDeal = async () => {
+  await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table tbody tr', { timeout: 15000 })
+  await page.click('table tbody tr td:nth-child(2)')
+  await page.waitForFunction(() => /^\/deals\/CRM-DEAL/.test(location.pathname), {
+    timeout: 15000,
+  })
+}
+
+const openTab = async (label) => {
+  // The tab strip renders after `get_activities` returns, so the URL changing is not
+  // enough to look for a tab by name — that raced and reported "no Emails tab" on a deal
+  // that had one a moment later.
+  await page.waitForSelector('[role="tab"]', { timeout: 15000 })
+  const [tab] = await page.$$(
+    `xpath/.//button[@role="tab"][starts-with(normalize-space(), "${label}")]`,
+  )
+  if (!tab) {
+    const seen = await page.$$eval('[role="tab"]', (ts) => ts.map((t) => t.innerText))
+    throw new Error(`no ${label} tab — saw: ${seen.join(', ')}`)
+  }
+  await tab.click()
+}
+
+await step('the Emails tab shows the thread and the composer', async () => {
+  await openFirstDeal()
+  await openTab('Emails')
+  // The composer's banner names the unserved send endpoint — its presence is the run-5
+  // policy working, not a failure.
+  await page.waitForFunction(
+    () => /Sending email|No emails on this record/.test(document.body.innerText),
+    { timeout: 15000 },
+  )
+  await shot(page, '31-emails-tab')
+})
+
+await step('the Calls tab renders', async () => {
+  await openTab('Calls')
+  await page.waitForFunction(
+    () => /No calls logged|Completed|No Answer/.test(document.body.innerText),
+    { timeout: 15000 },
+  )
+})
+
+await step('a task can be created from a deal and deleted again', async () => {
+  // Each tab step reopens the deal rather than inheriting whatever the last one left. The
+  // first version chained them, so one failure mid-step left a dialog open and took the
+  // next two down with it — reporting three bugs where there was one.
+  await openFirstDeal()
+  await openTab('Tasks')
+  const title = `verify task ${Date.now() % 100000}`
+
+  const [newTask] = await page.$$('xpath/.//button[contains(., "New task")]')
+  if (!newTask) throw new Error('no "New task" button')
+  await newTask.click()
+  await page.waitForSelector('[role="dialog"]', { timeout: 10000 })
+  // The dialog opens before its fields do — it fetches the doctype's Quick Entry layout on
+  // open, and shows "Loading…" until that lands. Probing before then found a dialog with
+  // no inputs and called it a bug.
+  await page.waitForFunction(
+    () => {
+      const dialog = document.querySelector('[role="dialog"]')
+      return dialog && !/Loading/.test(dialog.innerText)
+    },
+    { timeout: 15000 },
+  )
+
+  // The form is the doctype's Quick Entry layout, so the field is found by its label
+  // rather than by a name the client chose.
+  /**
+   * Typed and then blurred, not assigned.
+   *
+   * `FieldInput` commits on blur or Enter, never per keystroke — each commit is a
+   * `set_value` round trip, so the panel deliberately does not fire one per character.
+   * Setting `.value` and dispatching `input` therefore updates the DOM and never the
+   * draft, and the create posted with no title: *"title: This field is required."* Which
+   * is a fair description of a harness that never typed anything.
+   */
+  const typed = await page.evaluate(() => {
+    const dialog = document.querySelector('[role="dialog"]')
+    const input = dialog?.querySelector('input[type="text"]')
+    if (!input) return false
+    input.focus()
+    return true
+  })
+  if (typed) {
+    await page.keyboard.type(title)
+    await page.keyboard.press('Tab')
+  }
+  if (!typed) {
+    // Name what the dialog *does* have. "No text input" could mean the layout is empty,
+    // or that the title field is a control this probe does not recognise, and those are
+    // different bugs.
+    const shape = await page.evaluate(() => {
+      const dialog = document.querySelector('[role="dialog"]')
+      if (!dialog) return 'no dialog at all'
+      const controls = [...dialog.querySelectorAll('input, select, textarea')].map(
+        (el) => `${el.tagName.toLowerCase()}[type=${el.getAttribute('type') ?? '-'}]`,
+      )
+      return controls.length
+        ? `controls: ${controls.join(', ')}`
+        : `no controls; text: ${dialog.innerText.slice(0, 120).replace(/\n/g, ' | ')}`
+    })
+    throw new Error(`the task dialog has no text input — ${shape}`)
+  }
+
+  const [create] = await page.$$('xpath/.//div[@role="dialog"]//button[@type="submit"]')
+  if (!create) throw new Error('the task dialog has no submit button')
+  await create.click()
+
+  await page.waitForFunction(
+    (value) => document.body.innerText.includes(value),
+    { timeout: 15000 },
+    title,
+  )
+
+  // Reload: proves the task reached the server, and that it came back attached to *this*
+  // deal rather than merely to the task list.
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await openTab('Tasks')
+  await page.waitForFunction(
+    (value) => document.body.innerText.includes(value),
+    { timeout: 15000 },
+    title,
+  )
+  console.log(`        "${title}" survived a reload on the deal`)
+  await shot(page, '32-task-created')
+})
+
+await step('the Notes tab renders its own controls', async () => {
+  await openFirstDeal()
+  await openTab('Notes')
+  await page.waitForFunction(
+    () => /New note|No notes yet/.test(document.body.innerText),
+    { timeout: 15000 },
+  )
+})
+
+console.log('run 5 — list toolbar')
+await step('the quick filter row renders', async () => {
+  await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table tbody tr', { timeout: 15000 })
+  const picker = await page.$('button[title="Choose quick filters"]')
+  if (!picker) throw new Error('no quick-filter picker')
+})
+
+await step('adding a column persists across a reload', async () => {
+  await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table thead th', { timeout: 15000 })
+  const before = await page.$$eval('table thead th', (ths) => ths.length)
+
+  const [columns] = await page.$$('xpath/.//button[contains(., "Columns")]')
+  if (!columns) throw new Error('no Columns button')
+  await columns.click()
+  await page.waitForSelector('[role="menu"]', { timeout: 5000 })
+
+  // The first unchecked item is under "Add a column" — checking it is the add.
+  const added = await page.evaluate(() => {
+    const items = [...document.querySelectorAll('[role="menuitemcheckbox"]')]
+    const unchecked = items.find((i) => i.getAttribute('aria-checked') === 'false')
+    if (!unchecked) return null
+    const label = unchecked.innerText.trim()
+    unchecked.click()
+    return label
+  })
+  if (!added) throw new Error('no addable column offered')
+  await page.keyboard.press('Escape')
+
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table thead th', { timeout: 15000 })
+  const after = await page.$$eval('table thead th', (ths) => ths.length)
+  console.log(`        added "${added}": ${before} columns -> ${after} after a reload`)
+  if (after <= before) throw new Error(`column "${added}" did not persist`)
+
+  // Put it back, so the next run starts where this one did.
+  const [again] = await page.$$('xpath/.//button[contains(., "Columns")]')
+  await again.click()
+  await page.waitForSelector('[role="menu"]', { timeout: 5000 })
+  await page.evaluate((label) => {
+    const item = [...document.querySelectorAll('[role="menuitemcheckbox"]')].find(
+      (i) => i.innerText.trim() === label && i.getAttribute('aria-checked') === 'true',
+    )
+    item?.click()
+  }, added)
+  await page.keyboard.press('Escape')
+})
+
+await step('the kanban board settings dialog opens', async () => {
+  await page.goto(`${BASE}/deals/view/kanban`, { waitUntil: 'domcontentloaded' })
+  await page.waitForFunction(() => !/Loading/.test(document.body.innerText), {
+    timeout: 20000,
+  })
+  const [board] = await page.$$('xpath/.//button[contains(., "Board")]')
+  if (!board) throw new Error('no Board settings button')
+  await board.click()
+  await page.waitForSelector('[role="dialog"]', { timeout: 10000 })
+  await page.keyboard.press('Escape')
+})
+
+console.log('run 5 — other screens')
+await step('an organization shows its deals and contacts', async () => {
+  await page.goto(`${BASE}/organizations/view`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table tbody tr', { timeout: 15000 })
+  await page.click('table tbody tr td:nth-child(2)')
+  await page.waitForFunction(() => /^\/organizations\//.test(location.pathname), {
+    timeout: 15000,
+  })
+  await page.waitForFunction(
+    () => /Deals \(\d+\)/.test(document.body.innerText),
+    { timeout: 15000 },
+  )
+})
+
+await step('a call log row opens its detail', async () => {
+  await page.goto(`${BASE}/call-logs/view`, { waitUntil: 'domcontentloaded' })
+  await page.waitForFunction(() => !/Loading/.test(document.body.innerText), {
+    timeout: 20000,
+  })
+  const rows = await page.$$('table tbody tr')
+  if (!rows.length) {
+    console.log('        no call logs in this database — nothing to open')
+    return
+  }
+  await page.click('table tbody tr td:nth-child(2)')
+  await page.waitForSelector('[role="dialog"]', { timeout: 10000 })
+  await page.keyboard.press('Escape')
+})
+
+await step('the data import screen renders', async () => {
+  await page.goto(`${BASE}/data-import`, { waitUntil: 'domcontentloaded' })
+  await page.waitForFunction(() => !/^\s*$/.test(document.body.innerText), {
+    timeout: 15000,
+  })
+})
+
+await step('the welcome screen renders its checklist', async () => {
+  await page.goto(`${BASE}/welcome`, { waitUntil: 'domcontentloaded' })
+  await page.waitForFunction(() => /Welcome to Frappe CRM/.test(document.body.innerText), {
+    timeout: 15000,
+  })
+})
+
+await step('the sidebar collapses to a drawer on a narrow viewport', async () => {
+  await page.setViewport({ width: 640, height: 900 })
+  await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('button[aria-label="Open menu"]', { timeout: 15000 })
+
+  // The sidebar is off-canvas rather than removed, so the test is its position, not its
+  // presence — `-translate-x-full` puts it left of the viewport.
+  const hidden = await page.evaluate(() => {
+    const aside = document.querySelector('aside')
+    return aside ? aside.getBoundingClientRect().right <= 0 : false
+  })
+  if (!hidden) throw new Error('the sidebar is still on screen at 640px')
+
+  await page.click('button[aria-label="Open menu"]')
+  await page.waitForFunction(
+    () => {
+      const aside = document.querySelector('aside')
+      return aside && aside.getBoundingClientRect().right > 0
+    },
+    { timeout: 5000 },
+  )
+  await shot(page, '33-mobile-drawer')
+  await page.setViewport({ width: 1440, height: 900 })
+})
+
+console.log('sign out')
 await step('sign out returns to login', async () => {
   await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('button[title="Sign out"]', { timeout: 10000 })
@@ -879,11 +1236,13 @@ else {
   const grouped = new Map()
   for (const failure of apiFailures) {
     const key = `${failure.status} ${failure.path}`
-    if (!grouped.has(key)) grouped.set(key, new Set())
-    grouped.get(key).add(failure.step)
+    if (!grouped.has(key)) grouped.set(key, { steps: new Set(), reasons: new Set() })
+    grouped.get(key).steps.add(failure.step)
+    if (failure.reason) grouped.get(key).reasons.add(failure.reason)
   }
-  for (const [key, steps] of grouped) {
+  for (const [key, { steps, reasons }] of grouped) {
     console.log(`  ${key}`)
+    for (const reason of reasons) console.log(`      why: ${reason}`)
     console.log(`      during: ${[...steps].join('; ')}`)
   }
 }

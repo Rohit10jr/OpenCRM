@@ -3,7 +3,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import { MoreHorizontal, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { errorMessage } from '@/api/client'
-import { keys } from '@/api/queryKeys'
 import { useDocMutations } from '@/api/hooks'
 import { RichTextView } from '@/components/RichText'
 import { Badge } from '@/components/ui/primitives'
@@ -31,8 +30,9 @@ import { CreateModal } from './CreateModal'
  * Entry layout, so the fields on offer here are whatever the server says a task has. There
  * is deliberately no second, hand-written task form to drift out of step with it.
  *
- * **Invalidating `keys.doc.all`** is what refreshes the list, because the rows came down
- * inside the record's own `get_activities` payload rather than from a query of their own.
+ * The rows come down inside the record's own `get_activities` payload rather than from a
+ * query of their own, so **the key to invalidate is that payload's** — see `refresh` below,
+ * and the bug that comment records.
  */
 export function LinkedRecords({
   doctype,
@@ -59,7 +59,17 @@ export function LinkedRecords({
   const [creating, setCreating] = useState(false)
   const [draft, setDraft] = useState<Record<string, unknown>>({})
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: keys.doc.all })
+  /**
+   * The rows come down inside the record's `get_activities` payload, which lives under
+   * `['activities', name]` — *not* under `['doc']`.
+   *
+   * This invalidated `keys.doc.all` until the browser harness caught it. The two key
+   * spaces never intersect, so creating, editing or deleting a task refreshed nothing and
+   * the change appeared only after a manual page reload. Every mutation looked like it had
+   * silently failed.
+   */
+  const refresh = () =>
+    queryClient.invalidateQueries({ queryKey: ['activities', parentName] })
 
   const linkDefaults = {
     reference_doctype: parentDoctype,
