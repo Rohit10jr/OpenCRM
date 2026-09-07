@@ -198,11 +198,18 @@ export function NoteRow({ row }: { row: Record<string, unknown> }) {
   )
 }
 
-// `CRM Task`'s status and priority are Select fields, so these are the model's own choices
-// rather than rows in a `* Status` doctype — nothing to look a colour up from.
+/**
+ * `CRM Task`'s status and priority are Select fields, so these are the model's own choices
+ * rather than rows in a `* Status` doctype — nothing to look a colour up from.
+ *
+ * The full set is `TASK_STATUS_CHOICES` (`core_sales.py:49`): Backlog, Todo, In Progress,
+ * Done, **Canceled**. That last one is spelled with one L. This matched `'Cancelled'`
+ * until it was checked against the model, so a cancelled task rendered grey like a backlog
+ * item — a wrong colour, silently, on the one status that most wants to stand out.
+ */
 function statusTheme(status: string) {
   if (status === 'Done') return 'green' as const
-  if (status === 'Cancelled') return 'red' as const
+  if (status === 'Canceled') return 'red' as const
   if (status === 'In Progress') return 'blue' as const
   return 'gray' as const
 }

@@ -12,14 +12,35 @@ import { useSettingsDoc } from './useSettingsDoc'
  * in four places to no benefit.
  *
  * The Vue app spreads these across `GeneralSettings.vue`, `BrandSettings.vue`,
- * `DefaultsSettings.vue` and `PreferencesSettings.vue`, which is the same shape.
+ * `DefaultsSettings.vue`, `PreferencesSettings.vue` — and `DashboardSettings.vue`, which is
+ * why there is no route named Dashboard here.
+ *
+ * **That fifth screen is not missing, it is absorbed.** Every field it edits —
+ * `enable_forecasting`, `auto_update_expected_deal_value`, `currency`, `service_provider`,
+ * `access_key` — is on General below, because they are all one document and none of them is
+ * about the dashboard. Counting Vue's tabs and finding four here reads as a gap; it is a
+ * different partition of the same fields.
  */
 
 const TIMESTAMP_FORMATS = ['Relative', 'Absolute', 'Relative & Absolute'] as const
 const SORT_ORDERS = ['Oldest First', 'Newest First'] as const
 
-/** Frankfurter is the default and needs no key; the others do (`metadata.py:323`). */
-const FX_PROVIDERS = ['frankfurter.app', 'exchangerate.host', 'exchangerate-api.com'] as const
+/**
+ * The four values `service_provider` accepts, verbatim from `SERVICE_PROVIDER_CHOICES`
+ * (`metadata.py:27`). Frankfurter is the default and needs no key.
+ *
+ * **Transcribed, not remembered.** The first version of this list guessed
+ * `exchangerate-api.com` — the website — where the stored choice is `exchangerate-api`, and
+ * dropped `fawazahmed-exchange-api` entirely. So one option wrote a value the model does
+ * not accept and another provider could not be chosen at all. A `choices` list is a
+ * contract; copy it.
+ */
+const FX_PROVIDERS = [
+  'frankfurter.app',
+  'fawazahmed-exchange-api',
+  'exchangerate.host',
+  'exchangerate-api',
+] as const
 
 export function GeneralSettingsPage() {
   const { doc, setField, isPending } = useSettingsDoc<Record<string, unknown>>('FCRM Settings')
