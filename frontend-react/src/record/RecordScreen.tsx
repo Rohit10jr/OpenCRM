@@ -47,6 +47,7 @@ export function RecordScreen({
   backTo,
   backLabel,
   asideTop,
+  body,
 }: {
   doctype: string
   name: string
@@ -62,6 +63,11 @@ export function RecordScreen({
    * branched on here, so this file stays doctype-agnostic.
    */
   asideTop?: React.ReactNode
+  /**
+   * What to show instead of the tabs on a doctype with no activity feed. An organization's
+   * deals and contacts, say — the record has plenty to show, just not a timeline.
+   */
+  body?: React.ReactNode
 }) {
   const record = useRecord(doctype, name)
   // An open record is the one place realtime earns its keep: two people editing the same
@@ -273,9 +279,11 @@ export function RecordScreen({
               // readable well before it stops working.
               (tabBodies[tab] ?? tabBodies.activity)
             ) : (
-              <div className="flex h-full items-center justify-center p-10 text-base text-ink-gray-4">
-                This doctype has no activity feed. Edit its fields in the panel.
-              </div>
+              (body ?? (
+                <div className="flex h-full items-center justify-center p-10 text-base text-ink-gray-4">
+                  This doctype has no activity feed. Edit its fields in the panel.
+                </div>
+              ))
             )}
           </div>
 
