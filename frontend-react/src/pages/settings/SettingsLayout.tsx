@@ -56,17 +56,20 @@ export const SETTINGS_NAV = [
 
 export function SettingsLayout() {
   return (
-    <div className="flex h-full min-h-0">
-      <nav className="w-56 shrink-0 overflow-y-auto border-r border-outline-gray-1 bg-surface-gray-1 p-3">
-        <h1 className="mb-3 px-2 text-lg font-semibold text-ink-gray-8">Settings</h1>
+    <div className="flex h-full min-h-0 flex-col md:flex-row">
+      {/* A row of chips above the content on a phone, a column beside it on a desktop. */}
+      <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-outline-gray-1 bg-surface-gray-1 p-2 md:w-56 md:flex-col md:overflow-y-auto md:border-b-0 md:border-r md:p-3">
+        <h1 className="mb-3 hidden px-2 text-lg font-semibold text-ink-gray-8 md:block">Settings</h1>
         {SETTINGS_NAV.map((section) => (
-          <div key={section.group} className="mb-4">
-            <p className="mb-1 px-2 text-sm font-medium text-ink-gray-5">{section.group}</p>
+          <div key={section.group} className="flex gap-1 md:mb-4 md:flex-col">
+            <p className="mb-1 hidden px-2 text-sm font-medium text-ink-gray-5 md:block">
+              {section.group}
+            </p>
             {section.items.map((item) => (
               <Link
                 key={item.to}
                 to={item.to}
-                className="block rounded px-2 py-1.5 text-base text-ink-gray-7 hover:bg-surface-gray-2"
+                className="block whitespace-nowrap rounded px-2 py-1.5 text-base text-ink-gray-7 hover:bg-surface-gray-2"
                 activeProps={{ className: 'bg-surface-gray-3 font-medium text-ink-gray-8' }}
               >
                 {item.label}

@@ -179,7 +179,7 @@ export function RecordScreen({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-2 border-b border-outline-gray-1 px-4 py-3">
+      <header className="flex flex-wrap items-center gap-2 border-b border-outline-gray-1 px-4 py-3">
         <nav className="flex min-w-0 items-center gap-1.5 text-base">
           <Link to={backTo} className="text-ink-gray-5 hover:text-ink-gray-7">
             {backLabel}
@@ -218,12 +218,14 @@ export function RecordScreen({
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      {/* Stacked below `xl`, side by side above it. A 384px panel beside the timeline
+          leaves nothing for the timeline on a laptop, let alone a phone. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-auto xl:flex-row xl:overflow-hidden">
         <div className="flex min-w-0 flex-1 flex-col">
           <div
             role="tablist"
             className={cn(
-              'flex shrink-0 gap-5 px-5',
+              'flex shrink-0 gap-5 overflow-x-auto px-5',
               tabs.length && 'border-b border-outline-gray-1',
             )}
           >
@@ -245,7 +247,9 @@ export function RecordScreen({
             ))}
           </div>
 
-          <div className="min-h-0 flex-1 overflow-auto">
+          {/* Stacked, the outer column is what scrolls; side by side, this pane does.
+              A pane with `min-h-0 flex-1` inside a scrolling column collapses to nothing. */}
+          <div className="flex-1 xl:min-h-0 xl:overflow-auto">
             {record.hasActivities ? (
               // A lookup rather than a ternary chain: this was five branches when it was
               // written, six once comments arrived, and a chain that long stops being
@@ -264,7 +268,7 @@ export function RecordScreen({
           ) : null}
         </div>
 
-        <aside className="w-96 shrink-0 overflow-y-auto border-l border-outline-gray-1">
+        <aside className="shrink-0 border-t border-outline-gray-1 xl:w-96 xl:overflow-y-auto xl:border-l xl:border-t-0">
           {/* Above the layout, not inside it: the SLA fields are not on the side-panel
               layout the server returns, so no metadata would have placed them. */}
           <SlaSection doc={doc} onUpdateField={saveField} />

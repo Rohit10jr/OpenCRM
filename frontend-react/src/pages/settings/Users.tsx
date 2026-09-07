@@ -82,7 +82,7 @@ export function UsersSettingsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-2 border-b border-outline-gray-1 px-4 py-3">
+      <header className="flex flex-wrap items-center gap-2 border-b border-outline-gray-1 px-4 py-3">
         <h1 className="text-lg font-semibold text-ink-gray-8">Users</h1>
         <div className="ml-auto flex items-center gap-2">
           <Button variant="subtle" size="md" onClick={() => setAddingExisting(true)}>
