@@ -55,12 +55,38 @@ cdp.on('Network.webSocketHandshakeResponseReceived', ({ requestId, response }) =
   }
 })
 
+/**
+ * Every non-2xx API response, with its path and status.
+ *
+ * The console handler below only ever said "Failed to load resource: 404", which names
+ * neither the endpoint nor the screen that asked for it — a run with twelve of those told
+ * you something was wrong and nothing else. This records the actual request, so a failure
+ * is a dotted path you can look up in `BACKEND_GAPS.md`.
+ */
+const apiFailures = []
+page.on('response', (response) => {
+  const url = response.url()
+  if (!url.includes('/api/')) return
+  const status = response.status()
+  if (status < 400) return
+  // The dotted path is the useful half; the host and query string are noise.
+  const path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0]
+  apiFailures.push({ path, status, step: currentStep })
+})
+
 page.on('console', (message) => {
+  // Resource errors are recorded above with their URL; this line would add a duplicate
+  // that names nothing.
+  if (message.text().startsWith('Failed to load resource')) return
   if (message.type() === 'error') problems.push(`console: ${message.text()}`)
 })
 page.on('pageerror', (error) => problems.push(`pageerror: ${error.message}`))
 
+/** Which step is running, so a failed request can name the screen that made it. */
+let currentStep = 'startup'
+
 const step = async (label, fn) => {
+  currentStep = label
   try {
     await fn()
     console.log(`  ok    ${label}`)
@@ -565,10 +591,14 @@ await step('a comment posts and appears in the timeline', async () => {
   await page.waitForFunction(() => /^\/deals\/CRM-DEAL/.test(location.pathname), {
     timeout: 15000,
   })
-  await page.waitForSelector('textarea[name="comment"]', { timeout: 15000 })
+  // Run 5 replaced the textarea with TipTap, so the target is the editor's contenteditable
+  // and the chunk holding it is loaded on demand — hence waiting for it rather than the
+  // form around it.
+  await page.waitForSelector('.ProseMirror', { timeout: 15000 })
 
   const stamp = `verify comment ${Date.now() % 100000}`
-  await page.type('textarea[name="comment"]', stamp)
+  await page.click('.ProseMirror')
+  await page.type('.ProseMirror', stamp)
   // The submit button inside the comment form — not `button[contains(., "Comment")]`,
   // which also matches the "Comments (N)" tab and clicked that instead.
   const [send] = await page.$$('form button[type="submit"]')
@@ -581,7 +611,10 @@ await step('a comment posts and appears in the timeline', async () => {
 
   // Reload: proves it reached the server rather than staying in React state.
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await page.waitForSelector('textarea[name="comment"]', { timeout: 15000 })
+  // Run 5 replaced the textarea with TipTap, so the target is the editor's contenteditable
+  // and the chunk holding it is loaded on demand — hence waiting for it rather than the
+  // form around it.
+  await page.waitForSelector('.ProseMirror', { timeout: 15000 })
   await page.waitForFunction(
     (text) => document.body.innerText.includes(text),
     { timeout: 15000 },
@@ -706,7 +739,16 @@ await step('bulk delete removes the selected rows', async () => {
   if (before < 2) throw new Error(`expected at least the 2 deals just made, saw ${before}`)
 
   // Select-all from the header checkbox, which exercises that path too.
-  await page.click('table thead th:first-child button[role="checkbox"]')
+  //
+  // Clicked in-page for the same reason the Delete button below is: the table re-renders
+  // while the list settles, and a handle Puppeteer resolved a moment earlier is detached
+  // from the document by the time it is clicked. That is the failure this step hit after
+  // run 5 made the toolbar above the table fetch more.
+  await page.evaluate(() => {
+    const box = document.querySelector('table thead th:first-child button[role="checkbox"]')
+    if (!box) throw new Error('no select-all checkbox')
+    box.click()
+  })
   await page.waitForFunction(() => /rows? selected/.test(document.body.innerText), {
     timeout: 5000,
   })
@@ -782,7 +824,15 @@ await step('delete the saved view', async () => {
   const [picker] = await page.$$('xpath/.//button[contains(@class,"inline-flex")][contains(., "verify-view-")]')
   if (!picker) throw new Error('the saved view is not the current one')
   await picker.click()
-  const [del] = await page.$$('xpath/.//button[starts-with(@aria-label, "Delete verify-view-")]')
+  // Run 5 moved delete out of the row and into a per-view "..." submenu, alongside rename,
+  // duplicate, pin and publish. Two clicks now: open the row's menu, then Delete.
+  const [manage] = await page.$$(
+    'xpath/.//button[starts-with(@aria-label, "Manage verify-view-")]',
+  )
+  if (!manage) throw new Error('the view row has no manage menu')
+  await manage.click()
+  const [del] = await page.$$('xpath/.//div[@role="menuitem"][normalize-space()="Delete"]')
+  if (!del) throw new Error('the manage menu has no Delete item')
   await del.click()
   await page.waitForFunction(() => !location.search.includes('view='), { timeout: 10000 })
   await page.keyboard.press('Escape')
@@ -821,7 +871,25 @@ await step('sign out returns to login', async () => {
 
 await browser.close()
 
+console.log('\nfailed API calls:')
+if (apiFailures.length === 0) console.log('  none')
+else {
+  // One line per distinct path+status, with the steps that triggered it. The same missing
+  // endpoint called from four screens is one gap, not four.
+  const grouped = new Map()
+  for (const failure of apiFailures) {
+    const key = `${failure.status} ${failure.path}`
+    if (!grouped.has(key)) grouped.set(key, new Set())
+    grouped.get(key).add(failure.step)
+  }
+  for (const [key, steps] of grouped) {
+    console.log(`  ${key}`)
+    console.log(`      during: ${[...steps].join('; ')}`)
+  }
+}
+
 console.log('\nproblems:')
 if (problems.length === 0) console.log('  none')
 else problems.forEach((p) => console.log(`  - ${p}`))
-process.exit(problems.length ? 1 : 0)
+
+process.exit(problems.length || apiFailures.length ? 1 : 0)

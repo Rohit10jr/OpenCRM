@@ -30,7 +30,7 @@ export function TelephonySettingsPage() {
   // Which provider the server thinks is live, rather than which tab is open.
   const enabled = useQuery({
     queryKey: ['call-integration-enabled'],
-    queryFn: () => callGet<unknown>('crm.api.is_call_integration_enabled'),
+    queryFn: () => callGet<unknown>('crm.integrations.api.is_call_integration_enabled'),
     retry: false,
   })
 

@@ -26,7 +26,7 @@ export function CallButton({ phone }: { phone?: unknown }) {
 
   const enabled = useQuery({
     queryKey: ['call-integration-enabled'],
-    queryFn: () => callGet<unknown>('crm.api.is_call_integration_enabled'),
+    queryFn: () => callGet<unknown>('crm.integrations.api.is_call_integration_enabled'),
     staleTime: Infinity,
     retry: false,
   })

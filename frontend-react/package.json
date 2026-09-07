@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "verify": "node scripts/verify-browser.mjs"
+    "verify": "node scripts/verify-browser.mjs",
+    "check:api": "node scripts/check-api-paths.mjs"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.2",
