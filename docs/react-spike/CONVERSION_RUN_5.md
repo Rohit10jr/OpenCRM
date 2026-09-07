@@ -133,8 +133,9 @@ Named so nobody has to rediscover them:
   four `Mobile*` pages beside the four they mirror. Breakpoints do it in one tree; four
   screens to keep in step is how they drift apart.
 * **Column reordering and per-column width.** Both stored, both real, both their own work.
+  *(Run 6 built reordering; width is still open.)*
 * **Twilio's browser softphone.** Not a backend gap — an in-browser WebRTC dialer needing
-  `@twilio/voice-sdk`. `BACKEND_GAPS.md` §8.
+  `@twilio/voice-sdk`. `BACKEND_GAPS.md` §9.
 * **Dragging the call panel around**, and a custom audio player with playback speed. The
   browser's own player does the part that matters.
 * **`PersonaForm.vue`** — a survey that writes one boolean.
@@ -143,20 +144,27 @@ Named so nobody has to rediscover them:
 * **Form scripts.** `get_data` returns `form_script` and `list_script`, and the Vue client
   executes them. Running server-supplied JavaScript is a decision, not an oversight — it
   should be made deliberately by someone, not inherited by a port.
-* **Nested AND/OR filter groups** (`ConditionsFilter/`).
+* **Rule condition builders** (`ConditionsFilter/`) — and not for the reason this line
+  first gave. It is not a list filter: `get_data` takes no `or_filters`. It builds
+  conditions for assignment rules and SLA, and *neither destination works* — the rule
+  doctype is unmodelled and the SLA condition is stored but never evaluated.
+  `BACKEND_GAPS.md` §8.
 
 ---
 
 ## Next up, in order
 
-1. **Click every screen.** This is the whole of the next session and it is not optional —
+1. ~~**Click every screen.**~~ **Done in run 6**, by machine rather than by hand: 66 browser
+   steps and 48 unit tests. See `HARNESS_FINDINGS.md`. The original wording follows, because
+   the reasoning still holds for the next batch of unverified work:
    twenty-three commits of unverified UI is exactly the debt this project's rules exist to
    prevent. Nothing below matters until it is done.
 2. **Whitelist `convert_to_deal`.** `conversion.py:263` is implemented and complete; one
    decorator turns a 404 into a working button. Still the cheapest item on the list.
 3. **Decide about email send and file upload.** They gate the two most-used things in a CRM,
    and every other part of both features is built and waiting.
-4. Column reordering; the email template's rich-text body and its variable picker.
+4. ~~Column reordering; the email template body~~ — both done in run 6. Still open:
+   per-column width, and the two decisions only the owner can make (Twilio, form scripts).
 
 ---
 

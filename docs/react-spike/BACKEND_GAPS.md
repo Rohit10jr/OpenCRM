@@ -145,7 +145,35 @@ trade than leaving the screen honest.
 
 ---
 
-## 8. Twilio's browser softphone — `crm.integrations.twilio.api.generate_access_token`
+## 8. Rule conditions have nothing to attach to — `ConditionsFilter/`
+
+**Wanted by:** `AssignmentRulesSection.vue` and `SlaAssignmentConditions.vue`. Those are the
+only two callers; earlier notes here called this "nested AND/OR list filters", which was
+wrong — `get_data` takes no `or_filters` and neither does upstream's, so the list views
+never had this and were never meant to.
+
+**Both destinations are dead ends, for different reasons:**
+
+* **Assignment Rules.** `Assignment Rule` is a *framework* doctype and this port does not
+  model it, so `get_assignment_rules_list` returns `[]` permanently and duplication raises
+  (`api/assignment_rule.py:20`). There is no rule to put a condition on.
+* **SLA.** `CRM Service Level Agreement` *is* modelled and has both `condition` and
+  `condition_json` (`sla.py:74`) — but **nothing in the backend ever reads either.** The
+  model comment says as much: *"phase 5 owns whether we evaluate it at all. Storing it is
+  not executing it."* Grepping confirms the only other mention is the migration.
+
+**React does:** nothing, deliberately. This is the one place the run-5 "wire it up and let
+it fail visibly" policy does not apply, because there is no failure to see — the write
+would succeed, the value would persist, and it would change nothing. A condition builder
+here is a screen that looks like it configures behaviour and does not, which is worse than
+its absence and much harder to notice.
+
+**To unblock:** model `Assignment Rule`, or make the SLA engine evaluate `condition`. Until
+one of those, this is not frontend work.
+
+---
+
+## 9. Twilio's browser softphone — `crm.integrations.twilio.api.generate_access_token`
 
 **Not a backend gap. A frontend dependency this port has not taken on.** Recorded here
 because the symptom looks identical from the UI: Twilio users get no call panel.
