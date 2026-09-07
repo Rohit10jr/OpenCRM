@@ -15,8 +15,13 @@ visible before you click rather than after.
 
 **Checked against `frappe_core.whitelist.all_methods()` on 2026-09-07**, not inferred from
 the Vue source. The whitelist is larger than earlier runs assumed — telephony, WhatsApp,
-ERPNext, dashboard, notifications and exchange rate are all served. Only the two below are
-genuinely absent.
+ERPNext, dashboard, notifications and exchange rate are all served.
+
+Later in run 5 the check was made exhaustive: every dotted path the Vue client mentions,
+diffed against every path this backend whitelists. That is what turned up the deal-contact
+*writes* (§3) and `create_lead_from_call_log` (§7) — both of which the earlier, screen-by-
+screen pass had missed, because nobody had reached those screens yet. The register below is
+now the full list rather than the list of what happened to be built.
 
 ---
 
@@ -46,7 +51,7 @@ signature, and the activity feed it writes into.
 live. `crm.api.delete_attachment` and `crm.api.get_file_uploader_defaults` *are* served, so
 listing and deleting work and only adding does not.
 
-**React does:** `FileUploader` renders a drop zone and a file picker, and posts multipart to
+**React does:** `record/Attachments.tsx` renders a file picker and posts multipart to
 `/api/method/upload_file`. It will 404.
 
 **To unblock:** a multipart upload route plus a `File` doctype write path.
@@ -66,6 +71,17 @@ real path and fails.
 
 **To unblock:** whitelist `get_deal_contacts`, or point the client at
 `/api/resource/CRM Contacts` filtered by parent, if the child table is exposed.
+
+**The write side is missing too**, found in run 5 by diffing every dotted path the Vue
+client calls against every one this backend whitelists. All three of
+
+* `crm.fcrm.doctype.crm_deal.crm_deal.add_contact`
+* `crm.fcrm.doctype.crm_deal.crm_deal.remove_contact`
+* `crm.fcrm.doctype.crm_deal.crm_deal.set_primary_contact`
+
+are called by `Deal.vue` and served by nothing. So the whole feature is absent, not just its
+read half — worth knowing before someone whitelists `get_deal_contacts` alone and expects a
+working panel.
 
 ---
 
@@ -112,7 +128,24 @@ saved and nothing says which format), and notes.
 
 ---
 
-## 7. Twilio's browser softphone — `crm.integrations.twilio.api.generate_access_token`
+## 7. Creating a lead from a call log — `crm_call_log.create_lead_from_call_log`
+
+**Wanted by:** `CallLogDetailModal.vue` — an unknown number rings, and the modal offers to
+make a lead out of it. It is the one action on that screen.
+
+**Not whitelisted.** Nothing else covers it: the endpoint reads the call log and creates the
+lead with the number already on it, which a plain `/api/resource/CRM Lead` insert would not.
+
+**React does:** nothing. `pages/CallLogs.tsx` shows the call read-only. This one is *not*
+wired-to-fail like the email send, because unlike a Send button it has no obvious place —
+adding a button whose only outcome is a 404 to a screen that otherwise works is a worse
+trade than leaving the screen honest.
+
+**To unblock:** whitelist it. Then the detail dialog grows one button.
+
+---
+
+## 8. Twilio's browser softphone — `crm.integrations.twilio.api.generate_access_token`
 
 **Not a backend gap. A frontend dependency this port has not taken on.** Recorded here
 because the symptom looks identical from the UI: Twilio users get no call panel.

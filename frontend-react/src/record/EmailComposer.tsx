@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { call, callGet, errorMessage } from '@/api/client'
 import { useDocList } from '@/api/hooks'
 import { MissingEndpoint } from '@/components/MissingEndpoint'
+import { EmailRecipients } from './EmailRecipients'
 import { isRichTextEmpty, RichTextEditor } from '@/components/RichText'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -98,18 +99,7 @@ export function EmailComposer({
         }}
       >
         <div className="flex items-center gap-2">
-          <label className="w-10 shrink-0 text-sm text-ink-gray-5" htmlFor="email-to">
-            To
-          </label>
-          <Input
-            id="email-to"
-            name="to"
-            type="text"
-            required
-            placeholder="someone@example.com, another@example.com"
-            value={to}
-            onChange={(event) => setTo(event.target.value)}
-          />
+          <EmailRecipients id="email-to" label="To" value={to} onChange={setTo} />
           {!showCc ? (
             <Button type="button" variant="ghost" size="sm" onClick={() => setShowCc(true)}>
               Cc
@@ -119,16 +109,7 @@ export function EmailComposer({
 
         {showCc ? (
           <div className="flex items-center gap-2">
-            <label className="w-10 shrink-0 text-sm text-ink-gray-5" htmlFor="email-cc">
-              Cc
-            </label>
-            <Input
-              id="email-cc"
-              name="cc"
-              type="text"
-              value={cc}
-              onChange={(event) => setCc(event.target.value)}
-            />
+            <EmailRecipients id="email-cc" label="Cc" value={cc} onChange={setCc} />
           </div>
         ) : null}
 
