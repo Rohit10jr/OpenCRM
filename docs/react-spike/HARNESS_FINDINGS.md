@@ -9,9 +9,9 @@ Two tools, both new here, both permanent:
 |---|---|---|
 | `npm run check:api` | Every dotted path in `src/` vs. the backend's whitelist | no — ~1 second |
 | `npm test` | 48 unit tests over the pure functions | no |
-| `npm run verify` | 66 browser steps against the real API | yes |
+| `npm run verify` | 67 browser steps against the real API | yes |
 
-**Final state: 66 steps green, 0 problems, 1 known gap.** Everything below is what it took
+**Final state: 67 steps green, 0 problems, 1 known gap.** Everything below is what it took
 to get there.
 
 ---
@@ -112,16 +112,25 @@ tell them apart is worse than none, because it spends your morning on its own ty
 | Three tab steps failing at once | They chained — one failure left a dialog open and took the next two down |
 | Assignment intermittently failing | The picker's 5s bound; run 5 added queries to a record open |
 | Dashboard "0 lines" then fine | The step measured `document.body` too early and **passed on zero** |
+| `website: no more than 280 characters` | The step *appended* a stamp each run instead of replacing it, and after enough runs the field overflowed — the server rejecting data only the harness had ever written |
 
-That last one is the sharpest. The step counted content and reported success on an empty
-page — the exact failure this harness exists to catch, committed by the harness. It asserts
-on `<main>` now and fails loudly if a screen fetches cleanly and renders nothing.
+The dashboard one is the sharpest. The step counted content and reported success on an
+empty page — the exact failure this harness exists to catch, committed by the harness. It
+asserts on `<main>` now and fails loudly if a screen fetches cleanly and renders nothing.
+
+The `website` one is the most instructive, because it was a **time bomb the harness itself
+planted**. `click({ clickCount: 3 })` did not reliably select the whole value, so each run
+added another `verify-NNNNN` rather than replacing the last, and it passed for as long as
+the field still fit. Nothing about the failure pointed at the harness — the message was a
+server validation error on a real field, and it was reproducible. **A step that writes to a
+shared record has to leave it the size it found it**, which is the same rule as the
+bulk-delete step's "a destructive step has to bring its own data", learned twice.
 
 ---
 
 ## Part 4 — What the harness now proves
 
-**66 steps.** The 28 from runs 1–3 still pass unchanged, which is itself the answer to
+**67 steps.** The 28 from runs 1–3 still pass unchanged, which is itself the answer to
 "did run 5 break anything": no.
 
 New coverage:
@@ -130,7 +139,7 @@ New coverage:
 * **Dashboard** renders tiles; **notifications** render
 * **Emails / Calls / Tasks / Notes** tabs — and a task **round-trips**: created on a deal,
   survives a reload, still attached to that deal
-* **Adding *and reordering* a column persists across a reload** — proving both are writes to
+* **Adding, reordering *and resizing* a column persists across a reload** — proving all three are writes to
   the view and not component state
 * Kanban board settings, quick-filter picker, organization related lists, call-log detail,
   data import, welcome
@@ -139,7 +148,7 @@ New coverage:
 
 ### What it still does not prove
 
-Being explicit, because "66 green" invites over-reading:
+Being explicit, because "67 green" invites over-reading:
 
 * **Nothing that needs a missing endpoint.** Email send, file upload, lead conversion and
   deal contacts are unreachable by definition.

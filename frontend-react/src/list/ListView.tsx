@@ -6,13 +6,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { call, errorMessage } from '@/api/client'
 import { keys } from '@/api/queryKeys'
-import type { DocRow, Filters, ViewType } from '@/api/types'
+import type { DocRow, Filters, ListColumn, ViewType } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { BulkActions } from './BulkActions'
 import type { CellOverride } from './Cell'
 import { KanbanBoard } from './KanbanBoard'
 import { QuickFilters } from './QuickFilters'
 import { ListTable, ListTableHeader } from './ListTable'
+import { useColumnSettings } from './useColumnSettings'
 import { useListView, type ListFilter } from './useListView'
 import { useStatuses } from './useLookups'
 import { ViewControls } from './ViewControls'
@@ -114,6 +115,17 @@ export function ListView({
     },
   })
 
+  /**
+   * Dragging a column edge writes the whole column array, through the same endpoint the
+   * Columns menu uses — a width is a column property, not a separate thing to store.
+   */
+  const columnSettings = useColumnSettings({
+    doctype,
+    viewType: list.viewType,
+    view: list.views.find((view) => String(view.name) === String(savedViewName)),
+  })
+  const saveColumns = (columns: ListColumn[]) => columnSettings.save.mutate(columns)
+
   const getStatusColor = statusDoctype
     ? (value: string) => getStatus(value)?.color
     : undefined
@@ -213,7 +225,7 @@ export function ListView({
             {list.viewType === 'group_by' ? (
               <>
                 {/* One shared header, then a headerless table per group. */}
-                <ListTableHeader columns={list.columns} />
+                <ListTableHeader columns={list.columns} onResize={saveColumns} />
                 {list.groups.map((group) => (
                   <section key={group.value || '__empty'}>
                     <h2 className="bg-surface-gray-1 px-4 py-1.5 text-sm font-medium text-ink-gray-6">
@@ -242,6 +254,7 @@ export function ListView({
                 onRowClick={onRowClick}
                 getStatusColor={getStatusColor}
                 overrides={cellOverrides}
+                onResize={saveColumns}
               />
             )}
             {list.hasMore ? (

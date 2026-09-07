@@ -10,6 +10,7 @@ import type { DocRow, ListColumn } from '@/api/types'
 import { Checkbox } from '@/components/ui/primitives'
 import { cn } from '@/lib/utils'
 import { Cell, type CellOverride } from './Cell'
+import { useColumnResize } from './useColumnResize'
 
 /**
  * The list table.
@@ -30,6 +31,7 @@ export function ListTable({
   getStatusColor,
   overrides,
   showHeader = true,
+  onResize,
 }: {
   rows: DocRow[]
   columns: ListColumn[]
@@ -43,6 +45,8 @@ export function ListTable({
    * widths are fixed from the column descriptors, so the tables line up.
    */
   showHeader?: boolean
+  /** Persist a new column width. Omitted where the caller has nowhere to save it. */
+  onResize?: (columns: ListColumn[]) => void
 }) {
   const tableColumns = useMemo<ColumnDef<DocRow>[]>(() => {
     const select: ColumnDef<DocRow> = {
@@ -99,18 +103,24 @@ export function ListTable({
     getRowId: (row) => row.name,
   })
 
+  const resize = useColumnResize(columns, onResize ?? (() => {}))
+
   return (
     <table className="w-full table-fixed border-collapse text-base">
-      <ColumnWidths columns={columns} />
+      <ColumnWidths columns={columns} widthOf={resize.widthOf} />
       <thead className={showHeader ? 'sticky top-0 z-10 bg-surface-white' : 'hidden'}>
         {table.getHeaderGroups().map((group) => (
           <tr key={group.id} className="border-b border-outline-gray-1">
             {group.headers.map((header) => (
               <th
                 key={header.id}
-                className="truncate px-3 py-2 text-left text-sm font-medium text-ink-gray-5"
+                className="relative truncate px-3 py-2 text-left text-sm font-medium text-ink-gray-5"
               >
                 {flexRender(header.column.columnDef.header, header.getContext())}
+                {/* Not on the selection column — it is a fixed 2.5rem checkbox. */}
+                {onResize && header.id !== 'select' ? (
+                  <ResizeHandle onPointerDown={(e) => resize.start(header.id, e)} />
+                ) : null}
               </th>
             ))}
           </tr>
@@ -146,10 +156,19 @@ export function ListTable({
  *
  * A separate component rather than an empty `ListTable`, which read as a puzzle.
  */
-export function ListTableHeader({ columns }: { columns: ListColumn[] }) {
+export function ListTableHeader({
+  columns,
+  onResize,
+}: {
+  columns: ListColumn[]
+  /** Omitted where there is nothing to save to — a group_by section, say. */
+  onResize?: (columns: ListColumn[]) => void
+}) {
+  const resize = useColumnResize(columns, onResize ?? (() => {}))
+
   return (
     <table className="w-full table-fixed border-collapse text-base">
-      <ColumnWidths columns={columns} />
+      <ColumnWidths columns={columns} widthOf={resize.widthOf} />
       <thead className="sticky top-0 z-10 bg-surface-white">
         <tr className="border-b border-outline-gray-1">
           {/* Matches the selection column the tables below render. */}
@@ -157,9 +176,10 @@ export function ListTableHeader({ columns }: { columns: ListColumn[] }) {
           {columns.map((column) => (
             <th
               key={column.key}
-              className="truncate px-3 py-2 text-left text-sm font-medium text-ink-gray-5"
+              className="relative truncate px-3 py-2 text-left text-sm font-medium text-ink-gray-5"
             >
               {column.label}
+              {onResize ? <ResizeHandle onPointerDown={(e) => resize.start(column.key, e)} /> : null}
             </th>
           ))}
         </tr>
@@ -172,13 +192,40 @@ export function ListTableHeader({ columns }: { columns: ListColumn[] }) {
  * Widths live on `<col>` rather than `<th>` so a group_by section, which hides its own
  * header, still lines up with the shared header above it.
  */
-function ColumnWidths({ columns }: { columns: ListColumn[] }) {
+function ColumnWidths({
+  columns,
+  widthOf,
+}: {
+  columns: ListColumn[]
+  /** Lets the header override a width mid-drag; the body tables just read the stored one. */
+  widthOf?: (column: ListColumn) => string | undefined
+}) {
   return (
     <colgroup>
       <col style={{ width: '2.5rem' }} />
-      {columns.map((column) => (
-        <col key={column.key} style={column.width ? { width: column.width } : undefined} />
-      ))}
+      {columns.map((column) => {
+        const width = widthOf ? widthOf(column) : column.width
+        return <col key={column.key} style={width ? { width } : undefined} />
+      })}
     </colgroup>
+  )
+}
+
+/**
+ * The grab strip on a column's right edge.
+ *
+ * Four pixels wide and transparent until hovered — a visible divider on every column would
+ * be chrome the table does not otherwise have. `touch-none` because a drag on a trackpad or
+ * a touchscreen would otherwise scroll the page instead of moving the edge.
+ */
+function ResizeHandle({ onPointerDown }: { onPointerDown: (e: React.PointerEvent) => void }) {
+  return (
+    <span
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize column"
+      onPointerDown={onPointerDown}
+      className="absolute right-0 top-0 h-full w-1 cursor-col-resize touch-none select-none hover:bg-outline-gray-3"
+    />
   )
 }

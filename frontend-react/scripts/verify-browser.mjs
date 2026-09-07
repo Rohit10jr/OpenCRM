@@ -414,7 +414,21 @@ await step('editing a side panel field saves to the server', async () => {
   const [websiteInput] = await page.$$(
     'xpath/.//label[contains(., "Website")]/following::input[1]',
   )
-  await websiteInput.click({ clickCount: 3 })
+  /**
+   * Select-all explicitly, then type over it.
+   *
+   * `click({ clickCount: 3 })` was not reliably selecting the whole value here, so every
+   * run *appended* another `verify-NNNNN` instead of replacing the last one. It went
+   * unnoticed for as long as the field still fit, and then started failing with
+   * `website: Ensure this field has no more than 280 characters.` — the server being
+   * right, about data only this harness had ever written.
+   *
+   * A step that writes to a shared record has to leave it the size it found it.
+   */
+  await websiteInput.click()
+  await page.keyboard.down('Control')
+  await page.keyboard.press('KeyA')
+  await page.keyboard.up('Control')
   await websiteInput.type(stamp)
   await page.keyboard.press('Enter')
   await new Promise((r) => setTimeout(r, 2500))
@@ -1185,6 +1199,56 @@ await step('reordering a column persists across a reload', async () => {
     rows[2]?.querySelector('button[aria-label="Move up"]')?.click()
   })
   await page.keyboard.press('Escape')
+})
+
+await step('dragging a column edge resizes it, and the width persists', async () => {
+  await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table thead th', { timeout: 15000 })
+
+  // The second header cell — the first is the 2.5rem checkbox, which has no handle.
+  const handle = await page.$('table thead th:nth-child(2) [aria-label="Resize column"]')
+  if (!handle) throw new Error('no resize handle on the first data column')
+
+  const box = await handle.boundingBox()
+  if (!box) throw new Error('the resize handle has no box')
+  const widthOf = () =>
+    page.$eval('table thead th:nth-child(2)', (th) => th.getBoundingClientRect().width)
+  const before = await widthOf()
+
+  // A real pointer drag: press on the handle, move, release. `pointermove` is listened for
+  // on `window`, so the intermediate step does not have to stay over the element.
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 80, box.y + box.height / 2, { steps: 8 })
+  await page.mouse.up()
+
+  await page.waitForFunction(
+    (was) => {
+      const th = document.querySelector('table thead th:nth-child(2)')
+      return th && Math.abs(th.getBoundingClientRect().width - was) > 20
+    },
+    { timeout: 5000 },
+    before,
+  )
+
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table thead th', { timeout: 15000 })
+  const after = await widthOf()
+  console.log(`        ${Math.round(before)}px -> ${Math.round(after)}px after a reload`)
+  if (Math.abs(after - before) < 20) {
+    throw new Error(`the width did not persist: ${before} -> ${after}`)
+  }
+
+  // Put it back, so the next run starts from the same width.
+  const restore = await page.$('table thead th:nth-child(2) [aria-label="Resize column"]')
+  const box2 = await restore?.boundingBox()
+  if (box2) {
+    await page.mouse.move(box2.x + box2.width / 2, box2.y + box2.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box2.x - 80, box2.y + box2.height / 2, { steps: 8 })
+    await page.mouse.up()
+    await new Promise((r) => setTimeout(r, 1000))
+  }
 })
 
 await step('the kanban board settings dialog opens', async () => {
