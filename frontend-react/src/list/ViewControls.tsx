@@ -1,7 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import {
   ArrowDownUp,
-  Columns3,
   Filter,
   LayoutGrid,
   List as ListIcon,
@@ -12,7 +11,6 @@ import type { DocField, Filters, ListColumn, SavedView, ViewType } from '@/api/t
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -34,6 +32,7 @@ import {
   useSortOptions,
 } from './useFieldOptions'
 import type { ListFilter } from './useListView'
+import { ColumnMenu } from './ColumnMenu'
 import { KanbanSettings } from './KanbanSettings'
 import { ViewPicker } from './ViewPicker'
 
@@ -56,8 +55,6 @@ export function ViewControls({
   allowedViews,
   viewType,
   allColumns,
-  hiddenColumns,
-  onToggleColumn,
   filters,
   onFiltersChange,
   orderBy,
@@ -82,8 +79,6 @@ export function ViewControls({
   allowedViews: ViewType[]
   viewType: ViewType
   allColumns: ListColumn[]
-  hiddenColumns: string[]
-  onToggleColumn: (key: string) => void
   filters: ListFilter[]
   onFiltersChange: (filters: ListFilter[]) => void
   orderBy: string
@@ -225,29 +220,13 @@ export function ViewControls({
           />
         ) : null}
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm">
-              <Columns3 className="h-4 w-4" />
-              Columns
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="max-h-80 overflow-y-auto">
-            <DropdownMenuLabel>Show columns</DropdownMenuLabel>
-            {allColumns.map((column) => (
-              <DropdownMenuCheckboxItem
-                key={column.key}
-                checked={!hiddenColumns.includes(column.key)}
-                onCheckedChange={() => onToggleColumn(column.key)}
-                // Radix closes the menu on select; hiding several columns in a row is the
-                // normal case, so it stays open.
-                onSelect={(event) => event.preventDefault()}
-              >
-                {column.label}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ColumnMenu
+          doctype={doctype}
+          viewType={viewType}
+          view={views.find((view) => String(view.name) === String(savedViewName))}
+          columns={allColumns}
+          fields={fields}
+        />
 
         <Button variant="ghost" size="icon" onClick={onRefresh} title="Refresh">
           <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} />

@@ -133,8 +133,6 @@ export function ListView({
         allowedViews={allowedViews}
         viewType={list.viewType}
         allColumns={list.allColumns}
-        hiddenColumns={list.hiddenColumns}
-        onToggleColumn={list.toggleColumn}
         filters={filters}
         onFiltersChange={(next) => setSearch({ filters: next.length ? next : undefined })}
         orderBy={list.orderBy}

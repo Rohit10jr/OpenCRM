@@ -93,9 +93,6 @@ export function useListView({
    * the Vue client never sends.
    */
   const [pageLengthCount, setPageLengthCount] = useState(DEFAULT_PAGE_LENGTH)
-  /** Column keys the user has hidden. Empty means "whatever the server sends". */
-  const [hiddenColumns, setHiddenColumns] = useState<string[]>([])
-
   const { views, getView } = useViews(doctype)
   const savedView = getView(savedViewName)
   const saved = useMemo(() => viewParams(savedView), [savedView])
@@ -173,10 +170,9 @@ export function useListView({
     [payload, currentViewType],
   )
 
-  const columns = useMemo(
-    () => (payload?.columns ?? []).filter((c) => !hiddenColumns.includes(c.key)),
-    [payload, hiddenColumns],
-  )
+  // The server's column set, whole. Hiding a column used to be local state here; it is a
+  // write to the view now (`useColumnSettings`), so what comes back *is* what to show.
+  const columns = payload?.columns ?? []
 
   /**
    * A group_by view returns flat rows plus a descriptor of what to group them by; the
@@ -195,12 +191,6 @@ export function useListView({
       ),
     }))
   }, [payload, rows, currentViewType])
-
-  const toggleColumn = useCallback((key: string) => {
-    setHiddenColumns((current) =>
-      current.includes(key) ? current.filter((k) => k !== key) : [...current, key],
-    )
-  }, [])
 
   /**
    * "Load more" grows the page rather than paging. That is what the Vue list does —
@@ -246,8 +236,6 @@ export function useListView({
     error: query.error,
     refetch: query.refetch,
 
-    hiddenColumns,
-    toggleColumn,
     pageLength,
     setPageSize,
     loadMore,
