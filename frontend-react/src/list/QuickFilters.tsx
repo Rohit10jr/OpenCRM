@@ -3,6 +3,8 @@ import { callGet } from '@/api/client'
 import { Input } from '@/components/ui/input'
 import type { DocField } from '@/api/types'
 import type { ListFilter } from './useListView'
+import { useFilterableFields } from './useFieldOptions'
+import { QuickFilterSettings } from './QuickFilterSettings'
 
 /**
  * The row of one-click filters above a list.
@@ -34,7 +36,10 @@ export function QuickFilters({
   })
 
   const fields = quick.data ?? []
-  if (!fields.length) return null
+  // The picker has to stay reachable even when nothing is selected, or turning the last
+  // quick filter off would be irreversible from the UI.
+  const filterable = useFilterableFields(doctype)
+  if (!fields.length && !filterable.length) return null
 
   const valueOf = (fieldname: string) =>
     filters.find((filter) => filter.fieldname === fieldname)?.value ?? ''
@@ -87,6 +92,12 @@ export function QuickFilters({
           )}
         </div>
       ))}
+
+      <QuickFilterSettings
+        doctype={doctype}
+        selected={fields.map((field) => field.fieldname)}
+        candidates={filterable}
+      />
     </div>
   )
 }

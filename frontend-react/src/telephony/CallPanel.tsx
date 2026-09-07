@@ -59,12 +59,33 @@ export function CallPanel() {
     const event = (data ?? {}) as ExotelCallPayload
     const result = exotelCallStatus(event)
 
+    /**
+     * A second call can arrive while the panel still shows the last one — a call that has
+     * ended stays on screen until dismissed, and the next one does not wait for that.
+     *
+     * `CallSid` is what distinguishes them. Without this check the panel carried the
+     * previous call's number and duration into the new one, because both are only ever
+     * *written* when the payload happens to supply them: an outbound call sets `number`
+     * only when it is currently empty, and `duration` is only set once a call ends. So the
+     * new call would show the old contact, and could end showing the old call's length.
+     *
+     * Found by the Codex review of this run.
+     */
+    const sid = event.CallSid ?? ''
+    const isNewCall = Boolean(payload) && sid !== (payload?.CallSid ?? '')
+    if (isNewCall) {
+      stopTicking()
+      setDuration(undefined)
+      setStatus(undefined)
+      setElapsed(0)
+    }
+
     setPayload(event)
     // An unrecognised payload keeps the last known status rather than blanking the panel
     // mid-call: Exotel sends intermediate events this state machine does not name.
     if (result.status) setStatus(result.status)
     if (result.phoneNumber) setNumber(result.phoneNumber)
-    else if (!number) setNumber(event.To || event.CallFrom || event.From || '')
+    else if (!number || isNewCall) setNumber(event.To || event.CallFrom || event.From || '')
     if (result.durationSeconds !== undefined) setDuration(result.durationSeconds)
 
     if (result.timer === 'start' && !ticking.current) {
