@@ -113,9 +113,33 @@ export function Cell({
       return <span className="truncate">{value ? 'Yes' : 'No'}</span>
     case 'Link':
       return <LinkCell value={value} options={column.options} getUser={getUser} />
+    case 'Text Editor':
+      // A row is one line, so a rich-text column is its text with the markup taken out.
+      // Rendering the HTML would be both wrong for a table cell and an XSS decision.
+      return <span className="truncate">{stripTags(value)}</span>
     default:
-      return <span className="truncate">{value == null ? '' : String(value)}</span>
+      return <span className="truncate">{plain(value)}</span>
   }
+}
+
+function stripTags(value: unknown): string {
+  return typeof value === 'string' ? value.replace(/<[^>]*>/g, ' ').trim() : plain(value)
+}
+
+/**
+ * `String(value)` on an object is `[object Object]`, which a JSON column would show in
+ * every row. The server sends these parsed, so they arrive here as objects.
+ */
+function plain(value: unknown): string {
+  if (value == null) return ''
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return ''
+    }
+  }
+  return String(value)
 }
 
 /**

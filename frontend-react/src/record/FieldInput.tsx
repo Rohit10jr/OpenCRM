@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { RichTextEditor } from '@/components/RichText'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/primitives'
 import { toLocalInput } from '@/lib/format'
@@ -89,6 +90,45 @@ export function FieldInput({
         />
       )
 
+    // `_frappe_fieldtype` maps every Django `TextField` to `Small Text`
+    // (`frappe_core/metadata.py:181`), so this is what a description or an address arrives
+    // as. A single-line input for one is not wrong so much as unusable.
+    case 'Small Text':
+    case 'Long Text':
+    case 'Text':
+      return (
+        <TextArea
+          field={field}
+          value={value == null ? '' : String(value)}
+          onCommit={onCommit}
+          disabled={readOnly}
+        />
+      )
+
+    case 'Text Editor':
+      return (
+        <RichTextEditor
+          value={typeof value === 'string' ? value : ''}
+          placeholder={field.placeholder}
+          disabled={readOnly}
+          onChange={onCommit}
+        />
+      )
+
+    /**
+     * Read-only, deliberately.
+     *
+     * A JSON field is a structured value the server put there, and a side-panel text box is
+     * the wrong instrument for editing one — a stray comma writes a string where an object
+     * was. Showing it beats hiding it; editing it belongs to whatever wrote it.
+     */
+    case 'JSON':
+      return (
+        <pre className="max-h-32 overflow-auto rounded bg-surface-gray-1 p-2 text-sm text-ink-gray-7">
+          {value == null ? '' : JSON.stringify(value, null, 2)}
+        </pre>
+      )
+
     default:
       return (
         <TextLike
@@ -100,6 +140,35 @@ export function FieldInput({
         />
       )
   }
+}
+
+/** The textarea twin of `TextLike`: same draft-then-commit-on-blur contract. */
+function TextArea({
+  field,
+  value,
+  onCommit,
+  disabled,
+}: {
+  field: PanelField
+  value: string
+  onCommit: (value: string) => void
+  disabled?: boolean
+}) {
+  const [draft, setDraft] = useState(value)
+
+  useEffect(() => setDraft(value), [value])
+
+  return (
+    <textarea
+      className="min-h-16 w-full resize-y rounded border border-outline-gray-2 bg-surface-white px-2 py-1.5 text-base text-ink-gray-8 focus:outline-none focus:ring-2 focus:ring-ink-gray-4 disabled:opacity-50"
+      placeholder={field.placeholder}
+      value={draft}
+      disabled={disabled}
+      onChange={(event) => setDraft(event.target.value)}
+      // No Enter-to-commit here: Enter is a newline in a textarea, which is the point of it.
+      onBlur={() => draft !== value && onCommit(draft)}
+    />
+  )
 }
 
 /** The shared text-ish input: draft locally, commit on blur or Enter. */
