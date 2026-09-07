@@ -81,22 +81,66 @@ function describe(entry: ActivityEntry): React.ReactNode {
     )
   }
 
-  if (entry.activity_type === 'changed' && entry.data && typeof entry.data === 'object') {
-    const change = entry.data as {
-      field_label?: string
-      field?: string
-      old_value?: unknown
-      value?: unknown
-    }
+  if (isVersion(entry.activity_type) && entry.data && typeof entry.data === 'object') {
+    // Consecutive changes by the same person collapse into one row with the rest hung off
+    // `other_versions` (`activities.py:322`), which is what makes a timeline show
+    // "Alice changed 4 fields" rather than four rows. The count includes this entry.
+    const others = Array.isArray(entry.other_versions) ? entry.other_versions : []
+
     return (
       <>
-        changed <span className="font-medium">{change.field_label ?? change.field}</span>{' '}
-        from <Value value={change.old_value} /> to <Value value={change.value} />
+        {changeSentence(entry)}
+        {others.length ? (
+          <ul className="mt-1 border-l-2 border-outline-gray-2 pl-3 text-sm text-ink-gray-6">
+            {others.map((other, index) => (
+              <li key={`${other.creation}-${index}`}>{changeSentence(other)}</li>
+            ))}
+          </ul>
+        ) : null}
       </>
     )
   }
   // `creation` and anything new the backend grows: `data` is a ready-made sentence.
   return <>{typeof entry.data === 'string' ? entry.data : (entry.activity_type ?? '')}</>
+}
+
+/** The three shapes `handle_multiple_versions` groups together. */
+function isVersion(activityType: unknown) {
+  return activityType === 'changed' || activityType === 'added' || activityType === 'removed'
+}
+
+/**
+ * One field change as a sentence.
+ *
+ * `added` carries no `old_value` — the backend drops it when there was nothing there
+ * (`activities.py:202`) — so "from empty to X" would be noise. `removed` is the mirror;
+ * `handle_multiple_versions` groups it, though nothing in this backend emits one yet.
+ */
+function changeSentence(entry: ActivityEntry): React.ReactNode {
+  const change = (entry.data ?? {}) as {
+    field_label?: string
+    field?: string
+    old_value?: unknown
+    value?: unknown
+  }
+  const field = <span className="font-medium">{change.field_label ?? change.field}</span>
+
+  if (entry.activity_type === 'added') {
+    return (
+      <>
+        set {field} to <Value value={change.value} />
+      </>
+    )
+  }
+  if (entry.activity_type === 'removed') {
+    return <>cleared {field}</>
+  }
+  return (
+    <>
+      changed {field} from <Value value={change.old_value} /> to{' '}
+      <Value value={change.value} />
+    </>
+  )
 }
 
 function Value({ value }: { value: unknown }) {
