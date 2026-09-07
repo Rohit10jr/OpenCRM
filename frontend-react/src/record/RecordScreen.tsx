@@ -85,13 +85,16 @@ export function RecordScreen({
   // Comments arrive inside the activity feed rather than from their own endpoint
   // (`activities.py:259`), so the Comments tab is a filter over what is already fetched.
   const comments = record.activities.filter((entry) => entry.activity_type === 'comment')
+  const emails = record.activities.filter(
+    (entry) => entry.activity_type === 'communication',
+  )
 
   // Only deals and leads have an activity feed. A contact showing six empty tabs would
   // read as a record with no history rather than a doctype the endpoint does not serve.
   const tabs: Tab[] = record.hasActivities
     ? [
         { id: 'activity', label: 'Activity' },
-        { id: 'emails', label: 'Emails' },
+        { id: 'emails', label: `Emails (${emails.length})` },
         { id: 'comments', label: `Comments (${comments.length})` },
         { id: 'calls', label: `Calls (${record.calls.length})` },
         { id: 'tasks', label: `Tasks (${record.tasks.length})` },
@@ -152,7 +155,21 @@ export function RecordScreen({
       />
     ),
     attachments: <Attachments name={name} rows={record.attachments} />,
-    emails: <EmailComposer doctype={doctype} name={name} />,
+    emails: (
+      <div className="flex h-full flex-col">
+        {/* The thread, then the composer. Emails come down inside `get_activities` as
+            `communication` entries, so this is a filter over what is already fetched —
+            the same trick the Comments tab uses. */}
+        <div className="min-h-0 flex-1 overflow-auto">
+          <ActivityTimeline
+            activities={emails}
+            isPending={record.activitiesPending}
+            emptyText="No emails on this record yet."
+          />
+        </div>
+        <EmailComposer doctype={doctype} name={name} />
+      </div>
+    ),
     whatsapp: <WhatsAppTab name={name} />,
   }
 

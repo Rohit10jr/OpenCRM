@@ -1,4 +1,5 @@
 import { RichTextView } from '@/components/RichText'
+import { EmailEntry } from './EmailEntry'
 import { Avatar, Tooltip } from '@/components/ui/primitives'
 import { formatDate, timeAgo } from '@/lib/format'
 import { useUsers } from '@/list/useLookups'
@@ -34,6 +35,16 @@ export function ActivityTimeline({
   return (
     <ol className="flex flex-col gap-4 p-5">
       {activities.map((entry, index) => {
+        // An email is a whole card, not a sentence with an avatar in front of it — it has
+        // a subject, recipients, a body and attachments. It gets its own row shape.
+        if (entry.activity_type === 'communication') {
+          return (
+            <li key={`${entry.creation}-${index}`}>
+              <EmailEntry entry={entry} />
+            </li>
+          )
+        }
+
         const user = getUser(entry.owner)
         return (
           <li key={`${entry.creation}-${index}`} className="flex items-start gap-3">
