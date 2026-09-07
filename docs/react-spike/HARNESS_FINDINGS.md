@@ -8,6 +8,7 @@ Two tools, both new here, both permanent:
 | Command | What it does | Needs servers |
 |---|---|---|
 | `npm run check:api` | Every dotted path in `src/` vs. the backend's whitelist | no — ~1 second |
+| `npm test` | 48 unit tests over the pure functions | no |
 | `npm run verify` | 65 browser steps against the real API | yes |
 
 **Final state: 65 steps green, 0 problems, 1 known gap.** Everything below is what it took
@@ -144,9 +145,11 @@ Being explicit, because "65 green" invites over-reading:
   deal contacts are unreachable by definition.
 * **Look.** It checks that content exists, not that anything is legible or aligned. Screenshots
   land in `scratch/shots/` for a human to judge.
-* **The call panel.** It is driven by an `exotel_call` socket event; nothing in the harness
-  can make one happen. `telephony/callStatus.ts` is a pure function and could be unit-tested
-  instead — that is the cheapest untaken win here.
+* **The call panel's *mounting*** is checked; its *logic* is not, and cannot be — the panel
+  is driven by an `exotel_call` socket event and nothing in a test run can make a real call
+  happen. That branch logic is pinned by unit tests instead
+  (`telephony/callStatus.test.ts`, 15 cases), which is the right tool for it: a pure
+  function of a flat bag of strings needs no browser.
 * **Most settings screens only render.** Fifteen prove they load; only Users is exercised.
 * **One database, one user.** Everything runs as Administrator. Nothing here tests the
   permission layer, which is where a CRM's sharpest bugs live.
@@ -165,6 +168,7 @@ cd frontend-react && npm run dev
 # terminal 3
 cd frontend-react
 npm run check:api    # ~1s, no servers needed
+npm test             # 48 unit tests, no servers needed
 npm run verify       # ~2 min, needs both
 ```
 
