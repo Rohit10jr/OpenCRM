@@ -178,10 +178,17 @@ shape, and it is why editing arrived on all of them in one change rather than si
 
 **What is genuinely lost**, and worth knowing before someone calls it a bug:
 
-* **The email template body is a plain textarea**, where `EditEmailTemplate.vue` gives it a
-  rich-text editor with `{{ doc.field }}` variable insertion. `RichTextEditor` exists now,
-  so this is a small change — but the variable picker is not, and a template body written
-  as plain text will render as plain text in the composer.
+* ~~**The email template body is a plain textarea**~~ — **closed in run 6.** It was the one
+  case where the shared form was not merely plainer but *wrong*: `response` is HTML the
+  composer inserts verbatim, so a textarea produced plain-text emails. Email templates now
+  have their own screen (`settings/EmailTemplates.tsx`) with the rich-text editor, the
+  `use_html` toggle and both body columns.
+
+  **Correction to this entry as first written:** it claimed Vue offers "`{{ doc.field }}`
+  variable insertion". It does not — `EditEmailTemplate.vue` has no picker of any kind. You
+  type `{{ field }}` by hand, and it shows examples as placeholder text. Ours does the same
+  with a hint line. The gap that was recorded here was half imagined, which is its own
+  lesson: a divergence written from a glance at a screenshot is a guess.
 * **No per-doctype validation before save.** The server still validates; the difference is
   that the message arrives as a toast after the round trip rather than beside the field.
 * **`name` is read-only once a row exists.** Renaming a document is a separate operation in

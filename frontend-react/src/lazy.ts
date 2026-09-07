@@ -84,8 +84,10 @@ export const LazyEmailAccounts = lazyRouteComponent(
   () => import('@/pages/settings/Lists'),
   'EmailAccountsSettingsPage',
 )
+// Its own file, not `Lists` — a template's body needs a rich-text editor, which is the one
+// thing the shared list-and-dialog cannot give it.
 export const LazyEmailTemplates = lazyRouteComponent(
-  () => import('@/pages/settings/Lists'),
+  () => import('@/pages/settings/EmailTemplates'),
   'EmailTemplatesSettingsPage',
 )
 export const LazySla = lazyRouteComponent(

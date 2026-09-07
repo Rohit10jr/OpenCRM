@@ -1,14 +1,19 @@
 import { DoctypeListSettings } from './DoctypeList'
 
 /**
- * The six settings screens that are a list of rows plus an add/remove.
+ * The five settings screens that are a list of rows plus an add/edit/remove.
  *
  * All of them go through `DoctypeListSettings` — see that file for why. What differs per
- * screen is here and only here: the doctype, the columns worth showing, and the create
- * form's fields.
+ * screen is here and only here: the doctype, the columns worth showing, and the form's
+ * fields.
+ *
+ * **Email templates used to be the sixth and now has its own file.** Its body is HTML the
+ * composer inserts verbatim, so a textarea produced plain-text emails — the one case where
+ * the shared form was not merely plainer but wrong. That is the bar for leaving here: not
+ * "this screen would be nicer bespoke", but "the shared form makes it incorrect".
  *
  * Field sets are taken from the models, not guessed:
- * `Email Account` (`frappe_platform/models.py:617`), `Email Template` (:530),
+ * `Email Account` (`frappe_platform/models.py:617`),
  * `CRM Service Level Agreement` (`sla.py:66`), `CRM Sales Hierarchy` (`metadata.py:257`),
  * `Facebook Lead Form` (`lead_syncing.py:73`), `CRM Form Script` (`metadata.py:126`).
  */
@@ -33,28 +38,6 @@ export function EmailAccountsSettingsPage() {
           type: 'checkbox',
           hint: 'Make a Contact for an unknown sender.',
         },
-      ]}
-    />
-  )
-}
-
-export function EmailTemplatesSettingsPage() {
-  return (
-    <DoctypeListSettings
-      doctype="Email Template"
-      title="Email templates"
-      description="Reusable bodies the composer can insert."
-      columns={['name', 'subject', 'reference_doctype']}
-      emptyText="No templates yet."
-      fields={[
-        {
-          fieldname: 'name',
-          label: 'Name',
-          hint: 'Email Template is named by prompt, so this is the document name.',
-        },
-        { fieldname: 'subject', label: 'Subject' },
-        { fieldname: 'response', label: 'Body', type: 'textarea' },
-        { fieldname: 'enabled', label: 'Enabled', type: 'checkbox' },
       ]}
     />
   )
