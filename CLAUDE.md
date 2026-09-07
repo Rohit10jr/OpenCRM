@@ -167,9 +167,26 @@ codex exec resume --last "<follow-up>"       # continue the same session
 
 **Never trust the exit code.** `codex exec` exits 0 even when it ran nothing. If the output
 contains `CreateProcessAsUserW failed`, `windows sandbox: runner failed`, `SpawnChild`, or
-Codex asks you to paste files — **the review did not happen.** Escalate a tier. A run that
-does not return in ~10 minutes is also a failure: retry once with a narrower prompt naming
-exact files and claims, then escalate.
+Codex asks you to paste files — **the review did not happen.** Escalate a tier.
+
+**Give it 30 minutes before calling it dead.** A real review of several files takes Codex a
+while, and the old ten-minute bar killed runs that were still working. Past 30, retry once
+with a narrower prompt naming exact files and claims, then escalate.
+
+The shell tool caps a foreground call at 10 minutes, so anything longer **must** be started
+with `run_in_background` and collected when it finishes — a foreground `codex exec` that
+runs long is killed by the harness, not by this rule, and that looks identical to a hang.
+
+**Narrow beats patient, though.** A wandering run is not a slow run: given a directory,
+Codex explores it and burns the budget on files you did not ask about. Name the exact paths,
+forbid searching, and cap the finding count — the same review that timed out unbounded came
+back in about a minute this way:
+
+```powershell
+codex exec -s read-only --cd "<dir>" "Read exactly these files and nothing else: <paths>.
+Do not search the repo. Report correctness bugs only, max 5, each as file:line plus one
+sentence. If none, say NONE."
+```
 
 ## Tier 3 — Claude subagent
 

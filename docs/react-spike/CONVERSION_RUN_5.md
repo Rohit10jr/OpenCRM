@@ -110,7 +110,8 @@ hour four.
 ## Review
 
 **Tier 1, Codex.** The first attempt wandered into the backend, ignored the files it was
-given, and was killed past CLAUDE.md's ten-minute bar. The retry — four named files,
+given, and was killed past what was then CLAUDE.md's ten-minute bar — since raised to 30,
+because that bar was cutting off runs that were still working. The retry — four named files,
 searching explicitly forbidden, a max of five findings — came back in about a minute with
 two, both in `CallPanel`, both real, both fixed in `ab09589`.
 
