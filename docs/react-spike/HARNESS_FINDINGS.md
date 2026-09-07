@@ -9,9 +9,9 @@ Two tools, both new here, both permanent:
 |---|---|---|
 | `npm run check:api` | Every dotted path in `src/` vs. the backend's whitelist | no — ~1 second |
 | `npm test` | 48 unit tests over the pure functions | no |
-| `npm run verify` | 65 browser steps against the real API | yes |
+| `npm run verify` | 66 browser steps against the real API | yes |
 
-**Final state: 65 steps green, 0 problems, 1 known gap.** Everything below is what it took
+**Final state: 66 steps green, 0 problems, 1 known gap.** Everything below is what it took
 to get there.
 
 ---
@@ -121,7 +121,7 @@ on `<main>` now and fails loudly if a screen fetches cleanly and renders nothing
 
 ## Part 4 — What the harness now proves
 
-**65 steps.** The 28 from runs 1–3 still pass unchanged, which is itself the answer to
+**66 steps.** The 28 from runs 1–3 still pass unchanged, which is itself the answer to
 "did run 5 break anything": no.
 
 New coverage:
@@ -130,8 +130,8 @@ New coverage:
 * **Dashboard** renders tiles; **notifications** render
 * **Emails / Calls / Tasks / Notes** tabs — and a task **round-trips**: created on a deal,
   survives a reload, still attached to that deal
-* **Adding a column persists across a reload** — proving it is a write to the view and not
-  component state
+* **Adding *and reordering* a column persists across a reload** — proving both are writes to
+  the view and not component state
 * Kanban board settings, quick-filter picker, organization related lists, call-log detail,
   data import, welcome
 * **The sidebar is off-screen at 640px and slides in on the menu button** — the responsive
@@ -139,7 +139,7 @@ New coverage:
 
 ### What it still does not prove
 
-Being explicit, because "65 green" invites over-reading:
+Being explicit, because "66 green" invites over-reading:
 
 * **Nothing that needs a missing endpoint.** Email send, file upload, lead conversion and
   deal contacts are unreachable by definition.

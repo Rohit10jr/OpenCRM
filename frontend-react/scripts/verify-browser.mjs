@@ -1137,6 +1137,56 @@ await step('adding a column persists across a reload', async () => {
   await page.keyboard.press('Escape')
 })
 
+await step('reordering a column persists across a reload', async () => {
+  await page.goto(`${BASE}/deals/view`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table thead th', { timeout: 15000 })
+  const headers = () =>
+    page.$$eval('table thead th', (ths) => ths.map((th) => th.innerText.trim()))
+  const before = await headers()
+
+  const openMenu = async () => {
+    const [columns] = await page.$$('xpath/.//button[contains(., "Columns")]')
+    if (!columns) throw new Error('no Columns button')
+    await columns.click()
+    await page.waitForSelector('[role="menuitemcheckbox"]', { timeout: 5000 })
+  }
+
+  await openMenu()
+  // Move the *second* column down. The first is the title cell every row links from, and
+  // shifting it changes what the other steps click on.
+  const moved = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('[role="menuitemcheckbox"]')].filter(
+      (row) => row.getAttribute('aria-checked') === 'true',
+    )
+    const row = rows[1]
+    if (!row) return null
+    const down = row.querySelector('button[aria-label="Move down"]')
+    if (!down) return null
+    down.click()
+    return row.innerText.trim()
+  })
+  if (!moved) throw new Error('no second column with a Move down arrow')
+  await page.keyboard.press('Escape')
+
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table thead th', { timeout: 15000 })
+  const after = await headers()
+  console.log(`        moved "${moved}" down: ${before.join(',')} -> ${after.join(',')}`)
+  if (after.join(',') === before.join(',')) {
+    throw new Error('the column order did not change after a reload')
+  }
+
+  // Put it back, so the next run starts where this one did.
+  await openMenu()
+  await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('[role="menuitemcheckbox"]')].filter(
+      (row) => row.getAttribute('aria-checked') === 'true',
+    )
+    rows[2]?.querySelector('button[aria-label="Move up"]')?.click()
+  })
+  await page.keyboard.press('Escape')
+})
+
 await step('the kanban board settings dialog opens', async () => {
   await page.goto(`${BASE}/deals/view/kanban`, { waitUntil: 'domcontentloaded' })
   await page.waitForFunction(() => !/Loading/.test(document.body.innerText), {
