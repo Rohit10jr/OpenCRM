@@ -1,0 +1,320 @@
+# API walkthrough - VS Code "REST Client" extension (humao.rest-client).
+#
+# The two passwords come from docs/.env (gitignored) - create it with two lines,
+#     ADMIN_PWD=...
+#     SALES_PWD=...
+# then click "Send Request" above each block in order. The login block captures the
+# tokens; every later request reads them.
+# Access tokens live 5 minutes by default (JWT_ACCESS_TOKEN_LIFETIME_MINUTES in the
+# repo-root .env; set to 180 for this walkthrough). Re-send block 1.1 when you see 401s.
+#
+# Companion to docs/TESTING_GUIDE.md, which says what to expect from each request.
+
+@host = http://localhost:8000
+@admin = Administrator
+@admin_pwd = {{$dotenv ADMIN_PWD}}
+@sales = ada@example.com
+@sales_pwd = {{$dotenv SALES_PWD}}
+
+# =========================================================================================
+# STEP 1 - auth and envelopes
+# =========================================================================================
+
+### 1.1 Login as Administrator -> 200, {"message": {"access", "refresh", "user", ...}}
+# @name login
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}", "pwd": "{{admin_pwd}}"}
+
+###
+@token = {{login.response.body.$.message.access}}
+@refresh = {{login.response.body.$.message.refresh}}
+
+### 1.2 Who am I -> 200, {"message": "Administrator"}
+GET {{host}}/api/method/frappe.auth.get_logged_user
+Authorization: Bearer {{token}}
+
+### 1.3 Same call with no token -> 401, exc_type AuthenticationError
+GET {{host}}/api/method/frappe.auth.get_logged_user
+
+### 1.4 A method that does not exist -> 404, exc_type DoesNotExistError
+GET {{host}}/api/method/crm.api.no_such_thing
+Authorization: Bearer {{token}}
+
+### 1.5 Wrong password -> 401, "Invalid login credentials"
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}", "pwd": "definitely-wrong"}
+
+### 1.6 Missing parameter -> 417, exc_type ValidationError, "Both usr and pwd are required"
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}"}
+
+### 1.7 Refresh -> 200, a NEW access and refresh pair (the old refresh is now blacklisted)
+# @name refreshed
+POST {{host}}/api/method/token/refresh
+Content-Type: application/json
+
+{"refresh": "{{refresh}}"}
+
+### 1.8 Re-use the OLD refresh token -> 401, "Token is blacklisted"
+POST {{host}}/api/method/token/refresh
+Content-Type: application/json
+
+{"refresh": "{{refresh}}"}
+
+### 1.9 Logout with the new refresh token -> 200, {"message": {"message": "Logged Out"}}
+POST {{host}}/api/method/logout
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"refresh": "{{refreshed.response.body.$.message.refresh}}"}
+
+### 1.10 Log in again so the rest of the file has a live token
+# @name login
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}", "pwd": "{{admin_pwd}}"}
+
+###
+@token = {{login.response.body.$.message.access}}
+
+# =========================================================================================
+# STEP 2 - one doctype through all five CRUD routes: CRM Organization
+# =========================================================================================
+
+### 2.1 Create -> 201, name == organization_name (field: naming, verbatim)
+POST {{host}}/api/resource/CRM%20Organization
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization_name": "Acme Test Co", "website": "https://acme.test", "no_of_employees": "11-50"}
+
+### 2.2 Create the same name again -> 409, exc_type DuplicateEntryError
+POST {{host}}/api/resource/CRM%20Organization
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization_name": "Acme Test Co"}
+
+### 2.3 Read one -> 200; note owner / modified_by / creation / modified came from BaseDocument
+GET {{host}}/api/resource/CRM%20Organization/Acme%20Test%20Co
+Authorization: Bearer {{token}}
+
+### 2.4 List, default 20 rows, newest first
+GET {{host}}/api/resource/CRM%20Organization
+Authorization: Bearer {{token}}
+
+### 2.5 List with a field selection and a filter -> 200, one row, three columns
+# The like-pattern is %acme% but a bare % is illegal in a URL, so it is written %25acme%25.
+# The server decodes it back before the filter runs.
+GET {{host}}/api/resource/CRM%20Organization?fields=["name","website","modified"]&filters=[["website","like","%25acme%25"]]
+Authorization: Bearer {{token}}
+
+### 2.6 `like` is case-insensitive on purpose (Postgres would not be) -> same row as 2.5
+GET {{host}}/api/resource/CRM%20Organization?fields=["name"]&filters=[["website","like","%25ACME%25"]]
+Authorization: Bearer {{token}}
+
+### 2.7 `in`, dict-form filters, ordering, paging -> 200, ONE row (Acme)
+# Two names match, but limit_page_length=1 asks for one row and "Acme" sorts before
+# "Globex". Change limit_start to 1 to get the second page, which is Globex.
+GET {{host}}/api/resource/CRM%20Organization?fields=["name"]&filters={"name":["in",["Acme Test Co","Globex"]]}&order_by=name asc&limit_page_length=2&limit_start=0
+Authorization: Bearer {{token}}
+
+### 2.8 Unknown field in fields= -> 417 (unknown names raise, they are not dropped)
+GET {{host}}/api/resource/CRM%20Organization?fields=["name","no_such_field"]
+Authorization: Bearer {{token}}
+
+### 2.9 Relation traversal is refused -> 417
+GET {{host}}/api/resource/CRM%20Organization?fields=["owner__password"]
+Authorization: Bearer {{token}}
+
+### 2.10 Update -> 200; modified changes, creation does not
+PUT {{host}}/api/resource/CRM%20Organization/Acme%20Test%20Co
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"website": "https://acme.examples", "annual_revenue": 1250000}
+
+### 2.11 A name with a slash is legal and addressable
+POST {{host}}/api/resource/CRM%20Organization
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization_name": "R/GA"}
+
+### 2.12 ...and reachable at a path-style URL -> 200
+GET {{host}}/api/resource/CRM%20Organization/R/GA
+Authorization: Bearer {{token}}
+
+### 2.13a Delete R/GA -> 200, {"data": null}
+DELETE {{host}}/api/resource/CRM%20Organization/R/GA
+Authorization: Bearer {{token}}
+
+### 2.13b Delete Acme Test Co -> 200, {"data": null}
+DELETE {{host}}/api/resource/CRM%20Organization/Acme%20Test%20Co
+Authorization: Bearer {{token}}
+
+### 2.14 Read it back -> 404, exc_type DoesNotExistError
+GET {{host}}/api/resource/CRM%20Organization/Acme%20Test%20Co
+Authorization: Bearer {{token}}
+
+### 2.15 A doctype that is not routable answers exactly like one that does not exist -> 404
+GET {{host}}/api/resource/ToDo
+Authorization: Bearer {{token}}
+
+# =========================================================================================
+# STEP 3 - CRM Lead, then the method endpoints its screen uses
+# =========================================================================================
+
+### 3.1 Create a lead -> 201, name CRM-LEAD-2026-000NN (naming series), status auto-set to "New"
+# lead_owner is the ACCESS column. Leave it out and a Sales User cannot see their own lead.
+# @name lead
+POST {{host}}/api/resource/CRM%20Lead
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "Walkthrough", "last_name": "Lead", "email": "walk@example.test", "organization": "Acme Test Co", "lead_owner": "{{admin}}"}
+
+###
+@lead_name = {{lead.response.body.$.data.name}}
+
+### 3.2 Read it -> lead_name was composed by the model ("Walkthrough Lead"), status is "New"
+GET {{host}}/api/resource/CRM%20Lead/{{lead_name}}
+Authorization: Bearer {{token}}
+
+### 3.3 The list screen's real engine: get_data -> data + columns + rows + views in one payload
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "filters": {}, "order_by": "modified desc", "page_length": 5, "view": {"view_type": "list"}}
+
+### 3.4 `@me` resolves to the caller -> only leads whose lead_owner is you
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "filters": {"lead_owner": "@me"}, "page_length": 5, "view": {"view_type": "list"}}
+
+### 3.5 Assign it to a colleague -> writes a ToDo row, refreshes _assign
+POST {{host}}/api/method/frappe.desk.form.assign_to.add
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{lead_name}}", "assign_to": ["{{sales}}"]}
+
+### 3.6 _assign now lists ada -> one row, two columns
+# The detail route (/<DocType>/<name>) always returns the whole document and ignores
+# `fields`, matching Frappe. Field selection is a LIST-route feature, so this reads the
+# one lead through the list route with a name filter.
+GET {{host}}/api/resource/CRM%20Lead?fields=["name","_assign"]&filters=[["name","=","{{lead_name}}"]]
+Authorization: Bearer {{token}}
+
+### 3.7 Comment on it
+POST {{host}}/api/method/crm.api.comment.add_comment
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"reference_doctype": "CRM Lead", "reference_name": "{{lead_name}}", "content": "<p>thank you CRM</p>"}
+
+### 3.8 The timeline -> assignment, comment, and a "created" entry, newest first
+POST {{host}}/api/method/crm.api.activities.get_activities
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "{{lead_name}}"}
+
+### 3.9 frappe.client.set_value is CRUD wearing a method name -> same effect as PUT
+POST {{host}}/api/method/frappe.client.set_value
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{lead_name}}", "fieldname": "job_title", "value": "CTO"}
+
+### 3.10 Status change -> also writes a CRM Status Change Log child row
+PUT {{host}}/api/resource/CRM%20Lead/{{lead_name}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status": "Contacted"}
+
+### 3.11 Deals: list the newest two
+GET {{host}}/api/resource/CRM%20Deal?fields=["name","deal_owner","status","deal_value"]&limit_page_length=2
+Authorization: Bearer {{token}}
+
+### 3.12 One deal in full, child tables inline (contacts, products)
+GET {{host}}/api/resource/CRM%20Deal/CRM-DEAL-2026-00101
+Authorization: Bearer {{token}}
+
+### 3.13 Clean up the walkthrough lead
+DELETE {{host}}/api/resource/CRM%20Lead/{{lead_name}}
+Authorization: Bearer {{token}}
+
+# =========================================================================================
+# STEP 4 - the same records as a Sales User
+# =========================================================================================
+
+### 4.1 Login as ada (Sales User)
+# @name sales_login
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{sales}}", "pwd": "{{sales_pwd}}"}
+
+###
+@sales_token = {{sales_login.response.body.$.message.access}}
+
+### 4.2 Her lead list -> only leads she owns or is assigned to (compare the count with 3.3)
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{sales_token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "filters": {}, "page_length": 50, "view": {"view_type": "list"}}
+
+### 4.3 A deal that is not hers -> 403, exc_type PermissionError (404 would mean it does not exist)
+GET {{host}}/api/resource/CRM%20Deal/CRM-DEAL-2026-00101
+Authorization: Bearer {{sales_token}}
+
+### 4.4 Organizations have no row rule -> she sees all of them
+GET {{host}}/api/resource/CRM%20Organization?fields=["name"]
+Authorization: Bearer {{sales_token}}
+
+### 4.5 A lead she creates without lead_owner vanishes for her -> 201, then 4.6 is empty
+# @name orphan
+POST {{host}}/api/resource/CRM%20Lead
+Authorization: Bearer {{sales_token}}
+Content-Type: application/json
+
+{"first_name": "Orphan", "last_name": "Lead", "email": "orphan@example.test"}
+
+###
+@orphan_name = {{orphan.response.body.$.data.name}}
+
+### 4.6 -> 403: she created it and cannot read it back. This is upstream's rule, not a bug.
+GET {{host}}/api/resource/CRM%20Lead/{{orphan_name}}
+Authorization: Bearer {{sales_token}}
+
+### 4.7 Administrator can, and cleans it up
+DELETE {{host}}/api/resource/CRM%20Lead/{{orphan_name}}
+Authorization: Bearer {{token}}
+
+### 4.8 She may not rewrite the org chart -> 403 (the tree is an input to the permission engine)
+POST {{host}}/api/resource/CRM%20Sales%20Hierarchy
+Authorization: Bearer {{sales_token}}
+Content-Type: application/json
+
+{"user": "{{sales}}"}
+
+### 4.9 She may read her own User row but not change her roles -> groups is never on the wire
+GET {{host}}/api/resource/User/{{sales}}
+Authorization: Bearer {{sales_token}}
+
+### 4.10 Filtering on a hidden field is refused rather than answered -> 400, "Invalid Filter"
+GET {{host}}/api/resource/User?filters=[["groups","like","%25Manager%25"]]
+Authorization: Bearer {{sales_token}}

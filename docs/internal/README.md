@@ -49,6 +49,10 @@ Prep work, each its own commit or PR, none of it produced by a running agent.
 | `docs/internal/RUNBOOK_PHASE_7.md` | Attended | 21 Aug | Phase 7's handoff — and where Step 0 and the nine "How to work here" rules were invented |
 | `docs/internal/RUNBOOK_PHASE_8.md` | Attended | 23 Aug | Phase 8's handoff |
 | `docs/WORKFLOW.md` | Attended | 25 Aug | All of the above, generalised into a reusable template for other projects |
+| `docs/BACKEND_LAYOUT.md` | Attended | 9 Sep | What each `backend/` folder is for, and how a request travels through the three generic views. The orientation for someone who expected a normal Django layout |
+| `docs/TESTING_GUIDE.md` | Attended | 10 Sep | The manual API walkthrough: what to test in what order, what each response should look like, and the gaps you will hit |
+| `docs/API_WALKTHROUGH.http` | Attended | 10 Sep | The same walkthrough as a VS Code REST Client file — set two passwords, click through |
+| `docs/ROUTES.md` | Attended | 9 Sep | **Generated** by `backend/scripts/generate_route_inventory.py` — every backend and frontend route in one place, with blank *Tested* columns. The checklist for the API walkthrough |
 
 ## C. Agent output — written during a run, about its own work
 
