@@ -1,0 +1,325 @@
+# 01 - authentication: login, the token pair, logout, forgot/reset password, invitation
+# redemption. Everything an unauthenticated stranger can reach, plus the two token routes.
+#
+# Expectations come from frappe/auth.py (login), frappe/core/doctype/user/user.py
+# (reset_password 1044, update_password 828, _get_user_for_update_password 945) and
+# crm/api/__init__.py:83 (accept_invitation). JWT replaces the session cookie by
+# decision (PORT_PLAN.md section 10), so the token blocks are port-defined.
+#
+# NOT here: the login lockout (10 failures lock the IP for 60 s, which would break every
+# file after it) - that is 99_lockout.http, run last. Rate limits on the reset endpoints
+# (10/h and 20/h) are not exercised either; this file spends 3 and 5 of them per run.
+
+@host = http://localhost:8000
+@admin = Administrator
+@admin_pwd = {{$dotenv ADMIN_PWD}}
+@sales = ada@example.com
+@sales_pwd = {{$dotenv SALES_PWD}}
+@manager = grace@example.com
+@temp_pwd = Walkthrough#Temp-2026
+
+# ---- login ------------------------------------------------------------------------------
+
+### 1.1 login -> 200, the token pair plus the fields the frontend stores
+# @name login
+# @expect $.message.access exists
+# @expect $.message.refresh exists
+# @expect $.message.user == Administrator
+# @expect $.message.full_name exists
+# @expect $.message.home_page == /crm
+# @expect $.message.message == Logged In
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}", "pwd": "{{admin_pwd}}"}
+
+###
+@token = {{login.response.body.$.message.access}}
+@refresh = {{login.response.body.$.message.refresh}}
+
+### 1.2 who am I -> 200
+# @expect $.message == Administrator
+GET {{host}}/api/method/frappe.auth.get_logged_user
+Authorization: Bearer {{token}}
+
+### 1.3 no token -> 401
+# @expect $.exc_type == AuthenticationError
+GET {{host}}/api/method/frappe.auth.get_logged_user
+
+### 1.4 a token that is not a JWT -> 401
+# @expect $.exc_type == AuthenticationError
+GET {{host}}/api/method/frappe.auth.get_logged_user
+Authorization: Bearer this-is-not-a-token
+
+### 1.5 wrong password -> 401, Frappe's wording
+# @expect $.exc_type == AuthenticationError
+# @expect $.message == Invalid login credentials
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}", "pwd": "definitely-wrong"}
+
+### 1.6 unknown account -> 401, the SAME wording, so accounts cannot be enumerated
+# @expect $.message == Invalid login credentials
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "nobody@example.com", "pwd": "whatever"}
+
+### 1.7 missing pwd -> 417
+# @expect $.exc_type == ValidationError
+# @expect $.message == Both usr and pwd are required
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}"}
+
+### 1.8 empty body -> 417
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{}
+
+### 1.9 username/password are accepted as aliases for usr/pwd -> 200
+# @expect $.message.user == Administrator
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"username": "{{admin}}", "password": "{{admin_pwd}}"}
+
+### 1.10 a Sales User logs in -> 200, user is the lowercased email
+# @expect $.message.user == ada@example.com
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{sales}}", "pwd": "{{sales_pwd}}"}
+
+### 1.11 email typed in a different case -> 200 upstream (MariaDB compares case-insensitively)
+# The User PK is stored lowercased; a person typing "Ada@Example.com" is the same person.
+# @expect $.message.user == ada@example.com
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "ADA@EXAMPLE.COM", "pwd": "{{sales_pwd}}"}
+
+### 1.12 GET is refused on login -> 403 (port hardening; upstream allows GET, nothing uses it)
+# @expect $.exc_type == PermissionError
+GET {{host}}/api/method/login?usr={{admin}}&pwd={{admin_pwd}}
+
+### 1.13 the Frappe legacy `cmd` parameter is ignored, not an error -> 200
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"cmd": "login", "usr": "{{admin}}", "pwd": "{{admin_pwd}}"}
+
+# ---- the token pair -----------------------------------------------------------------------
+
+### 2.1 refresh -> 200, a new pair
+# @name refreshed
+# @expect $.message.access exists
+# @expect $.message.refresh exists
+POST {{host}}/api/method/token/refresh
+Content-Type: application/json
+
+{"refresh": "{{refresh}}"}
+
+### 2.2 the OLD refresh token is single-use -> 401, blacklisted
+# @expect $.exc_type == AuthenticationError
+# @expect $.message contains blacklisted
+POST {{host}}/api/method/token/refresh
+Content-Type: application/json
+
+{"refresh": "{{refresh}}"}
+
+### 2.3 refresh with garbage -> 401
+# @expect $.exc_type == AuthenticationError
+POST {{host}}/api/method/token/refresh
+Content-Type: application/json
+
+{"refresh": "not.a.token"}
+
+### 2.4 refresh with nothing -> 417
+# @expect $.message == refresh token is required
+POST {{host}}/api/method/token/refresh
+Content-Type: application/json
+
+{}
+
+### 2.5 an ACCESS token is not a refresh token -> 401
+# @expect $.exc_type == AuthenticationError
+POST {{host}}/api/method/token/refresh
+Content-Type: application/json
+
+{"refresh": "{{token}}"}
+
+### 2.6 logout needs a token -> 401 (it is not allow_guest)
+# @expect $.exc_type == AuthenticationError
+POST {{host}}/api/method/logout
+Content-Type: application/json
+
+{"refresh": "{{refreshed.response.body.$.message.refresh}}"}
+
+### 2.7 logout -> 200, revokes the refresh token handed in
+# @expect $.message.message == Logged Out
+POST {{host}}/api/method/logout
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"refresh": "{{refreshed.response.body.$.message.refresh}}"}
+
+### 2.8 that refresh token is now dead -> 401
+POST {{host}}/api/method/token/refresh
+Content-Type: application/json
+
+{"refresh": "{{refreshed.response.body.$.message.refresh}}"}
+
+### 2.9 the ACCESS token still works after logout, for its remaining lifetime -> 200
+# Stateless JWT: nothing is looked up on an access token. KNOWN_ISSUES.md section 6 records
+# this as accepted; the window is JWT_ACCESS_TOKEN_LIFETIME_MINUTES.
+# @expect $.message == Administrator
+GET {{host}}/api/method/frappe.auth.get_logged_user
+Authorization: Bearer {{token}}
+
+### 2.10 logout with a garbage refresh token still succeeds -> 200 ("always succeed")
+# @expect $.message.message == Logged Out
+POST {{host}}/api/method/logout
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"refresh": "garbage"}
+
+### 2.11 logout via GET is also accepted, matching the session.js call -> 200
+GET {{host}}/api/method/logout
+Authorization: Bearer {{token}}
+
+### 2.12 fresh login for the rest of the file -> 200
+# @name login
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}", "pwd": "{{admin_pwd}}"}
+
+###
+@token = {{login.response.body.$.message.access}}
+
+# ---- forgot password. The response never varies: CWE-204, and upstream's own comment. ----
+
+### 3.1 reset for a real account -> 200, the generic sentence; the mail lands in the backend console
+# @expect $.message.message == If this email is registered with us, we have sent password reset instructions to it. Please check your inbox.
+POST {{host}}/api/method/frappe.core.doctype.user.user.reset_password
+Content-Type: application/json
+
+{"user": "{{manager}}"}
+
+### 3.2 reset for an address that does not exist -> 200, byte-identical
+# @expect $.message.message == If this email is registered with us, we have sent password reset instructions to it. Please check your inbox.
+POST {{host}}/api/method/frappe.core.doctype.user.user.reset_password
+Content-Type: application/json
+
+{"user": "ghost@example.com"}
+
+### 3.3 reset for a disabled built-in -> 200, still identical
+# @expect $.message.message == If this email is registered with us, we have sent password reset instructions to it. Please check your inbox.
+POST {{host}}/api/method/frappe.core.doctype.user.user.reset_password
+Content-Type: application/json
+
+{"user": "Guest"}
+
+# ---- set / update password ---------------------------------------------------------------
+
+### 4.1 a key that was never issued -> 410, and "used" and "invalid" share one message on purpose
+# @expect $.message == The reset password link has either been used before or is invalid
+POST {{host}}/api/method/frappe.core.doctype.user.user.update_password
+Content-Type: application/json
+
+{"key": "not-a-real-key", "new_password": "{{temp_pwd}}"}
+
+### 4.2 neither a key nor an old password -> 417
+# @expect $.message == Provide either a reset key or your current password
+POST {{host}}/api/method/frappe.core.doctype.user.user.update_password
+Content-Type: application/json
+
+{"new_password": "{{temp_pwd}}"}
+
+### 4.3 no new password -> 417
+# @expect $.message == New password is required
+POST {{host}}/api/method/frappe.core.doctype.user.user.update_password
+Content-Type: application/json
+
+{"key": "not-a-real-key"}
+
+### 4.4 old-password path, wrong old password -> 401 (upstream's status for this case)
+# @expect $.message == Invalid password
+POST {{host}}/api/method/frappe.core.doctype.user.user.update_password
+Content-Type: application/json
+
+{"usr": "{{sales}}", "old_password": "wrong", "new_password": "{{temp_pwd}}"}
+
+### 4.5 old-password path without naming the account -> 401
+# @expect $.message == Invalid password
+POST {{host}}/api/method/frappe.core.doctype.user.user.update_password
+Content-Type: application/json
+
+{"old_password": "{{sales_pwd}}", "new_password": "{{temp_pwd}}"}
+
+### 4.6 a weak new password is refused server-side -> 417
+# @expect $.exc_type == ValidationError
+POST {{host}}/api/method/frappe.core.doctype.user.user.update_password
+Content-Type: application/json
+
+{"usr": "{{sales}}", "old_password": "{{sales_pwd}}", "new_password": "1234"}
+
+### 4.7 change ada's password -> 200, and it returns a token pair, same shape as login
+# @expect $.message.access exists
+# @expect $.message.user == ada@example.com
+POST {{host}}/api/method/frappe.core.doctype.user.user.update_password
+Content-Type: application/json
+
+{"usr": "{{sales}}", "old_password": "{{sales_pwd}}", "new_password": "{{temp_pwd}}"}
+
+### 4.8 the old password no longer logs in -> 401
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{sales}}", "pwd": "{{sales_pwd}}"}
+
+### 4.9 the new one does -> 200
+# @expect $.message.user == ada@example.com
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{sales}}", "pwd": "{{temp_pwd}}"}
+
+### 4.10 change it back -> 200 (if this block fails, ada's password is the temp one above)
+# @expect $.message.user == ada@example.com
+POST {{host}}/api/method/frappe.core.doctype.user.user.update_password
+Content-Type: application/json
+
+{"usr": "{{sales}}", "old_password": "{{temp_pwd}}", "new_password": "{{sales_pwd}}"}
+
+### 4.11 and the original works again -> 200
+# @expect $.message.user == ada@example.com
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{sales}}", "pwd": "{{sales_pwd}}"}
+
+# ---- invitation redemption ----------------------------------------------------------------
+
+### 5.1 a key nobody issued -> 417, upstream's message
+# @expect $.message == Invalid or expired key
+POST {{host}}/api/method/crm.api.accept_invitation
+Content-Type: application/json
+
+{"key": "not-a-real-key"}
+
+### 5.2 no key at all -> 417
+# @expect $.message == Invalid or expired key
+POST {{host}}/api/method/crm.api.accept_invitation
+Content-Type: application/json
+
+{}
+
+### 5.3 GET works too, because the emailed link is a GET -> 417 for a bad key, not 403
+# @expect $.message == Invalid or expired key
+GET {{host}}/api/method/crm.api.accept_invitation?key=not-a-real-key
