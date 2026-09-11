@@ -24,6 +24,8 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 12 | 05 / 3.12 | low | `crm.api.contact.*` on a contact that does not exist answers 417 `ValidationError`; upstream answers 403 `PermissionError` | open |
 | 13 | 05 / 5.1–5.5 | **high** | `rename_doc` inserts a copy and deletes the original: a referenced document cannot be renamed, and renaming a contact **deletes** its email and phone rows and its deal links | open |
 | 14 | 05 / 6.2, 6.3 | low | The territory tree is unmaintained: `lft`/`rgt` stay null and no tree resolver is registered, so `descendants of` answers 400. Latent — the frontend never sends it | open |
+| 15 | 06 / 2.2, 2.4 | medium | A task's `assigned_to` never becomes an assignment: no ToDo, empty `_assign`, and changing it does not unassign the previous user | open |
+| 16 | 06 / 2.8, 3.4, 4.7, 4.9 | **high** | Task, Note and Call Log declare no list columns or rows, so their three screens fall back to Name and Last Modified; call-log rows are not parsed and the document hides its `links` | open |
 
 ---
 
@@ -310,3 +312,44 @@ behaviour; phase 2 built `crm_app/permissions/tree.py` for the sales hierarchy o
 never registered a resolver, so `_TREE_RESOLVERS` is empty at runtime. Latent: the
 frontend never sends a tree operator and nothing reads `lft`/`rgt`. Recorded so the
 phase-2 spec's "give territory the same treatment" is known to be unfulfilled.
+
+## 15. A task's assigned_to is not an assignment
+
+**Blocks:** `06_tasks_notes_calls.http` 2.2 (create with `assigned_to`), 2.4 (change it)
+
+**Expected:** `crm_task.py:30-56`: `after_insert` calls `assign_to.add` for
+`assigned_to`, so the task gets a ToDo and `_assign == ["ada@example.com"]`; `validate`
+on a later save unassigns the previous user and assigns the new one, so `_assign`
+becomes exactly `["grace@example.com"]`. The task board's assignee chip reads
+`_assign`, and the assignee's own task list is built from ToDo.
+
+**Actual:** `_assign` stays `[]` throughout. `crm_app/models/core_sales.py:CRMTask`
+has fields only; no lifecycle was ported. The `OwnerAssignmentMixin` used by Lead and
+Deal does exactly this job and would fit with `owner_field = "assigned_to"` plus the
+unassign-previous step.
+
+## 16. Task, Note and Call Log have no list definitions
+
+**Blocks:** `06_tasks_notes_calls.http` 2.8 (task columns), 3.4 (note rows), 4.9
+(call-log columns and parsed rows), 4.7 (call-log `links`)
+
+**Expected:** each controller declares what its screen needs:
+
+* `crm_task.py:57` — columns title, status, priority, due date, assigned to, modified;
+* `fcrm_note.py:24` — no columns but rows `title, content, reference_doctype,
+  reference_docname, owner, modified`, which the Notes page renders as cards;
+* `crm_call_log.py:57` — columns starting with caller, and `parse_list_data` adds
+  `_duration`, `_caller`, `_receiver` and `activity_type` to every row, which
+  `CallLogs.vue` and `CallArea.vue` read directly;
+* the call log's `links` child table (Table of Dynamic Link) comes back on the document.
+
+**Actual:** `get_data` for all three falls back to the registry default, two columns
+(`name`, `modified`) and generic rows. The Tasks and Call Logs screens would render
+with only those two columns, and the Notes page cards would have no title or content to
+show. The port writes Dynamic Link rows for a call log but the model declares no
+`POLYMORPHIC_CHILD_TABLES` entry for `links`, so the document never shows them.
+
+**Where:** `crm_app/models/core_sales.py` (`CRMTask.default_list_data`,
+`FCRMNote.default_list_data`), `crm_app/models/telephony.py` (`CRMCallLog.default_list_data`,
+`parse_list_data`, and `POLYMORPHIC_CHILD_TABLES = {"links": "Dynamic Link"}`). Lead,
+Deal, Organization and Contact all have theirs; these three were missed.
