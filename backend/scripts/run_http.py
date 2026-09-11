@@ -12,7 +12,8 @@ Supported, matching the extension's behaviour for everything the walkthrough fil
 * ``### title -> 201`` - the expected status is read from the block's own title; a title
   without one expects any 2xx; ``-> 200|404`` accepts either, for cleanup blocks
 * ``# @expect $.data.name == Acme`` - optional body assertions: ``==``, ``!=``,
-  ``contains``, ``exists``, ``absent``, and ``count N`` for the length of a list
+  ``contains``, ``excludes``, ``exists``, ``absent``, and ``count N`` for the length
+  of a list. ``contains``/``excludes`` match a substring of the value's JSON text
 
 Each block prints one PASS/FAIL line. ``--mark`` records a fully green file in the
 Tested column of ``docs/ROUTES.md`` for every method path and doctype it touched.
@@ -38,7 +39,7 @@ SUBST_RE = re.compile(r"\{\{([^{}]+)\}\}")
 #: ``-> 201`` or ``-> 200|404`` (a cleanup block that may find nothing to clean).
 STATUS_RE = re.compile(r"->\s*(\d{3}(?:\|\d{3})*)")
 NAME_RE = re.compile(r"^#\s*@name\s+(\S+)")
-EXPECT_RE = re.compile(r"^#\s*@expect\s+(\S+)\s+(==|!=|contains|exists|absent|count)\s*(.*)$")
+EXPECT_RE = re.compile(r"^#\s*@expect\s+(\S+)\s+(==|!=|contains|excludes|exists|absent|count)\s*(.*)$")
 
 
 class HttpError(Exception):
@@ -233,9 +234,9 @@ class Runner:
                 passed = present and (actual == wanted or str(actual) == raw)
             elif op == "!=":
                 passed = present and not (actual == wanted or str(actual) == raw)
-            elif op == "contains":
+            elif op in ("contains", "excludes"):
                 haystack = actual if isinstance(actual, str) else json.dumps(actual)
-                passed = present and raw in haystack
+                passed = present and ((raw in haystack) == (op == "contains"))
             else:  # count
                 passed = present and isinstance(actual, (list, dict)) and len(actual) == int(raw)
             if not passed:

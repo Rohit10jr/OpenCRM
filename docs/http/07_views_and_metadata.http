@@ -1,0 +1,708 @@
+# 07 - the runtime metadata layer: the field lists the list screen's menus are built
+# from, quick filters, saved views through every crm_view_settings.* method and their
+# own permission model, get_data in its list / kanban / group_by modes, form layouts and
+# the side panel, and form scripts.
+#
+# Expectations from crm/api/doc.py (sort_options 24, get_filterable_fields 54,
+# get_group_by_fields 112, get_quick_filters 163, update_quick_filters 207, get_fields
+# 628, get_data 256-500), crm_view_settings.py (main; check_permission at 151: admin or
+# System Manager edit anything, a Sales Manager edits public views, an owner edits their
+# own), crm_fields_layout.py and crm_form_script.py.
+#
+# Everything this file creates is labelled "ZZ" or lives on CRM Task, and is removed at
+# the end: the quick-filter override, the Quick Entry layout, the form script, and the
+# standard CRM Lead list view that set_as_default creates for Administrator.
+
+@host = http://localhost:8000
+@admin = Administrator
+@admin_pwd = {{$dotenv ADMIN_PWD}}
+@sales = ada@example.com
+@sales_pwd = {{$dotenv SALES_PWD}}
+@manager = grace@example.com
+@manager_pwd = {{$dotenv MANAGER_PWD}}
+@vs = crm.fcrm.doctype.crm_view_settings.crm_view_settings
+@fl = crm.fcrm.doctype.crm_fields_layout.crm_fields_layout
+@views = {{host}}/api/resource/CRM%20View%20Settings
+
+### 0.1 login as Administrator -> 200
+# @name login
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}", "pwd": "{{admin_pwd}}"}
+
+###
+@token = {{login.response.body.$.message.access}}
+
+### 0.2 login as the Sales Manager -> 200
+# @name mlogin
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{manager}}", "pwd": "{{manager_pwd}}"}
+
+###
+@mtoken = {{mlogin.response.body.$.message.access}}
+
+### 0.3 login as the Sales User -> 200
+# @name slogin
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{sales}}", "pwd": "{{sales_pwd}}"}
+
+###
+@stoken = {{slogin.response.body.$.message.access}}
+
+# ---- cleanup first ---------------------------------------------------------------------
+
+### 0.4 leftover ZZ views -> 200
+# @name old_views
+GET {{views}}?fields=["name"]&filters=[["label","like","ZZ%25"]]
+Authorization: Bearer {{token}}
+
+### 0.5 -> 200|404
+DELETE {{views}}/{{old_views.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.6 -> 200|404
+DELETE {{views}}/{{old_views.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 0.7 -> 200|404
+DELETE {{views}}/{{old_views.response.body.$.data[2].name}}
+Authorization: Bearer {{token}}
+
+### 0.8 -> 200|404
+DELETE {{views}}/{{old_views.response.body.$.data[3].name}}
+Authorization: Bearer {{token}}
+
+### 0.9 a standard CRM Lead view for Administrator, if an earlier run left one -> 200
+# @name old_std
+GET {{views}}?fields=["name"]&filters=[["dt","=","CRM Lead"],["is_standard","=",1],["user","=","Administrator"]]
+Authorization: Bearer {{token}}
+
+### 0.10 -> 200|404
+DELETE {{views}}/{{old_std.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.11 -> 200|404
+DELETE {{views}}/{{old_std.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 0.12 leftover quick-filter override for CRM Task -> 200
+# @name old_qf
+GET {{host}}/api/resource/CRM%20Global%20Settings?fields=["name"]&filters=[["dt","=","CRM Task"],["type","=","Quick Filters"]]
+Authorization: Bearer {{token}}
+
+### 0.13 -> 200|404
+DELETE {{host}}/api/resource/CRM%20Global%20Settings/{{old_qf.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.14 leftover Quick Entry layout for CRM Task -> 200|404
+DELETE {{host}}/api/resource/CRM%20Fields%20Layout/CRM%20Task-Quick%20Entry
+Authorization: Bearer {{token}}
+
+### 0.15 leftover form script -> 200|404
+DELETE {{host}}/api/resource/CRM%20Form%20Script/ZZ%20Lead%20Script
+Authorization: Bearer {{token}}
+
+# ---- the field lists behind the list screen's menus -----------------------------------------
+
+### 1.1 sort_options -> every column, with label / value / fieldname, plus the standard fields
+# @expect $.message contains "fieldname": "lead_name"
+# @expect $.message contains "fieldname": "modified"
+# @expect $.message[0].label exists
+# @expect $.message[0].value exists
+POST {{host}}/api/method/crm.api.doc.sort_options
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead"}
+
+### 1.2 get_filterable_fields -> Links, Selects, Data, dates ... and the standard nine
+# `converted` is excluded by CRMLead.get_non_filterable_fields (crm_lead.py:409)
+# @expect $.message contains "fieldname": "status"
+# @expect $.message contains "fieldname": "_assign"
+# @expect $.message contains "fieldname": "owner"
+# @expect $.message excludes "fieldname": "converted"
+POST {{host}}/api/method/crm.api.doc.get_filterable_fields
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead"}
+
+### 1.3 a Link field carries its target doctype as options
+# @expect $.message contains "options": "CRM Lead Status"
+POST {{host}}/api/method/crm.api.doc.get_filterable_fields
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead"}
+
+### 1.4 get_group_by_fields -> no free text (lost_notes is Text), standard fields appended
+# @expect $.message contains "fieldname": "status"
+# @expect $.message contains "fieldname": "_assign"
+# @expect $.message excludes "fieldname": "lost_notes"
+# @expect $.message excludes "fieldname": "converted"
+POST {{host}}/api/method/crm.api.doc.get_group_by_fields
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead"}
+
+### 1.5 get_fields -> a descriptor per column with fieldname, fieldtype, label
+# @expect $.message[0].fieldname exists
+# @expect $.message[0].fieldtype exists
+# @expect $.message[0].label exists
+POST {{host}}/api/method/crm.api.doc.get_fields
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "allow_all_fieldtypes": true}
+
+### 1.6 an unknown doctype -> 404 (500 today: finding 17 - DocTypeNotFound is not a FrappeError)
+# @expect $.exc_type == DoesNotExistError
+POST {{host}}/api/method/crm.api.doc.get_fields
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "No Such Doctype"}
+
+# ---- quick filters ------------------------------------------------------------------------------
+
+### 2.1 get_quick_filters for a lead -> the in_standard_filter fields, minus `converted`
+# @expect $.message contains "fieldname": "status"
+# @expect $.message contains "fieldname": "email"
+# @expect $.message excludes "fieldname": "converted"
+POST {{host}}/api/method/crm.api.doc.get_quick_filters
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "cached": true}
+
+### 2.2 for a task: title, priority, assigned_to, status, due_date; a Select gets a blank first option
+# @expect $.message count 5
+# @expect $.message[0].fieldname == title
+# @expect $.message[1].fieldname == priority
+# @expect $.message[1].fieldtype == Select
+# @expect $.message[1].options[0].value ==
+# @expect $.message[1].options[1].value == Low
+POST {{host}}/api/method/crm.api.doc.get_quick_filters
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Task"}
+
+### 2.3 update_quick_filters writes a CRM Global Settings row -> 200
+POST {{host}}/api/method/crm.api.doc.update_quick_filters
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Task", "quick_filters": ["status", "title"], "old_filters": ["title", "priority", "assigned_to", "status", "due_date"]}
+
+### 2.4 -> get_quick_filters now follows the row, in the order given
+# @expect $.message count 2
+# @expect $.message[0].fieldname == status
+# @expect $.message[1].fieldname == title
+POST {{host}}/api/method/crm.api.doc.get_quick_filters
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Task"}
+
+### 2.5 the row it wrote, one per (dt, type) -> 200
+# @name qf
+# @expect $.data count 1
+# @expect $.data[0].type == Quick Filters
+GET {{host}}/api/resource/CRM%20Global%20Settings?fields=["name","type","json"]&filters=[["dt","=","CRM Task"],["type","=","Quick Filters"]]
+Authorization: Bearer {{token}}
+
+# ---- saved views ----------------------------------------------------------------------------------
+
+### 3.1 create a private view with no columns: the controller defaults are synced in -> 200
+# @name view1
+# @expect $.message.name exists
+# @expect $.message.label == ZZ Hot leads
+# @expect $.message.user == Administrator
+# @expect $.message.public == false
+# @expect $.message.columns contains lead_name
+# @expect $.message.rows contains lead_owner
+# @expect $.message.route_name == Leads
+POST {{host}}/api/method/{{vs}}.create
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"view": {"doctype": "CRM Lead", "label": "ZZ Hot leads", "type": "list", "filters": {"status": "New"}, "columns": [], "rows": []}}
+
+###
+@view1 = {{view1.response.body.$.message.name}}
+
+### 3.2 update it -> 200, the label changed
+# @expect $.message.label == ZZ Hot leads (renamed)
+# @expect $.message.filters contains Contacted
+POST {{host}}/api/method/{{vs}}.update
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"view": {"name": "{{view1}}", "doctype": "CRM Lead", "label": "ZZ Hot leads (renamed)", "type": "list", "filters": {"status": "Contacted"}, "columns": [{"label": "Full Name", "type": "Data", "key": "lead_name", "width": "12rem"}], "rows": ["name", "lead_name"]}}
+
+### 3.3 get_views lists the caller's own and the global (ownerless) views -> contains it
+# @expect $.message contains ZZ Hot leads (renamed)
+POST {{host}}/api/method/crm.api.views.get_views
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead"}
+
+### 3.4 get_data with explicit columns is a custom view: is_default false, columns as given
+# @expect $.message.is_default == false
+# @expect $.message.columns count 1
+# @expect $.message.columns[0].key == lead_name
+# @expect $.message.rows contains lead_name
+# @expect $.message.total_count exists
+# @expect $.message.row_count exists
+# @expect $.message.views contains ZZ Hot leads (renamed)
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "filters": {}, "columns": [{"label": "Full Name", "type": "Data", "key": "lead_name", "width": "12rem"}], "rows": ["name", "lead_name"], "page_length": 5, "view": {"view_type": "list", "custom_view_name": "{{view1}}"}}
+
+### 3.5 pin -> 200
+POST {{host}}/api/method/{{vs}}.pin
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "{{view1}}", "value": 1}
+
+### 3.6 -> pinned
+# @expect $.data.pinned == true
+GET {{views}}/{{view1}}
+Authorization: Bearer {{token}}
+
+### 3.7 a Sales User may not make a view public -> 403 "Not permitted" (crm_view_settings.py:133)
+# @expect $.exc_type == PermissionError
+# @expect $.message == Not permitted
+POST {{host}}/api/method/{{vs}}.public
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"name": "{{view1}}", "value": 1}
+
+### 3.8 Administrator makes it public -> 200; the owner is cleared and the pin is dropped
+POST {{host}}/api/method/{{vs}}.public
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "{{view1}}", "value": 1}
+
+### 3.9 -> public, no user, unpinned
+# @expect $.data.public == true
+# @expect $.data.user == null
+# @expect $.data.pinned == false
+GET {{views}}/{{view1}}
+Authorization: Bearer {{token}}
+
+### 3.10 a Sales User sees the public view on the resource route -> 200
+# @expect $.data.public == true
+GET {{views}}/{{view1}}
+Authorization: Bearer {{stoken}}
+
+### 3.11 ...but may not edit it -> 403 (not the owner, not a manager)
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/method/{{vs}}.update
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"view": {"name": "{{view1}}", "doctype": "CRM Lead", "label": "ZZ hijacked", "type": "list", "filters": {}, "columns": [], "rows": []}}
+
+### 3.12 a Sales Manager may edit a public view -> 200
+# @expect $.message.label == ZZ Hot leads (manager edit)
+POST {{host}}/api/method/{{vs}}.update
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"view": {"name": "{{view1}}", "doctype": "CRM Lead", "label": "ZZ Hot leads (manager edit)", "type": "list", "filters": {}, "columns": [], "rows": []}}
+
+### 3.13 the Sales User creates her own private view -> 200, owned by her
+# @name view2
+# @expect $.message.user == ada@example.com
+# @expect $.message.public == false
+POST {{host}}/api/method/{{vs}}.create
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"view": {"doctype": "CRM Deal", "label": "ZZ Ada's deals", "type": "list", "filters": {"deal_owner": "@me"}, "columns": [], "rows": []}}
+
+###
+@view2 = {{view2.response.body.$.message.name}}
+
+### 3.14 a Sales Manager may NOT edit somebody's private view -> 403
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/method/{{vs}}.update
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"view": {"name": "{{view2}}", "doctype": "CRM Deal", "label": "ZZ touched", "type": "list", "filters": {}, "columns": [], "rows": []}}
+
+### 3.15 nor pin it -> 403
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/method/{{vs}}.pin
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"name": "{{view2}}", "value": 1}
+
+### 3.16 the Sales Manager does not even see it in the list -> the resource route hides private views of others
+# @expect $.data count 0
+GET {{views}}?fields=["name"]&filters=[["name","=",{{view2}}]]
+Authorization: Bearer {{mtoken}}
+
+### 3.17 the owner may edit her own -> 200
+# @expect $.message.label == ZZ Ada's deals (edited)
+POST {{host}}/api/method/{{vs}}.update
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"view": {"name": "{{view2}}", "doctype": "CRM Deal", "label": "ZZ Ada's deals (edited)", "type": "list", "filters": {"deal_owner": "@me"}, "columns": [], "rows": []}}
+
+### 3.18 a Sales User may not delete a public view -> 403
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/method/{{vs}}.delete
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"name": "{{view1}}"}
+
+### 3.19 deleting a view that does not exist is silent -> 200 (crm_view_settings.py:123 guards with db.exists)
+POST {{host}}/api/method/{{vs}}.delete
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": 999999999}
+
+### 3.20 update on a view that does not exist -> 404
+# @expect $.exc_type == DoesNotExistError
+POST {{host}}/api/method/{{vs}}.update
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"view": {"name": 999999999, "doctype": "CRM Lead", "label": "x", "type": "list"}}
+
+# ---- default views and the standard view ---------------------------------------------------------
+
+### 4.1 set_as_default on a named view -> 200
+POST {{host}}/api/method/{{vs}}.set_as_default
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"name": "{{view2}}"}
+
+### 4.2 -> is_default true
+# @expect $.data.is_default == true
+GET {{views}}/{{view2}}
+Authorization: Bearer {{stoken}}
+
+### 4.3 set_as_default with a type and doctype creates the caller's STANDARD view for it -> 200
+POST {{host}}/api/method/{{vs}}.set_as_default
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"type": "list", "doctype": "CRM Lead"}
+
+### 4.4 -> one standard CRM Lead list view for Administrator, default, with the controller's columns
+# @name std
+# @expect $.data count 1
+# @expect $.data[0].is_default == true
+# @expect $.data[0].label == List
+# @expect $.data[0].columns contains lead_name
+GET {{views}}?fields=["name","is_default","label","columns","rows"]&filters=[["dt","=","CRM Lead"],["is_standard","=",1],["user","=","Administrator"],["type","=","list"]]
+Authorization: Bearer {{token}}
+
+###
+@std = {{std.response.body.$.data[0].name}}
+
+### 4.5 only one default per user: view1 was public and never default, the new one is -> 200
+# @expect $.data count 1
+GET {{views}}?fields=["name"]&filters=[["user","=","Administrator"],["is_default","=",1]]
+Authorization: Bearer {{token}}
+
+### 4.6 get_data now loads the standard view (step 3 of get_data): is_default false, saved columns
+# @expect $.message.is_default == false
+# @expect $.message.columns contains lead_name
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "filters": {}, "page_length": 5, "view": {"view_type": "list"}}
+
+### 4.7 create_or_update_standard_view for a kanban syncs the columns from CRM Lead Status -> 200
+# @name kstd
+# @expect $.message.type == kanban
+# @expect $.message.column_field == status
+# @expect $.message.kanban_columns contains New
+# @expect $.message.kanban_columns contains Junk
+POST {{host}}/api/method/{{vs}}.create_or_update_standard_view
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"view": {"doctype": "CRM Lead", "type": "kanban", "column_field": "status", "kanban_columns": [], "kanban_fields": ["name", "lead_name"], "filters": {}}}
+
+###
+@kstd = {{kstd.response.body.$.message.name}}
+
+### 4.8 fetch_and_update_kanban_columns: nothing new, so the same columns come back -> 200
+# @expect $.message contains New
+# @expect $.message excludes "delete"
+POST {{host}}/api/method/{{vs}}.fetch_and_update_kanban_columns
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "{{kstd}}"}
+
+### 4.9 calling it on a list view returns nothing -> 200, null
+# @expect $.message == null
+POST {{host}}/api/method/{{vs}}.fetch_and_update_kanban_columns
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "{{std}}"}
+
+# ---- get_data in its three modes ------------------------------------------------------------------
+
+### 5.1 kanban: one entry per status column, each with its cards -> 200
+# @expect $.message.view_type == kanban
+# @expect $.message.kanban_columns count 6
+# @expect $.message.data[0].column.name == New
+# @expect $.message.data[0].fields contains lead_name
+# @expect $.message.data[0].data exists
+# @expect $.message.title_field == lead_name
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "filters": {}, "column_field": "status", "title_field": "lead_name", "kanban_fields": ["name", "lead_name", "email"], "page_length": 5, "view": {"view_type": "kanban"}}
+
+### 5.2 kanban with explicit columns: only those, in that order
+# @expect $.message.kanban_columns count 2
+# @expect $.message.data[0].column.name == Contacted
+# @expect $.message.data[1].column.name == New
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "filters": {}, "column_field": "status", "kanban_columns": [{"name": "Contacted"}, {"name": "New"}], "kanban_fields": ["name"], "page_length": 5, "view": {"view_type": "kanban"}}
+
+### 5.3 kanban on a Select column (task status) -> the Select's options become columns
+# @expect $.message.kanban_columns count 5
+# @expect $.message.data[0].column.name == Backlog
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Task", "filters": {}, "column_field": "status", "kanban_fields": ["name", "title"], "page_length": 5, "view": {"view_type": "kanban"}}
+
+### 5.4 group_by: the field descriptor comes back with its options resolved from the data
+# @expect $.message.view_type == group_by
+# @expect $.message.group_by_field.fieldname == status
+# @expect $.message.group_by_field.options exists
+# @expect $.message.rows contains status
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "filters": {}, "page_length": 50, "view": {"view_type": "group_by", "group_by_field": "status"}}
+
+### 5.5 page_length and page_length_count are echoed; total_count ignores paging
+# @expect $.message.page_length == 2
+# @expect $.message.page_length_count == 2
+# @expect $.message.row_count == 2
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "filters": {}, "page_length": 2, "page_length_count": 2, "view": {"view_type": "list"}}
+
+### 5.6 a hidden field (CRM Lead.image, crm_lead.py get_hidden_fields) is dropped from columns
+# @expect $.message.columns excludes "key": "image"
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "filters": {}, "columns": [{"label": "Image", "type": "Data", "key": "image"}, {"label": "Name", "type": "Data", "key": "lead_name"}], "rows": ["name"], "page_length": 1, "view": {"view_type": "list"}}
+
+### 5.7 the standard fields are always appended to rows
+# @expect $.message.rows contains _assign
+# @expect $.message.rows contains _liked_by
+# @expect $.message.rows contains modified_by
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Organization", "filters": {}, "page_length": 1, "view": {"view_type": "list"}}
+
+### 5.8 an unknown doctype -> 404 (500 today: finding 17)
+# @expect $.exc_type == DoesNotExistError
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "No Such Doctype", "view": {"view_type": "list"}}
+
+# ---- form layouts and the side panel ---------------------------------------------------------------
+
+### 6.1 get_fields_layout with nothing saved -> the default layout from the JSON's breaks, fields expanded
+# @expect $.message[0].sections exists
+# @expect $.message[0].sections[0].columns[0].fields[0].fieldname exists
+# @expect $.message[0].sections[0].columns[0].fields[0].fieldtype exists
+POST {{host}}/api/method/{{fl}}.get_fields_layout
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Task", "type": "Quick Entry"}
+
+### 6.2 the side panel for a lead (a saved row exists) -> sections with expanded fields
+# @expect $.message[0].name exists
+# @expect $.message[0].columns[0].fields[0].fieldname exists
+POST {{host}}/api/method/{{fl}}.get_sidepanel_sections
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead"}
+
+### 6.3 no side panel configured for a task -> empty list
+# @expect $.message count 0
+POST {{host}}/api/method/{{fl}}.get_sidepanel_sections
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Task"}
+
+### 6.4 a Sales User may not save a layout -> 403, crm_fields_layout.py:197 verbatim
+# @expect $.exc_type == PermissionError
+# @expect $.message == Not permitted to modify fields layout
+POST {{host}}/api/method/{{fl}}.save_fields_layout
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Task", "type": "Quick Entry", "layout": "[{\"name\": \"tab_1\", \"sections\": [{\"name\": \"s1\", \"columns\": [{\"name\": \"c1\", \"fields\": [\"title\", \"priority\"]}]}]}]"}
+
+### 6.5 a Sales Manager may -> 200, the layout string is echoed
+# @expect $.message contains title
+POST {{host}}/api/method/{{fl}}.save_fields_layout
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Task", "type": "Quick Entry", "layout": "[{\"name\": \"tab_1\", \"sections\": [{\"name\": \"s1\", \"columns\": [{\"name\": \"c1\", \"fields\": [\"title\", \"priority\", \"no_such_field\"]}]}]}]"}
+
+### 6.6 -> the saved layout is served, fields expanded, unknown fieldnames dropped
+# @expect $.message count 1
+# @expect $.message[0].sections[0].columns[0].fields count 2
+# @expect $.message[0].sections[0].columns[0].fields[0].fieldname == title
+# @expect $.message[0].sections[0].columns[0].fields[1].fieldtype == Select
+POST {{host}}/api/method/{{fl}}.get_fields_layout
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Task", "type": "Quick Entry"}
+
+### 6.7 the row it wrote is named by the format strategy: "{dt}-{type}"
+# @expect $.data.name == CRM Task-Quick Entry
+# @expect $.data.dt == CRM Task
+GET {{host}}/api/resource/CRM%20Fields%20Layout/CRM%20Task-Quick%20Entry
+Authorization: Bearer {{token}}
+
+# ---- form scripts --------------------------------------------------------------------------------------
+
+### 7.1 a Sales User may not create a form script (it runs in every colleague's browser) -> 403
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/resource/CRM%20Form%20Script
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"name": "ZZ Lead Script", "dt": "CRM Lead", "view": "Form", "enabled": 1, "script": "console.log('zz')"}
+
+### 7.2 Administrator may; the name is supplied by the client (autoname=prompt) -> 201
+# @expect $.data.name == ZZ Lead Script
+POST {{host}}/api/resource/CRM%20Form%20Script
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "ZZ Lead Script", "dt": "CRM Lead", "view": "Form", "enabled": 1, "script": "console.log('zz')"}
+
+### 7.3 a prompt doctype without a name -> 400|417
+# The serializer requires `name` for a prompt doctype, so this is refused before naming
+# runs: "name: This field is required." rather than upstream's "No Name Specified for CRM
+# Form Script". A 4xx either way; only the wording differs (finding 4's family).
+# @expect $.exc_type == ValidationError
+POST {{host}}/api/resource/CRM%20Form%20Script
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"dt": "CRM Lead", "view": "Form", "enabled": 1, "script": "1"}
+
+### 7.4 get_data hands the script to the browser as a bare string when there is one
+# @expect $.message.form_script == console.log('zz')
+# @expect $.message.list_script == null
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "filters": {}, "page_length": 1, "view": {"view_type": "list"}}
+
+### 7.5 a disabled script is not served -> 200
+PUT {{host}}/api/resource/CRM%20Form%20Script/ZZ%20Lead%20Script
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"enabled": 0}
+
+### 7.6 -> form_script null
+# @expect $.message.form_script == null
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "filters": {}, "page_length": 1, "view": {"view_type": "list"}}
+
+# ---- teardown -------------------------------------------------------------------------------------------
+
+### 8.1 delete the views -> 200
+POST {{host}}/api/method/{{vs}}.delete
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "{{view1}}"}
+
+### 8.2 -> 200
+POST {{host}}/api/method/{{vs}}.delete
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"name": "{{view2}}"}
+
+### 8.3 delete Administrator's standard list and kanban views for CRM Lead -> 200
+DELETE {{views}}/{{std}}
+Authorization: Bearer {{token}}
+
+### 8.4 -> 200
+DELETE {{views}}/{{kstd}}
+Authorization: Bearer {{token}}
+
+### 8.5 delete the quick-filter override -> 200
+DELETE {{host}}/api/resource/CRM%20Global%20Settings/{{qf.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 8.6 delete the task layout -> 200
+DELETE {{host}}/api/resource/CRM%20Fields%20Layout/CRM%20Task-Quick%20Entry
+Authorization: Bearer {{token}}
+
+### 8.7 delete the form script -> 200
+DELETE {{host}}/api/resource/CRM%20Form%20Script/ZZ%20Lead%20Script
+Authorization: Bearer {{token}}
+
+### 8.8 nothing left behind -> 200, empty
+# @expect $.data count 0
+GET {{views}}?fields=["name"]&filters=[["label","like","ZZ%25"]]
+Authorization: Bearer {{token}}

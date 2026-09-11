@@ -26,6 +26,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 14 | 05 / 6.2, 6.3 | low | The territory tree is unmaintained: `lft`/`rgt` stay null and no tree resolver is registered, so `descendants of` answers 400. Latent — the frontend never sends it | open |
 | 15 | 06 / 2.2, 2.4 | medium | A task's `assigned_to` never becomes an assignment: no ToDo, empty `_assign`, and changing it does not unassign the previous user | open |
 | 16 | 06 / 2.8, 3.4, 4.7, 4.9 | **high** | Task, Note and Call Log declare no list columns or rows, so their three screens fall back to Name and Last Modified; call-log rows are not parsed and the document hides its `links` | open |
+| 17 | 07 / 1.6, 5.8 | medium | A method endpoint given a doctype that does not exist answers **500**: `registry.DocTypeNotFound` is a bare `KeyError` the handler never maps | open |
 
 ---
 
@@ -353,3 +354,22 @@ show. The port writes Dynamic Link rows for a call log but the model declares no
 `FCRMNote.default_list_data`), `crm_app/models/telephony.py` (`CRMCallLog.default_list_data`,
 `parse_list_data`, and `POLYMORPHIC_CHILD_TABLES = {"links": "Dynamic Link"}`). Lead,
 Deal, Organization and Contact all have theirs; these three were missed.
+
+## 17. An unknown doctype on a method endpoint answers 500
+
+**Blocks:** `07_views_and_metadata.http` 1.6 (`get_fields`), 5.8 (`get_data`); the same
+applies to `sort_options`, `get_filterable_fields`, `get_group_by_fields`,
+`get_quick_filters`, `update_quick_filters` and every other endpoint that calls
+`registry.get_entry(doctype)` first.
+
+**Expected:** 404 `DoesNotExistError`. Upstream's `frappe.get_meta("No Such Doctype")`
+raises `DoesNotExistError`, which the request handler renders as 404.
+
+**Actual:** 500. `frappe_core/registry.py:DocTypeNotFound` subclasses `KeyError`, not
+`FrappeError`, so `frappe_exception_handler` returns `None`. The resource routes are
+unaffected only because `views._resolve_routable_entry` catches it and raises the port's
+`DoesNotExistError` itself; the method endpoints call the registry directly.
+
+**Where:** make `DocTypeNotFound` a subclass of `frappe_core.exceptions.DoesNotExistError`
+(one line, and `_resolve_routable_entry`'s translation becomes redundant), or map it in
+the handler alongside `Http404`.
