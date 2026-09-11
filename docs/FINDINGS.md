@@ -16,6 +16,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 4 | 02 / 10.4, 10.5 | low | Serializer validation answers **400**, the port's own validation answers **417**, both as `ValidationError` | open |
 | 5 | 01 / 1.11 | medium | An email typed in a different case cannot log in; upstream accepts `Ada@Example.com` | open |
 | 6 | 01 / 1.4 | low | A malformed bearer token answers `exc_type: InvalidToken`, not `AuthenticationError` | open |
+| 7 | 03 / 5.8 | medium | A child-table row missing a mandatory field reaches the database and answers **409 DuplicateEntryError**, not `MandatoryError` | open |
 
 ---
 
@@ -144,3 +145,23 @@ name.
 **Where:** `frappe_core/exceptions.py` — match with `isinstance` rather than the exact
 type, or add `InvalidToken` to the map. The status is already right, so the frontend's
 refresh-on-401 works; only the label and message differ.
+
+## 7. A child row missing a mandatory field is a database error
+
+**Block:** `03_leads.http` 5.8 — `PUT` a lead with
+`products: [{"product_name": "ZZ No Rate", "qty": 1}]`
+
+**Expected:** 417 with `exc_type: MandatoryError` and Frappe's message
+`Error: Value missing for CRM Products: Rate` (`frappe/model/document.py:_validate_mandatory`
+walks child rows too). The frontend branches on `MandatoryError` (`data/document.js:61`,
+`Modals/DoctypeModal.vue:115`) to highlight the missing field.
+
+**Actual:** 409, `exc_type: DuplicateEntryError`, message *"null value in column "rate" of
+relation "crm_app_crmproducts" violates not-null constraint"*. The nested child payload
+is written by `children.replace_children` without going through the child doctype's
+serializer, so nothing checks required fields before the INSERT; the NOT NULL constraint
+fires and the handler renders it as a duplicate.
+
+**Where:** `frappe_core/serializers.py:_write_children` — validate each row through the
+child's serializer (or check its required fields) before `replace_children`, raising
+`MandatoryError`. Parent-level mandatory fields already answer correctly (03 / 2.5).

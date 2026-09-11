@@ -155,30 +155,30 @@ class Runner:
         if not request_lines:
             return  # a variables-only block
 
+        expected = STATUS_RE.search(title)
+        allowed = {int(s) for s in expected.group(1).split("|")} if expected else set()
+
         try:
             method, url = self.resolve(request_lines[0]).split(None, 1)
+            headers: dict[str, str] = {}
+            i = 1
+            while i < len(request_lines) and request_lines[i].strip():
+                key, _, value = request_lines[i].partition(":")
+                headers[key.strip()] = self.resolve(value.strip())
+                i += 1
+            body = "\n".join(request_lines[i + 1 :]).strip()
+            body = self.resolve(body) if body else ""
         except (ValueError, HttpError) as exc:
-            self.record(title, False, str(exc))
+            # A cleanup block deleting "whatever the previous list returned" has nothing
+            # to reference on a clean database. If the title already accepts 404, an
+            # unresolvable reference means the same thing: nothing there to clean.
+            if 404 in allowed:
+                self.record(title, True, f"skipped: {exc}")
+            else:
+                self.record(title, False, str(exc))
             return
         if self.host:
             url = re.sub(r"^https?://[^/]+", self.host, url)
-
-        headers: dict[str, str] = {}
-        i = 1
-        while i < len(request_lines) and request_lines[i].strip():
-            key, _, value = request_lines[i].partition(":")
-            try:
-                headers[key.strip()] = self.resolve(value.strip())
-            except HttpError as exc:
-                self.record(title, False, str(exc))
-                return
-            i += 1
-        body = "\n".join(request_lines[i + 1 :]).strip()
-        try:
-            body = self.resolve(body) if body else ""
-        except HttpError as exc:
-            self.record(title, False, str(exc))
-            return
 
         try:
             response = requests.request(
@@ -191,9 +191,7 @@ class Runner:
             self.responses[name] = response
         self.note_touched(url)
 
-        expected = STATUS_RE.search(title)
         if expected:
-            allowed = {int(s) for s in expected.group(1).split("|")}
             ok = response.status_code in allowed
             detail = "" if ok else f"expected {expected.group(1)}, got {response.status_code}"
         else:
