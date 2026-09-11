@@ -5,7 +5,7 @@ at a time. Two companions:
 
 | File | What |
 |---|---|
-| [`API_WALKTHROUGH.http`](API_WALKTHROUGH.http) | Every request below, ready to click through in VS Code's REST Client |
+| [`http/00_walkthrough.http`](http/00_walkthrough.http) | Every request below, ready to click through in VS Code's REST Client, or to replay with `backend/scripts/run_http.py` |
 | [`ROUTES.md`](ROUTES.md) | The full inventory, with a blank **Tested** column to fill in as you go |
 
 **Every expected status below was verified on 10 Sep 2026** by replaying the whole
@@ -42,7 +42,7 @@ python manage.py changepassword ada@example.com
 Then put both in the `@admin_pwd` / `@sales_pwd` lines at the top of the `.http` file.
 
 **Tooling.** Install the *REST Client* extension (`humao.rest-client`) in VS Code, open
-`API_WALKTHROUGH.http`, and click **Send Request** above each block. Block 1.1 captures
+`http/00_walkthrough.http`, and click **Send Request** above each block. Block 1.1 captures
 the tokens; every later block reads them. **Access tokens die after five minutes** — when
 you start seeing 401s, re-send 1.1 (or 1.10).
 

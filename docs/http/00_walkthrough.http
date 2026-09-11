@@ -1,6 +1,6 @@
 # API walkthrough - VS Code "REST Client" extension (humao.rest-client).
 #
-# The two passwords come from docs/.env (gitignored) - create it with two lines,
+# The two passwords come from docs/http/.env (gitignored) - create it with two lines,
 #     ADMIN_PWD=...
 #     SALES_PWD=...
 # then click "Send Request" above each block in order. The login block captures the
@@ -87,6 +87,16 @@ Content-Type: application/json
 # =========================================================================================
 # STEP 2 - one doctype through all five CRUD routes: CRM Organization
 # =========================================================================================
+
+### 2.0a Clean up a previous run -> 200|404
+# Every file removes its own leftovers FIRST, so a run that died halfway does not make
+# the next one fail on "duplicate". 404 here just means there was nothing to remove.
+DELETE {{host}}/api/resource/CRM%20Organization/Acme%20Test%20Co
+Authorization: Bearer {{token}}
+
+### 2.0b -> 200|404
+DELETE {{host}}/api/resource/CRM%20Organization/R/GA
+Authorization: Bearer {{token}}
 
 ### 2.1 Create -> 201, name == organization_name (field: naming, verbatim)
 POST {{host}}/api/resource/CRM%20Organization
