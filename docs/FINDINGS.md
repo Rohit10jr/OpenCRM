@@ -29,6 +29,8 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 17 | 07 / 1.6, 5.8 | medium | A method endpoint given a doctype that does not exist answers **500**: `registry.DocTypeNotFound` is a bare `KeyError` the handler never maps | open |
 | 18 | 08 / 3.11, 3.12 | medium | Assigning a document to someone never notifies them: nothing listens to ToDo writes, where `crm/api/todo.py` raises the Assignment notification | open |
 | 19 | 08 / 7.2 | medium | Deleting a document leaves its comments, communications, ToDos and notifications behind; upstream removes them with the document | open |
+| 20 | 10 / 2.15, 2.16 | medium | Six of upstream's nineteen dashboard charts were never built; a tile using one renders `Invalid chart name` | open, known |
+| 21 | 10 / 2.18 | low | A dashboard date that does not parse answers **500**; upstream's `getdate` throws 417 "… is not a valid date string." | open |
 
 ---
 
@@ -424,3 +426,34 @@ is ever reset, a new document inherits the old one's comments and timeline.
 **Where:** a `pre_delete` handler on every routable doctype (`frappe_core/children.py`
 already hooks `post_delete`) that deletes Comment, Communication, ToDo, Version and
 CRM Notification rows whose `reference_*` columns name the document.
+
+## 20. Six dashboard charts were never built
+
+**Blocks:** `10_dashboard.http` 2.15 (`sales_trend`), 2.16 (`funnel_conversion`)
+
+**Expected:** a chart payload. `crm/api/dashboard.py` defines nineteen builders; the
+dashboard editor in the frontend offers all of them.
+
+**Actual:** `{"error": "Invalid chart name"}`, the same answer as for a name that never
+existed. `crm_app/api/dashboard.py:UNPORTED_CHARTS` names the six deliberately:
+`sales_trend`, `forecasted_revenue`, `funnel_conversion`,
+`average_time_to_close_a_lead`, `average_time_to_close_a_deal`,
+`deal_status_change_counts`. They are the time-series and duration-arithmetic charts,
+and `docs/internal/PROGRESS_PHASE_3.md` records them as not done.
+
+**Status:** known and recorded, not a surprise. Listed here so the suite has a line to
+point at and so the gap is closed in one place when it is closed. The default layout
+uses only ported charts, so the dashboard as shipped renders; a user who adds one of
+the six from the editor gets a broken tile.
+
+## 21. An unparseable dashboard date answers 500
+
+**Block:** `10_dashboard.http` 2.18 — `from_date: "yesterday"`
+
+**Expected:** 417 `ValidationError`, *"yesterday is not a valid date string."*
+(`frappe/utils/data.py:getdate`, version-15, catches `ParserError` and throws).
+
+**Actual:** 500 `ValueError` from `crm_app/api/dashboard.py:_parse_date`, which nothing
+catches. Low: the frontend's date picker only ever sends ISO dates, so it is reachable
+by hand rather than by a click. Same family as findings 1, 2 and 17 — a plain Python
+exception where a `FrappeError` was meant.

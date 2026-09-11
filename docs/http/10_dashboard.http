@@ -1,0 +1,319 @@
+# 10 - the dashboard: reset_to_default (System Manager only), get_dashboard (the layout
+# with a data payload per tile, current month by default, a Sales User scoped to
+# themselves), get_chart by name, and the CRM Dashboard row the layout lives in.
+#
+# Expectations from crm/api/dashboard.py (main): reset_to_default 19-23, get_dashboard
+# 25-61, get_chart 64-88 ({"error": "Invalid chart name"} for an unknown name, a dict
+# rather than a raise so one tile fails instead of the page), and the chart builders'
+# shapes. The port declares which charts it did not build (UNPORTED_CHARTS).
+#
+# The file resets the Manager Dashboard to the default layout first and last, so a
+# layout you have customised by hand will be lost by running it.
+
+@host = http://localhost:8000
+@admin = Administrator
+@admin_pwd = {{$dotenv ADMIN_PWD}}
+@sales = ada@example.com
+@sales_pwd = {{$dotenv SALES_PWD}}
+@manager = grace@example.com
+@manager_pwd = {{$dotenv MANAGER_PWD}}
+@dash = crm.api.dashboard
+
+### 0.1 login as Administrator -> 200
+# @name login
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}", "pwd": "{{admin_pwd}}"}
+
+###
+@token = {{login.response.body.$.message.access}}
+
+### 0.2 login as the Sales Manager -> 200
+# @name mlogin
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{manager}}", "pwd": "{{manager_pwd}}"}
+
+###
+@mtoken = {{mlogin.response.body.$.message.access}}
+
+### 0.3 login as the Sales User -> 200
+# @name slogin
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{sales}}", "pwd": "{{sales_pwd}}"}
+
+###
+@stoken = {{slogin.response.body.$.message.access}}
+
+# ---- the layout -------------------------------------------------------------------------
+
+### 1.1 reset_to_default as a System Manager -> 200, the default layout as a JSON string
+# @expect $.message contains total_leads
+# @expect $.message contains deals_by_stage_donut
+POST {{host}}/api/method/{{dash}}.reset_to_default
+Authorization: Bearer {{token}}
+
+### 1.2 a Sales Manager may not reset it -> 403 "Not permitted" (frappe.only_for("System Manager"))
+# @expect $.exc_type == PermissionError
+# @expect $.message == Not permitted
+POST {{host}}/api/method/{{dash}}.reset_to_default
+Authorization: Bearer {{mtoken}}
+
+### 1.3 nor a Sales User -> 403
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/method/{{dash}}.reset_to_default
+Authorization: Bearer {{stoken}}
+
+### 1.4 get_dashboard -> the ten default tiles, each with its data filled in
+# @expect $.message count 10
+# @expect $.message[0].name == total_leads
+# @expect $.message[0].type == number
+# @expect $.message[0].data.title == Total leads
+# @expect $.message[0].data.value exists
+# @expect $.message[0].data.delta exists
+# @expect $.message[4].name == deals_by_stage_donut
+# @expect $.message[4].data.categoryColumn == stage
+# @expect $.message[7].type == bar
+POST {{host}}/api/method/{{dash}}.get_dashboard
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{}
+
+### 1.5 an explicit range covering the demo data -> a non-zero lead count
+# @expect $.message[0].data.value != 0
+POST {{host}}/api/method/{{dash}}.get_dashboard
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"from_date": "2026-01-01", "to_date": "2026-12-31"}
+
+### 1.6 a Sales User gets the dashboard scoped to herself (dashboard.py:36-40) -> 200
+# @expect $.message count 10
+# @expect $.message[0].data.value exists
+POST {{host}}/api/method/{{dash}}.get_dashboard
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"from_date": "2026-01-01", "to_date": "2026-12-31", "user": "{{manager}}"}
+
+### 1.7 a manager may scope it to anyone -> 200
+# @expect $.message count 10
+POST {{host}}/api/method/{{dash}}.get_dashboard
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"from_date": "2026-01-01", "to_date": "2026-12-31", "user": "{{sales}}"}
+
+### 1.8 the row behind it: CRM Dashboard "Manager Dashboard", named by its title
+# @expect $.data.name == Manager Dashboard
+# @expect $.data.layout contains total_leads
+GET {{host}}/api/resource/CRM%20Dashboard/Manager%20Dashboard
+Authorization: Bearer {{token}}
+
+### 1.9 the layout is editable through the resource route (reviewed-open: chart definitions, not data) -> 200
+PUT {{host}}/api/resource/CRM%20Dashboard/Manager%20Dashboard
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"layout": "[{\"name\": \"total_leads\", \"type\": \"number\", \"width\": 1}, {\"name\": \"won_deals\", \"type\": \"number\", \"width\": 1}, {\"name\": \"lost_deal_reasons\", \"type\": \"bar\", \"width\": 2}]"}
+
+### 1.10 -> get_dashboard follows the saved layout
+# @expect $.message count 3
+# @expect $.message[1].name == won_deals
+# @expect $.message[2].data.series[0].name == count
+POST {{host}}/api/method/{{dash}}.get_dashboard
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{}
+
+### 1.11 a tile naming a chart nobody knows gets data null, the page still renders
+PUT {{host}}/api/resource/CRM%20Dashboard/Manager%20Dashboard
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"layout": "[{\"name\": \"total_leads\", \"type\": \"number\", \"width\": 1}, {\"name\": \"no_such_chart\", \"type\": \"number\", \"width\": 1}]"}
+
+### 1.12 -> null data for the unknown tile
+# @expect $.message count 2
+# @expect $.message[1].data == null
+POST {{host}}/api/method/{{dash}}.get_dashboard
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{}
+
+# ---- get_chart by name --------------------------------------------------------------------
+
+### 2.1 total_leads -> a number tile: title, value, delta, deltaSuffix
+# @expect $.message.title == Total leads
+# @expect $.message.value exists
+# @expect $.message.deltaSuffix == %
+POST {{host}}/api/method/{{dash}}.get_chart
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "total_leads", "type": "number", "from_date": "2026-01-01", "to_date": "2026-12-31"}
+
+### 2.2 ongoing_deals -> 200
+# @expect $.message.title exists
+# @expect $.message.value exists
+POST {{host}}/api/method/{{dash}}.get_chart
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "ongoing_deals", "type": "number", "from_date": "2026-01-01", "to_date": "2026-12-31"}
+
+### 2.3 won_deals -> 200
+# @expect $.message.value exists
+POST {{host}}/api/method/{{dash}}.get_chart
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "won_deals", "type": "number", "from_date": "2026-01-01", "to_date": "2026-12-31"}
+
+### 2.4 average_deal_value -> 200
+# @expect $.message.title exists
+# @expect $.message.value exists
+POST {{host}}/api/method/{{dash}}.get_chart
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "average_deal_value", "type": "number", "from_date": "2026-01-01", "to_date": "2026-12-31"}
+
+### 2.5 average_won_deal_value and average_ongoing_deal_value -> 200
+# @expect $.message.value exists
+POST {{host}}/api/method/{{dash}}.get_chart
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "average_won_deal_value", "type": "number", "from_date": "2026-01-01", "to_date": "2026-12-31"}
+
+### 2.6 -> 200
+# @expect $.message.value exists
+POST {{host}}/api/method/{{dash}}.get_chart
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "average_ongoing_deal_value", "type": "number", "from_date": "2026-01-01", "to_date": "2026-12-31"}
+
+### 2.7 deals_by_stage_donut -> data rows with stage, count, status_type
+# @expect $.message.categoryColumn == stage
+# @expect $.message.valueColumn == count
+# @expect $.message.data[0].stage exists
+# @expect $.message.data[0].status_type exists
+POST {{host}}/api/method/{{dash}}.get_chart
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "deals_by_stage_donut", "type": "donut", "from_date": "2026-01-01", "to_date": "2026-12-31"}
+
+### 2.8 deals_by_stage_axis -> a bar series
+# @expect $.message.series[0].name == count
+# @expect $.message.series[0].type == bar
+POST {{host}}/api/method/{{dash}}.get_chart
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "deals_by_stage_axis", "type": "axis", "from_date": "2026-01-01", "to_date": "2026-12-31"}
+
+### 2.9 leads_by_source -> a donut; leads with no source are grouped as "Empty"
+# @expect $.message.data exists
+# @expect $.message.categoryColumn exists
+POST {{host}}/api/method/{{dash}}.get_chart
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "leads_by_source", "type": "donut", "from_date": "2026-01-01", "to_date": "2026-12-31"}
+
+### 2.10 deals_by_source -> 200
+# @expect $.message.data exists
+POST {{host}}/api/method/{{dash}}.get_chart
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "deals_by_source", "type": "donut", "from_date": "2026-01-01", "to_date": "2026-12-31"}
+
+### 2.11 deals_by_territory -> 200
+# @expect $.message.series[0].name == count
+POST {{host}}/api/method/{{dash}}.get_chart
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "deals_by_territory", "type": "axis", "from_date": "2026-01-01", "to_date": "2026-12-31"}
+
+### 2.12 deals_by_salesperson -> 200
+# @expect $.message.series[0].name == count
+POST {{host}}/api/method/{{dash}}.get_chart
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "deals_by_salesperson", "type": "axis", "from_date": "2026-01-01", "to_date": "2026-12-31"}
+
+### 2.13 lost_deal_reasons -> 200
+# @expect $.message.series[0].name == count
+POST {{host}}/api/method/{{dash}}.get_chart
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "lost_deal_reasons", "type": "axis", "from_date": "2026-01-01", "to_date": "2026-12-31"}
+
+### 2.14 an unknown name -> 200 with {"error": "Invalid chart name"}, not a raise (dashboard.py:88)
+# @expect $.message.error == Invalid chart name
+POST {{host}}/api/method/{{dash}}.get_chart
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "no_such_chart", "type": "number"}
+
+### 2.15 sales_trend exists upstream (dashboard.py:555) -> a line chart; the port never built it (finding 20)
+# @expect $.message.error absent
+# @expect $.message.series exists
+POST {{host}}/api/method/{{dash}}.get_chart
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "sales_trend", "type": "axis", "from_date": "2026-01-01", "to_date": "2026-12-31"}
+
+### 2.16 funnel_conversion, likewise (dashboard.py:736) -> finding 20
+# @expect $.message.error absent
+POST {{host}}/api/method/{{dash}}.get_chart
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "funnel_conversion", "type": "funnel", "from_date": "2026-01-01", "to_date": "2026-12-31"}
+
+### 2.17 without a token -> 401
+# @expect $.exc_type == AuthenticationError
+POST {{host}}/api/method/{{dash}}.get_chart
+Content-Type: application/json
+
+{"name": "total_leads", "type": "number"}
+
+### 2.18 dates that do not parse -> 417 (frappe.utils.getdate throws "... is not a valid date string."; 500 today: finding 21)
+# @expect $.exc_type == ValidationError
+POST {{host}}/api/method/{{dash}}.get_chart
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "total_leads", "type": "number", "from_date": "yesterday", "to_date": "soon"}
+
+# ---- teardown ------------------------------------------------------------------------------
+
+### 3.1 put the default layout back -> 200
+# @expect $.message contains deals_by_salesperson
+POST {{host}}/api/method/{{dash}}.reset_to_default
+Authorization: Bearer {{token}}
+
+### 3.2 -> ten tiles again
+# @expect $.message count 10
+POST {{host}}/api/method/{{dash}}.get_dashboard
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{}
