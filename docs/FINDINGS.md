@@ -31,6 +31,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 19 | 08 / 7.2 | medium | Deleting a document leaves its comments, communications, ToDos and notifications behind; upstream removes them with the document | open |
 | 20 | 10 / 2.15, 2.16 | medium | Six of upstream's nineteen dashboard charts were never built; a tile using one renders `Invalid chart name` | open, known |
 | 21 | 10 / 2.18 | low | A dashboard date that does not parse answers **500**; upstream's `getdate` throws 417 "… is not a valid date string." | open |
+| 22 | 13 / 4.8 | low | A **private** File attached to nothing is readable by every user; upstream lets only its owner read it | open |
 
 ---
 
@@ -457,3 +458,24 @@ the six from the editor gets a broken tile.
 catches. Low: the frontend's date picker only ever sends ISO dates, so it is reachable
 by hand rather than by a click. Same family as findings 1, 2 and 17 — a plain Python
 exception where a `FrappeError` was meant.
+
+## 22. A private, unattached File is readable by everyone
+
+**Block:** `13_bulk_and_misc.http` 4.8 — ada uploads a private file attached to nothing;
+grace reads its row.
+
+**Expected:** 403. `frappe/core/doctype/file/file.py:has_permission` (version-15) grants
+a public file to everyone, an owner their own upload, and an attached file per its
+document; a private file that is none of those falls through to `return False`.
+
+**Actual:** 200. `crm_app/permissions/attachments.py:_has_permission` treats a row
+that references nothing as unhidden — the carve-out `specs/KNOWN_ISSUES.md` §3 recorded
+for comments and communications ("an orphan hides nothing, and the product creates
+them") — and `file_has_permission` reaches it after the public and own-upload
+short-circuits. For a *private* file that is the opposite of upstream's fallback.
+
+Metadata only today, since nothing serves file bytes; it becomes a real disclosure the
+day a download route lands, which `KNOWN_ISSUES.md` already warns about.
+
+**Where:** `file_has_permission` — after the two short-circuits, deny when
+`is_private` and the file is attached to nothing, before deferring to `_has_permission`.
