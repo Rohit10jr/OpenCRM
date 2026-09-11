@@ -27,6 +27,8 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 15 | 06 / 2.2, 2.4 | medium | A task's `assigned_to` never becomes an assignment: no ToDo, empty `_assign`, and changing it does not unassign the previous user | open |
 | 16 | 06 / 2.8, 3.4, 4.7, 4.9 | **high** | Task, Note and Call Log declare no list columns or rows, so their three screens fall back to Name and Last Modified; call-log rows are not parsed and the document hides its `links` | open |
 | 17 | 07 / 1.6, 5.8 | medium | A method endpoint given a doctype that does not exist answers **500**: `registry.DocTypeNotFound` is a bare `KeyError` the handler never maps | open |
+| 18 | 08 / 3.11, 3.12 | medium | Assigning a document to someone never notifies them: nothing listens to ToDo writes, where `crm/api/todo.py` raises the Assignment notification | open |
+| 19 | 08 / 7.2 | medium | Deleting a document leaves its comments, communications, ToDos and notifications behind; upstream removes them with the document | open |
 
 ---
 
@@ -273,6 +275,10 @@ not exist, and throws `PermissionError`.
 `crm_app/api/contact.py` uses `throw()` for the missing case and `PermissionError` only
 for the denied case. Low, but the frontend branches on `PermissionError`.
 
+**Same shape elsewhere:** `crm.api.comment.add_comment` on a document that does not
+exist (`08 / 2.3`) answers 417 `ValidationError`; upstream's `frappe.get_doc` raises
+`DoesNotExistError`, 404. Both are `throw()` used where a typed exception belongs.
+
 ## 13. rename_doc is insert-then-delete
 
 **Blocks:** `05_contacts_organizations.http` 5.1/5.2 (organization referenced by a deal),
@@ -373,3 +379,48 @@ unaffected only because `views._resolve_routable_entry` catches it and raises th
 **Where:** make `DocTypeNotFound` a subclass of `frappe_core.exceptions.DoesNotExistError`
 (one line, and `_resolve_routable_entry`'s translation becomes redundant), or map it in
 the handler alongside `Http404`.
+
+## 18. Assigning a document to someone never notifies them
+
+**Blocks:** `08_activities_comments_notifications.http` 3.11, 3.12
+
+**Expected:** `crm/api/todo.py:after_insert` (registered in `hooks.py:doc_events` for
+`ToDo`) calls `notify_assigned_user`, which creates a `CRM Notification` of type
+`Assignment` for the assignee with the text *"{owner} assigned a {doctype} {name} to
+you"*, and `on_update` sends *"Your assignment on ... has been removed by ..."* when the
+ToDo is cancelled. The bell menu is how a rep learns a lead was handed to them.
+
+**Actual:** no row. `frappe_core/assignment.py` connects ToDo writes to the `_assign`
+cache only; `crm_app/async_signals.py` listens to Comment, Communication and
+Invitation. Mentions do notify (`notify_mentions` is ported), assignments do not. The
+`crm/api/todo.py` module was never ported — `PHASE_3_ENDPOINTS.md` §2 group E noted it
+"has no whitelisted endpoints, only doc_events hooks — those belong in phase 1", and
+phase 1 did not pick them up.
+
+**Where:** a `post_save` handler on ToDo in `crm_app/async_signals.py`, porting
+`notify_assigned_user` and `get_notification_text`; `crm_app/api/notifications.py:get_hash`
+already knows how to route an Assignment notification.
+
+## 19. Deleting a document leaves its dependants behind
+
+**Block:** `08_activities_comments_notifications.http` 7.2 — delete a lead, then list
+comments by its name: 5 rows remain.
+
+**Expected:** 0. `frappe/model/delete_doc.py:delete_doc` calls `delete_dynamic_links`
+(ToDo, DocShare, Version, Comment rows keyed to the document) and
+`delete_communications`, so nothing is left pointing at a name that no longer exists.
+
+**Actual:** every Comment, Communication, ToDo, Version and CRM Notification row that
+referenced the lead is still there. `frappe_core/children.py:delete_polymorphic_children`
+covers only the polymorphic *child tables* (products, status log, rolling responses);
+the reference-by-name doctypes have no cascade at all. `docs/internal/PROGRESS.md`
+recorded this as a phase-1 concern ("Frappe also has an on_trash cascade this port
+doesn't") and it was never closed.
+
+**Consequences:** orphan rows accumulate forever; ToDos for a deleted lead keep
+granting nothing but still count as assignments for the user; and when a naming series
+is ever reset, a new document inherits the old one's comments and timeline.
+
+**Where:** a `pre_delete` handler on every routable doctype (`frappe_core/children.py`
+already hooks `post_delete`) that deletes Comment, Communication, ToDo, Version and
+CRM Notification rows whose `reference_*` columns name the document.

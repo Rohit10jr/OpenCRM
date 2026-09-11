@@ -1,0 +1,601 @@
+# 08 - the timeline and what feeds it: comments (with @mentions), the _comments cache,
+# likes, communications (the record an email becomes), CRM Notification for mentions and
+# assignments, and get_activities. Also the rule that Comment and Communication rows
+# defer to the document they hang off - a person who cannot open the lead cannot read,
+# write or move its comments.
+#
+# Expectations from crm/api/comment.py (main), crm/api/notifications.py, crm/api/todo.py
+# (after_insert notifies the assignee), crm/api/activities.py (get_activities returns
+# [activities, calls, notes, tasks, attachments]), frappe/desk/like.py, and
+# frappe/model/delete_doc.py:delete_dynamic_links (a deleted document takes its ToDo,
+# Comment and Communication rows with it).
+#
+# Two leads: one Administrator owns (ada is assigned to it, so she can see it) and one
+# the Sales Manager owns, which ada cannot see.
+
+@host = http://localhost:8000
+@admin = Administrator
+@admin_pwd = {{$dotenv ADMIN_PWD}}
+@sales = ada@example.com
+@sales_pwd = {{$dotenv SALES_PWD}}
+@manager = grace@example.com
+@manager_pwd = {{$dotenv MANAGER_PWD}}
+@lead = {{host}}/api/resource/CRM%20Lead
+@comment = {{host}}/api/resource/Comment
+@comm = {{host}}/api/resource/Communication
+@notif = {{host}}/api/resource/CRM%20Notification
+
+### 0.1 login as Administrator -> 200
+# @name login
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}", "pwd": "{{admin_pwd}}"}
+
+###
+@token = {{login.response.body.$.message.access}}
+
+### 0.2 login as the Sales Manager -> 200
+# @name mlogin
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{manager}}", "pwd": "{{manager_pwd}}"}
+
+###
+@mtoken = {{mlogin.response.body.$.message.access}}
+
+### 0.3 login as the Sales User -> 200
+# @name slogin
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{sales}}", "pwd": "{{sales_pwd}}"}
+
+###
+@stoken = {{slogin.response.body.$.message.access}}
+
+# ---- cleanup first ---------------------------------------------------------------------
+
+### 0.4 leftover comments -> 200
+# @name old_c
+GET {{comment}}?fields=["name"]&filters=[["content","like","%25ZZ%25"]]
+Authorization: Bearer {{token}}
+
+### 0.5 -> 200|404
+DELETE {{comment}}/{{old_c.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.6 -> 200|404
+DELETE {{comment}}/{{old_c.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 0.7 -> 200|404
+DELETE {{comment}}/{{old_c.response.body.$.data[2].name}}
+Authorization: Bearer {{token}}
+
+### 0.8 -> 200|404
+DELETE {{comment}}/{{old_c.response.body.$.data[3].name}}
+Authorization: Bearer {{token}}
+
+### 0.9 leftover communications -> 200
+# @name old_m
+GET {{comm}}?fields=["name"]&filters=[["subject","like","ZZ%25"]]
+Authorization: Bearer {{token}}
+
+### 0.10 -> 200|404
+DELETE {{comm}}/{{old_m.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.11 -> 200|404
+DELETE {{comm}}/{{old_m.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 0.12 -> 200|404
+DELETE {{comm}}/{{old_m.response.body.$.data[2].name}}
+Authorization: Bearer {{token}}
+
+### 0.13 leftover notifications -> 200
+# @name old_n
+GET {{notif}}?fields=["name"]&filters=[["message","like","%25ZZ%25"]]
+Authorization: Bearer {{token}}
+
+### 0.14 -> 200|404
+DELETE {{notif}}/{{old_n.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.15 -> 200|404
+DELETE {{notif}}/{{old_n.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 0.16 -> 200|404
+DELETE {{notif}}/{{old_n.response.body.$.data[2].name}}
+Authorization: Bearer {{token}}
+
+### 0.17 leftover leads -> 200
+# @name old_l
+GET {{lead}}?fields=["name"]&filters=[["first_name","like","ZZ Timeline%25"]]
+Authorization: Bearer {{token}}
+
+### 0.18 -> 200|404
+DELETE {{lead}}/{{old_l.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.19 -> 200|404
+DELETE {{lead}}/{{old_l.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+# ---- fixtures ----------------------------------------------------------------------------
+
+### 1.1 a lead Administrator owns -> 201
+# @name lead1
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Timeline One", "lead_owner": "{{admin}}", "annual_revenue": 1000}
+
+###
+@lead1 = {{lead1.response.body.$.data.name}}
+
+### 1.2 a lead the Sales Manager owns, invisible to ada -> 201
+# @name lead2
+POST {{lead}}
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"first_name": "ZZ Timeline Two", "lead_owner": "{{manager}}"}
+
+###
+@lead2 = {{lead2.response.body.$.data.name}}
+
+### 1.3 ada cannot see lead2 -> 403
+# @expect $.exc_type == PermissionError
+GET {{lead}}/{{lead2}}
+Authorization: Bearer {{stoken}}
+
+# ---- comments and mentions -----------------------------------------------------------------------
+
+### 2.1 add_comment with an @mention of ada -> 200, the Comment row
+# @name c1
+# @expect $.message.name exists
+# @expect $.message.comment_type == Comment
+# @expect $.message.comment_email == Administrator
+# @expect $.message.reference_name == {{lead1}}
+POST {{host}}/api/method/crm.api.comment.add_comment
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"reference_doctype": "CRM Lead", "reference_name": "{{lead1}}", "content": "<p>ZZ hi <span data-type=\"mention\" data-id=\"ada@example.com\" data-label=\"Ada\">@Ada</span> please call them</p>"}
+
+###
+@c1 = {{c1.response.body.$.message.name}}
+
+### 2.2 the lead's _comments cache follows -> holds the comment, its author and name
+# @expect $.data._comments count 1
+# @expect $.data._comments[0].by == Administrator
+# @expect $.data._comments[0].name == {{c1}}
+# @expect $.data._comments[0].comment contains ZZ hi
+GET {{lead}}/{{lead1}}
+Authorization: Bearer {{token}}
+
+### 2.3 add_comment on a document that does not exist -> 404|417 (404 DoesNotExistError upstream; 417 is finding 12, counted once)
+POST {{host}}/api/method/crm.api.comment.add_comment
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"reference_doctype": "CRM Lead", "reference_name": "CRM-LEAD-0000-99999", "content": "<p>ZZ nowhere</p>"}
+
+### 2.4 ada may not comment on a lead she cannot see -> 403
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/method/crm.api.comment.add_comment
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"reference_doctype": "CRM Lead", "reference_name": "{{lead2}}", "content": "<p>ZZ sneaky</p>"}
+
+### 2.5 ...nor forge one through the generic route -> 403 (the create check builds a candidate from the payload)
+# @expect $.exc_type == PermissionError
+POST {{comment}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"comment_type": "Comment", "reference_doctype": "CRM Lead", "reference_name": "{{lead2}}", "content": "<p>ZZ forged</p>"}
+
+### 2.6 the manager comments on lead2 -> 200
+# @name c2
+POST {{host}}/api/method/crm.api.comment.add_comment
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"reference_doctype": "CRM Lead", "reference_name": "{{lead2}}", "content": "<p>ZZ private remark</p>"}
+
+###
+@c2 = {{c2.response.body.$.message.name}}
+
+### 2.7 ada's Comment list hides comments on documents she cannot open -> 0
+# @expect $.data count 0
+GET {{comment}}?fields=["name","content"]&filters=[["reference_name","=","{{lead2}}"]]
+Authorization: Bearer {{stoken}}
+
+### 2.8 the manager sees it -> 1
+# @expect $.data count 1
+GET {{comment}}?fields=["name"]&filters=[["reference_name","=","{{lead2}}"]]
+Authorization: Bearer {{mtoken}}
+
+### 2.9 ada may not read it directly either -> 403
+# @expect $.exc_type == PermissionError
+GET {{comment}}/{{c2}}
+Authorization: Bearer {{stoken}}
+
+### 2.10 assign ada to lead1 so she can see it -> 200
+POST {{host}}/api/method/frappe.desk.form.assign_to.add
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{lead1}}", "assign_to": ["{{sales}}"]}
+
+### 2.11 now she can comment on lead1 -> 200
+# @name c3
+POST {{host}}/api/method/crm.api.comment.add_comment
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"reference_doctype": "CRM Lead", "reference_name": "{{lead1}}", "content": "<p>ZZ ada was here</p>"}
+
+###
+@c3 = {{c3.response.body.$.message.name}}
+
+### 2.12 ...but cannot MOVE her comment onto the lead she cannot see -> 403 (destination re-check)
+# @expect $.exc_type == PermissionError
+PUT {{comment}}/{{c3}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"reference_name": "{{lead2}}"}
+
+### 2.13 she may edit its content -> 200
+# @expect $.data.content == <p>ZZ ada edited</p>
+PUT {{comment}}/{{c3}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"content": "<p>ZZ ada edited</p>"}
+
+# ---- notifications ------------------------------------------------------------------------------------
+
+### 3.1 the mention raised a notification for ada -> in her list, routed to the comment
+# @expect $.message contains "hash": "#{{c1}}"
+# @expect $.message contains "route_name": "Lead"
+# @expect $.message contains "reference_doctype": "lead"
+# @expect $.message contains "type": "Mention"
+POST {{host}}/api/method/crm.api.notifications.get_notifications
+Authorization: Bearer {{stoken}}
+
+### 3.2 the same row through the resource route: unread, from Administrator -> 1
+# @expect $.data count 1
+# @expect $.data[0].read == false
+# @expect $.data[0].from_user == Administrator
+# @expect $.data[0].to_user == ada@example.com
+# @expect $.data[0].notification_type_doctype == Comment
+GET {{notif}}?fields=["name","read","from_user","to_user","notification_type_doctype"]&filters=[["notification_type_doc","=","{{c1}}"]]
+Authorization: Bearer {{stoken}}
+
+### 3.3 mark_as_read for that comment -> 200
+POST {{host}}/api/method/crm.api.notifications.mark_as_read
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doc": "{{c1}}"}
+
+### 3.4 -> read
+# @expect $.data[0].read == true
+GET {{notif}}?fields=["name","read"]&filters=[["notification_type_doc","=","{{c1}}"]]
+Authorization: Bearer {{stoken}}
+
+### 3.5 a Sales User may not mint notifications for others -> 403 (create is refused, unlike leads)
+# @expect $.exc_type == PermissionError
+POST {{notif}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"type": "Mention", "from_user": "{{sales}}", "to_user": "{{manager}}", "message": "ZZ forged", "notification_text": "x"}
+
+### 3.6 she sees only her own -> nothing addressed to anybody else
+# @expect $.data count 0
+GET {{notif}}?fields=["name"]&filters=[["to_user","!=","{{sales}}"]]
+Authorization: Bearer {{stoken}}
+
+### 3.7 a manager sees everyone's -> the mention row is visible to Administrator
+# @expect $.data count 1
+GET {{notif}}?fields=["name"]&filters=[["notification_type_doc","=","{{c1}}"]]
+Authorization: Bearer {{token}}
+
+### 3.8 mentioning yourself raises nothing (crm_notification.notify_user: never notify yourself) -> 200
+# @name c4
+POST {{host}}/api/method/crm.api.comment.add_comment
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"reference_doctype": "CRM Lead", "reference_name": "{{lead1}}", "content": "<p>ZZ note to self <span data-type=\"mention\" data-id=\"Administrator\" data-label=\"Admin\">@Admin</span></p>"}
+
+###
+@c4 = {{c4.response.body.$.message.name}}
+
+### 3.9 -> no notification for that comment
+# @expect $.data count 0
+GET {{notif}}?fields=["name"]&filters=[["notification_type_doc","=","{{c4}}"]]
+Authorization: Bearer {{token}}
+
+### 3.10 mentioning an address that is not a user is ignored, the comment still lands -> 200
+POST {{host}}/api/method/crm.api.comment.add_comment
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"reference_doctype": "CRM Lead", "reference_name": "{{lead1}}", "content": "<p>ZZ <span data-type=\"mention\" data-id=\"ghost@example.com\" data-label=\"Ghost\">@Ghost</span></p>"}
+
+### 3.11 an assignment notifies the assignee (crm/api/todo.py:after_insert) -> one Assignment row for ada
+# (none today: finding 18 - nothing in the port listens to ToDo writes for notifications)
+# @expect $.data count 1
+# @expect $.data[0].type == Assignment
+GET {{notif}}?fields=["name","type","message"]&filters=[["type","=","Assignment"],["reference_name","=","{{lead1}}"],["to_user","=","{{sales}}"]]
+Authorization: Bearer {{token}}
+
+### 3.12 ...and its text names the assigner and the record (finding 18)
+# @expect $.message contains assigned a
+POST {{host}}/api/method/crm.api.notifications.get_notifications
+Authorization: Bearer {{stoken}}
+
+# ---- likes --------------------------------------------------------------------------------------------
+
+### 4.1 like -> 200, the list of who likes it
+# @expect $.message contains Administrator
+POST {{host}}/api/method/frappe.desk.like.toggle_like
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{lead1}}", "add": "Yes"}
+
+### 4.2 liking twice is idempotent -> still one entry
+# @expect $.message count 1
+POST {{host}}/api/method/frappe.desk.like.toggle_like
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{lead1}}", "add": "Yes"}
+
+### 4.3 the cache on the document -> _liked_by holds Administrator
+# @expect $.data._liked_by contains Administrator
+GET {{lead}}/{{lead1}}?fields=["name","_liked_by"]&filters=[["name","=","{{lead1}}"]]
+Authorization: Bearer {{token}}
+
+### 4.4 unlike -> empty
+# @expect $.message count 0
+POST {{host}}/api/method/frappe.desk.like.toggle_like
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{lead1}}", "add": "No"}
+
+### 4.5 liking a document you cannot read -> 403
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/method/frappe.desk.like.toggle_like
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{lead2}}", "add": "Yes"}
+
+# ---- communications: the record an email becomes -----------------------------------------------------
+
+### 5.1 log a sent email on lead2 (the send button's URL is one of the 20 missing) -> 201
+# @name m1
+# @expect $.data.reference_name == {{lead2}}
+POST {{comm}}
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"communication_type": "Communication", "communication_medium": "Email", "sent_or_received": "Sent", "subject": "ZZ Re: your quote", "content": "<p>We can do 400k</p>", "sender": "{{manager}}", "recipients": "buyer@example.test", "reference_doctype": "CRM Lead", "reference_name": "{{lead2}}"}
+
+###
+@m1 = {{m1.response.body.$.data.name}}
+
+### 5.2 ada cannot list emails on a lead she cannot see -> 0
+# @expect $.data count 0
+GET {{comm}}?fields=["name","subject","content"]&filters=[["reference_name","=","{{lead2}}"]]
+Authorization: Bearer {{stoken}}
+
+### 5.3 nor read one directly -> 403
+# @expect $.exc_type == PermissionError
+GET {{comm}}/{{m1}}
+Authorization: Bearer {{stoken}}
+
+### 5.4 nor log one onto it -> 403
+# @expect $.exc_type == PermissionError
+POST {{comm}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"communication_type": "Communication", "subject": "ZZ forged mail", "reference_doctype": "CRM Lead", "reference_name": "{{lead2}}"}
+
+### 5.5 the manager reads it back -> 200
+# @expect $.data.subject == ZZ Re: your quote
+GET {{comm}}/{{m1}}
+Authorization: Bearer {{mtoken}}
+
+### 5.6 a communication referencing nothing is not hidden -> ada can create and read it
+# @name m2
+# @expect $.data.reference_name ==
+POST {{comm}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"communication_type": "Communication", "subject": "ZZ orphan mail", "content": "x"}
+
+###
+@m2 = {{m2.response.body.$.data.name}}
+
+### 5.7 ...but cannot attach it afterwards to a lead she cannot see -> 403
+# @expect $.exc_type == PermissionError
+PUT {{comm}}/{{m2}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"reference_doctype": "CRM Lead", "reference_name": "{{lead2}}"}
+
+# ---- the timeline ----------------------------------------------------------------------------------------
+
+### 6.1 get_activities -> [activities, calls, notes, tasks, attachments]
+# @expect $.message count 5
+# @expect $.message[0] contains "activity_type": "creation"
+# @expect $.message[0] contains created this lead
+# @expect $.message[0] contains "activity_type": "comment"
+# @expect $.message[0] contains ZZ ada edited
+# @expect $.message[1] count 0
+# @expect $.message[2] count 0
+POST {{host}}/api/method/crm.api.activities.get_activities
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "{{lead1}}"}
+
+### 6.2 a tracked field change lands in the timeline -> 200
+PUT {{lead}}/{{lead1}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"annual_revenue": 5000}
+
+### 6.3 -> a "changed" entry naming annual_revenue, old and new
+# @expect $.message[0] contains "activity_type": "changed"
+# @expect $.message[0] contains annual_revenue
+# @expect $.message[0] contains 5000
+POST {{host}}/api/method/crm.api.activities.get_activities
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "{{lead1}}"}
+
+### 6.4 a status change is shown from the status log, not from Version -> "changed" with status
+PUT {{lead}}/{{lead1}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status": "Contacted"}
+
+### 6.5 -> the timeline names the status move
+# @expect $.message[0] contains Contacted
+POST {{host}}/api/method/crm.api.activities.get_activities
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "{{lead1}}"}
+
+### 6.6 the communication appears on lead2's timeline for the manager
+# @expect $.message[0] contains "activity_type": "communication"
+# @expect $.message[0] contains ZZ Re: your quote
+POST {{host}}/api/method/crm.api.activities.get_activities
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"name": "{{lead2}}"}
+
+### 6.7 ada asking for lead2's timeline -> 403 "Not permitted" (activities.py:179 verbatim)
+# @expect $.exc_type == PermissionError
+# @expect $.message == Not permitted
+POST {{host}}/api/method/crm.api.activities.get_activities
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"name": "{{lead2}}"}
+
+### 6.8 a name that is neither a lead nor a deal -> 404 "Document not found" (activities.py:20 verbatim)
+# @expect $.exc_type == DoesNotExistError
+# @expect $.message == Document not found
+POST {{host}}/api/method/crm.api.activities.get_activities
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "CRM-LEAD-0000-99999"}
+
+# ---- deleting a document takes its dependants with it (delete_doc.py:delete_dynamic_links) ---------
+
+### 7.1 delete lead1 -> 200
+DELETE {{lead}}/{{lead1}}
+Authorization: Bearer {{token}}
+
+### 7.2 -> its comments went with it (Comment is in delete_dynamic_links) -> 0
+# (they stay today: finding 19 - deleting a document leaves its dependants behind)
+# @expect $.data count 0
+GET {{comment}}?fields=["name"]&filters=[["reference_name","=","{{lead1}}"]]
+Authorization: Bearer {{token}}
+
+# ---- teardown ----------------------------------------------------------------------------------------------
+
+### 8.1 delete lead2 -> 200
+DELETE {{lead}}/{{lead2}}
+Authorization: Bearer {{mtoken}}
+
+### 8.2 sweep comments left on either lead (none if 7.2 held) -> 200
+# @name sweep_c
+GET {{comment}}?fields=["name"]&filters=[["content","like","%25ZZ%25"]]
+Authorization: Bearer {{token}}
+
+### 8.3 -> 200|404
+DELETE {{comment}}/{{sweep_c.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 8.4 -> 200|404
+DELETE {{comment}}/{{sweep_c.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 8.5 -> 200|404
+DELETE {{comment}}/{{sweep_c.response.body.$.data[2].name}}
+Authorization: Bearer {{token}}
+
+### 8.6 -> 200|404
+DELETE {{comment}}/{{sweep_c.response.body.$.data[3].name}}
+Authorization: Bearer {{token}}
+
+### 8.6b -> 200|404
+DELETE {{comment}}/{{sweep_c.response.body.$.data[4].name}}
+Authorization: Bearer {{token}}
+
+### 8.7 sweep communications -> 200
+# @name sweep_m
+GET {{comm}}?fields=["name"]&filters=[["subject","like","ZZ%25"]]
+Authorization: Bearer {{token}}
+
+### 8.8 -> 200|404
+DELETE {{comm}}/{{sweep_m.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 8.9 -> 200|404
+DELETE {{comm}}/{{sweep_m.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 8.10 sweep notifications -> 200
+# @name sweep_n
+GET {{notif}}?fields=["name"]&filters=[["message","like","%25ZZ%25"]]
+Authorization: Bearer {{token}}
+
+### 8.11 -> 200|404
+DELETE {{notif}}/{{sweep_n.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 8.12 -> 200|404
+DELETE {{notif}}/{{sweep_n.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 8.13 sweep assignment notifications too -> 200
+# @name sweep_a
+GET {{notif}}?fields=["name"]&filters=[["type","=","Assignment"],["message","like","%25ZZ Timeline%25"]]
+Authorization: Bearer {{token}}
+
+### 8.14 -> 200|404
+DELETE {{notif}}/{{sweep_a.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 8.15 nothing left behind -> 200, empty
+# @expect $.data count 0
+GET {{comment}}?fields=["name"]&filters=[["content","like","%25ZZ%25"]]
+Authorization: Bearer {{token}}
