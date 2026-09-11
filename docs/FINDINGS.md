@@ -35,9 +35,13 @@ which nothing catches. With `DEBUG=True` the body is the HTML debug page.
 **Where:** `frappe_core/filters.py:build_q` — validate `fieldname` against
 `concrete_field_names(model)` before building the `Q`, raising `FilterError`.
 
-**Upstream, for the record:** `frappe/model/db_query.py:prepare_filter_condition` does
-not validate the field either; the unknown column reaches MariaDB and the request fails
-with a database error. So upstream is also a 500 here. The 4xx expectation is the port's
+**Upstream, for the record:** `frappe/utils/data.py:get_filter` (version-15) checks the
+*operator* against a fixed list and throws 417 `Operator must be one of ...` for a bad
+one, and sanitises the column name against injection. It then asks
+`meta.has_field(fieldname)`, and when the answer is no it only tries the child tables and
+carries on; nothing throws. `prepare_filter_condition` builds the column into the SQL,
+MariaDB rejects the unknown column, and the request fails with a database error. So
+upstream is also a 500 here. The 4xx expectation is the port's
 own contract, not a fidelity requirement, and it is the better behaviour: a typo in a
 saved view's filter should not read as a server crash.
 
@@ -46,18 +50,28 @@ saved view's filter should not read as a server crash.
 **Blocks:** `02_resource_grammar.http` 10.9 (no `organization_name`) and 10.10 (name
 `ZZ <script>`)
 
-**Expected:** 417 with Frappe's own messages, `No Name Specified for CRM Organization`
-and `Name cannot contain special characters like <>`. Both are `frappe.throw` calls
-upstream (`frappe/model/naming.py:validate_name`), and the frontend displays
-`messages[0]`.
+**Expected:** two different answers, both from `frappe/model/naming.py:validate_name`
+(version-15):
 
-**Actual:** 500. `frappe_core/naming.py` raises its own `NameError_`, which is not a
-`FrappeError`, so `frappe_exception_handler` returns `None` and Django's 500 handler
-takes over. The message text is right; it never reaches the client.
+* no name → `frappe.throw(_("No Name Specified for {0}"))` with the default exception,
+  `ValidationError`, so **417**;
+* `<` or `>` in the name → `frappe.throw(..., frappe.NameError)`, and `NameError` is
+  declared with `http_status_code = 409`, so **409** with `exc_type: NameError` and the
+  message `Name cannot contain special characters like '<', '>'`.
 
-**Where:** make `NameError_` subclass `frappe_core.exceptions.ValidationError`, or map it
-in the handler. **User-visible:** the Organization form's "Save" with an empty name shows
-a generic failure instead of the message written for it.
+The frontend branches on neither; it displays `messages[0]`, so the sentence is what a
+person sees.
+
+**Actual:** 500 for both. `frappe_core/naming.py` raises its own `NameError_`, a plain
+`ValueError` subclass, for every naming failure - the two above and five more. It is not
+a `FrappeError`, so `frappe_exception_handler` returns `None` and Django's 500 handler
+takes over. The message text was transcribed correctly; it never reaches the client.
+
+**Where:** `frappe_core/naming.py` - raise `frappe_core.exceptions.ValidationError` for
+the empty name and a `NameError` subclass of `FrappeError` (status 409) for the rest, so
+both the status and the `exc_type` match upstream. **User-visible:** the Organization
+form's Save with an empty name shows a generic failure instead of the message written
+for it.
 
 ## 3. Deleting a linked row → 409 with Django's wording
 
