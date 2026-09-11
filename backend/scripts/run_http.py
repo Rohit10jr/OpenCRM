@@ -15,8 +15,9 @@ Supported, matching the extension's behaviour for everything the walkthrough fil
   ``contains``, ``excludes``, ``exists``, ``absent``, and ``count N`` for the length
   of a list. ``contains``/``excludes`` match a substring of the value's JSON text
 
-Each block prints one PASS/FAIL line. ``--mark`` records a fully green file in the
-Tested column of ``docs/ROUTES.md`` for every method path and doctype it touched.
+Each block prints one PASS/FAIL line. ``--mark`` records the file in the Tested column
+of ``docs/ROUTES.md`` for every method path and doctype it touched, with a count of
+red lines when there were any (those are the logged findings).
 """
 
 from __future__ import annotations
@@ -304,8 +305,14 @@ def main() -> int:
         runner = Runner(path, args.host, args.verbose)
         ok = runner.run()
         all_ok &= ok
-        if ok and args.mark:
+        if args.mark:
+            failed = sum(1 for r in runner.results if not r[1])
+            # A file whose only red lines are logged findings has still tested every row
+            # it touched; the mark says so and counts the red lines, so the inventory
+            # distinguishes "covered, clean" from "covered, with open findings".
             label = f"{dt.date.today():%d %b} — {path.stem}"
+            if failed:
+                label += f" ({failed} red, see FINDINGS.md)"
             print(f"  marked {mark_routes(runner.touched, label)} rows in ROUTES.md")
     return 0 if all_ok else 1
 

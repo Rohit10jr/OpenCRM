@@ -1,0 +1,113 @@
+# 99 - the login lockout. RUN THIS LAST: eleven consecutive failures lock the calling
+# address for LOGIN_LOCK_INTERVAL_SECONDS (60 by default), and every login from this
+# machine - yours included - answers "locked" until it expires.
+#
+# Expectations from frappe/auth.py:260-269 (a tracker for the IP and one for the
+# account; either being locked stops the login) and :598-612 (is_user_allowed refuses
+# when the count is STRICTLY greater than the limit, so with the default of 10 the
+# eleventh failure is the one that locks the twelfth attempt). The port reproduces that
+# comparison exactly; the defaults match upstream's System Settings.
+#
+# The failures target an account that does not exist, so no real account's counter is
+# touched; the IP counter is what trips.
+
+@host = http://localhost:8000
+@sales = ada@example.com
+@sales_pwd = {{$dotenv SALES_PWD}}
+@ghost = zz.lock@example.com
+
+### 1.1 failure 1 -> 401 "Invalid login credentials"
+# @expect $.message == Invalid login credentials
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{ghost}}", "pwd": "wrong"}
+
+### 1.2 failure 2 -> 401
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{ghost}}", "pwd": "wrong"}
+
+### 1.3 failure 3 -> 401
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{ghost}}", "pwd": "wrong"}
+
+### 1.4 failure 4 -> 401
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{ghost}}", "pwd": "wrong"}
+
+### 1.5 failure 5 -> 401
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{ghost}}", "pwd": "wrong"}
+
+### 1.6 failure 6 -> 401
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{ghost}}", "pwd": "wrong"}
+
+### 1.7 failure 7 -> 401
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{ghost}}", "pwd": "wrong"}
+
+### 1.8 failure 8 -> 401
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{ghost}}", "pwd": "wrong"}
+
+### 1.9 failure 9 -> 401
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{ghost}}", "pwd": "wrong"}
+
+### 1.10 failure 10 -> 401, still the plain refusal: the count now EQUALS the limit
+# @expect $.message == Invalid login credentials
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{ghost}}", "pwd": "wrong"}
+
+### 1.11 failure 11 -> 401, and this one trips the lock (count > limit)
+# @expect $.message == Invalid login credentials
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{ghost}}", "pwd": "wrong"}
+
+### 2.1 the next attempt from this address is refused before the password is checked -> 403
+# even with CORRECT credentials for a real account: the IP tracker is locked
+# @expect $.message contains locked
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{sales}}", "pwd": "{{sales_pwd}}"}
+
+### 2.2 and the wording tells the caller when to retry -> 403
+# @expect $.message contains will resume after
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{sales}}", "pwd": "{{sales_pwd}}"}
+
+### 3.1 the old-password path of update_password sits behind the same tracker (phase-8 review) -> 403 "locked", not 401 "Invalid password"
+# A wrong old password on purpose: if the lock is not in force this answers 401 "Invalid
+# password" and changes nothing; if it is, the tracker refuses before the password is read.
+# @expect $.message contains locked
+POST {{host}}/api/method/frappe.core.doctype.user.user.update_password
+Content-Type: application/json
+
+{"usr": "{{sales}}", "old_password": "not-the-password", "new_password": "Whatever#Temp-2026"}
+
+# After 60 seconds the lock expires by itself. There is no block for that: a .http file
+# cannot wait. Log in again a minute after running this file.
