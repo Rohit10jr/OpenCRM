@@ -17,6 +17,8 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 5 | 01 / 1.11 | medium | An email typed in a different case cannot log in; upstream accepts `Ada@Example.com` | open |
 | 6 | 01 / 1.4 | low | A malformed bearer token answers `exc_type: InvalidToken`, not `AuthenticationError` | open |
 | 7 | 03 / 5.8 | medium | A child-table row missing a mandatory field reaches the database and answers **409 DuplicateEntryError**, not `MandatoryError` | open |
+| 8 | 04 / 4.9, 5.1 | medium | Validation that depends on child rows runs **before the rows are written**, so expected-value auto-update and primary-contact derivation lag one save behind | open |
+| 9 | 04 / 4.12, 5.1 | **high** | A child row whose Link is given by name, as every form sends it, answers **500** — deal contacts and product lines with a product code cannot be written | open |
 
 ---
 
@@ -165,3 +167,51 @@ fires and the handler renders it as a duplicate.
 **Where:** `frappe_core/serializers.py:_write_children` — validate each row through the
 child's serializer (or check its required fields) before `replace_children`, raising
 `MandatoryError`. Parent-level mandatory fields already answer correctly (03 / 2.5).
+
+## 8. Child-dependent validation runs before the child rows are written
+
+**Blocks:** `04_deals.http` 4.9 (with 4.9b/4.9c showing the catch-up), and 5.1 once
+finding 9 is fixed.
+
+**Expected:** upstream's `validate()` sees the child rows as part of the document, so a
+single save that adds product lines moves `expected_deal_value` to the new total
+(`crm_deal.py:240-248`, with `auto_update_expected_deal_value` on), and a single save that
+adds a contact row makes it primary and copies its email, mobile and phone onto the deal
+(`crm_deal.py:120-149`).
+
+**Actual:** the port's serializer calls `instance.save()` first and writes the child rows
+afterwards (`frappe_core/serializers.py:update`, then `_write_children`). `save()`
+therefore runs `update_expected_deal_value` and `set_primary_contact` against the rows
+that existed *before* this request. The totals are then refreshed by a bare `update()`,
+so the very next save of any field catches up (4.9c passes), but the request that made
+the change answers with stale derived values. For contacts the same order means a
+contact added through the document is never made primary and the deal's email stays
+empty until something else saves the deal.
+
+**Where:** `frappe_core/serializers.py` — write the children before the final `save()`
+(create the parent with `save()` first only to obtain a name, or run the derivations
+again after `_write_children`), so the derived fields and the child rows land in the
+same request as they do upstream.
+
+## 9. A child row whose Link is given by name answers 500
+
+**Blocks:** `04_deals.http` 4.12 (`products: [{"product_code": "ZZ-P1", ...}]`) and 5.1,
+5.3, 5.5, 5.8 (`contacts: [{"contact": "ZZ Primary"}]`)
+
+**Expected:** 200. A Link field in a child row is written by name over the wire, exactly
+as a top-level Link is; `ConvertToDealModal.vue`, the deal contacts panel and the product
+grid all send `{"contact": "<name>"}` / `{"product_code": "<code>"}`.
+
+**Actual:** 500 with `ValueError: Cannot assign "'ZZ Primary'": "CRMContacts.contact" must
+be a "Contact" instance.` `children.replace_children` copies the row dict into
+`create(**payload)` untouched; Django accepts a raw key only under the `_id` attname
+(`contact_id`), which the docstring there acknowledges and which no Frappe client ever
+sends. Top-level Links are fine because the parent goes through a DRF serializer, which
+resolves the key; child rows bypass the serializer.
+
+**Where:** `frappe_core/children.py:replace_children` — for every `ForeignKey` on the
+child model, move a value supplied under the field name to its `attname`, and let a
+missing target surface as the 417 `LinkValidationError` upstream raises
+(`Could not find Row #1: Contact: ZZ Nobody`) rather than a 500. Finding 7's validation
+pass would be the natural place. **User-visible:** adding a contact to a deal, or a
+product with a code, fails outright through the document route.
