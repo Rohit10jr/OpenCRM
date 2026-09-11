@@ -1,0 +1,601 @@
+# 05 - Contact, its email and phone child tables, CRM Organization, Industry and the
+# Territory tree; the crm.api.contact.* endpoints; rename_doc and search_link.
+#
+# Expectations from frappe/contacts/doctype/contact/contact.py (version-15): autoname at
+# line 54 (full name, "-N" on collision), validate at 65 (set_primary_email, set_primary
+# phone/mobile), and crm/api/contact.py (main) for the four endpoints. rename_doc from
+# frappe/model/rename_doc.py: every Link pointing at the old name is repointed.
+#
+# Fixture rows are prefixed "ZZ". A deal is created to test contact linkage; it is
+# found and removed by its next_step marker.
+
+@host = http://localhost:8000
+@admin = Administrator
+@admin_pwd = {{$dotenv ADMIN_PWD}}
+@sales = ada@example.com
+@sales_pwd = {{$dotenv SALES_PWD}}
+@contact = {{host}}/api/resource/Contact
+@org = {{host}}/api/resource/CRM%20Organization
+@territory = {{host}}/api/resource/CRM%20Territory
+
+### 0.1 login -> 200
+# @name login
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}", "pwd": "{{admin_pwd}}"}
+
+###
+@token = {{login.response.body.$.message.access}}
+
+# ---- cleanup first ---------------------------------------------------------------------
+
+### 0.2 find deals left by an earlier run -> 200
+# @name leftovers
+GET {{host}}/api/resource/CRM%20Deal?fields=["name"]&filters=[["next_step","like","ZZ Link%25"]]
+Authorization: Bearer {{token}}
+
+### 0.3 delete leftover deal 1 -> 200|404
+DELETE {{host}}/api/resource/CRM%20Deal/{{leftovers.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.4 delete leftover deal 2 -> 200|404
+DELETE {{host}}/api/resource/CRM%20Deal/{{leftovers.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 0.5 cleanup contacts -> 200|404
+DELETE {{contact}}/ZZ%20Jane%20Roe
+Authorization: Bearer {{token}}
+
+### 0.6 -> 200|404
+DELETE {{contact}}/ZZ%20Jane%20Roe-1
+Authorization: Bearer {{token}}
+
+### 0.7 -> 200|404
+DELETE {{contact}}/ZZ%20Jane%20Renamed
+Authorization: Bearer {{token}}
+
+### 0.8 -> 200|404
+DELETE {{contact}}/ZZ%20John%20Doe
+Authorization: Bearer {{token}}
+
+### 0.9 -> 200|404
+DELETE {{contact}}/ZZ%20Acme%20Only
+Authorization: Bearer {{token}}
+
+### 0.9b -> 200|404
+DELETE {{contact}}/ZZ%20No%20Mail
+Authorization: Bearer {{token}}
+
+### 0.10 cleanup organizations -> 200|404
+DELETE {{org}}/ZZ%20Contact%20Org
+Authorization: Bearer {{token}}
+
+### 0.11 -> 200|404
+DELETE {{org}}/ZZ%20Renamed%20Org
+Authorization: Bearer {{token}}
+
+### 0.12 cleanup territories, leaves first -> 200|404
+DELETE {{territory}}/ZZ%20Berlin
+Authorization: Bearer {{token}}
+
+### 0.13 -> 200|404
+DELETE {{territory}}/ZZ%20Europe
+Authorization: Bearer {{token}}
+
+### 0.14 -> 200|404
+DELETE {{territory}}/ZZ%20World
+Authorization: Bearer {{token}}
+
+### 0.15 cleanup industry -> 200|404
+DELETE {{host}}/api/resource/CRM%20Industry/ZZ%20Industry
+Authorization: Bearer {{token}}
+
+# ---- fixtures ----------------------------------------------------------------------------
+
+### 1.1 industry -> 201
+POST {{host}}/api/resource/CRM%20Industry
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"industry": "ZZ Industry"}
+
+### 1.2 territory root (a group) -> 201
+POST {{territory}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"territory_name": "ZZ World", "is_group": 1}
+
+### 1.3 territory child group -> 201
+# @expect $.data.parent_crm_territory == ZZ World
+POST {{territory}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"territory_name": "ZZ Europe", "is_group": 1, "parent_crm_territory": "ZZ World"}
+
+### 1.4 territory leaf -> 201
+POST {{territory}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"territory_name": "ZZ Berlin", "parent_crm_territory": "ZZ Europe"}
+
+### 1.5 organization in that leaf -> 201
+# @expect $.data.industry == ZZ Industry
+# @expect $.data.territory == ZZ Berlin
+POST {{org}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization_name": "ZZ Contact Org", "industry": "ZZ Industry", "territory": "ZZ Berlin", "website": "https://zzcontact.example"}
+
+# ---- contact naming and validation ----------------------------------------------------
+
+### 2.1 first + last -> 201, named by the full name, full_name derived
+# @expect $.data.name == ZZ Jane Roe
+# @expect $.data.full_name == ZZ Jane Roe
+POST {{contact}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Jane", "last_name": "Roe", "company_name": "ZZ Contact Org"}
+
+### 2.2 the same name again -> 201, suffixed -1 (append_number_if_name_exists)
+# @expect $.data.name == ZZ Jane Roe-1
+POST {{contact}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Jane", "last_name": "Roe"}
+
+### 2.3 no person's name: company_name is the fallback, never a suffix -> 201
+# @expect $.data.name == ZZ Acme Only
+# @expect $.data.full_name == ZZ Acme Only
+POST {{contact}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"company_name": "ZZ Acme Only"}
+
+### 2.3b a contact with no email at all, for the search test -> 201
+# @expect $.data.name == ZZ No Mail
+POST {{contact}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ No", "last_name": "Mail"}
+
+### 2.4 nothing to name it by -> 417 "No Name Specified for Contact" (500 today: finding 2)
+# @expect $.message contains No Name Specified
+POST {{contact}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"designation": "Nobody"}
+
+### 2.5 email rows on create: the primary's address is copied to email_id -> 201
+# @expect $.data.name == ZZ John Doe
+# @expect $.data.email_ids count 2
+# @expect $.data.email_ids[0].is_primary == true
+# @expect $.data.email_id == john@zz.test
+POST {{contact}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ John", "last_name": "Doe", "email_ids": [{"email_id": "john@zz.test", "is_primary": 1}, {"email_id": "john2@zz.test"}]}
+
+### 2.6 a single email row with no primary flag becomes primary by itself -> 200
+# contact.py:184 - `if len(self.email_ids) == 1: self.email_ids[0].is_primary = 1`
+# (2.7, 2.9 and 2.10 fail today: finding 10 - Contact.validate's primary rules are not
+# applied on a document save)
+PUT {{contact}}/ZZ%20Acme%20Only
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"email_ids": [{"email_id": "acme@zz.test"}]}
+
+### 2.7 -> is_primary true, email_id follows
+# @expect $.data.email_ids[0].is_primary == true
+# @expect $.data.email_id == acme@zz.test
+GET {{contact}}/ZZ%20Acme%20Only
+Authorization: Bearer {{token}}
+
+### 2.8 a top-level email_id with NO rows is cleared on save (contact.py:176-178) -> 200
+PUT {{contact}}/ZZ%20Jane%20Roe-1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"email_id": "orphan@zz.test"}
+
+### 2.9 -> email_id is empty: the child table is the truth, the column only mirrors it
+# @expect $.data.email_id ==
+GET {{contact}}/ZZ%20Jane%20Roe-1
+Authorization: Bearer {{token}}
+
+### 2.10 two primary emails -> 417, contact.py:181 verbatim
+# @expect $.message == Only one Email ID can be set as primary.
+PUT {{contact}}/ZZ%20John%20Doe
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"email_ids": [{"email_id": "john@zz.test", "is_primary": 1}, {"email_id": "john2@zz.test", "is_primary": 1}]}
+
+### 2.11 phone rows: separate primary flags for mobile and phone -> 200
+PUT {{contact}}/ZZ%20John%20Doe
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"phone_nos": [{"phone": "+1 333", "is_primary_mobile_no": 1}, {"phone": "+1 444", "is_primary_phone": 1}]}
+
+### 2.12 -> mobile_no and phone each follow their own primary
+# @expect $.data.phone_nos count 2
+# @expect $.data.mobile_no == +1 333
+# @expect $.data.phone == +1 444
+GET {{contact}}/ZZ%20John%20Doe
+Authorization: Bearer {{token}}
+
+### 2.13 an email row that is not an address -> 417 (Data/Email fields are validated upstream; 200 today: finding 11)
+# @expect $.exc_type == InvalidEmailAddressError
+PUT {{contact}}/ZZ%20John%20Doe
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"email_ids": [{"email_id": "not-an-email"}]}
+
+# ---- crm.api.contact.* ---------------------------------------------------------------
+
+### 3.1 create_new email: the first one is primary -> 200, true
+# @expect $.message == true
+POST {{host}}/api/method/crm.api.contact.create_new
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"contact": "ZZ Jane Roe", "field": "email", "value": "jane@zz.test"}
+
+### 3.2 -> one row, primary, email_id set
+# @expect $.data.email_ids count 1
+# @expect $.data.email_ids[0].is_primary == true
+# @expect $.data.email_id == jane@zz.test
+GET {{contact}}/ZZ%20Jane%20Roe
+Authorization: Bearer {{token}}
+
+### 3.3 a second email is NOT primary -> 200
+POST {{host}}/api/method/crm.api.contact.create_new
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"contact": "ZZ Jane Roe", "field": "email", "value": "jane.alt@zz.test"}
+
+### 3.4 -> two rows, email_id unchanged
+# @expect $.data.email_ids count 2
+# @expect $.data.email_ids[1].is_primary == false
+# @expect $.data.email_id == jane@zz.test
+GET {{contact}}/ZZ%20Jane%20Roe
+Authorization: Bearer {{token}}
+
+### 3.5 set_as_primary the second -> 200
+POST {{host}}/api/method/crm.api.contact.set_as_primary
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"contact": "ZZ Jane Roe", "field": "email", "value": "jane.alt@zz.test"}
+
+### 3.6 -> exactly one primary, and email_id follows it
+# @expect $.data.email_ids[0].is_primary == false
+# @expect $.data.email_ids[1].is_primary == true
+# @expect $.data.email_id == jane.alt@zz.test
+GET {{contact}}/ZZ%20Jane%20Roe
+Authorization: Bearer {{token}}
+
+### 3.7 create_new mobile_no: the first phone row is the primary mobile -> 200
+POST {{host}}/api/method/crm.api.contact.create_new
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"contact": "ZZ Jane Roe", "field": "mobile_no", "value": "+49 30 1"}
+
+### 3.8 create_new phone: a second row, not primary -> 200
+POST {{host}}/api/method/crm.api.contact.create_new
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"contact": "ZZ Jane Roe", "field": "phone", "value": "+49 30 2"}
+
+### 3.9 set_as_primary phone on the second row -> 200
+POST {{host}}/api/method/crm.api.contact.set_as_primary
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"contact": "ZZ Jane Roe", "field": "phone", "value": "+49 30 2"}
+
+### 3.10 -> mobile_no from row 1, phone from row 2
+# @expect $.data.phone_nos count 2
+# @expect $.data.mobile_no == +49 30 1
+# @expect $.data.phone == +49 30 2
+GET {{contact}}/ZZ%20Jane%20Roe
+Authorization: Bearer {{token}}
+
+### 3.11 an unknown field -> 417 "Invalid field", crm/api/contact.py:80 verbatim
+# @expect $.message == Invalid field
+POST {{host}}/api/method/crm.api.contact.create_new
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"contact": "ZZ Jane Roe", "field": "fax", "value": "1"}
+
+### 3.12 a contact that does not exist -> 403 PermissionError "Not permitted" upstream (417 today: finding 12)
+# has_permission("Contact", "write", "<missing>") is False upstream, so it is a
+# PermissionError, not a validation failure.
+# @expect $.exc_type == PermissionError
+# @expect $.message == Not permitted
+POST {{host}}/api/method/crm.api.contact.create_new
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"contact": "ZZ Nobody", "field": "email", "value": "x@y.test"}
+
+### 3.13 search_emails: lists, not dicts - [full_name, email_id, name] -> 200
+# @expect $.message[0] count 3
+# @expect $.message[0][2] == ZZ Jane Roe
+POST {{host}}/api/method/crm.api.contact.search_emails
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"txt": "ZZ Jane Roe"}
+
+### 3.14 search_emails only returns contacts that have an email -> ZZ No Mail is absent
+# @expect $.message count 0
+POST {{host}}/api/method/crm.api.contact.search_emails
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"txt": "ZZ No Mail"}
+
+# ---- linkage to deals -------------------------------------------------------------------
+
+### 4.1 a deal linked to ZZ Jane Roe -> 201
+# The child row names its contact under `contact_id` rather than `contact`, which is the
+# one form the child writer accepts today (finding 9); the form would send `contact`.
+# @name deal
+# @expect $.data.contacts count 1
+# @expect $.data.contacts[0].email == jane.alt@zz.test
+POST {{host}}/api/resource/CRM%20Deal
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization": "ZZ Contact Org", "deal_owner": "{{admin}}", "next_step": "ZZ Link deal", "contacts": [{"contact_id": "ZZ Jane Roe", "is_primary": 1}]}
+
+###
+@deal = {{deal.response.body.$.data.name}}
+
+### 4.2 get_linked_deals -> the one deal, with the nine fields crm/api/contact.py:47-57 lists
+# @expect $.message count 1
+# @expect $.message[0].name == {{deal}}
+# @expect $.message[0].deal_owner == Administrator
+# @expect $.message[0].organization == ZZ Contact Org
+POST {{host}}/api/method/crm.api.contact.get_linked_deals
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"contact": "ZZ Jane Roe"}
+
+### 4.3 a contact with no deals -> empty list
+# @expect $.message count 0
+POST {{host}}/api/method/crm.api.contact.get_linked_deals
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"contact": "ZZ John Doe"}
+
+### 4.4 login as a Sales User -> 200
+# @name sales_login
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{sales}}", "pwd": "{{sales_pwd}}"}
+
+###
+@sales_token = {{sales_login.response.body.$.message.access}}
+
+### 4.5 get_linked_deals hides deals she cannot read -> empty (deliberate divergence)
+# Upstream reads each deal with get_cached_doc, which ignores permissions, and would hand
+# her the deal value. The port reads through the permission layer. Recorded in
+# docs/internal/PROGRESS_PHASE_3.md.
+# @expect $.message count 0
+POST {{host}}/api/method/crm.api.contact.get_linked_deals
+Authorization: Bearer {{sales_token}}
+Content-Type: application/json
+
+{"contact": "ZZ Jane Roe"}
+
+# ---- rename_doc: every Link to the old name must follow ------------------------------------
+# 5.1-5.5 fail today: finding 13. The port renames by inserting a copy and deleting the
+# original, so a referenced document cannot be renamed at all (PROTECT), and renaming a
+# contact deletes its email and phone rows and its deal links (CASCADE).
+
+### 5.1 rename the organization the deal points at -> 200, the new name
+# @expect $.message == ZZ Renamed Org
+POST {{host}}/api/method/frappe.client.rename_doc
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Organization", "old_name": "ZZ Contact Org", "new_name": "ZZ Renamed Org"}
+
+### 5.2 -> the deal's Link was repointed (rename_doc.py:update_link_field_values)
+# @expect $.data.organization == ZZ Renamed Org
+GET {{host}}/api/resource/CRM%20Deal/{{deal}}
+Authorization: Bearer {{token}}
+
+### 5.3 rename the linked contact -> 200
+# @expect $.message == ZZ Jane Renamed
+POST {{host}}/api/method/frappe.client.rename_doc
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "Contact", "old_name": "ZZ Jane Roe", "new_name": "ZZ Jane Renamed"}
+
+### 5.4 -> the contact kept its own email and phone rows
+# @expect $.data.email_ids count 2
+# @expect $.data.phone_nos count 2
+GET {{contact}}/ZZ%20Jane%20Renamed
+Authorization: Bearer {{token}}
+
+### 5.5 -> and the deal still links to it, under the new name
+# @expect $.data.contacts count 1
+# @expect $.data.contacts[0].contact == ZZ Jane Renamed
+GET {{host}}/api/resource/CRM%20Deal/{{deal}}
+Authorization: Bearer {{token}}
+
+### 5.6 rename onto a name that exists -> 417
+# @expect $.message contains already exists
+POST {{host}}/api/method/frappe.client.rename_doc
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "Contact", "old_name": "ZZ John Doe", "new_name": "ZZ Acme Only"}
+
+### 5.7 merge is refused rather than silently ignored -> 417 (port decision, client.py)
+# @expect $.message == Merging documents is not supported
+POST {{host}}/api/method/frappe.client.rename_doc
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "Contact", "old_name": "ZZ John Doe", "new_name": "ZZ Acme Only", "merge": 1}
+
+# ---- the territory tree --------------------------------------------------------------------
+
+### 6.1 the leaf knows its parent -> 200
+# @expect $.data.parent_crm_territory == ZZ Europe
+# @expect $.data.is_group == false
+GET {{territory}}/ZZ%20Berlin
+Authorization: Bearer {{token}}
+
+# 6.2 and 6.3 fail today: finding 14 - the territory tree's lft/rgt are never written and
+# no resolver is registered for the tree operators. Latent: the frontend never sends them.
+
+### 6.2 a nested-set tree carries lft/rgt on every node (frappe/utils/nestedset.py) -> set
+# @expect $.data.lft != null
+# @expect $.data.rgt != null
+GET {{territory}}/ZZ%20World
+Authorization: Bearer {{token}}
+
+### 6.3 `descendants of` finds the organization two levels down -> 200, one row
+# @expect $.data count 1
+# @expect $.data[0].name == ZZ Renamed Org
+GET {{org}}?fields=["name"]&filters=[["territory","descendants of","ZZ World"]]
+Authorization: Bearer {{token}}
+
+### 6.4 a territory with children cannot be deleted -> 417|409 (417 LinkExistsError upstream; 409 is finding 3, counted once)
+DELETE {{territory}}/ZZ%20World
+Authorization: Bearer {{token}}
+
+# ---- organizations: the session endpoint, autocomplete, permissions map --------------------
+
+### 7.1 get_organizations -> every organization, every column, sorted by name
+# @expect $.message[0].organization_name exists
+# @expect $.message[0].website exists
+POST {{host}}/api/method/crm.api.session.get_organizations
+Authorization: Bearer {{token}}
+
+### 7.2 search_link, the Link autocomplete -> [{value, description}] matching the text
+# (filtered by industry as well, so the result is the same whether or not 5.1 renamed it)
+# @expect $.message count 1
+# @expect $.message[0].value contains Org
+# @expect $.message[0].description exists
+POST {{host}}/api/method/frappe.desk.search.search_link
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Organization", "txt": "ZZ", "filters": {"industry": "ZZ Industry"}}
+
+### 7.3 search_link with filters narrows further -> 0
+# @expect $.message count 0
+POST {{host}}/api/method/frappe.desk.search.search_link
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Organization", "txt": "ZZ Ren", "filters": {"industry": "No Such Industry"}}
+
+### 7.4 get_doc_permissions -> the map the frontend greys buttons with
+# @expect $.message.permissions.read == true
+# @expect $.message.permissions.write == true
+# @expect $.message.permissions.delete == true
+POST {{host}}/api/method/frappe.client.get_doc_permissions
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "Contact", "docname": "ZZ Jane Roe-1"}
+
+### 7.5 ...and for a document that does not exist, an empty map rather than an error
+# @expect $.message.permissions count 0
+POST {{host}}/api/method/frappe.client.get_doc_permissions
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Organization", "docname": "ZZ Nobody"}
+
+### 7.6 organizations filter by industry -> 1
+# @expect $.data count 1
+GET {{org}}?fields=["name"]&filters=[["industry","=","ZZ Industry"]]
+Authorization: Bearer {{token}}
+
+# ---- teardown --------------------------------------------------------------------------------
+
+### 8.1 delete the deal -> 200
+DELETE {{host}}/api/resource/CRM%20Deal/{{deal}}
+Authorization: Bearer {{token}}
+
+### 8.2 delete contacts -> 200|404 (5.3 may or may not have renamed, depending on findings)
+DELETE {{contact}}/ZZ%20Jane%20Renamed
+Authorization: Bearer {{token}}
+
+### 8.3 -> 200|404
+DELETE {{contact}}/ZZ%20Jane%20Roe
+Authorization: Bearer {{token}}
+
+### 8.4 -> 200
+DELETE {{contact}}/ZZ%20Jane%20Roe-1
+Authorization: Bearer {{token}}
+
+### 8.5 -> 200
+DELETE {{contact}}/ZZ%20John%20Doe
+Authorization: Bearer {{token}}
+
+### 8.6 -> 200
+DELETE {{contact}}/ZZ%20Acme%20Only
+Authorization: Bearer {{token}}
+
+### 8.6b -> 200
+DELETE {{contact}}/ZZ%20No%20Mail
+Authorization: Bearer {{token}}
+
+### 8.7 delete organizations -> 200|404 (one of the two names exists, depending on 5.1)
+DELETE {{org}}/ZZ%20Renamed%20Org
+Authorization: Bearer {{token}}
+
+### 8.8 -> 200|404
+DELETE {{org}}/ZZ%20Contact%20Org
+Authorization: Bearer {{token}}
+
+### 8.9 delete territories, leaves first -> 200
+DELETE {{territory}}/ZZ%20Berlin
+Authorization: Bearer {{token}}
+
+### 8.10 -> 200
+DELETE {{territory}}/ZZ%20Europe
+Authorization: Bearer {{token}}
+
+### 8.11 -> 200
+DELETE {{territory}}/ZZ%20World
+Authorization: Bearer {{token}}
+
+### 8.12 delete industry -> 200
+DELETE {{host}}/api/resource/CRM%20Industry/ZZ%20Industry
+Authorization: Bearer {{token}}
+
+### 8.13 nothing left behind -> 200, empty
+# @expect $.data count 0
+GET {{contact}}?fields=["name"]&filters=[["name","like","ZZ %25"]]
+Authorization: Bearer {{token}}

@@ -19,6 +19,11 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 7 | 03 / 5.8 | medium | A child-table row missing a mandatory field reaches the database and answers **409 DuplicateEntryError**, not `MandatoryError` | open |
 | 8 | 04 / 4.9, 5.1 | medium | Validation that depends on child rows runs **before the rows are written**, so expected-value auto-update and primary-contact derivation lag one save behind | open |
 | 9 | 04 / 4.12, 5.1 | **high** | A child row whose Link is given by name, as every form sends it, answers **500** — deal contacts and product lines with a product code cannot be written | open |
+| 10 | 05 / 2.7, 2.9, 2.10 | medium | Contact's primary-email and primary-phone rules are not applied on a document save: a lone email row is not made primary, a stray `email_id` is not cleared, two primaries are accepted | open |
+| 11 | 05 / 2.13 | low | Email addresses are never validated — on a contact's email rows, and `crm_lead.py:146` explicitly validates a lead's email too | open |
+| 12 | 05 / 3.12 | low | `crm.api.contact.*` on a contact that does not exist answers 417 `ValidationError`; upstream answers 403 `PermissionError` | open |
+| 13 | 05 / 5.1–5.5 | **high** | `rename_doc` inserts a copy and deletes the original: a referenced document cannot be renamed, and renaming a contact **deletes** its email and phone rows and its deal links | open |
+| 14 | 05 / 6.2, 6.3 | low | The territory tree is unmaintained: `lft`/`rgt` stay null and no tree resolver is registered, so `descendants of` answers 400. Latent — the frontend never sends it | open |
 
 ---
 
@@ -215,3 +220,93 @@ missing target surface as the 417 `LinkValidationError` upstream raises
 (`Could not find Row #1: Contact: ZZ Nobody`) rather than a 500. Finding 7's validation
 pass would be the natural place. **User-visible:** adding a contact to a deal, or a
 product with a code, fails outright through the document route.
+
+## 10. Contact's primary rules are not applied on a document save
+
+**Blocks:** `05_contacts_organizations.http` 2.6/2.7 (a lone email row is not made
+primary), 2.8/2.9 (a top-level `email_id` with no rows is not cleared), 2.10 (two
+primary rows accepted)
+
+**Expected:** `Contact.validate` (`contact.py:65`) calls `set_primary_email` and
+`set_primary("phone")` / `set_primary("mobile_no")` on every save: one row means it is
+primary; no rows means the mirror column is emptied; two primaries throw
+`Only one Email ID can be set as primary.` (417).
+
+**Actual:** the port's `Contact.save()` only derives `full_name`. The mirror columns are
+refreshed by `sync_primary_values`, which runs from a signal when a *child row* is
+written through `crm.api.contact.create_new` / `set_as_primary`, so those two endpoints
+behave; a document saved through `/api/resource/Contact` with rows inline gets none of
+the three rules. **User-visible:** a contact created with one email through the form
+shows no primary, and a deal that later picks it up derives an empty email.
+
+**Where:** `frappe_platform/models.py:Contact.save` — port the three methods, run them
+after the child rows are written (finding 8's ordering applies here too).
+
+## 11. Email addresses are never validated
+
+**Block:** `05_contacts_organizations.http` 2.13 — an email row `not-an-email`
+
+**Expected:** 417 `InvalidEmailAddressError`, *"not-an-email is not a valid Email
+Address"*. Upstream validates every `Data` field whose `options` is `Email`
+(`base_document.py:_validate_data_fields`), which covers `Contact Email.email_id`,
+`Contact.email_id`, `CRM Lead.email` and `CRM Deal.email`; and `crm_lead.py:146` calls
+`validate_email_address(self.email, throw=True)` explicitly on top.
+
+**Actual:** 200; any string is stored. The port's `CRMLead.validate_email` ports only the
+owner-equality check and drops the format check that precedes it.
+
+**Where:** `frappe_core/serializers.py` (a validator for fields declared Email in
+`doctype_meta.json`) and `CRMLead.validate_email`.
+
+## 12. A missing contact is a validation error, not a permission error
+
+**Block:** `05_contacts_organizations.http` 3.12
+
+**Expected:** 403 `PermissionError`, `Not permitted`. Upstream asks
+`frappe.has_permission("Contact", "write", name)`, which is False for a name that does
+not exist, and throws `PermissionError`.
+
+**Actual:** 417 `ValidationError` with the same words. `_require_contact` in
+`crm_app/api/contact.py` uses `throw()` for the missing case and `PermissionError` only
+for the denied case. Low, but the frontend branches on `PermissionError`.
+
+## 13. rename_doc is insert-then-delete
+
+**Blocks:** `05_contacts_organizations.http` 5.1/5.2 (organization referenced by a deal),
+5.3–5.5 (contact with email rows and a deal link)
+
+**Expected:** `frappe/model/rename_doc.py` renames in place: it updates the primary key
+and every Link, Dynamic Link and child `parent` column that pointed at the old name
+(`update_link_field_values`, `update_child_docs`), so the deal now points at
+`ZZ Renamed Org`, and the renamed contact keeps its two email rows, two phone rows and
+its place on the deal.
+
+**Actual:** `frappe.client.rename_doc` in `crm_app/api/client.py` inserts a copy under
+the new name and **deletes the original**. Two consequences:
+
+* a document any row links to with `PROTECT` cannot be renamed at all — 409 with
+  Django's "protected foreign keys" text (finding 3's rendering);
+* a document whose links are `CASCADE` renames "successfully" and **loses them**: the
+  contact came back with zero email rows and zero phone rows, and the deal's contacts
+  table was emptied. Silent data loss on an action the UI offers.
+
+**Where:** `client_rename_doc` — rename in place. Django cannot change a primary key with
+`save()`, so the faithful port is: insert the copy, repoint every inbound FK and
+polymorphic `parent`/`reference_name` column to the new name (the registry knows every
+model, and `children.discover_child_tables` knows the child rows), then delete the
+original. Until then the endpoint should refuse rather than cascade.
+
+## 14. The territory tree is unmaintained
+
+**Blocks:** `05_contacts_organizations.http` 6.2 (`lft`/`rgt` null), 6.3
+(`descendants of` → 400 "No tree resolver registered for 'CRM Territory'")
+
+**Expected:** `CRM Territory` is `is_tree` upstream, so `frappe/utils/nestedset.py`
+maintains `lft`/`rgt` on every write and `descendants of` finds the organization two
+levels down.
+
+**Actual:** neither. `crm_app/models/taxonomy.py:CRMTerritory` says phase 2 owns the tree
+behaviour; phase 2 built `crm_app/permissions/tree.py` for the sales hierarchy only and
+never registered a resolver, so `_TREE_RESOLVERS` is empty at runtime. Latent: the
+frontend never sends a tree operator and nothing reads `lft`/`rgt`. Recorded so the
+phase-2 spec's "give territory the same treatment" is known to be unfulfilled.

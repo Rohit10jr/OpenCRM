@@ -213,6 +213,10 @@ class Runner:
             return False, "body is not JSON"
         for path, op, raw in expects:
             try:
+                raw = self.resolve(raw)  # `{{deal}}` in an expectation means the captured name
+            except HttpError as exc:
+                return False, f"@expect {path}: {exc}"
+            try:
                 actual = json_path(body, path)
                 present = True
             except (KeyError, IndexError, TypeError):
