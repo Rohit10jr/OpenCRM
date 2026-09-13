@@ -14,7 +14,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 2 | 02 / 10.9, 10.10 | high | A document without a name, or a name containing `<`, answers **500** | open |
 | 3 | 02 / 10.11 | medium | Deleting a row another row links to answers **409 DuplicateEntryError** with Django's internal wording | open |
 | 4 | 02 / 10.4, 10.5 | low | Serializer validation answers **400**, the port's own validation answers **417**, both as `ValidationError` | open |
-| 5 | 01 / 1.11 | medium | An email typed in a different case cannot log in; upstream accepts `Ada@Example.com` | open |
+| 5 | 01 / 1.11 | medium | An email typed in a different case cannot log in; upstream accepts `Ada@Example.com` | **fixed** 13 Sep 2026 |
 | 6 | 01 / 1.4 | low | A malformed bearer token answers `exc_type: InvalidToken`, not `AuthenticationError` | open |
 | 7 | 03 / 5.8 | medium | A child-table row missing a mandatory field reaches the database and answers **409 DuplicateEntryError**, not `MandatoryError` | open |
 | 8 | 04 / 4.9, 5.1 | medium | Validation that depends on child rows runs **before the rows are written**, so expected-value auto-update and primary-contact derivation lag one save behind | open |
@@ -143,6 +143,11 @@ Not a blanket `.lower()`: the built-in `Administrator` is stored with its capita
 lookup should be `name__iexact` (or try exact, then lowercased). **User-visible:** anyone
 whose mail client capitalises their address gets "Invalid login credentials" for a
 correct password.
+
+**Fixed 13 Sep 2026.** `login` resolves the stored spelling with `name__iexact` before
+calling `authenticate`, and the disabled-account check reuses that lookup. Block 01 /
+1.11 is green; `tests/test_auth.py` covers the upper-case email, the mixed-case email,
+`administrator` typed in lower case, and a disabled account in a different case.
 
 ## 6. A malformed bearer token is not an `AuthenticationError`
 

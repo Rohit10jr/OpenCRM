@@ -69,6 +69,29 @@ def test_disabled_user_cannot_log_in(api, make_user):
     assert response.status_code == 401
 
 
+def test_login_is_case_insensitive_on_the_email(api, alice):
+    """Upstream's ``find_by_credentials`` compares the name under MariaDB's collation, so
+    any casing of the address logs in; the token names the stored, lowercased account."""
+    response = login(api, "ALICE@Example.com", "secret123")
+    assert response.status_code == 200
+    assert response.json()["message"]["user"] == alice.name
+
+
+def test_administrator_logs_in_under_its_capitalised_name(api, administrator):
+    administrator.set_password("secret123")
+    administrator.save()
+    response = login(api, "administrator", "secret123")
+    assert response.status_code == 200
+    assert response.json()["message"]["user"] == "Administrator"
+
+
+def test_disabled_user_is_reported_disabled_whatever_the_casing(api, make_user):
+    make_user("disabled@example.com", enabled=False)
+    response = login(api, "Disabled@Example.com", "secret123")
+    assert response.status_code == 401
+    assert response.json()["messages"] == ["User is disabled"]
+
+
 # --- the token actually authenticates -----------------------------------------
 
 
