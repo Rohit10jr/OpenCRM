@@ -14,6 +14,62 @@ differently, that is a finding, not a typo in this guide.
 
 ---
 
+## The suite — fifteen files that cover every endpoint
+
+The walkthrough below is the learning path. The **suite** is the numbered files in
+`docs/http/`, one per area, 944 requests in all, and it is what to run after any change
+to the backend. Each block's title carries the status it expects; the runner compares.
+
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+python scripts\run_http.py ..\docs\http\0*.http ..\docs\http\1*.http --mark
+python scripts\run_http.py ..\docs\http\99_lockout.http     # last: locks logins for 60 s
+```
+
+The first command runs files `00` to `14` in order, one after another, and prints a
+PASS or FAIL line per block and a total per file. `--mark` writes each file's name into
+the **Tested** column of `ROUTES.md` for every endpoint and doctype it touched, with a
+count of red lines if there were any. The second command runs the lockout test on its
+own, because eleven failed logins lock this machine's address for a minute and every
+login after it, yours included, is refused until the minute is up.
+
+**Results on 11 Sep 2026**, against the demo database. Every red line is a numbered
+entry in [`FINDINGS.md`](FINDINGS.md); a file stays red until its findings are fixed or
+recorded as deliberate divergences.
+
+| File | Result | Red lines are |
+|---|---|---|
+| 01 auth | 40 / 42 | findings 5, 6 |
+| 02 resource grammar | 74 / 80 | findings 1 to 4 |
+| 03 leads | 63 / 64 | finding 7 |
+| 04 deals | 65 / 73 | findings 8, 9 |
+| 05 contacts, organizations | 73 / 85 | findings 2, 10 to 14 |
+| 06 tasks, notes, calls | 53 / 59 | findings 15, 16 |
+| 07 views and metadata | 82 / 84 | finding 17 |
+| 08 activities, comments, notifications | 82 / 85 | findings 18, 19 |
+| 09 users and invitations | 76 / 76 | clean |
+| 10 dashboard | 32 / 35 | findings 20, 21 |
+| 11 permissions matrix | 92 / 92 | clean |
+| 12 settings singletons | 54 / 54 | clean |
+| 13 bulk and misc | 79 / 80 | finding 22 |
+| 14 unserved paths | 21 / 21 | clean, by definition |
+| 99 lockout | 14 / 14 | clean |
+
+Three things to know before running it:
+
+- **File 09 spends three of the five `change_password` calls allowed per five minutes.**
+  Run it twice inside that window and the change-back is refused, leaving ada's password
+  as the temporary one in the file.
+- **Each file cleans up what an earlier run left behind before it creates anything**, so a
+  run that died halfway does not make the next one fail. Every record it creates is
+  prefixed `ZZ`.
+- **The whole suite writes to the database it is pointed at.** It creates and deletes its
+  own records only, but it does toggle two FCRM Settings flags (forecasting and the sales
+  hierarchy) and resets the Manager Dashboard layout, restoring each at the end.
+
+---
+
 ## 0. Before you start
 
 **Servers.** Two PowerShell windows:
