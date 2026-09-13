@@ -631,7 +631,7 @@ Content-Type: application/json
 
 {"name": "ZZ Lead Script", "dt": "CRM Lead", "view": "Form", "enabled": 1, "script": "console.log('zz')"}
 
-### 7.3 a prompt doctype without a name -> 400|417
+### 7.3 a prompt doctype without a name -> 417
 # The serializer requires `name` for a prompt doctype, so this is refused before naming
 # runs: "name: This field is required." rather than upstream's "No Name Specified for CRM
 # Form Script". A 4xx either way; only the wording differs (finding 4's family).

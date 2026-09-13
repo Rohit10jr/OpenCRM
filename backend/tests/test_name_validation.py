@@ -18,7 +18,9 @@ from urllib.parse import quote
 
 import pytest
 
-from frappe_core.naming import NameError_, validate_name
+from frappe_core.exceptions import NameError as FrappeNameError
+from frappe_core.exceptions import ValidationError
+from frappe_core.naming import validate_name
 from tests_support.models import FieldDoc, PromptDoc
 
 pytestmark = pytest.mark.django_db
@@ -29,19 +31,19 @@ pytestmark = pytest.mark.django_db
 
 
 def test_empty_name_is_rejected():
-    with pytest.raises(NameError_, match="No Name Specified for Widget"):
+    with pytest.raises(ValidationError, match="No Name Specified for Widget"):
         validate_name("Widget", "")
 
 
 def test_name_starting_with_new_doctype_is_rejected():
     """naming.py:489-492 - Frappe's marker for a name that failed to generate."""
-    with pytest.raises(NameError_, match="please contact the administrator"):
+    with pytest.raises(FrappeNameError, match="please contact the administrator"):
         validate_name("Widget", "New Widget 1")
 
 
 def test_name_equal_to_the_doctype_is_rejected():
     """naming.py:495-496."""
-    with pytest.raises(NameError_, match="Name of Widget cannot be Widget"):
+    with pytest.raises(FrappeNameError, match="Name of Widget cannot be Widget"):
         validate_name("Widget", "Widget")
 
 
@@ -59,7 +61,7 @@ def test_doctype_named_DocType_is_exempt():
 def test_angle_brackets_are_rejected(name):
     """naming.py:498-501. The only characters Frappe forbids - and the reason matters:
     a name is rendered untrusted in every list view."""
-    with pytest.raises(NameError_, match="cannot contain special characters"):
+    with pytest.raises(FrappeNameError, match="cannot contain special characters"):
         validate_name("Widget", name)
 
 
@@ -97,13 +99,13 @@ def test_name_is_stripped_not_slugified():
 
 
 def test_a_generated_field_name_is_validated():
-    with pytest.raises(NameError_, match="cannot contain special characters"):
+    with pytest.raises(FrappeNameError, match="cannot contain special characters"):
         FieldDoc.objects.create(organization_name="<script>alert(1)</script>")
 
 
 def test_a_client_supplied_prompt_name_is_validated():
     """Upstream validates at insert regardless of origin (naming.py:181)."""
-    with pytest.raises(NameError_, match="cannot contain special characters"):
+    with pytest.raises(FrappeNameError, match="cannot contain special characters"):
         PromptDoc.objects.create(name="<b>x</b>", label="x")
 
 
@@ -173,3 +175,20 @@ def test_an_ordinary_name_is_unaffected(auth_api):
     url = "/api/resource/" + quote("Phase Zero Field") + "/" + quote("ScaleUp Labs")
 
     assert auth_api.get(url).json()["data"]["name"] == "ScaleUp Labs"
+
+
+# --- the strategies' own refusals are Frappe's, not a 500 (FINDINGS.md 2) -------
+
+
+def test_an_empty_naming_field_is_reported_by_its_label():
+    """``set_name_from_naming_options`` (naming.py:206-210): a ``field:`` doctype with
+    nothing in the field says "<Label> is required" - the label, not the fieldname -
+    with the default ``frappe.throw`` class, ``ValidationError``."""
+    with pytest.raises(ValidationError, match="^Organization Name is required$"):
+        FieldDoc.objects.create(organization_name="")
+
+
+def test_a_prompt_doctype_without_a_name_uses_upstreams_words():
+    """``_prompt_autoname`` (naming.py:562-569)."""
+    with pytest.raises(ValidationError, match="^Please set the document name$"):
+        PromptDoc.objects.create(label="x")

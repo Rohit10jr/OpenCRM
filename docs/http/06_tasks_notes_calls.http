@@ -152,7 +152,7 @@ Content-Type: application/json
 GET {{task}}/{{task1}}
 Authorization: Bearer {{token}}
 
-### 2.5 a status outside the Select -> 400|417 (finding 4)
+### 2.5 a status outside the Select -> 417
 # @expect $.exc_type == ValidationError
 PUT {{task}}/{{task1}}
 Authorization: Bearer {{token}}
@@ -160,7 +160,7 @@ Content-Type: application/json
 
 {"status": "Started"}
 
-### 2.6 a task without a title -> 400|417, title is mandatory
+### 2.6 a task without a title -> 417, title is mandatory
 POST {{task}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -218,7 +218,7 @@ Content-Type: application/json
 
 {"content": "<p>ZZ edited</p>"}
 
-### 3.3 a note needs a title -> 400|417
+### 3.3 a note needs a title -> 417
 POST {{note}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -260,7 +260,7 @@ Content-Type: application/json
 
 {"id": "ZZ-CALL-1", "type": "Incoming", "status": "No Answer", "from": "+49 30 9", "to": "+49 30 7", "receiver": "{{admin}}"}
 
-### 4.3 a status outside the Select -> 400|417
+### 4.3 a status outside the Select -> 417
 POST {{call}}
 Authorization: Bearer {{token}}
 Content-Type: application/json

@@ -80,6 +80,13 @@ def test_unknown_operator_is_rejected():
         build_q(Widget, [["status", "~=", "Open"]])
 
 
+def test_unknown_field_is_rejected():
+    """Otherwise ``Q(no_such_field=...)`` reaches the ORM, which raises ``FieldError``,
+    and the request answers 500 (FINDINGS.md 1)."""
+    with pytest.raises(FilterError, match="Unknown field 'no_such_field'"):
+        build_q(Widget, [["no_such_field", "=", "x"]])
+
+
 # --- criterion 4: @me in all three forms --------------------------------------
 
 

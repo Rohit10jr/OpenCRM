@@ -23,10 +23,12 @@ that field is the load-bearing one; ``exc_type`` drives the branching. Both are 
 from __future__ import annotations
 
 import json
+import re
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
+from django.db.models.deletion import ProtectedError, RestrictedError
 from django.http import Http404
 from rest_framework import exceptions as drf_exceptions
 from rest_framework.response import Response
@@ -79,6 +81,26 @@ class DuplicateEntryError(FrappeError):
     http_status_code = 409
 
 
+class NameError(FrappeError):  # noqa: A001 - shadows the builtin deliberately, as frappe.exceptions does
+    """``frappe.NameError``: the document's name itself is unacceptable.
+
+    Upstream declares it with 409 rather than ValidationError's 417
+    (``frappe/exceptions.py:50``); ``validate_name`` throws it for a name containing
+    ``<`` or ``>``, a name equal to the doctype, or the ``New <DocType>`` marker.
+    """
+
+    http_status_code = 409
+
+
+class LinkExistsError(ValidationError):
+    """``frappe.LinkExistsError``: the document is linked from another and cannot go.
+
+    Upstream checks every Link field before deleting (``delete_doc.py:
+    check_if_doc_is_linked``); the port's ``on_delete=PROTECT`` columns refuse at the
+    database, and ``frappe_exception_handler`` renders that refusal as this.
+    """
+
+
 def throw(message: str, exc: type[FrappeError] = ValidationError, title: str | None = None):
     """The port's ``frappe.throw``. Message text is preserved verbatim."""
     raise exc(message, title=title)
@@ -126,6 +148,125 @@ def _flatten_drf_detail(detail) -> list[str]:
     return [str(detail)]
 
 
+# Matched with ``isinstance``, most specific first. An exact-type map let SimpleJWT's
+# ``InvalidToken``, a subclass of ``AuthenticationFailed``, fall through to its own class
+# name, which ``frontend/src/stores/users.js`` does not branch on (FINDINGS.md 6). The
+# serializer's ``ValidationError`` is Frappe's ``ValidationError`` and answers 417 like
+# the port's own, not DRF's 400: upstream has one status for a validation failure, and
+# the frontend should not see two for the same ``exc_type`` (FINDINGS.md 4).
+_DRF_EXC_TYPES: tuple[tuple[type, str, int | None], ...] = (
+    (drf_exceptions.NotFound, "DoesNotExistError", None),
+    (drf_exceptions.PermissionDenied, "PermissionError", None),
+    (drf_exceptions.NotAuthenticated, "AuthenticationError", None),
+    (drf_exceptions.AuthenticationFailed, "AuthenticationError", None),
+    (drf_exceptions.ValidationError, "ValidationError", 417),
+)
+
+
+def _drf_exc_type(exc) -> tuple[str, int | None]:
+    """Frappe's label for a DRF exception, and the status to use instead of DRF's."""
+    for klass, label, status in _DRF_EXC_TYPES:
+        if isinstance(exc, klass):
+            return label, status
+    return type(exc).__name__, None
+
+
+def _drf_messages(exc) -> list[str]:
+    detail = exc.detail
+    if isinstance(exc, (drf_exceptions.AuthenticationFailed, drf_exceptions.NotAuthenticated)):
+        # SimpleJWT nests a per-token-class breakdown under ``messages``; the one
+        # sentence under ``detail`` is what a person should see.
+        if isinstance(detail, dict) and "detail" in detail:
+            return [str(detail["detail"])]
+    return _flatten_drf_detail(detail)
+
+
+def _doctype_of(model) -> str:
+    get_doctype = getattr(model, "get_doctype", None)
+    return get_doctype() if callable(get_doctype) else model.__name__
+
+
+def _is_child_table(model) -> bool:
+    """The registry's flag, not the model's: ``register_doctype(..., is_child_table=True)``
+    records it on the entry only, so ``model.is_child_table()`` answers False for a
+    child table declared that way (every CRM child table is)."""
+    # Lazy: registry is imported by models, which import this module.
+    from frappe_core import registry
+
+    try:
+        return bool(registry.get_entry(_doctype_of(model)).is_child_table)
+    except Exception:
+        is_child = getattr(model, "is_child_table", None)
+        return bool(is_child()) if callable(is_child) else False
+
+
+def _child_parent_name(row) -> str:
+    """The parent document's name for a child-table row, whatever the column is called:
+    ``parent`` as a string in Frappe's shape, or a ``parent_<x>`` foreign key."""
+    parent = getattr(row, "parent", None)
+    if isinstance(parent, str) and parent:
+        return parent
+    for field in type(row)._meta.fields:
+        if field.name.startswith("parent") and field.is_relation:
+            value = getattr(row, field.attname, None)
+            if value:
+                return str(value)
+    return ""
+
+
+def link_exists_error(exc: ProtectedError | RestrictedError) -> LinkExistsError:
+    """Frappe's sentence for a delete refused by a Link, built from Django's refusal.
+
+    ``delete_doc.py:raise_link_exists_exception`` names the document, the first document
+    that references it and, when the reference sits in a child table, that row's parent
+    and position. Django hands over the referencing rows; the deleted document is read
+    back through the foreign key that protected it, which the exception's own message
+    names by model class.
+    """
+    rows = (
+        getattr(exc, "protected_objects", None)
+        or getattr(exc, "restricted_objects", None)
+        or ()
+    )
+    # Django hands the rows over as a set; pick by name so the sentence is the same on
+    # every run, as upstream's is (the query's first row, ordered by the database).
+    row = min(rows, key=lambda r: str(r.pk), default=None)
+    if row is None:
+        return LinkExistsError(str(exc))
+
+    match = re.search(r"model '([^']+)'", str(exc))
+    deleted_model_name = match.group(1) if match else ""
+    doctype = name = ""
+    for field in type(row)._meta.fields:
+        related = getattr(field, "related_model", None)
+        if related is None or not field.is_relation:
+            continue
+        if deleted_model_name and related.__name__ != deleted_model_name:
+            continue
+        doctype = _doctype_of(related)
+        name = str(getattr(row, field.attname, "") or "")
+        break
+
+    reference_doctype = _doctype_of(type(row))
+    reference_name = str(row.pk)
+    at_position = ""
+    if _is_child_table(type(row)):
+        reference_doctype = str(getattr(row, "parenttype", "") or reference_doctype)
+        reference_name = _child_parent_name(row) or reference_name
+        at_position = f"at Row: {getattr(row, 'idx', '')}"
+
+    parts = (
+        "Cannot delete or cancel because",
+        doctype,
+        name,
+        "is linked with",
+        reference_doctype,
+        reference_name,
+        at_position,
+    )
+    return LinkExistsError(" ".join(part for part in parts if part))
+
+
 def frappe_exception_handler(exc, context):
     """DRF ``EXCEPTION_HANDLER``. Renders every error in the Frappe envelope."""
 
@@ -141,6 +282,13 @@ def frappe_exception_handler(exc, context):
         messages = list(exc.messages) if hasattr(exc, "messages") else [str(exc)]
         body = build_error_body("ValidationError", messages)
         return Response(body, status=417)
+
+    # Before IntegrityError: ProtectedError and RestrictedError subclass it, and a
+    # refused delete is not a duplicate (FINDINGS.md 3).
+    if isinstance(exc, (ProtectedError, RestrictedError)):
+        error = link_exists_error(exc)
+        body = build_error_body(error.exc_type, [error.message], error.title)
+        return Response(body, status=error.http_status_code)
 
     if isinstance(exc, IntegrityError):
         body = build_error_body("DuplicateEntryError", [str(exc)], "Duplicate")
@@ -161,16 +309,12 @@ def frappe_exception_handler(exc, context):
         return Response(body, status=400)
 
     if isinstance(exc, drf_exceptions.APIException):
-        exc_type = {
-            drf_exceptions.NotFound: "DoesNotExistError",
-            drf_exceptions.PermissionDenied: "PermissionError",
-            drf_exceptions.NotAuthenticated: "AuthenticationError",
-            drf_exceptions.AuthenticationFailed: "AuthenticationError",
-            drf_exceptions.ValidationError: "ValidationError",
-        }.get(type(exc), type(exc).__name__)
-        messages = _flatten_drf_detail(exc.detail)
+        exc_type, status_override = _drf_exc_type(exc)
+        messages = _drf_messages(exc)
         response = drf_exception_handler(exc, context)
-        status_code = response.status_code if response is not None else exc.status_code
+        status_code = status_override or (
+            response.status_code if response is not None else exc.status_code
+        )
         body = build_error_body(exc_type, messages)
         result = Response(body, status=status_code)
         if response is not None and getattr(response, "_headers", None):

@@ -403,6 +403,13 @@ def build_q(
         # `tests/test_field_security.py::test_a_secret_cannot_be_recovered_by_probing`.
         if is_hidden(model, fieldname, user):
             raise FilterError(f"Cannot filter on {fieldname!r}")
+        # A field the doctype does not have is the caller's mistake, not a crash: the
+        # ORM would raise FieldError and the request would answer 500 (FINDINGS.md 1).
+        # Same sentence as query.py uses for `fields=`. Upstream lets the database
+        # reject the column, also a 500; the port's contract is stricter on purpose.
+        field = _get_field(model, fieldname)
+        if field is None or not getattr(field, "concrete", False):
+            raise FilterError(f"Unknown field {fieldname!r} for this document type")
         path = resolve_field_path(model, fieldname)
         q = handler(model, path, fieldname, value)
         if result is None:

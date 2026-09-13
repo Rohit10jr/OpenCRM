@@ -202,7 +202,7 @@ Content-Type: application/json
 ###
 @deal4 = {{deal4.response.body.$.data.name}}
 
-### 2.5 organization on a deal IS a Link, unlike on a lead -> 400|417 (finding 4)
+### 2.5 organization on a deal IS a Link, unlike on a lead -> 417
 # @expect $.exc_type == ValidationError
 POST {{deal}}
 Authorization: Bearer {{token}}
@@ -443,7 +443,7 @@ Content-Type: application/json
 GET {{deal}}/{{deal3}}
 Authorization: Bearer {{token}}
 
-### 5.8 a contact row pointing at a contact that does not exist -> 400|417 (finding 4)
+### 5.8 a contact row pointing at a contact that does not exist -> 417 (500 today: finding 9)
 PUT {{deal}}/{{deal3}}
 Authorization: Bearer {{token}}
 Content-Type: application/json

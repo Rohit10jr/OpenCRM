@@ -253,7 +253,9 @@ Authorization: Bearer {{token}}
 GET {{org}}?fields=["name"]&filters=garbage
 Authorization: Bearer {{token}}
 
-### 6.9 filter on a field the doctype does not have -> 400|417 (500 would be a finding)
+### 6.9 filter on a field the doctype does not have -> 400, the port's FilterError (upstream: a database error)
+# @expect $.exc_type == ValidationError
+# @expect $.message contains Unknown field 'no_such_field'
 GET {{org}}?fields=["name"]&filters=[["no_such_field","=","x"]]
 Authorization: Bearer {{token}}
 
@@ -422,23 +424,27 @@ Content-Type: application/json
 
 {"owner": "ada@example.com", "creation": "2000-01-01T00:00:00Z"}
 
-### 10.9 POST without the naming field -> 417, "No Name Specified"
-# @expect $.message contains No Name Specified
+### 10.9 POST without the naming field -> 417, "Organization Name is required" (naming.py:206-210, the field's label)
+# @expect $.exc_type == ValidationError
+# @expect $.message == Organization Name is required
 POST {{org}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"website": "https://nameless.example"}
 
-### 10.10 POST a name containing < -> 417, Frappe's validate_name rule
-# @expect $.exc_type == ValidationError
+### 10.10 POST a name containing < -> 409, Frappe's NameError (validate_name, naming.py:498-501)
+# @expect $.exc_type == NameError
+# @expect $.message == Name cannot contain special characters like '<', '>'
 POST {{org}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"organization_name": "ZZ <script>"}
 
-### 10.11 deleting a row another row links to -> 417 (Frappe: LinkExistsError; 500 is a finding)
+### 10.11 deleting a row another row links to -> 417 LinkExistsError (delete_doc.py:452)
+# @expect $.exc_type == LinkExistsError
+# @expect $.message == Cannot delete or cancel because CRM Industry ZZ Grammar Industry is linked with CRM Organization ZZ Grammar Alpha
 DELETE {{host}}/api/resource/CRM%20Industry/ZZ%20Grammar%20Industry
 Authorization: Bearer {{token}}
 

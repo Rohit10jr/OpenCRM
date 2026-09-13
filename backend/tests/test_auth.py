@@ -114,6 +114,17 @@ def test_a_garbage_token_is_rejected(api):
     assert api.get(WIDGETS).status_code == 401
 
 
+def test_a_garbage_token_is_an_authentication_error(api):
+    """SimpleJWT raises ``InvalidToken``, a subclass of ``AuthenticationFailed``; the
+    envelope must label it as every other authentication failure, which is what
+    ``stores/users.js`` branches on, and carry one sentence, not SimpleJWT's nested
+    per-token-class breakdown."""
+    api.credentials(HTTP_AUTHORIZATION="Bearer not-a-real-token")
+    body = api.get(WIDGETS).json()
+    assert body["exc_type"] == "AuthenticationError"
+    assert body["messages"] == ["Given token not valid for any token type"]
+
+
 def test_token_identifies_the_right_user(api, alice, bob):
     """The JWT subject is the email PK, so ``@me`` and ``owner`` resolve correctly."""
     token = login(api, bob.name, "secret123").json()["message"]["access"]

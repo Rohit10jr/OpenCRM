@@ -10,12 +10,12 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 
 | # | Block | Severity | Summary | Status |
 |---|---|---|---|---|
-| 1 | 02 / 6.9 | medium | A filter on a field the doctype does not have answers **500** | open |
-| 2 | 02 / 10.9, 10.10 | high | A document without a name, or a name containing `<`, answers **500** | open |
-| 3 | 02 / 10.11 | medium | Deleting a row another row links to answers **409 DuplicateEntryError** with Django's internal wording | open |
-| 4 | 02 / 10.4, 10.5 | low | Serializer validation answers **400**, the port's own validation answers **417**, both as `ValidationError` | open |
+| 1 | 02 / 6.9 | medium | A filter on a field the doctype does not have answers **500** | **fixed** 13 Sep 2026 |
+| 2 | 02 / 10.9, 10.10 | high | A document without a name, or a name containing `<`, answers **500** | **fixed** 13 Sep 2026 |
+| 3 | 02 / 10.11 | medium | Deleting a row another row links to answers **409 DuplicateEntryError** with Django's internal wording | **fixed** 13 Sep 2026 |
+| 4 | 02 / 10.4, 10.5 | low | Serializer validation answers **400**, the port's own validation answers **417**, both as `ValidationError` | **fixed** 13 Sep 2026 |
 | 5 | 01 / 1.11 | medium | An email typed in a different case cannot log in; upstream accepts `Ada@Example.com` | **fixed** 13 Sep 2026 |
-| 6 | 01 / 1.4 | low | A malformed bearer token answers `exc_type: InvalidToken`, not `AuthenticationError` | open |
+| 6 | 01 / 1.4 | low | A malformed bearer token answers `exc_type: InvalidToken`, not `AuthenticationError` | **fixed** 13 Sep 2026 |
 | 7 | 03 / 5.8 | medium | A child-table row missing a mandatory field reaches the database and answers **409 DuplicateEntryError**, not `MandatoryError` | open |
 | 8 | 04 / 4.9, 5.1 | medium | Validation that depends on child rows runs **before the rows are written**, so expected-value auto-update and primary-contact derivation lag one save behind | open |
 | 9 | 04 / 4.12, 5.1 | **high** | A child row whose Link is given by name, as every form sends it, answers **500** — deal contacts and product lines with a product code cannot be written | open |
@@ -61,19 +61,26 @@ upstream is also a 500 here. The 4xx expectation is the port's
 own contract, not a fidelity requirement, and it is the better behaviour: a typo in a
 saved view's filter should not read as a server crash.
 
+**Fixed 13 Sep 2026.** `build_q` checks the field against the model's concrete columns
+before building the `Q` and raises `FilterError` with the sentence `fields=` already
+uses, `Unknown field 'x' for this document type`, so the answer is 400 like every
+other malformed filter. Block 02 / 6.9 is green.
+
 ## 2. Naming validation errors → 500
 
 **Blocks:** `02_resource_grammar.http` 10.9 (no `organization_name`) and 10.10 (name
 `ZZ <script>`)
 
-**Expected:** two different answers, both from `frappe/model/naming.py:validate_name`
-(version-15):
+**Expected:** two different answers from `frappe/model/naming.py` (version-15):
 
-* no name → `frappe.throw(_("No Name Specified for {0}"))` with the default exception,
-  `ValidationError`, so **417**;
-* `<` or `>` in the name → `frappe.throw(..., frappe.NameError)`, and `NameError` is
-  declared with `http_status_code = 409`, so **409** with `exc_type: NameError` and the
-  message `Name cannot contain special characters like '<', '>'`.
+* no name on a `field:` doctype → `set_name_from_naming_options` (naming.py:206-210)
+  throws `"{0} is required"` with the field's **label**, so **417** `ValidationError`
+  with the message `Organization Name is required`. (This entry first said "No Name
+  Specified for CRM Organization": that is `validate_name`'s sentence, which upstream
+  only reaches when nothing at all set the name. The `field:` check fires first.)
+* `<` or `>` in the name → `validate_name` throws `frappe.NameError`, declared with
+  `http_status_code = 409`, so **409** with `exc_type: NameError` and the message
+  `Name cannot contain special characters like '<', '>'`.
 
 The frontend branches on neither; it displays `messages[0]`, so the sentence is what a
 person sees.
@@ -88,6 +95,13 @@ the empty name and a `NameError` subclass of `FrappeError` (status 409) for the 
 both the status and the `exc_type` match upstream. **User-visible:** the Organization
 form's Save with an empty name shows a generic failure instead of the message written
 for it.
+
+**Fixed 13 Sep 2026.** `NameError_` is gone. `validate_name` raises the port's
+`ValidationError` for the empty name and a new `frappe_core.exceptions.NameError`
+(409) for the other three rules; the `field:` strategy raises `"<Label> is required"`,
+the `prompt` strategy `"Please set the document name"`, and the `format` strategy hands
+an empty result to `validate_name` as upstream does. Blocks 02 / 10.9 and 10.10 are
+green with the corrected expectations above.
 
 ## 3. Deleting a linked row → 409 with Django's wording
 
@@ -108,6 +122,12 @@ of model 'CRMIndustry' because they are referenced through protected foreign key
 and render it as `LinkExistsError` (417) with the Frappe sentence. The referencing rows
 are in `exc.protected_objects`.
 
+**Fixed 13 Sep 2026.** The handler catches `ProtectedError` and `RestrictedError`
+ahead of `IntegrityError` and renders a new `LinkExistsError` (417) whose message is
+built the way `delete_doc.py:raise_link_exists_exception` builds it: the document, the
+first referencing document by name, and for a reference in a child table the parent
+plus `at Row: <idx>`. Block 02 / 10.11 is green.
+
 ## 4. Two status codes for one exc_type
 
 **Blocks:** `02_resource_grammar.http` 10.4 (bad Select value) and 10.5 (Link to a
@@ -121,6 +141,11 @@ with `http_status_code = 417`, and the port's own `ValidationError` uses 417.
 400 from the serializer and 417 from model or filter code. The frontend branches on
 `exc_type`, not the number, so nothing breaks; it is an inconsistency, and the reason the
 suite keeps 417 as the expectation is that `PORT_PLAN.md` §3 fixes the wire protocol.
+
+**Fixed 13 Sep 2026.** The handler answers 417 for DRF's `ValidationError`, so the
+serializer and the port's own validation agree. Blocks 02 / 10.4 and 10.5 are green,
+and the `400|417` titles that accepted this in files 03, 04, 06 and 07 are back to
+`417`. `FilterError` keeps its 400: that is a separate, documented contract of the port.
 
 **Where:** `frappe_core/exceptions.py`, the `drf_exceptions.APIException` branch — use 417
 when the mapped `exc_type` is `ValidationError`.
@@ -165,6 +190,11 @@ name.
 **Where:** `frappe_core/exceptions.py` — match with `isinstance` rather than the exact
 type, or add `InvalidToken` to the map. The status is already right, so the frontend's
 refresh-on-401 works; only the label and message differ.
+
+**Fixed 13 Sep 2026.** The handler matches DRF exceptions with `isinstance`, most
+specific first, so every `AuthenticationFailed` subclass is an `AuthenticationError`,
+and for those it keeps only the one sentence under SimpleJWT's `detail` instead of the
+nested per-token-class breakdown. Block 01 / 1.4 is green.
 
 ## 7. A child row missing a mandatory field is a database error
 

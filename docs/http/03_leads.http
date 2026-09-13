@@ -174,7 +174,7 @@ Content-Type: application/json
 ###
 @lead5 = {{lead5.response.body.$.data.name}}
 
-### 2.8 a status that does not exist -> 400|417 (417 upstream; 400 is finding 4, logged once, accepted here)
+### 2.8 a status that does not exist -> 417
 # @expect $.exc_type == ValidationError
 POST {{lead}}
 Authorization: Bearer {{token}}
@@ -182,7 +182,7 @@ Content-Type: application/json
 
 {"first_name": "ZZ Bad Status", "status": "No Such Status", "lead_owner": "{{admin}}"}
 
-### 2.9 a lead_owner that is not a user -> 400|417 (417 upstream; 400 is finding 4, logged once, accepted here)
+### 2.9 a lead_owner that is not a user -> 417
 # @expect $.exc_type == ValidationError
 POST {{lead}}
 Authorization: Bearer {{token}}
@@ -275,7 +275,7 @@ Content-Type: application/json
 
 {"status": "Junk", "lost_reason": "ZZ No Budget"}
 
-### 3.8 a lost reason that does not exist -> 400|417 (417 upstream; 400 is finding 4, logged once, accepted here)
+### 3.8 a lost reason that does not exist -> 417
 # @expect $.exc_type == ValidationError
 PUT {{lead}}/{{lead2}}
 Authorization: Bearer {{token}}
