@@ -26,11 +26,11 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 14 | 05 / 6.2, 6.3 | low | The territory tree is unmaintained: `lft`/`rgt` stay null and no tree resolver is registered, so `descendants of` answers 400. Latent — the frontend never sends it | open |
 | 15 | 06 / 2.2, 2.4 | medium | A task's `assigned_to` never becomes an assignment: no ToDo, empty `_assign`, and changing it does not unassign the previous user | open |
 | 16 | 06 / 2.8, 3.4, 4.7, 4.9 | **high** | Task, Note and Call Log declare no list columns or rows, so their three screens fall back to Name and Last Modified; call-log rows are not parsed and the document hides its `links` | open |
-| 17 | 07 / 1.6, 5.8 | medium | A method endpoint given a doctype that does not exist answers **500**: `registry.DocTypeNotFound` is a bare `KeyError` the handler never maps | open |
+| 17 | 07 / 1.6, 5.8 | medium | A method endpoint given a doctype that does not exist answers **500**: `registry.DocTypeNotFound` is a bare `KeyError` the handler never maps | **fixed** 13 Sep 2026 |
 | 18 | 08 / 3.11, 3.12 | medium | Assigning a document to someone never notifies them: nothing listens to ToDo writes, where `crm/api/todo.py` raises the Assignment notification | open |
 | 19 | 08 / 7.2 | medium | Deleting a document leaves its comments, communications, ToDos and notifications behind; upstream removes them with the document | open |
 | 20 | 10 / 2.15, 2.16 | medium | Six of upstream's nineteen dashboard charts were never built; a tile using one renders `Invalid chart name` | open, known |
-| 21 | 10 / 2.18 | low | A dashboard date that does not parse answers **500**; upstream's `getdate` throws 417 "… is not a valid date string." | open |
+| 21 | 10 / 2.18 | low | A dashboard date that does not parse answers **500**; upstream's `getdate` throws 417 "… is not a valid date string." | **fixed** 13 Sep 2026 |
 | 22 | 13 / 4.8 | low | A **private** File attached to nothing is readable by every user; upstream lets only its owner read it | open |
 
 ---
@@ -418,6 +418,11 @@ unaffected only because `views._resolve_routable_entry` catches it and raises th
 (one line, and `_resolve_routable_entry`'s translation becomes redundant), or map it in
 the handler alongside `Http404`.
 
+**Fixed 13 Sep 2026.** `DocTypeNotFound` subclasses `DoesNotExistError` as well as
+`KeyError`, reports `exc_type: DoesNotExistError`, and carries `DocType X not found`
+as its message. Blocks 07 / 1.6 and 5.8 are green; the resource view's own
+translation is left in place.
+
 ## 18. Assigning a document to someone never notifies them
 
 **Blocks:** `08_activities_comments_notifications.http` 3.11, 3.12
@@ -493,6 +498,12 @@ the six from the editor gets a broken tile.
 catches. Low: the frontend's date picker only ever sends ISO dates, so it is reachable
 by hand rather than by a click. Same family as findings 1, 2 and 17 — a plain Python
 exception where a `FrappeError` was meant.
+
+**Fixed 13 Sep 2026.** `_parse_date` uses dateutil's parser as `getdate` does, so the
+formats upstream accepts are accepted, and an unparseable string raises
+`ValidationError` with upstream's sentence verbatim, `frappe.bold` included:
+`<strong>yesterday</strong> is not a valid date string.`, titled "Invalid Date". Block
+10 / 2.18 is green.
 
 ## 22. A private, unattached File is readable by everyone
 

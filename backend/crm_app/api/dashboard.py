@@ -22,9 +22,12 @@ from __future__ import annotations
 
 import datetime
 
+from dateutil import parser as date_parser
+from dateutil.parser import ParserError
 from django.db.models import Avg, Count, Q, Sum
 
 from frappe_core.exceptions import PermissionError as FrappePermissionError
+from frappe_core.exceptions import ValidationError
 from frappe_core.query import base_queryset
 from frappe_core.session import get_current_user
 from frappe_core.whitelist import whitelist
@@ -78,7 +81,16 @@ def _parse_date(value) -> datetime.date | None:
         return value.date()
     if isinstance(value, datetime.date):
         return value
-    return datetime.date.fromisoformat(str(value)[:10])
+    # ``frappe.utils.getdate`` (data.py:87-107): dateutil's parser, so the formats it
+    # takes are the ones upstream takes, and a string it cannot read is a
+    # ValidationError titled "Invalid Date" - verbatim, ``frappe.bold`` included - not
+    # the 500 that ``date.fromisoformat`` raised (FINDINGS.md 21).
+    try:
+        return date_parser.parse(str(value)).date()
+    except (ParserError, ValueError, OverflowError):
+        raise ValidationError(
+            f"<strong>{value}</strong> is not a valid date string.", title="Invalid Date"
+        ) from None
 
 
 def resolve_range(from_date, to_date) -> tuple[datetime.date, datetime.date]:

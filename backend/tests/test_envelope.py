@@ -220,3 +220,16 @@ def test_a_filter_on_an_unknown_field_is_a_client_error(auth_api):
     body = response.json()
     assert body["exc_type"] == "ValidationError"
     assert body["message"] == "Unknown field 'no_such_field' for this document type"
+
+
+def test_an_unknown_doctype_on_a_method_endpoint_is_404(auth_api):
+    """``registry.DocTypeNotFound`` was a bare ``KeyError``, a 500 on every method
+    endpoint that resolves a doctype; the resource routes translated it themselves.
+    Upstream's ``frappe.get_meta`` raises ``DoesNotExistError`` (FINDINGS.md 17)."""
+    response = auth_api.post(
+        "/api/method/crm.api.doc.get_fields", {"doctype": "No Such Doctype"}, format="json"
+    )
+    assert response.status_code == 404
+    body = response.json()
+    assert body["exc_type"] == "DoesNotExistError"
+    assert body["message"] == "DocType No Such Doctype not found"

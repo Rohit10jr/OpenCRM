@@ -295,8 +295,9 @@ Content-Type: application/json
 
 {"name": "total_leads", "type": "number"}
 
-### 2.18 dates that do not parse -> 417 (frappe.utils.getdate throws "... is not a valid date string."; 500 today: finding 21)
+### 2.18 dates that do not parse -> 417, frappe.utils.getdate's sentence, frappe.bold included
 # @expect $.exc_type == ValidationError
+# @expect $.message == <strong>yesterday</strong> is not a valid date string.
 POST {{host}}/api/method/{{dash}}.get_chart
 Authorization: Bearer {{token}}
 Content-Type: application/json

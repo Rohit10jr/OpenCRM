@@ -161,8 +161,9 @@ Content-Type: application/json
 
 {"doctype": "CRM Lead", "allow_all_fieldtypes": true}
 
-### 1.6 an unknown doctype -> 404 (500 today: finding 17 - DocTypeNotFound is not a FrappeError)
+### 1.6 an unknown doctype -> 404 DoesNotExistError, as frappe.get_meta raises it
 # @expect $.exc_type == DoesNotExistError
+# @expect $.message == DocType No Such Doctype not found
 POST {{host}}/api/method/crm.api.doc.get_fields
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -542,8 +543,9 @@ Content-Type: application/json
 
 {"doctype": "CRM Organization", "filters": {}, "page_length": 1, "view": {"view_type": "list"}}
 
-### 5.8 an unknown doctype -> 404 (500 today: finding 17)
+### 5.8 an unknown doctype -> 404 DoesNotExistError
 # @expect $.exc_type == DoesNotExistError
+# @expect $.message == DocType No Such Doctype not found
 POST {{host}}/api/method/crm.api.doc.get_data
 Authorization: Bearer {{token}}
 Content-Type: application/json
