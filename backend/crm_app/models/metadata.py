@@ -158,7 +158,7 @@ class CRMDashboard(BaseDocument):
 
     class Meta:
         ordering = ["name"]
-        name_strategy = FieldValue("title")
+        name_strategy = FieldValue("title", label="Name")
 
 
 @register_doctype("CRM Notification")

@@ -67,7 +67,7 @@ class FacebookPage(EncryptedFieldsMixin, BaseDocument):
 
     class Meta:
         ordering = ["name"]
-        name_strategy = FieldValue("id")
+        name_strategy = FieldValue("id", label="ID")
 
 
 @register_doctype("Facebook Lead Form")
@@ -82,7 +82,7 @@ class FacebookLeadForm(BaseDocument):
 
     class Meta:
         ordering = ["name"]
-        name_strategy = FieldValue("id")
+        name_strategy = FieldValue("id", label="ID")
 
 
 @register_doctype("Facebook Lead Form Question", is_child_table=True)

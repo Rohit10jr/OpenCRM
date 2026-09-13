@@ -208,10 +208,13 @@ class FieldValue(NameStrategy):
     matching Frappe's ``DuplicateEntryError``.
     """
 
-    def __init__(self, fieldname: str):
+    def __init__(self, fieldname: str, label: str | None = None):
         if not fieldname:
             raise ValueError("FieldValue requires a fieldname")
         self.fieldname = fieldname
+        #: The DocType JSON label for the "{0} is required" message, where it is not
+        #: the title-cased fieldname: ``id`` is "ID", ``lead_status`` is "Status".
+        self.label = label
 
     def __repr__(self) -> str:
         return f"FieldValue({self.fieldname!r})"
@@ -226,9 +229,8 @@ class FieldValue(NameStrategy):
             # set_name_from_naming_options (naming.py:206-210): a ``field:`` doctype
             # with nothing in the field answers "<Label> is required", not the generic
             # "No Name Specified" that validate_name would give.
-            raise frappe_exceptions.ValidationError(
-                f"{_field_label(instance, self.fieldname)} is required"
-            )
+            label = self.label or _field_label(instance, self.fieldname)
+            raise frappe_exceptions.ValidationError(f"{label} is required")
         return value
 
 

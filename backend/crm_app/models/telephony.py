@@ -112,7 +112,7 @@ class CRMCallLog(BaseDocument):
 
     class Meta:
         ordering = ["-creation"]
-        name_strategy = FieldValue("id")
+        name_strategy = FieldValue("id", label="ID")
         indexes = [
             models.Index(
                 fields=["reference_doctype", "reference_docname"], name="call_log_reference_idx"

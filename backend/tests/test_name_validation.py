@@ -188,6 +188,15 @@ def test_an_empty_naming_field_is_reported_by_its_label():
         FieldDoc.objects.create(organization_name="")
 
 
+def test_a_strategy_can_carry_the_doctype_json_label():
+    """Where the JSON label is not the title-cased fieldname - ``id`` is "ID",
+    ``lead_status`` is "Status" - the strategy is told the label explicitly."""
+    from frappe_core.naming import FieldValue
+
+    with pytest.raises(ValidationError, match="^Org is required$"):
+        FieldValue("organization_name", label="Org").generate(FieldDoc(organization_name=""))
+
+
 def test_a_prompt_doctype_without_a_name_uses_upstreams_words():
     """``_prompt_autoname`` (naming.py:562-569)."""
     with pytest.raises(ValidationError, match="^Please set the document name$"):

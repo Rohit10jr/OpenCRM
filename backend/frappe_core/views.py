@@ -90,7 +90,7 @@ def _candidate_instance(entry, data):
     excluding relations costs nothing and avoids a class of error entirely.
 
     Falls back to an empty instance if the payload will not construct one. A malformed
-    body is the serializer's business to reject with a 400; failing here would answer a
+    body is the serializer's business to reject with a 417; failing here would answer a
     validation problem with a permission error.
     """
     model = entry.model

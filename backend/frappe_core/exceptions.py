@@ -234,26 +234,41 @@ def link_exists_error(exc: ProtectedError | RestrictedError) -> LinkExistsError:
     if row is None:
         return LinkExistsError(str(exc))
 
-    match = re.search(r"model '([^']+)'", str(exc))
+    # Django's message names the deleted model ("model 'CRMIndustry'") and every
+    # protecting field ("'CRMOrganization.industry'"). A row can hold two links to the
+    # same doctype - ``owner`` and ``modified_by`` on every document - so the field is
+    # taken from the message, not from the first foreign key pointing at the model.
+    message = str(exc)
+    match = re.search(r"model '([^']+)'", message)
     deleted_model_name = match.group(1) if match else ""
+    named_fields = {
+        fieldname
+        for model_name, fieldname in re.findall(r"'(\w+)\.(\w+)'", message)
+        if model_name == type(row).__name__
+    }
+    candidates = [
+        field
+        for field in type(row)._meta.fields
+        if field.is_relation
+        and field.related_model is not None
+        and (not deleted_model_name or field.related_model.__name__ == deleted_model_name)
+    ]
+    field = next((f for f in candidates if f.name in named_fields), None)
+    if field is None and candidates:
+        field = candidates[0]
     doctype = name = ""
-    for field in type(row)._meta.fields:
-        related = getattr(field, "related_model", None)
-        if related is None or not field.is_relation:
-            continue
-        if deleted_model_name and related.__name__ != deleted_model_name:
-            continue
-        doctype = _doctype_of(related)
+    if field is not None:
+        doctype = _doctype_of(field.related_model)
         name = str(getattr(row, field.attname, "") or "")
-        break
 
+    # A Link in a child table is reported as the parent document (delete_doc.py:
+    # 318-341), with no row position: only the dynamic-link check adds "at Row", and
+    # the port's foreign keys are all static Links.
     reference_doctype = _doctype_of(type(row))
     reference_name = str(row.pk)
-    at_position = ""
     if _is_child_table(type(row)):
         reference_doctype = str(getattr(row, "parenttype", "") or reference_doctype)
         reference_name = _child_parent_name(row) or reference_name
-        at_position = f"at Row: {getattr(row, 'idx', '')}"
 
     parts = (
         "Cannot delete or cancel because",
@@ -262,7 +277,6 @@ def link_exists_error(exc: ProtectedError | RestrictedError) -> LinkExistsError:
         "is linked with",
         reference_doctype,
         reference_name,
-        at_position,
     )
     return LinkExistsError(" ".join(part for part in parts if part))
 
@@ -317,7 +331,10 @@ def frappe_exception_handler(exc, context):
         )
         body = build_error_body(exc_type, messages)
         result = Response(body, status=status_code)
-        if response is not None and getattr(response, "_headers", None):
+        # Retry-After on a 429, WWW-Authenticate on a 401: DRF's handler sets them on
+        # its response, and they must ride along. (An earlier guard on a ``_headers``
+        # attribute, gone from HttpResponse since Django 3.2, silently dropped them.)
+        if response is not None:
             for key, value in response.items():
                 result[key] = value
         return result

@@ -169,10 +169,14 @@ lookup should be `name__iexact` (or try exact, then lowercased). **User-visible:
 whose mail client capitalises their address gets "Invalid login credentials" for a
 correct password.
 
-**Fixed 13 Sep 2026.** `login` resolves the stored spelling with `name__iexact` before
-calling `authenticate`, and the disabled-account check reuses that lookup. Block 01 /
+**Fixed 13 Sep 2026.** `login` resolves the stored spelling, exact first and then
+`name__iexact`, before calling `authenticate`; the review pointed out that `iexact`
+alone could match both the built-in `Administrator` and a user literally named
+`administrator`. The disabled-account check reuses that lookup and, as upstream's
+`LoginManager.authenticate` does, runs only after the password is verified. Block 01 /
 1.11 is green; `tests/test_auth.py` covers the upper-case email, the mixed-case email,
-`administrator` typed in lower case, and a disabled account in a different case.
+`administrator` typed in lower case, the exact-name precedence, and a disabled account
+with the right and the wrong password.
 
 ## 6. A malformed bearer token is not an `AuthenticationError`
 

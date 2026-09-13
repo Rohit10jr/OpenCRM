@@ -86,10 +86,37 @@ def test_administrator_logs_in_under_its_capitalised_name(api, administrator):
 
 
 def test_disabled_user_is_reported_disabled_whatever_the_casing(api, make_user):
+    """``LoginManager.authenticate`` (auth.py:275-278): the right password on a
+    disabled account answers "User disabled or missing"."""
     make_user("disabled@example.com", enabled=False)
     response = login(api, "Disabled@Example.com", "secret123")
     assert response.status_code == 401
-    assert response.json()["messages"] == ["User is disabled"]
+    assert response.json()["messages"] == ["User disabled or missing"]
+
+
+def test_a_wrong_password_on_a_disabled_account_reads_like_any_wrong_password(api, make_user):
+    """auth.py:271-274 checks the password first, so a disabled account cannot be told
+    apart from a missing one without its password."""
+    make_user("disabled@example.com", enabled=False)
+    response = login(api, "disabled@example.com", "wrong")
+    assert response.status_code == 401
+    assert response.json()["messages"] == ["Invalid login credentials"]
+
+
+def test_an_exact_name_wins_over_a_case_insensitive_match(api, administrator, make_user):
+    """A user literally named "administrator" would otherwise share a login name with
+    the built-in. Exact spelling first, then the case-insensitive fallback."""
+    administrator.set_password("admin-secret")
+    administrator.save()
+    make_user("administrator", password="shadow-secret")
+
+    assert login(api, "Administrator", "admin-secret").json()["message"]["user"] == (
+        "Administrator"
+    )
+    assert login(api, "administrator", "shadow-secret").json()["message"]["user"] == (
+        "administrator"
+    )
+    assert login(api, "administrator", "admin-secret").status_code == 401
 
 
 # --- the token actually authenticates -----------------------------------------

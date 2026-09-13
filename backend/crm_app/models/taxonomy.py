@@ -52,7 +52,7 @@ class CRMLeadStatus(BaseDocument):
 
     class Meta:
         ordering = ["position"]
-        name_strategy = FieldValue("lead_status")
+        name_strategy = FieldValue("lead_status", label="Status")
 
 
 @register_doctype("CRM Deal Status")
@@ -67,7 +67,7 @@ class CRMDealStatus(BaseDocument):
 
     class Meta:
         ordering = ["position"]
-        name_strategy = FieldValue("deal_status")
+        name_strategy = FieldValue("deal_status", label="Status")
 
 
 @register_doctype("CRM Lead Source")

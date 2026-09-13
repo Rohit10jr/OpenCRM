@@ -144,19 +144,21 @@ def test_the_account_key_is_case_insensitive(api, alice, settings):
     assert response.status_code == 403
 
 
-def test_a_disabled_account_does_not_count_as_a_failure(api, make_user, settings):
-    """Deliberate: counting it would let anyone lock out a colleague by repeatedly
-    "logging in" as them with the right password."""
+def test_a_disabled_account_counts_as_a_failure_like_upstream(api, make_user, settings):
+    """``LoginManager.authenticate`` (auth.py:275-278) adds a failure to both trackers
+    for the right password on a disabled account. An earlier port chose not to count
+    it, so that nobody could keep a colleague locked after re-enabling; but reaching
+    this branch needs the account's password, and matching upstream is the rule."""
     settings.LOGIN_MAX_CONSECUTIVE_ATTEMPTS = 2
     user = make_user("off@example.com")
     user.enabled = False
     user.save()
 
-    for _ in range(4):
+    for _ in range(3):
         response = api.post(LOGIN, {"usr": user.name, "pwd": "secret123"}, format="json")
 
     assert response.json()["exc_type"] == "AuthenticationError"
-    assert LoginAttemptTracker("off@example.com").is_user_allowed() is True
+    assert LoginAttemptTracker("off@example.com").is_user_allowed() is False
 
 
 def test_an_unknown_user_still_counts(api, settings):

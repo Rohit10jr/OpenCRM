@@ -185,9 +185,10 @@ def test_deleting_a_linked_document_is_a_link_exists_error(administrator, api_as
     assert CRMIndustry.objects.filter(pk="ZZ Fintech").exists()
 
 
-def test_a_link_from_a_child_row_names_the_parent_and_the_row():
-    """``delete_doc.py:412-433``: a reference that sits in a child table is reported as
-    the parent document plus ``at Row: <idx>``, never as the child row itself."""
+def test_a_link_from_a_child_row_names_the_parent():
+    """``delete_doc.py:318-341``: a Link that sits in a child table is reported as the
+    parent document, never as the child row itself, and with no row position: only the
+    dynamic-link check adds ``at Row``, and the port's foreign keys are static Links."""
     from django.db.models.deletion import ProtectedError
 
     from crm_app.models.core_sales import CRMContacts, CRMDeal
@@ -208,8 +209,47 @@ def test_a_link_from_a_child_row_names_the_parent_and_the_row():
     assert error.http_status_code == 417
     assert error.message == (
         "Cannot delete or cancel because Contact Ada Lovelace "
-        "is linked with CRM Deal CRM-DEAL-2026-00001 at Row: 2"
+        "is linked with CRM Deal CRM-DEAL-2026-00001"
     )
+
+
+def test_the_link_named_in_the_refusal_is_the_one_reported():
+    """A row can hold two links to the same doctype - every document has ``owner`` and
+    ``modified_by`` - so the foreign key is matched by the field Django names, not by
+    the first field pointing at the model."""
+    from django.db.models.deletion import ProtectedError
+
+    from crm_app.models.core_sales import CRMLead
+    from frappe_core.exceptions import link_exists_error
+    from frappe_platform.models import User
+
+    lead = CRMLead(name="CRM-LEAD-2026-00001")
+    lead.owner = User(name="alice@example.com")
+    lead.modified_by = User(name="bob@example.com")
+    refusal = ProtectedError(
+        "Cannot delete some instances of model 'User' because they are referenced "
+        "through protected foreign keys: 'CRMLead.modified_by'.",
+        {lead},
+    )
+
+    assert link_exists_error(refusal).message == (
+        "Cannot delete or cancel because User bob@example.com "
+        "is linked with CRM Lead CRM-LEAD-2026-00001"
+    )
+
+
+def test_drf_response_headers_survive_the_envelope():
+    """``Retry-After`` on a 429 and ``WWW-Authenticate`` on a 401 are set by DRF's own
+    handler; the envelope must carry them across rather than check a ``_headers``
+    attribute Django's ``HttpResponse`` no longer has."""
+    from rest_framework.exceptions import Throttled
+
+    from frappe_core.exceptions import frappe_exception_handler
+
+    response = frappe_exception_handler(Throttled(wait=7), {})
+
+    assert response.status_code == 429
+    assert response["Retry-After"] == "7"
 
 
 def test_a_filter_on_an_unknown_field_is_a_client_error(auth_api):
