@@ -254,8 +254,67 @@ def delete_polymorphic_children(instance) -> int:
     return removed
 
 
+#: ``frappe/model/delete_doc.py:delete_dynamic_links`` (459-467) and the
+#: ``clear_references`` that follow it (470-473), for the reference doctypes this port
+#: has: rows keyed to the document by doctype and name are deleted, except a
+#: Communication, whose reference is cleared - an email is kept, it just no longer
+#: points anywhere. Files go with the document too (``remove_all``, delete_doc.py:160).
+_REFERENCE_CLEANUP: tuple[tuple[str, str, str, str], ...] = (
+    ("ToDo", "reference_type", "reference_name", "delete"),
+    ("Version", "ref_doctype", "docname", "delete"),
+    ("Comment", "reference_doctype", "reference_name", "delete"),
+    ("File", "attached_to_doctype", "attached_to_name", "delete"),
+    ("Communication", "reference_doctype", "reference_name", "clear"),
+)
+
+
+#: True while a caller has already cleaned the references for a whole batch, so the
+#: per-row hook below stands down: a bulk delete does one query per reference doctype
+#: for every name at once (the C9 shape), not one per deleted row.
+_REFERENCES_HANDLED = contextvars.ContextVar("frappe_core.children.references_handled", default=False)
+
+
+def delete_references_batch(doctype: str, names: list[str]) -> int:
+    """Remove what named the deleted documents by doctype and name (FINDINGS.md 19).
+    Returns the number of rows deleted or cleared."""
+    if not names:
+        return 0
+    touched = 0
+    for reference_doctype, doctype_column, name_column, action in _REFERENCE_CLEANUP:
+        if not registry.has_doctype(reference_doctype):
+            continue
+        rows = registry.get_model(reference_doctype)._default_manager.filter(
+            **{doctype_column: doctype, f"{name_column}__in": names}
+        )
+        if action == "delete":
+            count, _ = rows.delete()
+        else:
+            count = rows.update(**{doctype_column: "", name_column: ""})
+        touched += count
+    return touched
+
+
+def delete_references(instance) -> int:
+    return delete_references_batch(type(instance).get_doctype(), [str(instance.pk)])
+
+
+class references_handled:  # noqa: N801 - used as a context manager
+    """``with children.references_handled():`` around a bulk delete whose caller ran
+    :func:`delete_references_batch` itself."""
+
+    def __enter__(self):
+        self._token = _REFERENCES_HANDLED.set(True)
+        return self
+
+    def __exit__(self, *exc):
+        _REFERENCES_HANDLED.reset(self._token)
+        return False
+
+
 def _on_parent_delete(sender, instance, **kwargs):
     delete_polymorphic_children(instance)
+    if not _REFERENCES_HANDLED.get():
+        delete_references(instance)
 
 
 def connect_cascade(model) -> None:

@@ -528,7 +528,14 @@ def perform_bulk_delete(doctype: str, targets: list[str], delete_linked: bool = 
         for link in _linked_docs_for_batch(doctype, targets):
             _clear_or_delete_link(link, remove_contact=(doctype == "Contact"), delete=delete_linked)
 
-        entry.model._default_manager.filter(pk__in=targets).delete()
+        # The reference cleanup delete_doc.py does per document (ToDo, Version, Comment,
+        # File, Communication) is batched the same way: one query per reference doctype
+        # for the whole batch, and the per-row hook stands down.
+        from frappe_core import children
+
+        children.delete_references_batch(doctype, targets)
+        with children.references_handled():
+            entry.model._default_manager.filter(pk__in=targets).delete()
 
 
 @whitelist("crm.api.doc.delete_bulk_docs")
