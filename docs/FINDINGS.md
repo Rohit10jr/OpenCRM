@@ -23,8 +23,8 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 11 | 05 / 2.13 | low | Email addresses are never validated — on a contact's email rows, and `crm_lead.py:146` explicitly validates a lead's email too | **fixed** 14 Sep 2026 |
 | 12 | 05 / 3.12 | low | `crm.api.contact.*` on a contact that does not exist answers 417 `ValidationError`; upstream answers 403 `PermissionError` | **fixed** 14 Sep 2026 |
 | 13 | 05 / 5.1–5.5 | **high** | `rename_doc` inserts a copy and deletes the original: a referenced document cannot be renamed, and renaming a contact **deletes** its email and phone rows and its deal links | **fixed** 14 Sep 2026 |
-| 14 | 05 / 6.2, 6.3 | low | The territory tree is unmaintained: `lft`/`rgt` stay null and no tree resolver is registered, so `descendants of` answers 400. Latent — the frontend never sends it | open |
-| 15 | 06 / 2.2, 2.4 | medium | A task's `assigned_to` never becomes an assignment: no ToDo, empty `_assign`, and changing it does not unassign the previous user | open |
+| 14 | 05 / 6.2, 6.3 | low | The territory tree is unmaintained: `lft`/`rgt` stay null and no tree resolver is registered, so `descendants of` answers 400. Latent — the frontend never sends it | **fixed** 14 Sep 2026 |
+| 15 | 06 / 2.2, 2.4 | medium | A task's `assigned_to` never becomes an assignment: no ToDo, empty `_assign`, and changing it does not unassign the previous user | **fixed** 14 Sep 2026 |
 | 16 | 06 / 2.8, 3.4, 4.7, 4.9 | **high** | Task, Note and Call Log declare no list columns or rows, so their three screens fall back to Name and Last Modified; call-log rows are not parsed and the document hides its `links` | **fixed** 14 Sep 2026 |
 | 17 | 07 / 1.6, 5.8 | medium | A method endpoint given a doctype that does not exist answers **500**: `registry.DocTypeNotFound` is a bare `KeyError` the handler never maps | **fixed** 13 Sep 2026 |
 | 18 | 08 / 3.11, 3.12 | medium | Assigning a document to someone never notifies them: nothing listens to ToDo writes, where `crm/api/todo.py` raises the Assignment notification | open |
@@ -415,6 +415,13 @@ never registered a resolver, so `_TREE_RESOLVERS` is empty at runtime. Latent: t
 frontend never sends a tree operator and nothing reads `lft`/`rgt`. Recorded so the
 phase-2 spec's "give territory the same treatment" is known to be unfulfilled.
 
+**Fixed 14 Sep 2026.** `crm_app/permissions/tree.py` rebuilds the territory's
+`lft`/`rgt` on every write, under its own advisory lock, with the sales hierarchy's
+walk generalised to any parent column (siblings by name, as `nestedset.py:rebuild_node`
+does), and registers `territory_subtree_q` as the `CRM Territory` resolver:
+`descendants of` excludes the node unless `(inclusive)`, `ancestors of` walks up, and a
+node that does not exist matches nothing. Blocks 05 / 6.2 and 6.3 are green.
+
 ## 15. A task's assigned_to is not an assignment
 
 **Blocks:** `06_tasks_notes_calls.http` 2.2 (create with `assigned_to`), 2.4 (change it)
@@ -429,6 +436,12 @@ becomes exactly `["grace@example.com"]`. The task board's assignee chip reads
 has fields only; no lifecycle was ported. The `OwnerAssignmentMixin` used by Lead and
 Deal does exactly this job and would fit with `owner_field = "assigned_to"` plus the
 unassign-previous step.
+
+**Fixed 14 Sep 2026.** `CRMTask.save` ports `crm_task.py:30-56`: a create assigns the
+task to `assigned_to` (a ToDo, so `_assign` names the user and the assignee's task
+list sees it); a later save whose `assigned_to` changed and is set cancels the previous
+user's ToDo and assigns the new one; clearing the field leaves the assignment, as
+upstream's early return does. Blocks 06 / 2.2 and 2.4 are green.
 
 ## 16. Task, Note and Call Log have no list definitions
 

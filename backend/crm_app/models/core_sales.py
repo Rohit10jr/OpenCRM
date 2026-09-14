@@ -1058,6 +1058,45 @@ class CRMTask(AutoIncrementDocument):
             ],
         }
 
+    # -- assignment: crm_task.py:30-56 --------------------------------------------------
+    #
+    # ``after_insert`` assigns the task to ``assigned_to`` through ``assign_to.add``, so
+    # a ToDo exists and ``_assign`` names the user; ``validate`` on a later save, when
+    # ``assigned_to`` changed and is set, unassigns the previous user and assigns the new
+    # one. The task board's assignee chip reads ``_assign`` and the assignee's own task
+    # list is built from ToDo (FINDINGS.md 15). Clearing ``assigned_to`` leaves the
+    # previous assignment in place, as upstream's early return does.
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        instance._loaded_assigned_to = instance.assigned_to_id
+        return instance
+
+    def save(self, *args, **kwargs):
+        creating = self._state.adding
+        previous = getattr(self, "_loaded_assigned_to", None)
+        super().save(*args, **kwargs)
+        if creating:
+            self.assign_to()
+        elif self.assigned_to_id and previous != self.assigned_to_id:
+            self.unassign_from_previous_user(previous)
+            self.assign_to()
+        self._loaded_assigned_to = self.assigned_to_id
+
+    def unassign_from_previous_user(self, user) -> None:
+        if user:
+            assignment.cancel_assignment(self.get_doctype(), self.pk, [user])
+
+    def assign_to(self) -> None:
+        if self.assigned_to_id:
+            assignment.assign_to_user(
+                self.get_doctype(),
+                self.pk,
+                self.assigned_to_id,
+                description=self.title or self.description,
+            )
+
 
 @register_doctype("FCRM Note")
 class FCRMNote(BaseDocument):

@@ -134,7 +134,6 @@ Content-Type: application/json
 @task1 = {{task1_req.response.body.$.data.name}}
 
 ### 2.2 the task is assigned to assigned_to through a ToDo (crm_task.py:30, after_insert) -> _assign holds ada
-# (empty today: finding 15)
 # @expect $.data._assign contains ada@example.com
 GET {{task}}/{{task1}}
 Authorization: Bearer {{token}}
@@ -146,7 +145,7 @@ Content-Type: application/json
 
 {"assigned_to": "{{manager}}"}
 
-### 2.4 -> _assign is exactly [grace]  (finding 15)
+### 2.4 -> _assign is exactly [grace]
 # @expect $.data._assign count 1
 # @expect $.data._assign[0] == grace@example.com
 GET {{task}}/{{task1}}
