@@ -344,7 +344,7 @@ Content-Type: application/json
 
 {"products": [{"product_name": "ZZ Thing", "qty": 2, "rate": 100}]}
 
-### 4.9 -> expected_deal_value now equals the net total, 200 (5000 today: finding 8)
+### 4.9 -> expected_deal_value now equals the net total, 200, in the same request (crm_deal.py:240-248)
 # @expect $.data.total contains 200
 # @expect $.data.expected_deal_value contains 200
 GET {{deal}}/{{deal6}}
@@ -357,7 +357,7 @@ Content-Type: application/json
 
 {"next_step": "ZZ six edited"}
 
-### 4.9c -> 200 now. This pair documents the one-save lag of finding 8.
+### 4.9c -> 200, unchanged: there is no one-save lag any more (finding 8, fixed)
 # @expect $.data.expected_deal_value contains 200
 GET {{deal}}/{{deal6}}
 Authorization: Bearer {{token}}
@@ -376,7 +376,7 @@ Content-Type: application/json
 GET {{deal}}/{{deal4}}
 Authorization: Bearer {{token}}
 
-### 4.12 a product line naming its product_code, as the form sends it -> 200 (500 today: finding 9)
+### 4.12 a product line naming its product_code, as the form sends it -> 200
 # @expect $.data.products[0].product_code == ZZ-P1
 PUT {{deal}}/{{deal4}}
 Authorization: Bearer {{token}}
@@ -388,8 +388,7 @@ Content-Type: application/json
 
 ### 5.1 one contact row: it becomes primary and its details are copied onto the deal -> 200
 # crm_deal.py:120-149 runs inside validate(), so the same save that adds the row derives
-# email / mobile_no / phone from it. Read back in 5.2. (500 today: finding 9 - a Link in a
-# child row cannot be written by name; once that is fixed, finding 8 applies here too.)
+# email / mobile_no / phone from it. Read back in 5.2.
 PUT {{deal}}/{{deal3}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -443,7 +442,9 @@ Content-Type: application/json
 GET {{deal}}/{{deal3}}
 Authorization: Bearer {{token}}
 
-### 5.8 a contact row pointing at a contact that does not exist -> 417 (500 today: finding 9)
+### 5.8 a contact row pointing at a contact that does not exist -> 417 LinkValidationError (document.py:_validate_links)
+# @expect $.exc_type == LinkValidationError
+# @expect $.message contains Could not find Row #1: Contact:
 PUT {{deal}}/{{deal3}}
 Authorization: Bearer {{token}}
 Content-Type: application/json

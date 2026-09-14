@@ -356,8 +356,7 @@ Content-Type: application/json
 # ---- linkage to deals -------------------------------------------------------------------
 
 ### 4.1 a deal linked to ZZ Jane Roe -> 201
-# The child row names its contact under `contact_id` rather than `contact`, which is the
-# one form the child writer accepts today (finding 9); the form would send `contact`.
+# The child row names its contact under `contact`, as the form sends it.
 # @name deal_req
 # @expect $.data.contacts count 1
 # @expect $.data.contacts[0].email == jane.alt@zz.test
@@ -365,7 +364,7 @@ POST {{host}}/api/resource/CRM%20Deal
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"organization": "ZZ Contact Org", "deal_owner": "{{admin}}", "next_step": "ZZ Link deal", "contacts": [{"contact_id": "ZZ Jane Roe", "is_primary": 1}]}
+{"organization": "ZZ Contact Org", "deal_owner": "{{admin}}", "next_step": "ZZ Link deal", "contacts": [{"contact": "ZZ Jane Roe", "is_primary": 1}]}
 
 ###
 @deal = {{deal_req.response.body.$.data.name}}

@@ -44,11 +44,17 @@ class FrappeError(Exception):
     http_status_code = 417  # Frappe's ValidationError default
     title = "Message"
 
-    def __init__(self, message: str = "", title: str | None = None):
-        self.message = message
+    def __init__(
+        self, message: str = "", title: str | None = None, *, messages: list[str] | None = None
+    ):
+        # ``messages``: every sentence upstream would have ``msgprint``-ed before the
+        # throw, when there is more than one - a document missing three mandatory
+        # fields reports all three. ``message`` stays the first of them.
+        self.messages = [m for m in (messages or []) if m] or [message]
+        self.message = message or self.messages[0]
         if title is not None:
             self.title = title
-        super().__init__(message)
+        super().__init__(self.message)
 
     @property
     def exc_type(self) -> str:
@@ -71,6 +77,12 @@ class DoesNotExistError(FrappeError):
 
 class MandatoryError(FrappeError):
     http_status_code = 417
+
+
+class LinkValidationError(ValidationError):
+    """``frappe.LinkValidationError``: a Link names a document that does not exist.
+    ``document.py:_validate_links`` throws it as "Could not find <Label>: <name>", and
+    for a child row "Could not find Row #<idx>: <Label>: <name>"."""
 
 
 class AuthenticationError(FrappeError):
@@ -285,7 +297,7 @@ def frappe_exception_handler(exc, context):
     """DRF ``EXCEPTION_HANDLER``. Renders every error in the Frappe envelope."""
 
     if isinstance(exc, FrappeError):
-        body = build_error_body(exc.exc_type, [exc.message], exc.title)
+        body = build_error_body(exc.exc_type, list(exc.messages), exc.title)
         return Response(body, status=exc.http_status_code)
 
     if isinstance(exc, (Http404, ObjectDoesNotExist)):

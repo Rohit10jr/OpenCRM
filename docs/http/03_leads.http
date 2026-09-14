@@ -413,7 +413,8 @@ Content-Type: application/json
 GET {{lead}}/{{lead5}}
 Authorization: Bearer {{token}}
 
-### 5.8 a row without the mandatory rate -> 417 MandatoryError upstream (409 today: finding 7)
+### 5.8 a row without the mandatory rate -> 417 MandatoryError, the child-row wording (base_document.py:747-756)
+# @expect $.message == Error: <strong>CRM Products</strong> Row #1: Value missing for: Rate
 # @expect $.exc_type == MandatoryError
 PUT {{lead}}/{{lead5}}
 Authorization: Bearer {{token}}

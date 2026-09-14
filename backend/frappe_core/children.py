@@ -25,6 +25,7 @@ from __future__ import annotations
 from django.db import transaction
 
 from frappe_core import registry
+from frappe_core.exceptions import LinkValidationError, MandatoryError
 
 
 def discover_child_tables(model) -> dict[str, dict]:
@@ -72,12 +73,120 @@ def read_children(instance, spec: dict) -> list:
     return list(queryset.order_by("idx"))
 
 
+#: Columns every child row carries that are never "mandatory" in Frappe's sense: the
+#: BaseDocument stamps, the caches, and the parent pointers this module fills in.
+_STAMPS = frozenset(
+    {
+        "name",
+        "owner",
+        "modified_by",
+        "creation",
+        "modified",
+        "idx",
+        "docstatus",
+        "_assign",
+        "_liked_by",
+        "_comments",
+        "_user_tags",
+        "parent",
+        "parenttype",
+        "parentfield",
+    }
+)
+
+
+def _label(field) -> str:
+    """The field's label for a message: Django's automatic ``verbose_name`` is the
+    fieldname with spaces, lowercased, so it is title-cased back; an explicit one is
+    used as written. (``rate`` -> "Rate", ``product_name`` -> "Product Name".)"""
+    label = str(field.verbose_name)
+    return label.title() if label == field.name.replace("_", " ") else label
+
+
+def _is_mandatory(field) -> bool:
+    """Frappe's ``reqd`` as the models encode it: a writable column that allows neither
+    NULL nor blank and has no default."""
+    if field.name in _STAMPS or field.primary_key or not field.editable:
+        return False
+    if field.null or field.blank:
+        return False
+    return not field.has_default()
+
+
+def _is_link(field) -> bool:
+    return field.is_relation and (field.many_to_one or field.one_to_one)
+
+
+def prepare_rows(
+    child_model, rows: list[dict], *, fieldname: str, parent_field: str | None = None
+) -> list[dict]:
+    """Validate ``rows`` the way upstream validates a document's child rows, and return
+    the payloads to write.
+
+    Two checks, in upstream's order (``document.py:_validate_links`` runs before
+    ``_validate_mandatory``), each collecting every row's problems before raising:
+
+    * A Link given **by name**, as every form sends it (``{"contact": "Ada Lovelace"}``),
+      is moved to the column Django writes (``contact_id``) after confirming the target
+      exists; a missing target is ``LinkValidationError`` with upstream's wording,
+      ``Could not find Row #1: Contact: ZZ Nobody`` (base_document.py:790-796). Before
+      this the dict reached ``create()`` untouched and Django raised a 500 (FINDINGS.md 9).
+    * A mandatory column with no value is ``MandatoryError`` with upstream's wording for
+      a child row, ``Error: <strong>CRM Products</strong> Row #1: Value missing for:
+      Rate`` (base_document.py:747-756), one message per missing value. Before this the
+      NOT NULL constraint fired and answered 409 "Duplicate" (FINDINGS.md 7).
+
+    A caller may still pass an instance or the raw key under the attname, as the models
+    do when they build the status-change log.
+    """
+    doctype = child_model.get_doctype()
+    fields = [f for f in child_model._meta.get_fields() if getattr(f, "concrete", False)]
+    accepted = {f.name for f in fields} | {f.attname for f in fields}
+    missing_links: list[str] = []
+    missing_values: list[str] = []
+    payloads: list[dict] = []
+
+    for index, row in enumerate(rows or [], start=1):
+        payload = {k: v for k, v in (row or {}).items() if k in accepted and k != "name"}
+        for field in fields:
+            if not _is_link(field) or field.name not in payload:
+                continue
+            value = payload.pop(field.name)
+            if value is None or value == "":
+                payload[field.attname] = None
+            elif hasattr(value, "pk"):
+                payload[field.attname] = value.pk
+            elif field.related_model._default_manager.filter(pk=value).exists():
+                payload[field.attname] = value
+            else:
+                missing_links.append(f"Row #{index}: {_label(field)}: {value}")
+        for field in fields:
+            if field.name == parent_field or not _is_mandatory(field):
+                continue
+            value = payload.get(field.attname if _is_link(field) else field.name)
+            if value is None or value == "":
+                missing_values.append(
+                    f"Error: <strong>{doctype}</strong> Row #{index}: "
+                    f"Value missing for: {_label(field)}"
+                )
+        payload["idx"] = index
+        payload.setdefault("parentfield", fieldname)
+        payloads.append(payload)
+
+    if missing_links:
+        raise LinkValidationError("Could not find " + ", ".join(missing_links))
+    if missing_values:
+        raise MandatoryError(messages=missing_values)
+    return payloads
+
+
 @transaction.atomic
 def replace_children(instance, fieldname: str, spec: dict, rows: list[dict]) -> None:
     """Delete the parent's existing rows and recreate them from ``rows``.
 
     Wholesale replacement, not a merge - Frappe's semantics. ``idx`` is assigned from
-    list position, which is what orders a child table in the UI.
+    list position, which is what orders a child table in the UI. The rows are validated
+    by :func:`prepare_rows` before anything is deleted.
     """
     child_model = spec["model"]
     parent_doctype = type(instance).get_doctype()
@@ -87,22 +196,13 @@ def replace_children(instance, fieldname: str, spec: dict, rows: list[dict]) -> 
     else:
         base_filter = {spec["fk"]: instance}
 
+    payloads = prepare_rows(child_model, rows, fieldname=fieldname, parent_field=spec["fk"])
+
     child_model._default_manager.filter(**base_filter).delete()
 
-    # Both the field name and its attname, so a caller may pass either ``log_owner``
-    # (an instance) or ``log_owner_id`` (a raw PK). Without the attname, FK values
-    # supplied by PK were silently dropped and the column came back NULL.
-    concrete = set()
-    for f in child_model._meta.get_fields():
-        if getattr(f, "concrete", False):
-            concrete.add(f.name)
-            concrete.add(getattr(f, "attname", f.name))
-    for index, row in enumerate(rows or [], start=1):
-        payload = {k: v for k, v in (row or {}).items() if k in concrete and k != "name"}
+    for payload in payloads:
         payload.update(base_filter)
         payload.setdefault("parenttype", parent_doctype)
-        payload.setdefault("parentfield", fieldname)
-        payload["idx"] = index
         child_model._default_manager.create(**payload)
 
 

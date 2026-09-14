@@ -16,9 +16,9 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 4 | 02 / 10.4, 10.5 | low | Serializer validation answers **400**, the port's own validation answers **417**, both as `ValidationError` | **fixed** 13 Sep 2026 |
 | 5 | 01 / 1.11 | medium | An email typed in a different case cannot log in; upstream accepts `Ada@Example.com` | **fixed** 13 Sep 2026 |
 | 6 | 01 / 1.4 | low | A malformed bearer token answers `exc_type: InvalidToken`, not `AuthenticationError` | **fixed** 13 Sep 2026 |
-| 7 | 03 / 5.8 | medium | A child-table row missing a mandatory field reaches the database and answers **409 DuplicateEntryError**, not `MandatoryError` | open |
-| 8 | 04 / 4.9, 5.1 | medium | Validation that depends on child rows runs **before the rows are written**, so expected-value auto-update and primary-contact derivation lag one save behind | open |
-| 9 | 04 / 4.12, 5.1 | **high** | A child row whose Link is given by name, as every form sends it, answers **500** — deal contacts and product lines with a product code cannot be written | open |
+| 7 | 03 / 5.8 | medium | A child-table row missing a mandatory field reaches the database and answers **409 DuplicateEntryError**, not `MandatoryError` | **fixed** 14 Sep 2026 |
+| 8 | 04 / 4.9, 5.1 | medium | Validation that depends on child rows runs **before the rows are written**, so expected-value auto-update and primary-contact derivation lag one save behind | **fixed** 14 Sep 2026 |
+| 9 | 04 / 4.12, 5.1 | **high** | A child row whose Link is given by name, as every form sends it, answers **500** — deal contacts and product lines with a product code cannot be written | **fixed** 14 Sep 2026 |
 | 10 | 05 / 2.7, 2.9, 2.10 | medium | Contact's primary-email and primary-phone rules are not applied on a document save: a lone email row is not made primary, a stray `email_id` is not cleared, two primaries are accepted | open |
 | 11 | 05 / 2.13 | low | Email addresses are never validated — on a contact's email rows, and `crm_lead.py:146` explicitly validates a lead's email too | open |
 | 12 | 05 / 3.12 | low | `crm.api.contact.*` on a contact that does not exist answers 417 `ValidationError`; upstream answers 403 `PermissionError` | open |
@@ -220,6 +220,12 @@ fires and the handler renders it as a duplicate.
 child's serializer (or check its required fields) before `replace_children`, raising
 `MandatoryError`. Parent-level mandatory fields already answer correctly (03 / 2.5).
 
+**Fixed 14 Sep 2026.** `children.prepare_rows` checks every row before anything is
+deleted or written: a writable column that allows neither NULL nor blank and has no
+default is mandatory, and each missing one is reported with upstream's child-row
+wording, `Error: <strong>CRM Products</strong> Row #1: Value missing for: Rate`, one
+message per value, as `MandatoryError` 417. Block 03 / 5.8 is green.
+
 ## 8. Child-dependent validation runs before the child rows are written
 
 **Blocks:** `04_deals.http` 4.9 (with 4.9b/4.9c showing the catch-up), and 5.1 once
@@ -245,6 +251,12 @@ empty until something else saves the deal.
 again after `_write_children`), so the derived fields and the child rows land in the
 same request as they do upstream.
 
+**Fixed 14 Sep 2026.** On update the serializer writes the rows before the parent's
+save, so `validate()` sees them; on create the parent is saved first for its name, the
+rows are written, and it is saved once more so the derivations run. Both inside a
+transaction, so a parent-level refusal takes the rows back. Blocks 04 / 4.9 and 5.1
+are green in the same request; 4.9b and 4.9c now show no lag.
+
 ## 9. A child row whose Link is given by name answers 500
 
 **Blocks:** `04_deals.http` 4.12 (`products: [{"product_code": "ZZ-P1", ...}]`) and 5.1,
@@ -267,6 +279,13 @@ missing target surface as the 417 `LinkValidationError` upstream raises
 (`Could not find Row #1: Contact: ZZ Nobody`) rather than a 500. Finding 7's validation
 pass would be the natural place. **User-visible:** adding a contact to a deal, or a
 product with a code, fails outright through the document route.
+
+**Fixed 14 Sep 2026.** `children.prepare_rows` moves a Link given under the field name
+to the column Django writes after confirming the target exists; a missing target is
+`LinkValidationError` 417 with upstream's wording, `Could not find Row #1: Contact:
+ZZ Nobody`, and nothing is deleted before the rows pass. An instance or a raw key
+under the attname still works, as the models' own callers use it. Blocks 04 / 4.12,
+5.1, 5.3, 5.5 and 5.8 are green, and 05 / 4.1 now sends `contact` as the form does.
 
 ## 10. Contact's primary rules are not applied on a document save
 
