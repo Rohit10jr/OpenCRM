@@ -342,7 +342,7 @@ Content-Type: application/json
 GET {{notif}}?fields=["name","type","message"]&filters=[["type","=","Assignment"],["reference_name","=","{{lead1}}"],["to_user","=","{{sales}}"]]
 Authorization: Bearer {{token}}
 
-### 3.12 ...and its text names the assigner and the record (finding 18)
+### 3.12 ...and its text names the assigner and the record
 # @expect $.message contains assigned a
 POST {{host}}/api/method/crm.api.notifications.get_notifications
 Authorization: Bearer {{stoken}}

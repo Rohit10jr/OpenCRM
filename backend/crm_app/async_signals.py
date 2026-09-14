@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_save
 
 logger = logging.getLogger(__name__)
 
@@ -142,10 +142,199 @@ def on_invitation_insert(sender, instance, created, **kwargs):
     send_invitation_email.delay(str(instance.pk))
 
 
+# --- ToDo: crm/api/todo.py -----------------------------------------------------------------
+#
+# Registered upstream in hooks.py:doc_events for ToDo. ``after_insert`` makes the
+# assignee the lead's or deal's owner and notifies them; ``on_update`` notifies when the
+# assignment is cancelled and clears the owner. The bell menu is how a rep learns a
+# lead was handed to them (FINDINGS.md 18). ``get_notification_text`` is HTML the
+# frontend renders as such, so its shape is kept byte for byte.
+
+_ASSIGNABLE = ("CRM Lead", "CRM Deal", "CRM Task")
+
+
+def _remember_todo_status(sender, instance, **kwargs):
+    """``has_value_changed("status")`` needs the stored value; one read before the write."""
+    instance._previous_status = None
+    if instance._state.adding or instance.pk is None:
+        return
+    instance._previous_status = (
+        sender._default_manager.filter(pk=instance.pk).values_list("status", flat=True).first()
+    )
+
+
+def _owner_field(reference_type: str) -> str:
+    return "lead_owner" if reference_type == "CRM Lead" else "deal_owner"
+
+
+def _set_owner(reference_type: str, reference_name: str, user) -> None:
+    """``frappe.db.set_value(..., update_modified=False)``: a bare update, no save."""
+    from frappe_core import registry
+
+    registry.get_model(reference_type)._default_manager.filter(pk=reference_name).update(
+        **{f"{_owner_field(reference_type)}_id": user}
+    )
+
+
+def _full_name(user: str | None) -> str:
+    from frappe_platform.models import User
+
+    if not user:
+        return ""
+    return (
+        User._default_manager.filter(pk=user).values_list("full_name", flat=True).first()
+        or user
+    )
+
+
+def get_notification_text(owner: str, todo, reference_doc, is_cancelled: bool = False) -> str:
+    """``crm/api/todo.py:get_notification_text``, verbatim."""
+    name = todo.reference_name
+    doctype = todo.reference_type
+    if doctype.startswith("CRM "):
+        doctype = doctype[4:].lower()
+    if doctype in ("lead", "deal"):
+        name = (
+            getattr(reference_doc, "lead_name", None) or name
+            if doctype == "lead"
+            else getattr(reference_doc, "organization_id", None)
+            or getattr(reference_doc, "lead_name", None)
+            or name
+        )
+        bold_name = f'<span class="font-medium text-ink-gray-9">{name}</span>'
+        bold_owner = f'<span class="font-medium text-ink-gray-9">{owner}</span>'
+        if is_cancelled:
+            return f"""
+                <div class="mb-2 leading-5 text-ink-gray-5">
+                    <span>Your assignment on {doctype} {bold_name} has been removed by {bold_owner}</span>
+                </div>
+            """
+        return f"""
+            <div class="mb-2 leading-5 text-ink-gray-5">
+                <span class="font-medium text-ink-gray-9">{owner}</span>
+                <span>assigned a {doctype} {bold_name} to you</span>
+            </div>
+        """
+    if doctype == "task":
+        bold_title = f'<span class="font-medium text-ink-gray-9">{reference_doc.title}</span>'
+        bold_owner = f'<span class="font-medium text-ink-gray-9">{owner}</span>'
+        if is_cancelled:
+            return f"""
+                <div class="mb-2 leading-5 text-ink-gray-5">
+                    <span>Your assignment on task {bold_title} has been removed by {bold_owner}</span>
+                </div>
+            """
+        return f"""
+            <div class="mb-2 leading-5 text-ink-gray-5">
+                <span class="font-medium text-ink-gray-9">{owner}</span>
+                <span>assigned a new task {bold_title} to you</span>
+            </div>
+        """
+    return ""
+
+
+def get_redirect_to_doc(todo, reference_doc) -> tuple[str, str]:
+    """A task notification lands on the task's own lead or deal."""
+    if todo.reference_type == "CRM Task":
+        return reference_doc.reference_doctype, reference_doc.reference_docname
+    return todo.reference_type, todo.reference_name
+
+
+def notify_user(notification: dict) -> None:
+    """``crm_notification.py:notify_user``: never notify yourself, never twice."""
+    from crm_app.models import CRMNotification
+
+    if notification["owner"] == notification["assigned_to"]:
+        return
+    values = {
+        "from_user_id": notification["owner"],
+        "to_user_id": notification["assigned_to"],
+        "type": notification["notification_type"],
+        "message": notification["message"],
+        "notification_text": notification["notification_text"],
+        "notification_type_doctype": notification["reference_doctype"],
+        "notification_type_doc": notification["reference_docname"],
+        "reference_doctype": notification["redirect_to_doctype"],
+        "reference_name": notification["redirect_to_docname"],
+    }
+    if CRMNotification._default_manager.filter(**values).exists():
+        return
+    CRMNotification._default_manager.create(**values)
+
+
+def notify_assigned_user(todo, is_cancelled: bool = False) -> None:
+    """``crm/api/todo.py:notify_assigned_user``, verbatim in its two sentences."""
+    from frappe_core import registry
+    from frappe_core.session import get_current_user
+
+    if not registry.has_doctype(todo.reference_type):
+        return
+    reference = (
+        registry.get_model(todo.reference_type)
+        ._default_manager.filter(pk=todo.reference_name)
+        .first()
+    )
+    if reference is None:
+        return
+    acting_user = get_current_user() or todo.assigned_by_id
+    owner = _full_name(acting_user)
+    if is_cancelled:
+        message = (
+            f"Your assignment on {todo.reference_type} {todo.reference_name} "
+            f"has been removed by {owner}"
+        )
+    else:
+        message = f"{owner} assigned a {todo.reference_type} {todo.reference_name} to you"
+    redirect_to_doctype, redirect_to_docname = get_redirect_to_doc(todo, reference)
+    notify_user(
+        {
+            "owner": acting_user,
+            "assigned_to": todo.allocated_to_id,
+            "notification_type": "Assignment",
+            "message": message,
+            "notification_text": get_notification_text(owner, todo, reference, is_cancelled),
+            "reference_doctype": todo.reference_type,
+            "reference_docname": todo.reference_name,
+            "redirect_to_doctype": redirect_to_doctype,
+            "redirect_to_docname": redirect_to_docname,
+        }
+    )
+
+
+def on_todo_write(sender, instance, created, **kwargs):
+    """``crm/api/todo.py:after_insert`` and ``on_update``."""
+    reference_type = instance.reference_type
+    reference_name = instance.reference_name
+    assignee = instance.allocated_to_id
+    if not (reference_name and assignee):
+        return
+    if created:
+        # Upstream's after_insert does not look at status, because nothing upstream
+        # inserts a ToDo already cancelled; the port's permission tests do, and an
+        # assignment that never was should neither hand over the record nor notify.
+        if instance.status == "Cancelled":
+            return
+        if reference_type in ("CRM Lead", "CRM Deal"):
+            # Mirror assign_to: the latest assignment owns the record.
+            _set_owner(reference_type, reference_name, assignee)
+        if reference_type in _ASSIGNABLE:
+            notify_assigned_user(instance)
+        return
+    previous = getattr(instance, "_previous_status", None)
+    if previous != instance.status and instance.status == "Cancelled" and reference_type in _ASSIGNABLE:
+        notify_assigned_user(instance, is_cancelled=True)
+        if reference_type in ("CRM Lead", "CRM Deal"):
+            # Cancelling an assignment clears the owner; upstream accepts the wrinkle
+            # that removing one of several co-assignees clears it too.
+            _set_owner(reference_type, reference_name, None)
+
+
 def connect_signals() -> None:
     from crm_app.models import CRMInvitation
-    from frappe_platform.models import Comment, Communication
+    from frappe_platform.models import Comment, Communication, ToDo
 
+    pre_save.connect(_remember_todo_status, sender=ToDo, dispatch_uid="crm.async.todo.pre")
+    post_save.connect(on_todo_write, sender=ToDo, dispatch_uid="crm.async.todo")
     post_save.connect(on_comment_insert, sender=Comment, dispatch_uid="crm.async.comment")
     post_save.connect(
         on_communication_write, sender=Communication, dispatch_uid="crm.async.communication"
