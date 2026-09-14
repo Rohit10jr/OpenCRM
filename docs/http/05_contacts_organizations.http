@@ -447,8 +447,8 @@ Authorization: Bearer {{token}}
 GET {{host}}/api/resource/CRM%20Deal/{{deal}}
 Authorization: Bearer {{token}}
 
-### 5.6 rename onto a name that exists -> 417
-# @expect $.message contains already exists
+### 5.6 rename onto a name that exists -> 417, validate_rename's sentence
+# @expect $.message == Another Contact with name ZZ Acme Only exists, select another name
 POST {{host}}/api/method/frappe.client.rename_doc
 Authorization: Bearer {{token}}
 Content-Type: application/json

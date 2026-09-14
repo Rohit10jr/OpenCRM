@@ -27,6 +27,7 @@ from frappe_core.exceptions import throw
 from frappe_core.views import _candidate_instance, check_destination
 from frappe_core.naming import validate_name
 from frappe_core.query import fetch_rows, parse_json_param
+from frappe_core.rename import rename_document
 from frappe_core.session import get_current_user
 from frappe_core.whitelist import whitelist
 
@@ -210,32 +211,38 @@ def client_delete(doctype: str, name: str):
 
 @whitelist("frappe.client.rename_doc", methods=("POST",))
 def client_rename_doc(doctype: str, old_name: str, new_name: str, merge: bool = False):
-    """``frappe/rename_doc.py:rename_doc``.
+    """``frappe/model/rename_doc.py:rename_doc``.
 
-    Renaming a string PK is a real operation in Frappe - the frontend uses it to rename
-    an Email Template. ``merge`` is **not** supported: merging two documents means
-    repointing every inbound reference, which needs the framework's link map. It raises
+    Renames in place - every Link, Dynamic Link, child ``parent`` and version that named
+    the document is repointed (:mod:`frappe_core.rename`); the frontend uses it on
+    organizations, email templates, email accounts, assignment rules and SLA policies.
+    The refusals are ``validate_rename``'s, in its order and with its wording, and all
+    of them are a plain ``frappe.throw`` - 417, the permission one included.
+
+    ``merge`` is **not** supported: merging two documents means folding one's references
+    into the other's and deleting it, which nothing in the CRM asks for. It raises
     rather than silently ignoring the flag and losing data.
     """
-    entry, instance = _get_checked(doctype, old_name, "write")
+    entry = _entry_or_404(doctype)
 
     if merge:
         throw("Merging documents is not supported")
 
-    new_name = validate_name(doctype, str(new_name))
-    if new_name == old_name:
-        return old_name
+    old_name = str(old_name)
+    new_name = str(new_name)
+    instance = entry.model._default_manager.filter(pk=old_name).first()
+    if instance is None:
+        throw(f"Can't rename {old_name} to {new_name} because {old_name} doesn't exist.")
+    if old_name == new_name:
+        throw("No changes made because old and new name are the same.")
     if entry.model._default_manager.filter(pk=new_name).exists():
-        throw(f"{doctype} {new_name} already exists")
+        throw(f"Another {doctype} with name {new_name} exists, select another name")
+    if not permissions.check_object_permission(instance, "write", get_current_user()):
+        throw(f"You need write permission on {doctype} {old_name} to rename")
+    # "validate naming like it's done in doc.py" - validate_rename's last step.
+    new_name = validate_name(doctype, new_name)
 
-    with transaction.atomic():
-        # A string PK change is an insert + delete in Django, not an UPDATE.
-        instance.pk = new_name
-        instance._state.adding = True
-        instance.save(force_insert=True)
-        entry.model._default_manager.filter(pk=old_name).delete()
-
-    return new_name
+    return rename_document(doctype, old_name, new_name)
 
 
 @whitelist("frappe.client.get_doc_permissions")
