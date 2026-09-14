@@ -215,7 +215,7 @@ Content-Type: application/json
 {"doctype": "CRM Organization", "items": ["ZZ Bulk 1", "ZZ Nobody"]}
 
 ### 1.12 a lead with a note hanging off it -> 201
-# @name l1
+# @name l1_req
 POST {{lead}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -223,10 +223,10 @@ Content-Type: application/json
 {"first_name": "ZZ Bulk Lead 1", "lead_owner": "{{admin}}"}
 
 ###
-@l1 = {{l1.response.body.$.data.name}}
+@l1 = {{l1_req.response.body.$.data.name}}
 
 ### 1.13 -> 201
-# @name n1
+# @name n1_req
 POST {{note}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -234,7 +234,7 @@ Content-Type: application/json
 {"title": "ZZ Bulk note 1", "content": "x", "reference_doctype": "CRM Lead", "reference_docname": "{{l1}}"}
 
 ###
-@n1 = {{n1.response.body.$.data.name}}
+@n1 = {{n1_req.response.body.$.data.name}}
 
 ### 1.14 delete the lead with delete_linked=false -> the note survives, its reference is cleared
 # @expect $.message == success
@@ -250,7 +250,7 @@ GET {{note}}/{{n1}}
 Authorization: Bearer {{token}}
 
 ### 1.16 a second lead and note -> 201
-# @name l2
+# @name l2_req
 POST {{lead}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -258,10 +258,10 @@ Content-Type: application/json
 {"first_name": "ZZ Bulk Lead 2", "lead_owner": "{{admin}}"}
 
 ###
-@l2 = {{l2.response.body.$.data.name}}
+@l2 = {{l2_req.response.body.$.data.name}}
 
 ### 1.17 -> 201
-# @name n2
+# @name n2_req
 POST {{note}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -269,7 +269,7 @@ Content-Type: application/json
 {"title": "ZZ Bulk note 2", "content": "x", "reference_doctype": "CRM Lead", "reference_docname": "{{l2}}"}
 
 ###
-@n2 = {{n2.response.body.$.data.name}}
+@n2 = {{n2_req.response.body.$.data.name}}
 
 ### 1.18 delete_linked=true takes the note with the lead -> "success"
 # @expect $.message == success
@@ -413,7 +413,7 @@ Authorization: Bearer {{stoken}}
 # ---- File: the two carve-outs upstream makes (file.py:916, 919) ----------------------------------
 
 ### 4.1 a lead the manager owns, invisible to ada -> 201
-# @name lead
+# @name lead_req
 POST {{lead}}
 Authorization: Bearer {{mtoken}}
 Content-Type: application/json
@@ -421,10 +421,10 @@ Content-Type: application/json
 {"first_name": "ZZ Bulk File Lead", "lead_owner": "{{manager}}"}
 
 ###
-@lead_name = {{lead.response.body.$.data.name}}
+@lead_name = {{lead_req.response.body.$.data.name}}
 
 ### 4.2 a PUBLIC file attached to it -> 201
-# @name pub
+# @name pub_req
 POST {{file}}
 Authorization: Bearer {{mtoken}}
 Content-Type: application/json
@@ -432,7 +432,7 @@ Content-Type: application/json
 {"file_name": "zz-logo.png", "file_url": "/files/zz-logo.png", "is_private": 0, "attached_to_doctype": "CRM Lead", "attached_to_name": "{{lead_name}}"}
 
 ###
-@pub = {{pub.response.body.$.data.name}}
+@pub = {{pub_req.response.body.$.data.name}}
 
 ### 4.3 a public file is readable by anyone, whatever it hangs off (file.py:916) -> 200
 # @expect $.data.file_url == /files/zz-logo.png
@@ -448,7 +448,7 @@ Content-Type: application/json
 {"file_name": "zz-renamed.png"}
 
 ### 4.5 ada uploads a private file with no attachment -> 201
-# @name own
+# @name own_req
 POST {{file}}
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
@@ -456,7 +456,7 @@ Content-Type: application/json
 {"file_name": "zz-mine.pdf", "file_url": "/private/files/zz-mine.pdf", "is_private": 1}
 
 ###
-@own = {{own.response.body.$.data.name}}
+@own = {{own_req.response.body.$.data.name}}
 
 ### 4.6 your own upload is yours (file.py:919) -> 200
 # @expect $.data.owner == ada@example.com

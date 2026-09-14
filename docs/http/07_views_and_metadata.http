@@ -222,7 +222,7 @@ Authorization: Bearer {{token}}
 # ---- saved views ----------------------------------------------------------------------------------
 
 ### 3.1 create a private view with no columns: the controller defaults are synced in -> 200
-# @name view1
+# @name view1_req
 # @expect $.message.name exists
 # @expect $.message.label == ZZ Hot leads
 # @expect $.message.user == Administrator
@@ -237,7 +237,7 @@ Content-Type: application/json
 {"view": {"doctype": "CRM Lead", "label": "ZZ Hot leads", "type": "list", "filters": {"status": "New"}, "columns": [], "rows": []}}
 
 ###
-@view1 = {{view1.response.body.$.message.name}}
+@view1 = {{view1_req.response.body.$.message.name}}
 
 ### 3.2 update it -> 200, the label changed
 # @expect $.message.label == ZZ Hot leads (renamed)
@@ -327,7 +327,7 @@ Content-Type: application/json
 {"view": {"name": "{{view1}}", "doctype": "CRM Lead", "label": "ZZ Hot leads (manager edit)", "type": "list", "filters": {}, "columns": [], "rows": []}}
 
 ### 3.13 the Sales User creates her own private view -> 200, owned by her
-# @name view2
+# @name view2_req
 # @expect $.message.user == ada@example.com
 # @expect $.message.public == false
 POST {{host}}/api/method/{{vs}}.create
@@ -337,7 +337,7 @@ Content-Type: application/json
 {"view": {"doctype": "CRM Deal", "label": "ZZ Ada's deals", "type": "list", "filters": {"deal_owner": "@me"}, "columns": [], "rows": []}}
 
 ###
-@view2 = {{view2.response.body.$.message.name}}
+@view2 = {{view2_req.response.body.$.message.name}}
 
 ### 3.14 a Sales Manager may NOT edit somebody's private view -> 403
 # @expect $.exc_type == PermissionError
@@ -413,7 +413,7 @@ Content-Type: application/json
 {"type": "list", "doctype": "CRM Lead"}
 
 ### 4.4 -> one standard CRM Lead list view for Administrator, default, with the controller's columns
-# @name std
+# @name std_req
 # @expect $.data count 1
 # @expect $.data[0].is_default == true
 # @expect $.data[0].label == List
@@ -422,7 +422,7 @@ GET {{views}}?fields=["name","is_default","label","columns","rows"]&filters=[["d
 Authorization: Bearer {{token}}
 
 ###
-@std = {{std.response.body.$.data[0].name}}
+@std = {{std_req.response.body.$.data[0].name}}
 
 ### 4.5 only one default per user: view1 was public and never default, the new one is -> 200
 # @expect $.data count 1
@@ -439,7 +439,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "filters": {}, "page_length": 5, "view": {"view_type": "list"}}
 
 ### 4.7 create_or_update_standard_view for a kanban syncs the columns from CRM Lead Status -> 200
-# @name kstd
+# @name kstd_req
 # @expect $.message.type == kanban
 # @expect $.message.column_field == status
 # @expect $.message.kanban_columns contains New
@@ -451,7 +451,7 @@ Content-Type: application/json
 {"view": {"doctype": "CRM Lead", "type": "kanban", "column_field": "status", "kanban_columns": [], "kanban_fields": ["name", "lead_name"], "filters": {}}}
 
 ###
-@kstd = {{kstd.response.body.$.message.name}}
+@kstd = {{kstd_req.response.body.$.message.name}}
 
 ### 4.8 fetch_and_update_kanban_columns: nothing new, so the same columns come back -> 200
 # @expect $.message contains New

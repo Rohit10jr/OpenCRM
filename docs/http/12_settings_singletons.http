@@ -215,7 +215,7 @@ Content-Type: application/json
 {"enabled": 0, "account_sid": "ZZ-sid"}
 
 ### 2.2 Administrator creates it -> 201; the two secrets are absent from the response
-# @name tw
+# @name tw_req
 # @expect $.data.account_sid == ZZ-sid
 # @expect $.data.api_key == ZZ-key
 # @expect $.data.api_secret absent
@@ -227,7 +227,7 @@ Content-Type: application/json
 {"enabled": 0, "account_sid": "ZZ-sid", "api_key": "ZZ-key", "api_secret": "ZZ-secret", "auth_token": "ZZ-token", "twiml_sid": "ZZ-twiml", "app_name": "ZZ app"}
 
 ###
-@tw = {{tw.response.body.$.data.name}}
+@tw = {{tw_req.response.body.$.data.name}}
 
 ### 2.3 a Sales User's list is empty, not merely filtered -> 0 rows
 # @expect $.data count 0
@@ -316,7 +316,7 @@ Content-Type: application/json
 # ---- CRM Exotel Settings and ERPNext CRM Settings: the same shape -------------------------------------
 
 ### 3.1 Exotel: Administrator creates it -> 201, api_token absent
-# @name ex
+# @name ex_req
 # @expect $.data.api_token absent
 # @expect $.data.webhook_verify_token == ZZ-verify
 POST {{exotel}}
@@ -326,7 +326,7 @@ Content-Type: application/json
 {"enabled": 0, "account_sid": "ZZ-ex-sid", "api_key": "ZZ-ex-key", "api_token": "ZZ-ex-token", "subdomain": "zz", "webhook_verify_token": "ZZ-verify"}
 
 ###
-@ex = {{ex.response.body.$.data.name}}
+@ex = {{ex_req.response.body.$.data.name}}
 
 ### 3.2 a Sales User cannot read the webhook secret through get_single_value -> 403
 # (open before the phase-7 review: this token is the entire authentication on a public webhook)
@@ -348,7 +348,7 @@ GET {{exotel}}/{{ex}}
 Authorization: Bearer {{token}}
 
 ### 3.5 ERPNext: Administrator creates it -> 201, api_secret absent
-# @name erp
+# @name erp_req
 # @expect $.data.api_secret absent
 # @expect $.data.api_key == ZZ-erp-key
 POST {{erp}}
@@ -358,7 +358,7 @@ Content-Type: application/json
 {"enabled": 0, "api_key": "ZZ-erp-key", "api_secret": "ZZ-erp-secret", "erpnext_site_url": "https://erp.example"}
 
 ###
-@erp_name = {{erp.response.body.$.data.name}}
+@erp_name = {{erp_req.response.body.$.data.name}}
 
 ### 3.6 a Sales User's list of ERPNext settings is empty -> 0
 # @expect $.data count 0

@@ -94,7 +94,7 @@ Content-Type: application/json
 # ---- naming: the series, and the four ways lead_name is derived -----------------------------
 
 ### 2.1 first name only -> 201; series name, status defaulted to New, lead_name = first_name
-# @name lead1
+# @name lead1_req
 # @expect $.data.name contains CRM-LEAD-
 # @expect $.data.status == New
 # @expect $.data.lead_name == ZZ Solo
@@ -107,10 +107,10 @@ Content-Type: application/json
 {"first_name": "ZZ Solo", "lead_owner": "{{admin}}", "source": "ZZ Source"}
 
 ###
-@lead1 = {{lead1.response.body.$.data.name}}
+@lead1 = {{lead1_req.response.body.$.data.name}}
 
 ### 2.2 salutation + first + middle + last -> lead_name includes the salutation
-# @name lead2
+# @name lead2_req
 # @expect $.data.lead_name == Ms ZZ Ada Byron Lovelace
 POST {{lead}}
 Authorization: Bearer {{token}}
@@ -119,10 +119,10 @@ Content-Type: application/json
 {"salutation": "Ms", "first_name": "ZZ Ada", "middle_name": "Byron", "last_name": "Lovelace", "lead_owner": "{{admin}}"}
 
 ###
-@lead2 = {{lead2.response.body.$.data.name}}
+@lead2 = {{lead2_req.response.body.$.data.name}}
 
 ### 2.3 no person's name, an organization -> lead_name = organization
-# @name lead3
+# @name lead3_req
 # @expect $.data.lead_name == ZZ Org
 POST {{lead}}
 Authorization: Bearer {{token}}
@@ -131,10 +131,10 @@ Content-Type: application/json
 {"organization": "ZZ Org", "lead_owner": "{{admin}}"}
 
 ###
-@lead3 = {{lead3.response.body.$.data.name}}
+@lead3 = {{lead3_req.response.body.$.data.name}}
 
 ### 2.4 no name, no organization, an email -> lead_name = the local part only
-# @name lead4
+# @name lead4_req
 # @expect $.data.lead_name == zz.mail
 POST {{lead}}
 Authorization: Bearer {{token}}
@@ -143,7 +143,7 @@ Content-Type: application/json
 {"email": "zz.mail@example.test", "lead_owner": "{{admin}}"}
 
 ###
-@lead4 = {{lead4.response.body.$.data.name}}
+@lead4 = {{lead4_req.response.body.$.data.name}}
 
 ### 2.5 nothing to name it by -> 417, crm_lead.py:133 verbatim
 # @expect $.exc_type == ValidationError
@@ -163,7 +163,7 @@ Content-Type: application/json
 {"first_name": "ZZ Self", "email": "{{sales}}", "lead_owner": "{{sales}}"}
 
 ### 2.7 an explicit status is kept, not overridden by the default -> 201
-# @name lead5
+# @name lead5_req
 # @expect $.data.status == Contacted
 POST {{lead}}
 Authorization: Bearer {{token}}
@@ -172,7 +172,7 @@ Content-Type: application/json
 {"first_name": "ZZ Explicit", "status": "Contacted", "lead_owner": "{{admin}}"}
 
 ###
-@lead5 = {{lead5.response.body.$.data.name}}
+@lead5 = {{lead5_req.response.body.$.data.name}}
 
 ### 2.8 a status that does not exist -> 417
 # @expect $.exc_type == ValidationError
@@ -346,7 +346,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "name": "{{lead3}}", "assign_to": ["{{sales}}"]}
 
 ### 4.7 a lead created with no lead_owner gets no assignment -> 201, _assign empty
-# @name lead6
+# @name lead6_req
 # @expect $.data._assign count 0
 POST {{lead}}
 Authorization: Bearer {{token}}
@@ -355,7 +355,7 @@ Content-Type: application/json
 {"first_name": "ZZ Unowned"}
 
 ###
-@lead6 = {{lead6.response.body.$.data.name}}
+@lead6 = {{lead6_req.response.body.$.data.name}}
 
 # ---- products child table and totals -------------------------------------------------------------
 

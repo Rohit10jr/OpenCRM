@@ -128,7 +128,7 @@ Authorization: Bearer {{token}}
 # ---- fixtures ----------------------------------------------------------------------------
 
 ### 1.1 a lead Administrator owns -> 201
-# @name lead1
+# @name lead1_req
 POST {{lead}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -136,10 +136,10 @@ Content-Type: application/json
 {"first_name": "ZZ Timeline One", "lead_owner": "{{admin}}", "annual_revenue": 1000}
 
 ###
-@lead1 = {{lead1.response.body.$.data.name}}
+@lead1 = {{lead1_req.response.body.$.data.name}}
 
 ### 1.2 a lead the Sales Manager owns, invisible to ada -> 201
-# @name lead2
+# @name lead2_req
 POST {{lead}}
 Authorization: Bearer {{mtoken}}
 Content-Type: application/json
@@ -147,7 +147,7 @@ Content-Type: application/json
 {"first_name": "ZZ Timeline Two", "lead_owner": "{{manager}}"}
 
 ###
-@lead2 = {{lead2.response.body.$.data.name}}
+@lead2 = {{lead2_req.response.body.$.data.name}}
 
 ### 1.3 ada cannot see lead2 -> 403
 # @expect $.exc_type == PermissionError
@@ -157,7 +157,7 @@ Authorization: Bearer {{stoken}}
 # ---- comments and mentions -----------------------------------------------------------------------
 
 ### 2.1 add_comment with an @mention of ada -> 200, the Comment row
-# @name c1
+# @name c1_req
 # @expect $.message.name exists
 # @expect $.message.comment_type == Comment
 # @expect $.message.comment_email == Administrator
@@ -169,7 +169,7 @@ Content-Type: application/json
 {"reference_doctype": "CRM Lead", "reference_name": "{{lead1}}", "content": "<p>ZZ hi <span data-type=\"mention\" data-id=\"ada@example.com\" data-label=\"Ada\">@Ada</span> please call them</p>"}
 
 ###
-@c1 = {{c1.response.body.$.message.name}}
+@c1 = {{c1_req.response.body.$.message.name}}
 
 ### 2.2 the lead's _comments cache follows -> holds the comment, its author and name
 # @expect $.data._comments count 1
@@ -203,7 +203,7 @@ Content-Type: application/json
 {"comment_type": "Comment", "reference_doctype": "CRM Lead", "reference_name": "{{lead2}}", "content": "<p>ZZ forged</p>"}
 
 ### 2.6 the manager comments on lead2 -> 200
-# @name c2
+# @name c2_req
 POST {{host}}/api/method/crm.api.comment.add_comment
 Authorization: Bearer {{mtoken}}
 Content-Type: application/json
@@ -211,7 +211,7 @@ Content-Type: application/json
 {"reference_doctype": "CRM Lead", "reference_name": "{{lead2}}", "content": "<p>ZZ private remark</p>"}
 
 ###
-@c2 = {{c2.response.body.$.message.name}}
+@c2 = {{c2_req.response.body.$.message.name}}
 
 ### 2.7 ada's Comment list hides comments on documents she cannot open -> 0
 # @expect $.data count 0
@@ -236,7 +236,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "name": "{{lead1}}", "assign_to": ["{{sales}}"]}
 
 ### 2.11 now she can comment on lead1 -> 200
-# @name c3
+# @name c3_req
 POST {{host}}/api/method/crm.api.comment.add_comment
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
@@ -244,7 +244,7 @@ Content-Type: application/json
 {"reference_doctype": "CRM Lead", "reference_name": "{{lead1}}", "content": "<p>ZZ ada was here</p>"}
 
 ###
-@c3 = {{c3.response.body.$.message.name}}
+@c3 = {{c3_req.response.body.$.message.name}}
 
 ### 2.12 ...but cannot MOVE her comment onto the lead she cannot see -> 403 (destination re-check)
 # @expect $.exc_type == PermissionError
@@ -312,7 +312,7 @@ GET {{notif}}?fields=["name"]&filters=[["notification_type_doc","=","{{c1}}"]]
 Authorization: Bearer {{token}}
 
 ### 3.8 mentioning yourself raises nothing (crm_notification.notify_user: never notify yourself) -> 200
-# @name c4
+# @name c4_req
 POST {{host}}/api/method/crm.api.comment.add_comment
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -320,7 +320,7 @@ Content-Type: application/json
 {"reference_doctype": "CRM Lead", "reference_name": "{{lead1}}", "content": "<p>ZZ note to self <span data-type=\"mention\" data-id=\"Administrator\" data-label=\"Admin\">@Admin</span></p>"}
 
 ###
-@c4 = {{c4.response.body.$.message.name}}
+@c4 = {{c4_req.response.body.$.message.name}}
 
 ### 3.9 -> no notification for that comment
 # @expect $.data count 0
@@ -388,7 +388,7 @@ Content-Type: application/json
 # ---- communications: the record an email becomes -----------------------------------------------------
 
 ### 5.1 log a sent email on lead2 (the send button's URL is one of the 20 missing) -> 201
-# @name m1
+# @name m1_req
 # @expect $.data.reference_name == {{lead2}}
 POST {{comm}}
 Authorization: Bearer {{mtoken}}
@@ -397,7 +397,7 @@ Content-Type: application/json
 {"communication_type": "Communication", "communication_medium": "Email", "sent_or_received": "Sent", "subject": "ZZ Re: your quote", "content": "<p>We can do 400k</p>", "sender": "{{manager}}", "recipients": "buyer@example.test", "reference_doctype": "CRM Lead", "reference_name": "{{lead2}}"}
 
 ###
-@m1 = {{m1.response.body.$.data.name}}
+@m1 = {{m1_req.response.body.$.data.name}}
 
 ### 5.2 ada cannot list emails on a lead she cannot see -> 0
 # @expect $.data count 0
@@ -423,7 +423,7 @@ GET {{comm}}/{{m1}}
 Authorization: Bearer {{mtoken}}
 
 ### 5.6 a communication referencing nothing is not hidden -> ada can create and read it
-# @name m2
+# @name m2_req
 # @expect $.data.reference_name ==
 POST {{comm}}
 Authorization: Bearer {{stoken}}
@@ -432,7 +432,7 @@ Content-Type: application/json
 {"communication_type": "Communication", "subject": "ZZ orphan mail", "content": "x"}
 
 ###
-@m2 = {{m2.response.body.$.data.name}}
+@m2 = {{m2_req.response.body.$.data.name}}
 
 ### 5.7 ...but cannot attach it afterwards to a lead she cannot see -> 403
 # @expect $.exc_type == PermissionError

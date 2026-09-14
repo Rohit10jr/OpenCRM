@@ -136,7 +136,7 @@ Authorization: Bearer {{token}}
 # ---- fixtures: one lead per person, two deals -----------------------------------------------------
 
 ### 1.1 ada's lead -> 201
-# @name l_ada
+# @name l_ada_req
 POST {{lead}}
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
@@ -144,10 +144,10 @@ Content-Type: application/json
 {"first_name": "ZZ Matrix Ada", "lead_owner": "{{sales}}", "annual_revenue": 100}
 
 ###
-@l_ada = {{l_ada.response.body.$.data.name}}
+@l_ada = {{l_ada_req.response.body.$.data.name}}
 
 ### 1.2 alan's lead -> 201
-# @name l_alan
+# @name l_alan_req
 POST {{lead}}
 Authorization: Bearer {{s2token}}
 Content-Type: application/json
@@ -155,10 +155,10 @@ Content-Type: application/json
 {"first_name": "ZZ Matrix Alan", "lead_owner": "{{sales2}}", "annual_revenue": 200}
 
 ###
-@l_alan = {{l_alan.response.body.$.data.name}}
+@l_alan = {{l_alan_req.response.body.$.data.name}}
 
 ### 1.3 grace's lead -> 201
-# @name l_grace
+# @name l_grace_req
 POST {{lead}}
 Authorization: Bearer {{mtoken}}
 Content-Type: application/json
@@ -166,10 +166,10 @@ Content-Type: application/json
 {"first_name": "ZZ Matrix Grace", "lead_owner": "{{manager}}", "annual_revenue": 300}
 
 ###
-@l_grace = {{l_grace.response.body.$.data.name}}
+@l_grace = {{l_grace_req.response.body.$.data.name}}
 
 ### 1.4 Administrator's lead -> 201
-# @name l_admin
+# @name l_admin_req
 POST {{lead}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -177,10 +177,10 @@ Content-Type: application/json
 {"first_name": "ZZ Matrix Admin", "lead_owner": "{{admin}}", "annual_revenue": 400}
 
 ###
-@l_admin = {{l_admin.response.body.$.data.name}}
+@l_admin = {{l_admin_req.response.body.$.data.name}}
 
 ### 1.5 alan's deal -> 201
-# @name d_alan
+# @name d_alan_req
 POST {{deal}}
 Authorization: Bearer {{s2token}}
 Content-Type: application/json
@@ -188,10 +188,10 @@ Content-Type: application/json
 {"deal_owner": "{{sales2}}", "deal_value": 777777, "next_step": "ZZ Matrix alan"}
 
 ###
-@d_alan = {{d_alan.response.body.$.data.name}}
+@d_alan = {{d_alan_req.response.body.$.data.name}}
 
 ### 1.6 grace's deal -> 201
-# @name d_grace
+# @name d_grace_req
 POST {{deal}}
 Authorization: Bearer {{mtoken}}
 Content-Type: application/json
@@ -199,7 +199,7 @@ Content-Type: application/json
 {"deal_owner": "{{manager}}", "deal_value": 888888, "next_step": "ZZ Matrix grace"}
 
 ###
-@d_grace = {{d_grace.response.body.$.data.name}}
+@d_grace = {{d_grace_req.response.body.$.data.name}}
 
 # ---- hierarchy OFF: Sales Users see their own; a Sales Manager sees everything -----------------------
 
@@ -416,7 +416,7 @@ GET {{deal}}?fields=["name","deal_value"]&filters=[["next_step","like","ZZ Matri
 Authorization: Bearer {{mtoken}}
 
 ### 4.4 a deal created by ada with deal_owner alan is invisible to her afterwards -> 201 then 403
-# @name d_orphan
+# @name d_orphan_req
 POST {{deal}}
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
@@ -424,7 +424,7 @@ Content-Type: application/json
 {"deal_owner": "{{sales2}}", "next_step": "ZZ Matrix orphan"}
 
 ###
-@d_orphan = {{d_orphan.response.body.$.data.name}}
+@d_orphan = {{d_orphan_req.response.body.$.data.name}}
 
 ### 4.5 -> 403 (upstream's rule: the owner column decides, not who created it)
 # @expect $.exc_type == PermissionError
@@ -455,7 +455,7 @@ Content-Type: application/json
 {"user": "{{manager}}"}
 
 ### 5.3 Administrator builds it: grace at the root -> 201
-# @name n_grace
+# @name n_grace_req
 POST {{tree}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -463,10 +463,10 @@ Content-Type: application/json
 {"user": "{{manager}}", "is_group": 1}
 
 ###
-@n_grace = {{n_grace.response.body.$.data.name}}
+@n_grace = {{n_grace_req.response.body.$.data.name}}
 
 ### 5.4 ada reports to grace -> 201; full_name is fetched from the user
-# @name n_ada
+# @name n_ada_req
 # @expect $.data.reports_to == {{n_grace}}
 # @expect $.data.full_name exists
 POST {{tree}}
@@ -476,7 +476,7 @@ Content-Type: application/json
 {"user": "{{sales}}", "reports_to": "{{n_grace}}"}
 
 ###
-@n_ada = {{n_ada.response.body.$.data.name}}
+@n_ada = {{n_ada_req.response.body.$.data.name}}
 
 ### 5.5 the nested-set bounds were rebuilt: grace's node spans ada's
 # @expect $.data.lft != null

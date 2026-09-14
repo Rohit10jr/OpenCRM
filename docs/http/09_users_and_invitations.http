@@ -526,7 +526,7 @@ Content-Type: application/json
 # ---- delete_attachment ------------------------------------------------------------------------------
 
 ### 7.1 a lead the manager owns -> 201
-# @name lead
+# @name lead_req
 POST {{host}}/api/resource/CRM%20Lead
 Authorization: Bearer {{mtoken}}
 Content-Type: application/json
@@ -534,7 +534,7 @@ Content-Type: application/json
 {"first_name": "ZZ Attach Lead", "lead_owner": "{{manager}}"}
 
 ###
-@lead = {{lead.response.body.$.data.name}}
+@lead = {{lead_req.response.body.$.data.name}}
 
 ### 7.2 a File row attached to it (metadata only; nothing serves bytes in this port) -> 201
 # @name file

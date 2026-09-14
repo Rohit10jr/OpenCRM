@@ -149,7 +149,7 @@ Content-Type: application/json
 # ---- create and defaults -------------------------------------------------------------------
 
 ### 2.1 minimal deal -> 201; series name, status Qualification, probability 0, exchange_rate 1
-# @name deal1
+# @name deal1_req
 # @expect $.data.name contains CRM-DEAL-
 # @expect $.data.status == Qualification
 # @expect $.data.probability == 0
@@ -163,10 +163,10 @@ Content-Type: application/json
 {"organization": "ZZ Deal Org", "deal_owner": "{{admin}}", "next_step": "ZZ one"}
 
 ###
-@deal1 = {{deal1.response.body.$.data.name}}
+@deal1 = {{deal1_req.response.body.$.data.name}}
 
 ### 2.2 the status's probability is inherited when the deal has none -> 60
-# @name deal2
+# @name deal2_req
 # @expect $.data.status == ZZ Hot
 # @expect $.data.probability == 60
 POST {{deal}}
@@ -176,10 +176,10 @@ Content-Type: application/json
 {"organization": "ZZ Deal Org", "deal_owner": "{{admin}}", "status": "ZZ Hot", "next_step": "ZZ two"}
 
 ###
-@deal2 = {{deal2.response.body.$.data.name}}
+@deal2 = {{deal2_req.response.body.$.data.name}}
 
 ### 2.3 an explicit probability is kept -> 25
-# @name deal3
+# @name deal3_req
 # @expect $.data.probability == 25
 POST {{deal}}
 Authorization: Bearer {{token}}
@@ -188,10 +188,10 @@ Content-Type: application/json
 {"organization": "ZZ Deal Org", "deal_owner": "{{admin}}", "status": "ZZ Hot", "probability": 25, "next_step": "ZZ three"}
 
 ###
-@deal3 = {{deal3.response.body.$.data.name}}
+@deal3 = {{deal3_req.response.body.$.data.name}}
 
 ### 2.4 nothing is mandatory server-side beyond what the model defaults -> 201
-# @name deal4
+# @name deal4_req
 # @expect $.data.status == Qualification
 POST {{deal}}
 Authorization: Bearer {{token}}
@@ -200,7 +200,7 @@ Content-Type: application/json
 {"next_step": "ZZ four"}
 
 ###
-@deal4 = {{deal4.response.body.$.data.name}}
+@deal4 = {{deal4_req.response.body.$.data.name}}
 
 ### 2.5 organization on a deal IS a Link, unlike on a lead -> 417
 # @expect $.exc_type == ValidationError
@@ -269,7 +269,7 @@ Content-Type: application/json
 # ---- forecasting, driven by FCRM Settings -------------------------------------------------
 
 ### 4.1 with forecasting OFF a deal needs no expected value -> 201
-# @name deal5
+# @name deal5_req
 POST {{deal}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -277,7 +277,7 @@ Content-Type: application/json
 {"organization": "ZZ Deal Org", "deal_owner": "{{admin}}", "next_step": "ZZ five"}
 
 ###
-@deal5 = {{deal5.response.body.$.data.name}}
+@deal5 = {{deal5_req.response.body.$.data.name}}
 
 ### 4.2 turn forecasting ON (manager-only write on the settings singleton) -> 200
 # @expect $.data.enable_forecasting == true
@@ -306,7 +306,7 @@ Content-Type: application/json
 {"organization": "ZZ Deal Org", "deal_owner": "{{admin}}", "expected_deal_value": 5000, "next_step": "ZZ six"}
 
 ### 4.5 both -> 201
-# @name deal6
+# @name deal6_req
 # @expect $.data.expected_deal_value contains 5000
 # @expect $.data.expected_closure_date == 2026-12-31
 POST {{deal}}
@@ -316,7 +316,7 @@ Content-Type: application/json
 {"organization": "ZZ Deal Org", "deal_owner": "{{admin}}", "expected_deal_value": 5000, "expected_closure_date": "2026-12-31", "next_step": "ZZ six"}
 
 ###
-@deal6 = {{deal6.response.body.$.data.name}}
+@deal6 = {{deal6_req.response.body.$.data.name}}
 
 ### 4.6 existing deals are checked on every save too: deal5 can no longer be saved -> 417
 # @expect $.exc_type == MandatoryError
