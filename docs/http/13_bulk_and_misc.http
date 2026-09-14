@@ -463,6 +463,18 @@ Content-Type: application/json
 GET {{file}}/{{own}}
 Authorization: Bearer {{stoken}}
 
+### 4.6b a private file attached to nothing is its owner's alone (file.py:932-951 falls to return False) -> 403
+# The manager sees every lead, but this file hangs off nothing, so there is no document
+# to reach it through.
+# @expect $.exc_type == PermissionError
+GET {{file}}/{{own}}
+Authorization: Bearer {{mtoken}}
+
+### 4.6c ...and it is not in her list either -> 200, absent
+# @expect $.data excludes {{own}}
+GET {{file}}?fields=["name"]&filters=[["name","=","{{own}}"]]
+Authorization: Bearer {{mtoken}}
+
 ### 4.7 ...and may even attach it to a lead she cannot see -> 200: upstream's own-upload carve-out
 # (file.py:919) is checked BEFORE the attached document, so the owner keeps write on the File row.
 # The row does not grant her the lead; it only records where the file hangs.
@@ -473,10 +485,8 @@ Content-Type: application/json
 
 {"attached_to_doctype": "CRM Lead", "attached_to_name": "{{lead_name}}"}
 
-### 4.8 a private file attached to nothing is readable only by its owner upstream (file.py:921 returns False) -> 403
-# (200 today: finding 22 - the port's "a row referencing nothing is not hidden" carve-out, written for
-# comments, is applied to private files too)
-# @expect $.exc_type == PermissionError
+### 4.8 once attached, the file is reachable through its document: the manager reads the lead, so the file -> 200
+# @expect $.data.attached_to_name == {{lead_name}}
 GET {{file}}/{{own}}
 Authorization: Bearer {{mtoken}}
 
