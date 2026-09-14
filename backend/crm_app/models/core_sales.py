@@ -1029,6 +1029,32 @@ class CRMTask(AutoIncrementDocument):
             ),
         ]
 
+    @staticmethod
+    def default_list_data():
+        """Verbatim from ``crm_task.py:default_list_data``."""
+        return {
+            "columns": [
+                {"label": "Title", "type": "Data", "key": "title", "width": "16rem"},
+                {"label": "Status", "type": "Select", "key": "status", "width": "8rem"},
+                {"label": "Priority", "type": "Select", "key": "priority", "width": "8rem"},
+                {"label": "Due Date", "type": "Date", "key": "due_date", "width": "8rem"},
+                {"label": "Assigned To", "type": "Link", "key": "assigned_to", "width": "10rem"},
+                {"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
+            ],
+            "rows": [
+                "name",
+                "title",
+                "description",
+                "assigned_to",
+                "due_date",
+                "status",
+                "priority",
+                "reference_doctype",
+                "reference_docname",
+                "modified",
+            ],
+        }
+
 
 @register_doctype("FCRM Note")
 class FCRMNote(BaseDocument):
@@ -1049,6 +1075,23 @@ class FCRMNote(BaseDocument):
                 fields=["reference_doctype", "reference_docname"], name="fcrm_note_reference_idx"
             ),
         ]
+
+    @staticmethod
+    def default_list_data():
+        """Verbatim from ``fcrm_note.py:default_list_data``: no columns, the Notes page
+        is a card grid that reads these rows."""
+        return {
+            "columns": [],
+            "rows": [
+                "name",
+                "title",
+                "content",
+                "reference_doctype",
+                "reference_docname",
+                "owner",
+                "modified",
+            ],
+        }
 
 
 __all__ = [

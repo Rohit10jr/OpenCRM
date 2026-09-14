@@ -110,6 +110,11 @@ class CRMCallLog(BaseDocument):
     )
     reference_docname = models.CharField(max_length=140, blank=True, default="", db_index=True)
 
+    #: ``links``, a Table of Dynamic Link in crm_call_log.json: the lead, deal or contact
+    #: rows the integrations attach to a call. Written by ``integrations/call_log.py``
+    #: with ``parenttype="CRM Call Log"``; declared here so the document carries them.
+    POLYMORPHIC_CHILD_TABLES = {"links": "Dynamic Link"}
+
     class Meta:
         ordering = ["-creation"]
         name_strategy = FieldValue("id", label="ID")
@@ -118,6 +123,43 @@ class CRMCallLog(BaseDocument):
                 fields=["reference_doctype", "reference_docname"], name="call_log_reference_idx"
             ),
         ]
+
+    @staticmethod
+    def default_list_data():
+        """Verbatim from ``crm_call_log.py:default_list_data``."""
+        return {
+            "columns": [
+                {"label": "Caller", "type": "Link", "key": "caller", "options": "User", "width": "9rem"},
+                {"label": "Receiver", "type": "Link", "key": "receiver", "options": "User", "width": "9rem"},
+                {"label": "Type", "type": "Select", "key": "type", "width": "9rem"},
+                {"label": "Status", "type": "Select", "key": "status", "width": "9rem"},
+                {"label": "Duration", "type": "Duration", "key": "duration", "width": "6rem"},
+                {"label": "From (number)", "type": "Data", "key": "from", "width": "9rem"},
+                {"label": "To (number)", "type": "Data", "key": "to", "width": "9rem"},
+                {"label": "Created On", "type": "Datetime", "key": "creation", "width": "8rem"},
+            ],
+            "rows": [
+                "name",
+                "caller",
+                "receiver",
+                "type",
+                "status",
+                "duration",
+                "from",
+                "to",
+                "note",
+                "recording_url",
+                "reference_doctype",
+                "reference_docname",
+                "creation",
+            ],
+        }
+
+    @staticmethod
+    def parse_list_data(calls):
+        """``crm_call_log.py:parse_list_data`` - every list row goes through
+        :func:`parse_call_log`, which ``CallLogs.vue`` and ``CallArea.vue`` rely on."""
+        return [parse_call_log(call) for call in calls] if calls else []
 
     def before_insert(self):
         """``crm_call_log.py:50-54``.
@@ -141,6 +183,66 @@ class CRMCallLog(BaseDocument):
 # `from` / `to` are Python keywords - same treatment as CRM Status Change Log.
 CRMCallLog.add_to_class("from", models.CharField(max_length=140))
 CRMCallLog.add_to_class("to", models.CharField(max_length=140))
+
+
+def seconds_to_duration(seconds) -> str:
+    """``crm/utils/__init__.py:seconds_to_duration``, verbatim: ``1h 1m 1s`` with every
+    zero part left out, and ``0s`` for nothing."""
+    if not seconds:
+        return "0s"
+    seconds = int(seconds)
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    seconds = (seconds % 3600) % 60
+    if hours and minutes and seconds:
+        return f"{hours}h {minutes}m {seconds}s"
+    if hours and minutes:
+        return f"{hours}h {minutes}m"
+    if hours and seconds:
+        return f"{hours}h {seconds}s"
+    if minutes and seconds:
+        return f"{minutes}m {seconds}s"
+    if hours:
+        return f"{hours}h"
+    if minutes:
+        return f"{minutes}m"
+    return f"{seconds}s"
+
+
+def _user_label(name) -> dict:
+    """``frappe.db.get_values("User", name, ["full_name", "user_image"])``."""
+    from frappe_platform.models import User
+
+    row = None
+    if name:
+        row = User._default_manager.filter(pk=name).values_list("full_name", "user_image").first()
+    full_name, image = row if row else (None, None)
+    return {"label": full_name, "image": image}
+
+
+def _contact_label(number) -> dict:
+    from crm_app.integrations.phone import get_contact_by_phone_number
+
+    contact = get_contact_by_phone_number(number) if number else {}
+    return {"label": contact.get("full_name", "Unknown"), "image": contact.get("image")}
+
+
+def parse_call_log(call: dict) -> dict:
+    """``crm_call_log.py:parse_call_log``, verbatim: the timeline and the call-log list
+    read ``_duration``, ``_caller``, ``_receiver`` and ``activity_type`` straight off
+    each row. The caller of an incoming call is the contact behind ``from``; of an
+    outgoing one, the user in ``caller``. ``show_recording`` starts False."""
+    call["show_recording"] = False
+    call["_duration"] = seconds_to_duration(call.get("duration"))
+    if call.get("type") == "Incoming":
+        call["activity_type"] = "incoming_call"
+        call["_caller"] = _contact_label(call.get("from"))
+        call["_receiver"] = _user_label(call.get("receiver"))
+    elif call.get("type") == "Outgoing":
+        call["activity_type"] = "outgoing_call"
+        call["_caller"] = _user_label(call.get("caller"))
+        call["_receiver"] = _contact_label(call.get("to"))
+    return call
 
 
 @register_doctype("CRM Telephony Agent")

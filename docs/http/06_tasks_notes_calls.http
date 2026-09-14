@@ -181,7 +181,6 @@ Content-Type: application/json
 @task2 = {{task2_req.response.body.$.data.name}}
 
 ### 2.8 the task list screen: upstream's default columns are title, status, priority, ... (crm_task.py:57)
-# (Name / Last Modified today: finding 16 - the port's CRMTask declares no default_list_data)
 # @expect $.message.columns[0].key == title
 # @expect $.message.rows contains assigned_to
 POST {{host}}/api/method/crm.api.doc.get_data
@@ -303,7 +302,6 @@ Content-Type: application/json
 @calltask = {{calltask_req.response.body.$.message.name}}
 
 ### 4.7 the call log carries both links in its `links` child table (crm_call_log.py:139) -> 2
-# (absent today: finding 16 - the port writes Dynamic Link rows but the document does not show them)
 # @expect $.data.links count 2
 GET {{call}}/{{call1}}
 Authorization: Bearer {{token}}
@@ -318,8 +316,8 @@ Content-Type: application/json
 
 ### 4.9 the call-log list: upstream's columns (crm_call_log.py:57), not Name / Last Modified
 # and each row is parsed by parse_call_log (crm_call_log.py:150): _duration, _caller, _receiver
-# (finding 16)
 # @expect $.message.columns[0].key == caller
+# @expect $.message.data[0].activity_type exists
 # @expect $.message.data[0]._duration exists
 # @expect $.message.data[0]._caller exists
 POST {{host}}/api/method/crm.api.doc.get_data

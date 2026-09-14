@@ -22,10 +22,10 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 10 | 05 / 2.7, 2.9, 2.10 | medium | Contact's primary-email and primary-phone rules are not applied on a document save: a lone email row is not made primary, a stray `email_id` is not cleared, two primaries are accepted | open |
 | 11 | 05 / 2.13 | low | Email addresses are never validated — on a contact's email rows, and `crm_lead.py:146` explicitly validates a lead's email too | open |
 | 12 | 05 / 3.12 | low | `crm.api.contact.*` on a contact that does not exist answers 417 `ValidationError`; upstream answers 403 `PermissionError` | open |
-| 13 | 05 / 5.1–5.5 | **high** | `rename_doc` inserts a copy and deletes the original: a referenced document cannot be renamed, and renaming a contact **deletes** its email and phone rows and its deal links | open |
+| 13 | 05 / 5.1–5.5 | **high** | `rename_doc` inserts a copy and deletes the original: a referenced document cannot be renamed, and renaming a contact **deletes** its email and phone rows and its deal links | **fixed** 14 Sep 2026 |
 | 14 | 05 / 6.2, 6.3 | low | The territory tree is unmaintained: `lft`/`rgt` stay null and no tree resolver is registered, so `descendants of` answers 400. Latent — the frontend never sends it | open |
 | 15 | 06 / 2.2, 2.4 | medium | A task's `assigned_to` never becomes an assignment: no ToDo, empty `_assign`, and changing it does not unassign the previous user | open |
-| 16 | 06 / 2.8, 3.4, 4.7, 4.9 | **high** | Task, Note and Call Log declare no list columns or rows, so their three screens fall back to Name and Last Modified; call-log rows are not parsed and the document hides its `links` | open |
+| 16 | 06 / 2.8, 3.4, 4.7, 4.9 | **high** | Task, Note and Call Log declare no list columns or rows, so their three screens fall back to Name and Last Modified; call-log rows are not parsed and the document hides its `links` | **fixed** 14 Sep 2026 |
 | 17 | 07 / 1.6, 5.8 | medium | A method endpoint given a doctype that does not exist answers **500**: `registry.DocTypeNotFound` is a bare `KeyError` the handler never maps | **fixed** 13 Sep 2026 |
 | 18 | 08 / 3.11, 3.12 | medium | Assigning a document to someone never notifies them: nothing listens to ToDo writes, where `crm/api/todo.py` raises the Assignment notification | open |
 | 19 | 08 / 7.2 | medium | Deleting a document leaves its comments, communications, ToDos and notifications behind; upstream removes them with the document | open |
@@ -366,6 +366,18 @@ polymorphic `parent`/`reference_name` column to the new name (the registry knows
 model, and `children.discover_child_tables` knows the child rows), then delete the
 original. Until then the endpoint should refuse rather than cascade.
 
+**Fixed 14 Sep 2026.** `frappe_core/rename.py:rename_document` inserts the copy with
+`bulk_create` (no save hook, naming or version capture for what is not a new
+document), repoints every foreign key in the schema that targets the model, including
+the hidden ones on many-to-many through tables, the `parent` of multi-parent child rows,
+and every Dynamic Link pair the models declare (`reference_doctype/reference_name`,
+`reference_type/reference_name`, `attached_to_*`, `ref_doctype/docname`,
+`link_doctype/link_name`), then deletes the original, all in one transaction. The
+endpoint's refusals are `validate_rename`'s, with its wording and its 417: a missing
+document, the same name, a taken name, no write permission. Blocks 05 / 5.1 to 5.6 are
+green. Not ported: upstream's `allow_rename` flag, so a doctype upstream would refuse
+to rename can be renamed here; nothing in the frontend reaches that.
+
 ## 14. The territory tree is unmaintained
 
 **Blocks:** `05_contacts_organizations.http` 6.2 (`lft`/`rgt` null), 6.3
@@ -421,6 +433,16 @@ show. The port writes Dynamic Link rows for a call log but the model declares no
 `FCRMNote.default_list_data`), `crm_app/models/telephony.py` (`CRMCallLog.default_list_data`,
 `parse_list_data`, and `POLYMORPHIC_CHILD_TABLES = {"links": "Dynamic Link"}`). Lead,
 Deal, Organization and Contact all have theirs; these three were missed.
+
+**Fixed 14 Sep 2026.** `CRMTask.default_list_data`, `FCRMNote.default_list_data` and
+`CRMCallLog.default_list_data` are upstream's, verbatim; `CRMCallLog.parse_list_data`
+runs every list row through a port of `parse_call_log`, with `seconds_to_duration`
+from `crm/utils` (`1h 1m 1s`, zero parts left out) and the caller and receiver as
+label-plus-image pairs, "Unknown" for a number no contact holds; and
+`POLYMORPHIC_CHILD_TABLES = {"links": "Dynamic Link"}` puts the link rows the
+integrations write onto the document. The Notes page's empty column list still falls
+back to Name and Last Modified in `get_data`, a documented guard the card grid never
+reads. Blocks 06 / 2.8, 3.4, 4.7 and 4.9 are green.
 
 ## 17. An unknown doctype on a method endpoint answers 500
 
