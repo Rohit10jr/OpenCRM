@@ -4,12 +4,47 @@ PHASE_0_FOUNDATION.md section 3. The frontend reads these directly, so none of t
 are optional.
 """
 
+import re
+from email.utils import parseaddr
+from html import escape
+
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import validate_email as _django_validate_email
 from django.db import models
 from django.db.models.base import ModelBase
 from django.utils import timezone
 
 from frappe_core import naming as naming_strategies
+from frappe_core.exceptions import InvalidEmailAddressError
 from frappe_core.session import get_current_user
+
+
+def validate_email_address(email_str: str) -> str:
+    """``frappe.utils.validate_email_address(email_str, throw=True)`` (utils/__init__.py:
+    166-206): every address in a comma- or semicolon-separated string is checked, an
+    address may carry a display name (``Jane <jane@x.test>``), a bare string with a space
+    is not an address, and the first bad one throws ``InvalidEmailAddressError`` with the
+    value HTML-escaped: "<value> is not a valid Email Address". Returns the addresses
+    found, joined with ", ", as upstream does.
+    """
+    out = []
+    for candidate in re.split(r"[,;]", (email_str or "").strip()):
+        candidate = candidate.strip()
+        if not candidate:
+            continue
+        address = ""
+        if "undisclosed-recipient" in candidate or (" " in candidate and "<" not in candidate):
+            address = ""
+        else:
+            address = parseaddr(candidate)[1]
+            try:
+                _django_validate_email(address)
+            except DjangoValidationError:
+                address = ""
+        if not address:
+            raise InvalidEmailAddressError(f"{escape(candidate)} is not a valid Email Address")
+        out.append(address)
+    return ", ".join(out)
 
 #: Attributes we allow inside ``class Meta`` that Django itself does not understand.
 #: They are stripped before Django's ``ModelBase`` validates Meta, then re-attached to
@@ -135,6 +170,12 @@ class BaseDocument(models.Model, metaclass=DocumentBase):
     #: module for why.
     TRACKED_FIELDS: tuple[str, ...] = ()
 
+    #: Data fields whose DocType ``options`` is ``Email``. Upstream validates every one
+    #: of them on save (``base_document.py:_validate_data_fields``, 936-940), one
+    #: address at a time after splitting on commas; declared per model for the same
+    #: reason as ``FETCH_FROM``.
+    EMAIL_FIELDS: tuple[str, ...] = ()
+
     @classmethod
     def from_db(cls, db, field_names, values):
         instance = super().from_db(db, field_names, values)
@@ -145,6 +186,13 @@ class BaseDocument(models.Model, metaclass=DocumentBase):
             # so the history costs no extra query.
             instance._tracked_snapshot = capture_tracked_values(instance)
         return instance
+
+    def _validate_email_fields(self) -> None:
+        """``base_document.py:_validate_data_fields`` for the Email-typed columns."""
+        for fieldname in self.EMAIL_FIELDS:
+            value = getattr(self, fieldname, None)
+            if value:
+                validate_email_address(str(value))
 
     def apply_fetch_from(self) -> None:
         """Copy each declared ``FETCH_FROM`` value off its linked document."""
@@ -203,6 +251,7 @@ class BaseDocument(models.Model, metaclass=DocumentBase):
         user_pk = get_current_user()
 
         self.apply_fetch_from()
+        self._validate_email_fields()
 
         creating = self._state.adding
         if creating:

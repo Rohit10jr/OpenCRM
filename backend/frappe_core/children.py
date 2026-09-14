@@ -22,6 +22,8 @@ Both shapes serialise identically on the wire, which is what matters to the fron
 
 from __future__ import annotations
 
+import contextvars
+
 from django.db import transaction
 
 from frappe_core import registry
@@ -180,6 +182,19 @@ def prepare_rows(
     return payloads
 
 
+#: True while :func:`replace_children` is writing a document's rows. Upstream saves a
+#: document and its rows as one unit and runs ``validate`` once over all of them; a
+#: per-row signal that re-derives the parent (Contact's primary mirror) would see the
+#: rows one at a time and, for instance, promote the first email row to primary before
+#: the second exists. Such signals check this and stand down; the parent's own save,
+#: which follows, applies the rules over the finished set.
+_REPLACING = contextvars.ContextVar("frappe_core.children.replacing", default=False)
+
+
+def replacing_children() -> bool:
+    return _REPLACING.get()
+
+
 @transaction.atomic
 def replace_children(instance, fieldname: str, spec: dict, rows: list[dict]) -> None:
     """Delete the parent's existing rows and recreate them from ``rows``.
@@ -198,12 +213,15 @@ def replace_children(instance, fieldname: str, spec: dict, rows: list[dict]) -> 
 
     payloads = prepare_rows(child_model, rows, fieldname=fieldname, parent_field=spec["fk"])
 
-    child_model._default_manager.filter(**base_filter).delete()
-
-    for payload in payloads:
-        payload.update(base_filter)
-        payload.setdefault("parenttype", parent_doctype)
-        child_model._default_manager.create(**payload)
+    token = _REPLACING.set(True)
+    try:
+        child_model._default_manager.filter(**base_filter).delete()
+        for payload in payloads:
+            payload.update(base_filter)
+            payload.setdefault("parenttype", parent_doctype)
+            child_model._default_manager.create(**payload)
+    finally:
+        _REPLACING.reset(token)
 
 
 def delete_polymorphic_children(instance) -> int:

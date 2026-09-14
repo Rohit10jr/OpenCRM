@@ -79,6 +79,11 @@ class MandatoryError(FrappeError):
     http_status_code = 417
 
 
+class InvalidEmailAddressError(ValidationError):
+    """``frappe.InvalidEmailAddressError``: ``validate_email_address(throw=True)`` on a
+    Data field whose options is Email - "<value> is not a valid Email Address"."""
+
+
 class LinkValidationError(ValidationError):
     """``frappe.LinkValidationError``: a Link names a document that does not exist.
     ``document.py:_validate_links`` throws it as "Could not find <Label>: <name>", and

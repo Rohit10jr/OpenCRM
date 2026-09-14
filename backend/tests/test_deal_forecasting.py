@@ -206,12 +206,21 @@ def _add_contact(deal, **kwargs):
     how these tests were originally written, and it only passed because fetch_from was
     not ported yet.
     """
+    from frappe_platform.models import ContactEmail, ContactPhone
+
+    email = kwargs.pop("email", "")
+    mobile_no = kwargs.pop("mobile_no", "")
     contact = Contact.objects.create(
         first_name=kwargs.pop("first_name", "Jane"),
         last_name=kwargs.pop("last_name", "Doe"),
-        email_id=kwargs.pop("email", ""),
-        mobile_no=kwargs.pop("mobile_no", ""),
     )
+    # The Contact's own columns mirror its rows on every save (contact.py:65-68), so
+    # the details go on the rows.
+    if email:
+        ContactEmail.objects.create(parent_contact=contact, email_id=email, is_primary=True)
+    if mobile_no:
+        ContactPhone.objects.create(parent_contact=contact, phone=mobile_no, is_primary_mobile_no=True)
+    contact.refresh_from_db()
     return CRMContacts.objects.create(parent_deal=deal, contact=contact, **kwargs)
 
 

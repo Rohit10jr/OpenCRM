@@ -510,6 +510,8 @@ class CRMLead(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
     #: Filled in by ``validate_status`` on create, so the serializer must not demand it
     #: (frappe_core/serializers.py). Upstream's client omits it too.
     AUTO_DEFAULTED_FIELDS = ("status",)
+    #: ``crm_lead.py:146`` validates the address explicitly on top of the Email option.
+    EMAIL_FIELDS = ("email",)
 
     #: ``image`` is hidden in the JSON; get_data drops hidden columns
     #: (``crm/api/doc.py:350-352``).
@@ -755,6 +757,7 @@ class CRMDeal(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
 
     #: Filled in by ``validate_status`` on create - see the note on ``CRMLead``.
     AUTO_DEFAULTED_FIELDS = ("status",)
+    EMAIL_FIELDS = ("email",)
 
     # -- lifecycle (crm_deal.py) --------------------------------------------------
 

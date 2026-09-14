@@ -19,9 +19,9 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 7 | 03 / 5.8 | medium | A child-table row missing a mandatory field reaches the database and answers **409 DuplicateEntryError**, not `MandatoryError` | **fixed** 14 Sep 2026 |
 | 8 | 04 / 4.9, 5.1 | medium | Validation that depends on child rows runs **before the rows are written**, so expected-value auto-update and primary-contact derivation lag one save behind | **fixed** 14 Sep 2026 |
 | 9 | 04 / 4.12, 5.1 | **high** | A child row whose Link is given by name, as every form sends it, answers **500** — deal contacts and product lines with a product code cannot be written | **fixed** 14 Sep 2026 |
-| 10 | 05 / 2.7, 2.9, 2.10 | medium | Contact's primary-email and primary-phone rules are not applied on a document save: a lone email row is not made primary, a stray `email_id` is not cleared, two primaries are accepted | open |
-| 11 | 05 / 2.13 | low | Email addresses are never validated — on a contact's email rows, and `crm_lead.py:146` explicitly validates a lead's email too | open |
-| 12 | 05 / 3.12 | low | `crm.api.contact.*` on a contact that does not exist answers 417 `ValidationError`; upstream answers 403 `PermissionError` | open |
+| 10 | 05 / 2.7, 2.9, 2.10 | medium | Contact's primary-email and primary-phone rules are not applied on a document save: a lone email row is not made primary, a stray `email_id` is not cleared, two primaries are accepted | **fixed** 14 Sep 2026 |
+| 11 | 05 / 2.13 | low | Email addresses are never validated — on a contact's email rows, and `crm_lead.py:146` explicitly validates a lead's email too | **fixed** 14 Sep 2026 |
+| 12 | 05 / 3.12 | low | `crm.api.contact.*` on a contact that does not exist answers 417 `ValidationError`; upstream answers 403 `PermissionError` | **fixed** 14 Sep 2026 |
 | 13 | 05 / 5.1–5.5 | **high** | `rename_doc` inserts a copy and deletes the original: a referenced document cannot be renamed, and renaming a contact **deletes** its email and phone rows and its deal links | **fixed** 14 Sep 2026 |
 | 14 | 05 / 6.2, 6.3 | low | The territory tree is unmaintained: `lft`/`rgt` stay null and no tree resolver is registered, so `descendants of` answers 400. Latent — the frontend never sends it | open |
 | 15 | 06 / 2.2, 2.4 | medium | A task's `assigned_to` never becomes an assignment: no ToDo, empty `_assign`, and changing it does not unassign the previous user | open |
@@ -308,6 +308,16 @@ shows no primary, and a deal that later picks it up derives an empty email.
 **Where:** `frappe_platform/models.py:Contact.save` — port the three methods, run them
 after the child rows are written (finding 8's ordering applies here too).
 
+**Fixed 14 Sep 2026.** `Contact.set_primary_email` and `Contact.set_primary` are
+upstream's, verbatim, and `Contact.save` runs them on every save of an existing contact
+(a create clears the three columns, since no row can exist yet; the document route
+saves again once its rows are written). Two primaries throw `Only one <strong>Email
+ID</strong> can be set as primary.` and the phone equivalents. The per-row re-sync
+signal stands down while a document's rows are being replaced, so the rules see the
+finished set, as upstream's single `validate` does. The earlier port's "first row when
+none is primary" fallback is gone: with no primary flagged the column is empty. Blocks
+05 / 2.6 to 2.12 are green.
+
 ## 11. Email addresses are never validated
 
 **Block:** `05_contacts_organizations.http` 2.13 — an email row `not-an-email`
@@ -324,6 +334,14 @@ owner-equality check and drops the format check that precedes it.
 **Where:** `frappe_core/serializers.py` (a validator for fields declared Email in
 `doctype_meta.json`) and `CRMLead.validate_email`.
 
+**Fixed 14 Sep 2026.** `BaseDocument.EMAIL_FIELDS` names a model's Email-typed
+columns (`Contact.email_id`, `Contact Email.email_id`, `CRM Lead.email`,
+`CRM Deal.email`), and every save validates them with a port of
+`frappe.utils.validate_email_address`: comma-separated lists, `Name <addr>` forms, the
+HTML-escaped value in `<value> is not a valid Email Address`, `InvalidEmailAddressError`
+417. A deal's own column is derived from its contact rows on every save, upstream too,
+so the check bites on the contact's row. Block 05 / 2.13 is green.
+
 ## 12. A missing contact is a validation error, not a permission error
 
 **Block:** `05_contacts_organizations.http` 3.12
@@ -339,6 +357,10 @@ for the denied case. Low, but the frontend branches on `PermissionError`.
 **Same shape elsewhere:** `crm.api.comment.add_comment` on a document that does not
 exist (`08 / 2.3`) answers 417 `ValidationError`; upstream's `frappe.get_doc` raises
 `DoesNotExistError`, 404. Both are `throw()` used where a typed exception belongs.
+
+**Fixed 14 Sep 2026.** `_require_contact` raises `PermissionError` for a missing
+contact as for a denied one, and `add_comment` raises `DoesNotExistError` for a
+doctype or document that does not exist. Blocks 05 / 3.12 and 08 / 2.3 are green.
 
 ## 13. rename_doc is insert-then-delete
 

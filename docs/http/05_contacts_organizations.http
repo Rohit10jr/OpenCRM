@@ -188,8 +188,6 @@ Content-Type: application/json
 
 ### 2.6 a single email row with no primary flag becomes primary by itself -> 200
 # contact.py:184 - `if len(self.email_ids) == 1: self.email_ids[0].is_primary = 1`
-# (2.7, 2.9 and 2.10 fail today: finding 10 - Contact.validate's primary rules are not
-# applied on a document save)
 PUT {{contact}}/ZZ%20Acme%20Only
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -215,7 +213,7 @@ GET {{contact}}/ZZ%20Jane%20Roe-1
 Authorization: Bearer {{token}}
 
 ### 2.10 two primary emails -> 417, contact.py:181 verbatim
-# @expect $.message == Only one Email ID can be set as primary.
+# @expect $.message == Only one <strong>Email ID</strong> can be set as primary.
 PUT {{contact}}/ZZ%20John%20Doe
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -236,8 +234,9 @@ Content-Type: application/json
 GET {{contact}}/ZZ%20John%20Doe
 Authorization: Bearer {{token}}
 
-### 2.13 an email row that is not an address -> 417 (Data/Email fields are validated upstream; 200 today: finding 11)
+### 2.13 an email row that is not an address -> 417 InvalidEmailAddressError (base_document.py:936-940, validate_email_address)
 # @expect $.exc_type == InvalidEmailAddressError
+# @expect $.message == not-an-email is not a valid Email Address
 PUT {{contact}}/ZZ%20John%20Doe
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -325,7 +324,7 @@ Content-Type: application/json
 
 {"contact": "ZZ Jane Roe", "field": "fax", "value": "1"}
 
-### 3.12 a contact that does not exist -> 403 PermissionError "Not permitted" upstream (417 today: finding 12)
+### 3.12 a contact that does not exist -> 403 PermissionError "Not permitted", as upstream
 # has_permission("Contact", "write", "<missing>") is False upstream, so it is a
 # PermissionError, not a validation failure.
 # @expect $.exc_type == PermissionError

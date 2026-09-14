@@ -179,7 +179,8 @@ Content-Type: application/json
 GET {{lead}}/{{lead1}}
 Authorization: Bearer {{token}}
 
-### 2.3 add_comment on a document that does not exist -> 404|417 (404 DoesNotExistError upstream; 417 is finding 12, counted once)
+### 2.3 add_comment on a document that does not exist -> 404 DoesNotExistError, as frappe.get_doc raises
+# @expect $.exc_type == DoesNotExistError
 POST {{host}}/api/method/crm.api.comment.add_comment
 Authorization: Bearer {{token}}
 Content-Type: application/json

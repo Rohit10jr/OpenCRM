@@ -18,6 +18,7 @@ from django.db.models.signals import post_delete, post_save
 from django.utils import timezone
 
 from frappe_core.assignment import register_todo_model
+from frappe_core.exceptions import ValidationError
 from frappe_core.models import BaseDocument
 from frappe_core.naming import FieldValue, Hash, Prompt, append_number_if_name_exists
 from frappe_core.registry import register_doctype
@@ -287,6 +288,8 @@ class Contact(BaseDocument):
     first_name = models.CharField(max_length=140, blank=True, default="")
     middle_name = models.CharField(max_length=140, blank=True, default="")
     last_name = models.CharField(max_length=140, blank=True, default="")
+    EMAIL_FIELDS = ("email_id",)
+
     full_name = models.CharField(max_length=420, blank=True, default="")
     salutation = models.CharField(max_length=140, blank=True, default="")
     company_name = models.CharField(max_length=140, blank=True, default="")
@@ -372,23 +375,52 @@ class Contact(BaseDocument):
         self.pk = append_number_if_name_exists(type(self), base)
         return True
 
-    def sync_primary_values(self) -> None:
-        """Recompute the denormalised primary email/phone from the child rows."""
-        if not self.pk:
+    def set_primary_email(self) -> None:
+        """``contact.py:175-194``, verbatim: no rows clears the column; two primaries
+        throw; a lone row is made primary and that is persisted; the column mirrors
+        the primary row, or is empty when none is flagged."""
+        rows = list(self.email_ids.all().order_by("idx", "pk"))
+        if not rows:
+            self.email_id = ""
             return
-        primary_email = self.email_ids.filter(is_primary=True).first() or self.email_ids.first()
-        self.email_id = primary_email.email_id if primary_email else ""
+        if len([row for row in rows if row.is_primary]) > 1:
+            raise ValidationError("Only one <strong>Email ID</strong> can be set as primary.")
+        if len(rows) == 1 and not rows[0].is_primary:
+            rows[0].is_primary = True
+            type(rows[0])._default_manager.filter(pk=rows[0].pk).update(is_primary=True)
+        primary = next((row for row in rows if row.is_primary), None)
+        self.email_id = primary.email_id.strip() if primary else ""
 
-        primary_mobile = (
-            self.phone_nos.filter(is_primary_mobile_no=True).first() or self.phone_nos.first()
-        )
-        self.mobile_no = primary_mobile.phone if primary_mobile else ""
+    def set_primary(self, fieldname: str) -> None:
+        """``contact.py:196-219``, verbatim, for ``phone`` and ``mobile_no``: unlike the
+        email rule, a lone row is **not** promoted."""
+        rows = list(self.phone_nos.all().order_by("idx", "pk"))
+        if not rows:
+            setattr(self, fieldname, "")
+            return
+        flag = "is_primary_" + fieldname
+        if len([row for row in rows if getattr(row, flag)]) > 1:
+            label = fieldname.replace("_", " ").title()  # frappe.unscrub
+            raise ValidationError(f"Only one <strong>{label}</strong> can be set as primary.")
+        primary = next((row for row in rows if getattr(row, flag)), None)
+        setattr(self, fieldname, primary.phone if primary else "")
 
-        primary_phone = self.phone_nos.filter(is_primary_phone=True).first()
-        self.phone = primary_phone.phone if primary_phone else ""
+    def sync_primary_values(self) -> None:
+        """The three primary rules ``Contact.validate`` runs (``contact.py:65-68``)."""
+        self.set_primary_email()
+        self.set_primary("phone")
+        self.set_primary("mobile_no")
 
     def save(self, *args, **kwargs):
         self.full_name = self.build_full_name()
+        # ``validate`` upstream: the mirror columns follow the rows on every save. A row
+        # cannot exist before the contact does, so a create clears them; the document
+        # route saves again once its rows are written (FINDINGS.md 8), and the rows the
+        # endpoints add re-sync through their own signal.
+        if self._state.adding:
+            self.email_id = self.mobile_no = self.phone = ""
+        else:
+            self.sync_primary_values()
         return super().save(*args, **kwargs)
 
 
@@ -401,6 +433,8 @@ class ContactEmail(BaseDocument):
     )
     parenttype = models.CharField(max_length=140, default="Contact")
     parentfield = models.CharField(max_length=140, default="email_ids")
+    EMAIL_FIELDS = ("email_id",)
+
     email_id = models.CharField(max_length=140)
     is_primary = models.BooleanField(default=False)
 
@@ -783,6 +817,13 @@ class DynamicLink(BaseDocument):
 # so a save-time hook would not see them. Signals on the child tables are the faithful
 # equivalent.
 def _resync_contact(sender, instance, **kwargs):
+    from frappe_core import children
+
+    # A document write replaces the rows as one unit and the contact's own save then
+    # applies the rules over all of them; re-deriving after each row would promote the
+    # first email row before the second exists (contact.py:183 needs the whole table).
+    if children.replacing_children():
+        return
     contact = instance.parent_contact
     if contact is None:
         return

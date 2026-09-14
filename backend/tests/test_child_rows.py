@@ -36,10 +36,15 @@ def product(administrator):
 
 @pytest.fixture
 def contact(administrator):
+    """The mirror columns follow the rows (contact.py:65-68), so the rows are created."""
+    from frappe_platform.models import ContactEmail, ContactPhone
+
     with session_user(administrator.name):
-        return Contact.objects.create(
-            first_name="Ada", last_name="Lovelace", email_id="ada@test.example", mobile_no="+1 111"
-        )
+        contact = Contact.objects.create(first_name="Ada", last_name="Lovelace")
+        ContactEmail.objects.create(parent_contact=contact, email_id="ada@test.example", is_primary=True)
+        ContactPhone.objects.create(parent_contact=contact, phone="+1 111", is_primary_mobile_no=True)
+        contact.refresh_from_db()
+        return contact
 
 
 def _put(client, deal, body):
