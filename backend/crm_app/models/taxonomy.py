@@ -119,12 +119,11 @@ class CRMTerritory(BaseDocument):
     imported data carry - and exposes ``parent_crm_territory`` as the self-FK the JSON
     declares.
 
-    **Phase 2 owns the tree behaviour**: maintaining ``lft``/``rgt`` on write and
-    answering subtree queries. It should register a resolver through
-    ``frappe_core.filters.register_tree_resolver("CRM Territory", ...)`` so the
-    ``descendants of`` operator works, and decide there whether to adopt treebeard
-    outright or keep the nested-set columns. Deferring that decision keeps phase 1
-    mechanical, which is what its spec asks for.
+    The tree behaviour lives in ``crm_app/permissions/tree.py``, next to the sales
+    hierarchy's: every write rebuilds ``lft``/``rgt`` (siblings by name, as
+    ``nestedset.py:rebuild_node`` walks them) and ``territory_subtree_q`` is registered
+    as the ``descendants of`` / ``ancestors of`` resolver. Nested-set columns, not
+    treebeard, so the schema stays Frappe's.
     """
 
     territory_name = models.CharField(max_length=140)

@@ -470,8 +470,6 @@ Content-Type: application/json
 GET {{territory}}/ZZ%20Berlin
 Authorization: Bearer {{token}}
 
-# 6.2 and 6.3 fail today: finding 14 - the territory tree's lft/rgt are never written and
-# no resolver is registered for the tree operators. Latent: the frontend never sends them.
 
 ### 6.2 a nested-set tree carries lft/rgt on every node (frappe/utils/nestedset.py) -> set
 # @expect $.data.lft != null
