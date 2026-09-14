@@ -27,11 +27,11 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 15 | 06 / 2.2, 2.4 | medium | A task's `assigned_to` never becomes an assignment: no ToDo, empty `_assign`, and changing it does not unassign the previous user | **fixed** 14 Sep 2026 |
 | 16 | 06 / 2.8, 3.4, 4.7, 4.9 | **high** | Task, Note and Call Log declare no list columns or rows, so their three screens fall back to Name and Last Modified; call-log rows are not parsed and the document hides its `links` | **fixed** 14 Sep 2026 |
 | 17 | 07 / 1.6, 5.8 | medium | A method endpoint given a doctype that does not exist answers **500**: `registry.DocTypeNotFound` is a bare `KeyError` the handler never maps | **fixed** 13 Sep 2026 |
-| 18 | 08 / 3.11, 3.12 | medium | Assigning a document to someone never notifies them: nothing listens to ToDo writes, where `crm/api/todo.py` raises the Assignment notification | open |
-| 19 | 08 / 7.2 | medium | Deleting a document leaves its comments, communications, ToDos and notifications behind; upstream removes them with the document | open |
-| 20 | 10 / 2.15, 2.16 | medium | Six of upstream's nineteen dashboard charts were never built; a tile using one renders `Invalid chart name` | open, known |
+| 18 | 08 / 3.11, 3.12 | medium | Assigning a document to someone never notifies them: nothing listens to ToDo writes, where `crm/api/todo.py` raises the Assignment notification | **fixed** 15 Sep 2026 |
+| 19 | 08 / 7.2 | medium | Deleting a document leaves its comments, communications, ToDos and notifications behind; upstream removes them with the document | **fixed** 15 Sep 2026 |
+| 20 | 10 / 2.15, 2.16 | medium | Six of upstream's nineteen dashboard charts were never built; a tile using one renders `Invalid chart name` | **fixed** 15 Sep 2026 |
 | 21 | 10 / 2.18 | low | A dashboard date that does not parse answers **500**; upstream's `getdate` throws 417 "… is not a valid date string." | **fixed** 13 Sep 2026 |
-| 22 | 13 / 4.8 | low | A **private** File attached to nothing is readable by every user; upstream lets only its owner read it | open |
+| 22 | 13 / 4.8 | low | A **private** File attached to nothing is readable by every user; upstream lets only its owner read it | **fixed** 15 Sep 2026 |
 
 ---
 
@@ -524,6 +524,14 @@ phase 1 did not pick them up.
 `notify_assigned_user` and `get_notification_text`; `crm_app/api/notifications.py:get_hash`
 already knows how to route an Assignment notification.
 
+**Fixed 15 Sep 2026.** `crm_app/async_signals.py` ports `crm/api/todo.py` as a ToDo
+`post_save` hook: on insert, the assignee of a lead or deal becomes its owner (the
+"mirror assign_to" rule) and a lead, deal or task assignment raises a `CRM
+Notification` of type Assignment with upstream's message and HTML text; when the ToDo
+is cancelled, "Your assignment on … has been removed by …" and the owner is cleared.
+Never for yourself, never twice; a task's notification lands on the task's own lead or
+deal. Blocks 08 / 3.11 and 3.12 are green.
+
 ## 19. Deleting a document leaves its dependants behind
 
 **Block:** `08_activities_comments_notifications.http` 7.2 — delete a lead, then list
@@ -548,6 +556,15 @@ is ever reset, a new document inherits the old one's comments and timeline.
 already hooks `post_delete`) that deletes Comment, Communication, ToDo, Version and
 CRM Notification rows whose `reference_*` columns name the document.
 
+**Fixed 15 Sep 2026.** `children.delete_references` runs from the `post_delete` hook
+every registered model already has, doing what `delete_doc.py:delete_dynamic_links`
+and the `clear_references` after it do for the doctypes the port has: ToDo, Version,
+Comment and File rows keyed to the document are deleted, a Communication's reference is
+cleared and the email kept. CRM Notification rows are left alone, as upstream leaves
+them (no hook names them). The bulk delete cleans a whole batch in one query per
+reference doctype and the per-row hook stands down, keeping the C9 shape. Block
+08 / 7.2 is green.
+
 ## 20. Six dashboard charts were never built
 
 **Blocks:** `10_dashboard.http` 2.15 (`sales_trend`), 2.16 (`funnel_conversion`)
@@ -566,6 +583,19 @@ and `docs/internal/PROGRESS_PHASE_3.md` records them as not done.
 point at and so the gap is closed in one place when it is closed. The default layout
 uses only ported charts, so the dashboard as shipped renders; a user who adds one of
 the six from the editor gets a broken tile.
+
+**Fixed 15 Sep 2026.** All six are built in `crm_app/api/dashboard.py` and registered
+in `CHART_BUILDERS`: the two average-time-to-close numbers (won deals by `closed_date`,
+the clock starting at the lead's creation for one and the deal's for the other, whole
+days as `TIMESTAMPDIFF` counts them, the delta in days), `sales_trend` (leads, deals
+and wins per day), `forecasted_revenue` (by month of expected closure over the twelve
+months before today, a lost deal at full expected value, any other weighted by
+probability, actual from won deals, empty strings where there is nothing),
+`funnel_conversion` (the leads count, then each status reached from the status-change
+log of deals not currently Lost, in position order) and the bare
+`deal_status_change_counts` list the funnel is built on. They aggregate in Python over
+the filtered rows rather than in SQL, and use the port's corrected previous-period
+window. Blocks 10 / 2.15 and 2.16 are green.
 
 ## 21. An unparseable dashboard date answers 500
 
@@ -605,3 +635,8 @@ day a download route lands, which `KNOWN_ISSUES.md` already warns about.
 
 **Where:** `file_has_permission` — after the two short-circuits, deny when
 `is_private` and the file is attached to nothing, before deferring to `_has_permission`.
+
+**Fixed 15 Sep 2026.** `file_has_permission` answers False for a file attached to
+nothing once the public and own-upload short-circuits have passed (creating one is
+still the upload itself), and `file_query_conditions` lists a file only when it is
+public, yours, or attached to a document you may see. Block 13 / 4.8 is green.

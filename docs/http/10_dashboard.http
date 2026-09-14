@@ -271,17 +271,20 @@ Content-Type: application/json
 
 {"name": "no_such_chart", "type": "number"}
 
-### 2.15 sales_trend exists upstream (dashboard.py:555) -> a line chart; the port never built it (finding 20)
+### 2.15 sales_trend (dashboard.py:555) -> a line chart: leads, deals and wins per day
 # @expect $.message.error absent
-# @expect $.message.series exists
+# @expect $.message.series count 3
+# @expect $.message.xAxis.timeGrain == day
 POST {{host}}/api/method/{{dash}}.get_chart
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"name": "sales_trend", "type": "axis", "from_date": "2026-01-01", "to_date": "2026-12-31"}
 
-### 2.16 funnel_conversion, likewise (dashboard.py:736) -> finding 20
+### 2.16 funnel_conversion (dashboard.py:736) -> the leads count first, then each status reached
 # @expect $.message.error absent
+# @expect $.message.data[0].stage == Leads
+# @expect $.message.swapXY == true
 POST {{host}}/api/method/{{dash}}.get_chart
 Authorization: Bearer {{token}}
 Content-Type: application/json
