@@ -17,6 +17,8 @@ import json
 import re
 from typing import Any
 
+from django.core.exceptions import ValidationError as DjangoValidationError
+
 from frappe_core import permissions, registry
 from frappe_core.exceptions import ValidationError
 from frappe_core.field_security import hidden_from, is_hidden
@@ -25,6 +27,21 @@ from frappe_core.session import get_current_user
 
 DEFAULT_PAGE_LENGTH = 20
 MAX_PAGE_LENGTH = 500
+
+
+def by_name(model, name):
+    """``frappe.get_doc(doctype, name)``'s lookup half: the rows called ``name``.
+
+    A name the primary key cannot hold - letters for an autoincrement doctype such as
+    CRM Task - finds nothing, as upstream, where such a name is simply absent from the
+    table. Django instead raises ``ValueError`` from ``filter(pk=...)`` before any query
+    runs, and that surfaced as a 500 on every lookup by name (FINDINGS.md 24).
+    """
+    try:
+        key = model._meta.pk.to_python(name)
+    except (DjangoValidationError, ValueError, TypeError):
+        return model._default_manager.none()
+    return model._default_manager.filter(pk=key)
 
 
 def parse_json_param(value: Any, default: Any = None) -> Any:

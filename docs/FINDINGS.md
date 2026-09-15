@@ -33,6 +33,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 21 | 10 / 2.18 | low | A dashboard date that does not parse answers **500**; upstream's `getdate` throws 417 "… is not a valid date string." | **fixed** 13 Sep 2026 |
 | 22 | 13 / 4.8 | low | A **private** File attached to nothing is readable by every user; upstream lets only its owner read it | **fixed** 15 Sep 2026 |
 | 23 | 05 / 8.2, by hand | medium | Deleting a contact re-validates the rows it is removing: a contact whose rows have two primaries answers **417** and cannot be deleted at all | **fixed** 15 Sep 2026 |
+| 24 | 06 / 0.3–0.5, by hand | medium | A name that is not a number, on a doctype whose names are numbers (CRM Task, CRM View Settings), answers **500** on every lookup; upstream answers 404 | **fixed** 16 Sep 2026 |
 
 ---
 
@@ -667,3 +668,31 @@ contact itself is being deleted.
 and `post_delete` signals (a model delete and a queryset delete alike), and the row
 signal returns early while it is set. A row deleted on its own still re-derives the
 contact's columns.
+
+## 24. A name that cannot be a number answers 500 on a numbered doctype
+
+**Block:** `06_tasks_notes_calls.http` 0.3 to 0.5, clicked by hand after 0.2 found no
+leftover task. REST Client then sends the unresolved placeholder,
+`{{old_tasks.response.body.$.data[0].name}}`, as the task's name. The runner never
+showed it because it resolves an absent path differently.
+
+**Expected:** 404 `DoesNotExistError`. `frappe.get_doc("CRM Task", "<anything>")`
+queries the table for that name and finds nothing; the name's shape is not the
+document's concern.
+
+**Actual:** 500. CRM Task, CRM View Settings and CRM Product Sync Issue are the three
+autoincrement doctypes, so their primary key is an integer column, and Django raises
+`ValueError: Field 'name' expected a number but got '...'` from `filter(pk=name)` before
+any query runs. Nothing mapped it. Every path that looks a document up by name was
+open to it: the resource routes, `frappe.client.*`, the linked-document and assignment
+endpoints, the view-settings endpoints.
+
+**Where:** one lookup helper, `frappe_core.query.by_name`, used wherever a name from the
+request is turned into a row.
+
+**Fixed 16 Sep 2026.** `by_name(model, name)` casts the name with the primary key's own
+`to_python` and answers an empty queryset when the cast fails, so every caller's
+existing "None means not found" branch gives the 404. The resource view, the two
+`_require_readable` helpers, `frappe.client.*`, `remove_assignments`,
+`delete_attachment`, the deal-contact buttons and the view-settings endpoints all go
+through it.

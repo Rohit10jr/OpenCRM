@@ -21,7 +21,7 @@ from django.db import transaction
 
 from frappe_core import children, permissions, registry
 from frappe_core.exceptions import PermissionError as FrappePermissionError
-from frappe_core.query import parse_json_param
+from frappe_core.query import by_name, parse_json_param
 from frappe_core.session import get_current_user
 from frappe_core.views import _candidate_instance
 from frappe_core.whitelist import whitelist
@@ -31,7 +31,7 @@ def _deal_for_write(name: str, denial: str):
     """``frappe.has_permission("CRM Deal", "write", deal)`` with upstream's sentence."""
     from crm_app.models import CRMDeal
 
-    deal = CRMDeal._default_manager.filter(pk=name).first()
+    deal = by_name(CRMDeal, name).first()
     if deal is None or not permissions.check_object_permission(deal, "write", get_current_user()):
         raise FrappePermissionError(denial)
     return deal

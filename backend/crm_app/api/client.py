@@ -26,7 +26,7 @@ from frappe_core.exceptions import PermissionError as FrappePermissionError
 from frappe_core.exceptions import throw
 from frappe_core.views import _candidate_instance, check_destination
 from frappe_core.naming import validate_name
-from frappe_core.query import fetch_rows, parse_json_param
+from frappe_core.query import by_name, fetch_rows, parse_json_param
 from frappe_core.rename import rename_document
 from frappe_core.session import get_current_user
 from frappe_core.whitelist import whitelist
@@ -43,7 +43,7 @@ def _entry_or_404(doctype: str):
 
 def _get_checked(doctype: str, name: str, ptype: str):
     entry = _entry_or_404(doctype)
-    instance = entry.model._default_manager.filter(pk=name).first()
+    instance = by_name(entry.model, name).first()
     if instance is None:
         raise DoesNotExistError(f"{doctype} {name} not found")
     if not permissions.check_object_permission(instance, ptype, get_current_user()):
@@ -254,7 +254,7 @@ def client_get_doc_permissions(doctype: str, docname: str):
     "what may I do", and the honest answer for an invisible row is "nothing".
     """
     entry = _entry_or_404(doctype)
-    instance = entry.model._default_manager.filter(pk=docname).first()
+    instance = by_name(entry.model, docname).first()
     if instance is None:
         return {"permissions": {}}
 

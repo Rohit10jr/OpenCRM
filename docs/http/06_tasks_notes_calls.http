@@ -38,6 +38,10 @@ GET {{task}}?fields=["name"]&filters=[["title","like","ZZ%25"]]
 Authorization: Bearer {{token}}
 
 ### 0.3 -> 200|404
+# When 0.2 found nothing, REST Client cannot resolve `$.data[0].name` and sends the
+# placeholder text itself as the name. A task's name is a number, so that name cannot
+# exist and the answer is 404 - which is what the block accepts. (It answered 500 until
+# 16 Sep 2026: FINDINGS.md 24.)
 DELETE {{task}}/{{old_tasks.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 

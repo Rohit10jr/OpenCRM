@@ -20,7 +20,7 @@ import json
 
 from frappe_core import registry
 from frappe_core.exceptions import PermissionError as FrappePermissionError
-from frappe_core.query import parse_json_param
+from frappe_core.query import by_name, parse_json_param
 from frappe_core.session import get_current_user
 from frappe_core.whitelist import whitelist
 
@@ -194,7 +194,7 @@ def delete(name: str | int):
     """``crm_view_settings.py:119-123``. Silent when the view is already gone."""
     from crm_app.models import CRMViewSettings
 
-    doc = CRMViewSettings._default_manager.filter(pk=name).first()
+    doc = by_name(CRMViewSettings, name).first()
     if doc is None:
         return
     check_permission(doc)
@@ -216,7 +216,7 @@ def public(name: str | int, value: bool | int):
     if user != "Administrator" and "Sales Manager" not in _roles(user):
         raise FrappePermissionError("Not permitted")
 
-    doc = CRMViewSettings._default_manager.filter(pk=name).first()
+    doc = by_name(CRMViewSettings, name).first()
     if doc is None:
         raise DoesNotExistError(f"{VIEW_SETTINGS} {name} not found")
 
@@ -235,7 +235,7 @@ def pin(name: str | int, value: bool | int):
     from crm_app.models import CRMViewSettings
     from frappe_core.exceptions import DoesNotExistError
 
-    doc = CRMViewSettings._default_manager.filter(pk=name).first()
+    doc = by_name(CRMViewSettings, name).first()
     if doc is None:
         raise DoesNotExistError(f"{VIEW_SETTINGS} {name} not found")
     check_permission(doc)
@@ -329,7 +329,7 @@ def fetch_and_update_kanban_columns(name: str | int):
     """
     from crm_app.models import CRMViewSettings
 
-    doc = CRMViewSettings._default_manager.filter(pk=name).first()
+    doc = by_name(CRMViewSettings, name).first()
     if doc is None or doc.type != "kanban":
         return None
 

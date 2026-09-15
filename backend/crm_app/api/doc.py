@@ -21,7 +21,7 @@ from frappe_core.exceptions import DoesNotExistError
 from frappe_core.exceptions import PermissionError as FrappePermissionError
 from frappe_core.exceptions import ValidationError, throw
 from frappe_core.metadata import _frappe_fieldtype, _link_target
-from frappe_core.query import parse_json_param
+from frappe_core.query import by_name, parse_json_param
 from frappe_core.session import get_current_user
 from frappe_core.whitelist import whitelist
 
@@ -236,7 +236,7 @@ def _require_readable(doctype: str, name: str):
     """
     if not registry.has_doctype(doctype):
         raise DoesNotExistError(f"DocType {doctype} not found")
-    instance = registry.get_model(doctype)._default_manager.filter(pk=name).first()
+    instance = by_name(registry.get_model(doctype), name).first()
     if instance is None:
         raise DoesNotExistError(f"{doctype} {name} not found")
     if not permissions.check_object_permission(instance, "read", get_current_user()):
@@ -284,7 +284,7 @@ def remove_assignments(
     # no honest client sends the flag - so ignoring it is invisible to the frontend and
     # closes the hole. Recorded in UPSTREAM_BUGS.md.
     entry = registry.get_entry(doctype)
-    instance = entry.model._default_manager.filter(pk=name).first()
+    instance = by_name(entry.model, name).first()
     if instance is None:
         throw(f"{doctype} {name} not found")
     if not permissions.check_object_permission(instance, "write", get_current_user()):
