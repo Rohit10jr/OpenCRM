@@ -676,6 +676,10 @@ Authorization: Bearer {{token}}
 # (crm/api/doc.py:833), which is not running on a dev machine, so nothing happens.
 # With the list empty the server answers 417 "Items are required", which is what a
 # clean run sees. Names that no longer exist are simply skipped.
+#
+# Example body, three names as 7.13 lists them (the example must stay up here: a line
+# below the blank one is part of the body and would be sent):
+#   {"doctype": "CRM Deal", "items": ["CRM-DEAL-2026-00290", "CRM-DEAL-2026-00291", "CRM-DEAL-2026-00292"]}
 POST {{host}}/api/method/crm.api.doc.delete_bulk_docs
 Authorization: Bearer {{token}}
 Content-Type: application/json
