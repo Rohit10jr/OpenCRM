@@ -101,6 +101,37 @@ def test_remove_contact_drops_the_row(auth_api, deal, contacts):
     assert list(CRMContacts.objects.filter(parent_deal=deal).values_list("contact_id", flat=True)) == [john.name]
 
 
+def test_removing_the_primary_leaves_the_lone_survivor_primary(auth_api, deal, contacts):
+    jane, john = contacts
+    call(auth_api, "crm_deal.add_contact", {"deal": deal.name, "contact": jane.name})
+    call(auth_api, "crm_deal.add_contact", {"deal": deal.name, "contact": john.name})
+    deal.refresh_from_db()
+    assert deal.email == "jane@zz.test", "jane was primary"
+
+    call(auth_api, "crm_deal.remove_contact", {"deal": deal.name, "contact": jane.name})
+
+    row = CRMContacts.objects.get(parent_deal=deal)
+    assert row.contact_id == john.name and row.is_primary is True, "crm_deal.py:114-118"
+    deal.refresh_from_db()
+    assert deal.email == "john@zz.test" and deal.mobile_no == ""
+
+
+def test_set_primary_contact_to_a_stranger_demotes_every_row(auth_api, deal, contacts, administrator):
+    jane, john = contacts
+    with session_user(administrator.name):
+        stranger = Contact.objects.create(first_name="ZZ Stranger")
+    call(auth_api, "crm_deal.add_contact", {"deal": deal.name, "contact": jane.name})
+    call(auth_api, "crm_deal.add_contact", {"deal": deal.name, "contact": john.name})
+
+    response = call(auth_api, "crm_deal.set_primary_contact", {"deal": deal.name, "contact": stranger.name})
+
+    assert response.json()["message"] is True, "upstream compares, it does not validate"
+    flags = set(CRMContacts.objects.filter(parent_deal=deal).values_list("is_primary", flat=True))
+    assert flags == {False}, "crm_deal.py:120-125: every row that is not the named one is demoted"
+    deal.refresh_from_db()
+    assert deal.email == "" and deal.mobile_no == "", "crm_deal.py:127-149: no primary, cleared"
+
+
 def test_a_contact_that_does_not_exist_is_a_link_error(auth_api, deal):
     response = call(auth_api, "crm_deal.add_contact", {"deal": deal.name, "contact": "ZZ Nobody"})
     assert response.status_code == 417
@@ -185,6 +216,33 @@ def test_create_deal_with_an_existing_contact_and_organization(auth_api, alice, 
     deal = CRMDeal.objects.get(pk=response.json()["message"])
     assert deal.organization_id == "ZZ Org"
     assert CRMContacts.objects.get(parent_deal=deal).contact_id == contacts[1].name
+    assert deal.contact_id == contacts[1].name, (
+        "upstream's deal.update(doc) keeps the modal's contact on the deal's own Link"
+    )
+
+
+def test_create_deal_reuses_a_contact_holding_the_mobile(auth_api, alice, contacts):
+    jane, _ = contacts
+    response = call(
+        auth_api,
+        "crm_deal.create_deal",
+        {"doc": {"first_name": "Someone", "mobile_no": "+1 111", "deal_owner": alice.name}},
+    )
+    deal = CRMDeal.objects.get(pk=response.json()["message"])
+    assert CRMContacts.objects.get(parent_deal=deal).contact_id == jane.name
+    assert Contact.objects.filter(first_name="Someone").count() == 0
+
+
+def test_create_deal_copies_the_organization_fields_the_modal_sends(auth_api, alice):
+    response = call(
+        auth_api,
+        "crm_deal.create_deal",
+        {"doc": {"organization_name": "ZZ Revenue", "website": "rev.test", "annual_revenue": 1200000, "deal_owner": alice.name}},
+    )
+    assert response.status_code == 200, response.content[:300]
+    organization = CRMOrganization.objects.get(pk="ZZ Revenue")
+    assert organization.website == "rev.test"
+    assert organization.annual_revenue == 1200000
 
 
 def test_create_deal_without_a_person_makes_no_contact(auth_api, alice):

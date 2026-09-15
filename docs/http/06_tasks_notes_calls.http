@@ -353,8 +353,8 @@ Authorization: Bearer {{token}}
 GET {{call}}/ZZ-CALL-1
 Authorization: Bearer {{token}}
 
-### 4.7f a call that does not exist -> 403, upstream's sentence (the write check on the call refuses)
-# @expect $.message == You are not permitted to update this call log.
+### 4.7f a call that does not exist -> 404 (frappe.get_doc runs before the write check)
+# @expect $.exc_type == DoesNotExistError
 POST {{host}}/api/method/crm.fcrm.doctype.crm_call_log.crm_call_log.create_lead_from_call_log
 Authorization: Bearer {{token}}
 Content-Type: application/json

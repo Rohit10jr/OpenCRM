@@ -11,6 +11,7 @@ from __future__ import annotations
 from django.db import transaction
 
 from frappe_core import permissions, registry
+from frappe_core.exceptions import DoesNotExistError
 from frappe_core.exceptions import PermissionError as FrappePermissionError
 from frappe_core.exceptions import throw
 from frappe_core.query import parse_json_param
@@ -87,6 +88,7 @@ def create_lead_from_call_log(call_log=None, lead_details=None, **extra):
     call <number>". The new lead is linked to the call, and its name returned."""
     from crm_app.integrations.call_log import link_with_reference_doc
     from crm_app.models import CRMCallLog
+    from frappe_core.models import BaseDocument
 
     parsed = parse_json_param(call_log, call_log) if call_log else {}
     if isinstance(parsed, str):
@@ -98,18 +100,25 @@ def create_lead_from_call_log(call_log=None, lead_details=None, **extra):
     if not call_log_name:
         throw("A valid call log is required.")
 
+    # ``frappe.get_doc`` first, so a call that does not exist is 404 before any
+    # permission question is asked; then ``call_doc.has_permission("write")``.
     call = CRMCallLog._default_manager.filter(pk=call_log_name).first()
-    if call is None or not permissions.check_object_permission(call, "write", get_current_user()):
+    if call is None:
+        raise DoesNotExistError(f"CRM Call Log {call_log_name} not found")
+    if not permissions.check_object_permission(call, "write", get_current_user()):
         raise FrappePermissionError("You are not permitted to update this call log.")
 
     details = parse_json_param(lead_details, lead_details) if lead_details else {}
     if details and not isinstance(details, dict):
         throw("Invalid lead details supplied.")
 
+    # ``meta.fields`` upstream: the doctype's own fields, never the standard ones
+    # (name, owner, creation, ...), which BaseDocument declares here.
     entry = registry.get_entry("CRM Lead")
+    standard = {f.name for f in BaseDocument._meta.local_fields}
     valid_fieldnames = {
         f.name for f in entry.model._meta.get_fields() if getattr(f, "concrete", False)
-    }
+    } - standard
     sanitized = {k: v for k, v in (details or {}).items() if k in valid_fieldnames}
     if not sanitized.get("lead_owner"):
         sanitized["lead_owner"] = get_current_user()

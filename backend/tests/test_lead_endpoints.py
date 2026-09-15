@@ -60,6 +60,20 @@ def test_an_existing_contact_and_organization_are_used_instead(auth_api, lead, a
     assert CRMContacts.objects.get(parent_deal=deal).contact_id == contact.pk
 
 
+def test_the_deal_form_may_arrive_as_json_or_empty(auth_api, lead, alice):
+    """A JSON string is decoded like every other ``call()`` argument; an empty string
+    means no overrides, which is what the modal sends when nothing was filled in."""
+    response = auth_api.post(PATH, {"lead": lead.name, "deal": '{"next_step": "ZZ str"}'}, format="json")
+    assert response.status_code == 200, response.content[:300]
+    assert CRMDeal.objects.get(pk=response.json()["message"]).next_step == "ZZ str"
+
+    with session_user(alice.name):
+        second = CRMLead.objects.create(first_name="ZZ Second", lead_owner=alice)
+    response = auth_api.post(PATH, {"lead": second.name, "deal": ""}, format="json")
+    assert response.status_code == 200, response.content[:300]
+    assert CRMDeal.objects.get(pk=response.json()["message"]).next_step == ""
+
+
 def test_converting_needs_write_on_the_lead(api_as, bob, lead):
     response = api_as(bob).post(PATH, {"lead": lead.name}, format="json")
     assert response.status_code == 403

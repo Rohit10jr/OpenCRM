@@ -71,6 +71,31 @@ def test_get_call_log_takes_the_deal_from_a_link(auth_api, alice, log):
     assert data["_notes"] == [] and data["_tasks"] == []
 
 
+def test_a_linked_lead_wins_over_the_reference(auth_api, alice, log):
+    """crm_call_log.py:219-241: the reference sets _lead first, the links loop after it,
+    so a lead linked later overwrites the one referenced."""
+    with session_user(alice.name):
+        referenced = CRMLead.objects.create(first_name="ZZ Referenced", lead_owner=alice)
+        linked = CRMLead.objects.create(first_name="ZZ Linked", lead_owner=alice)
+        CRMCallLog.objects.filter(pk=log.pk).update(reference_doctype="CRM Lead", reference_docname=referenced.name)
+        log.refresh_from_db()
+        link_with_reference_doc(log, "CRM Lead", linked.name)
+    data = call(auth_api, "get_call_log", {"name": log.pk}).json()["message"]
+    assert data["_lead"] == linked.name
+
+
+def test_an_incoming_call_is_parsed_from_the_receivers_side(auth_api, alice):
+    with session_user(alice.name):
+        incoming = CRMCallLog.objects.create(
+            status="Completed", type="Incoming", receiver=alice, duration=5, **{"from": "+1 333", "to": "+1 222"}
+        )
+    data = call(auth_api, "get_call_log", {"name": incoming.pk}).json()["message"]
+    assert data["activity_type"] == "incoming_call"
+    assert data["_receiver"]["label"] == alice.full_name
+    assert data["_duration"] == "5s"
+    assert data["show_recording"] is False and "recording_url_path" not in data
+
+
 def test_any_sales_user_may_open_a_call(api_as, bob, log):
     """CRM Call Log carries no row rule, here or upstream: every Sales User reads and
     writes every call, so the read check on ``get_call_log`` is a formality."""
@@ -124,5 +149,20 @@ def test_refusals_use_upstreams_words(auth_api, api_as, bob, log):
     assert response.json()["message"] == "Invalid lead details supplied."
 
     response = call(auth_api, "create_lead_from_call_log", {"call_log": "ZZ-NO-SUCH-CALL"})
-    assert response.status_code == 403
-    assert response.json()["message"] == "You are not permitted to update this call log."
+    assert response.status_code == 404, "frappe.get_doc runs before the permission check"
+    assert response.json()["exc_type"] == "DoesNotExistError"
+
+
+def test_only_the_leads_own_fields_are_taken_from_the_details(auth_api, alice, log):
+    """``meta.fields`` upstream: name, owner and the other standard fields are not among
+    them, so a caller cannot pick the lead's name or hand it to someone else."""
+    response = call(
+        auth_api,
+        "create_lead_from_call_log",
+        {"call_log": log.pk, "lead_details": {"name": "ZZ-PICKED", "owner": "bob@example.com", "creation": "2001-01-01", "idx": 9}},
+    )
+    assert response.status_code == 200, response.content[:300]
+    lead = CRMLead.objects.get(pk=response.json()["message"])
+    assert lead.name != "ZZ-PICKED" and lead.name.startswith("CRM-LEAD-")
+    assert lead.owner_id == alice.name
+    assert lead.idx == 0

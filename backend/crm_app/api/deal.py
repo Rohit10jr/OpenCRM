@@ -228,8 +228,10 @@ def create_deal(doc=None, **extra):
             contact = create_contact(payload)
         organization = payload.get("organization") or create_organization(payload)
 
+        # ``doc.pop("organization")`` then ``deal.update(doc)``: everything else the modal
+        # sent that is a deal field stays, including ``contact`` when it chose an existing
+        # one - CRM Deal has that Link (crm_deal.json), and upstream stores it as sent.
         data = {k: v for k, v in payload.items() if k in deal_fields and k != "organization"}
-        data.pop("contact", None)
         data["organization"] = organization
         data["contacts"] = [{"contact": contact, "is_primary": 1}] if contact else []
 
