@@ -667,3 +667,17 @@ Authorization: Bearer {{token}}
 # @expect $.data count 0
 GET {{deal}}?fields=["name"]&filters=[["next_step","like","ZZ%25"]]
 Authorization: Bearer {{token}}
+
+### 7.14 delete what 7.13 listed, by name -> 200|417
+# A helper for hand testing. Deals made while trying things keep 7.9 and 7.10 red,
+# because the organization and the status are still linked to them. Paste the names
+# 7.13 listed into the list, send, then run 7.9 to 7.13 again; empty the list after.
+# Ten names at most per call: above that delete_bulk_docs hands the batch to Celery
+# (crm/api/doc.py:833), which is not running on a dev machine, so nothing happens.
+# With the list empty the server answers 417 "Items are required", which is what a
+# clean run sees. Names that no longer exist are simply skipped.
+POST {{host}}/api/method/crm.api.doc.delete_bulk_docs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Deal", "items": []}
