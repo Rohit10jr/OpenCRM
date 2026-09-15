@@ -12,9 +12,11 @@ which fields exist but never the ``autoname`` of a platform doctype. Each choice
 carries a confidence note; the set is flagged in docs/internal/PROGRESS.md for review.
 """
 
+import contextvars
+
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
-from django.db.models.signals import post_delete, post_save
+from django.db.models.signals import post_delete, post_save, pre_delete
 from django.utils import timezone
 
 from frappe_core.assignment import register_todo_model
@@ -823,13 +825,29 @@ class DynamicLink(BaseDocument):
 # recomputes them on validate; children are written after the parent (they need its PK),
 # so a save-time hook would not see them. Signals on the child tables are the faithful
 # equivalent.
+#: Greater than zero while a Contact is being deleted. The cascade removes its rows one
+#: by one, and re-deriving the primaries after each would run the save-time rules on a
+#: document that is going away - a contact whose rows had two primaries could not be
+#: deleted at all (FINDINGS.md 23). Upstream's ``delete_doc`` removes the child rows
+#: without validating anything (``delete_doc.py:207-227``).
+_DELETING = contextvars.ContextVar("frappe_platform.contact.deleting", default=0)
+
+
+def _contact_deleting(sender, instance, **kwargs):
+    _DELETING.set(_DELETING.get() + 1)
+
+
+def _contact_deleted(sender, instance, **kwargs):
+    _DELETING.set(max(_DELETING.get() - 1, 0))
+
+
 def _resync_contact(sender, instance, **kwargs):
     from frappe_core import children
 
     # A document write replaces the rows as one unit and the contact's own save then
     # applies the rules over all of them; re-deriving after each row would promote the
     # first email row before the second exists (contact.py:183 needs the whole table).
-    if children.replacing_children():
+    if children.replacing_children() or _DELETING.get():
         return
     contact = instance.parent_contact
     if contact is None:
@@ -845,3 +863,8 @@ for _child in (ContactEmail, ContactPhone):
     post_delete.connect(
         _resync_contact, sender=_child, dispatch_uid=f"contact.unsync.{_child.__name__}"
     )
+
+# Django sends pre_delete for the contact before its rows are removed and post_delete
+# after, for a model delete and a queryset delete alike; the counter brackets the cascade.
+pre_delete.connect(_contact_deleting, sender=Contact, dispatch_uid="contact.deleting")
+post_delete.connect(_contact_deleted, sender=Contact, dispatch_uid="contact.deleted")

@@ -32,6 +32,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 20 | 10 / 2.15, 2.16 | medium | Six of upstream's nineteen dashboard charts were never built; a tile using one renders `Invalid chart name` | **fixed** 15 Sep 2026 |
 | 21 | 10 / 2.18 | low | A dashboard date that does not parse answers **500**; upstream's `getdate` throws 417 "… is not a valid date string." | **fixed** 13 Sep 2026 |
 | 22 | 13 / 4.8 | low | A **private** File attached to nothing is readable by every user; upstream lets only its owner read it | **fixed** 15 Sep 2026 |
+| 23 | 05 / 8.2, by hand | medium | Deleting a contact re-validates the rows it is removing: a contact whose rows have two primaries answers **417** and cannot be deleted at all | **fixed** 15 Sep 2026 |
 
 ---
 
@@ -640,3 +641,29 @@ day a download route lands, which `KNOWN_ISSUES.md` already warns about.
 nothing once the public and own-upload short-circuits have passed (creating one is
 still the upload itself), and `file_query_conditions` lists a file only when it is
 public, yours, or attached to a document you may see. Block 13 / 4.8 is green.
+
+## 23. Deleting a contact validates the rows it is removing
+
+**Block:** `05_contacts_organizations.http` 8.2, run by hand on a contact left behind by
+earlier clicking, whose three phone rows carried the same number twice, both flagged
+primary phone. No block reproduces it from a clean database: a save refuses two
+primaries (finding 10), so the rows had to be written some other way first.
+
+**Expected:** 200. `frappe/model/delete_doc.py:207-227` deletes a document's child rows
+with a plain query; nothing validates on the way out, so a document whose rows would
+fail a save is still deletable.
+
+**Actual:** 417 `ValidationError` "Only one <strong>Phone</strong> can be set as
+primary." The cascade removes the rows one at a time, each removal fires
+`_resync_contact` (the signal that keeps `email_id` / `mobile_no` / `phone` following
+the rows), and that runs `sync_primary_values` over the rows still present - the
+save-time rules, on a document that is going away. Any contact that reaches an
+inconsistent state is then stuck: it cannot be saved and cannot be deleted.
+
+**Where:** `frappe_platform/models.py`, `_resync_contact` - skip while the parent
+contact itself is being deleted.
+
+**Fixed 15 Sep 2026.** A counter brackets every Contact delete between its `pre_delete`
+and `post_delete` signals (a model delete and a queryset delete alike), and the row
+signal returns early while it is set. A row deleted on its own still re-derives the
+contact's columns.

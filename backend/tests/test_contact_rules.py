@@ -13,7 +13,7 @@ import pytest
 
 from crm_app.models import CRMDeal, CRMDealStatus, CRMLead, CRMLeadStatus
 from frappe_core.session import session_user
-from frappe_platform.models import Contact, ContactEmail
+from frappe_platform.models import Contact, ContactEmail, ContactPhone
 
 pytestmark = pytest.mark.django_db
 
@@ -189,3 +189,40 @@ def test_a_comment_on_a_missing_document_is_not_found(auth_api):
     )
     assert response.status_code == 404
     assert response.json()["exc_type"] == "DoesNotExistError"
+
+
+# --- 23: a delete never validates the rows it removes --------------------------------------
+
+
+def test_a_contact_whose_rows_would_fail_a_save_can_still_be_deleted(api_as, administrator, contact):
+    """delete_doc.py:207-227 removes the child rows without running validate. The
+    cascade here fires the row signal that re-derives the primaries, and two rows
+    flagged primary phone - which a save refuses, but hand testing produced - made the
+    delete answer 417 "Only one Phone can be set as primary."."""
+    # bulk_create sends no signal, so the rows land as-is; it runs no naming either,
+    # hence the explicit names.
+    ContactPhone.objects.bulk_create(
+        [
+            ContactPhone(name="zz-row-1", parent_contact=contact, phone="+1 1", is_primary_phone=True),
+            ContactPhone(name="zz-row-2", parent_contact=contact, phone="+1 1", is_primary_phone=True),
+        ]
+    )
+
+    response = api_as(administrator).delete(f"{CONTACTS}/{quote(contact.name)}")
+
+    assert response.status_code == 200, response.content[:300]
+    assert not Contact.objects.filter(pk=contact.pk).exists()
+    assert not ContactPhone.objects.filter(parent_contact_id=contact.pk).exists()
+
+
+def test_a_row_deleted_on_its_own_still_resyncs_the_contact(auth_api, contact):
+    """The guard brackets the contact's own delete only: removing one row of a live
+    contact re-derives its mirror columns as before."""
+    _put(auth_api, contact, {"email_ids": [{"email_id": "acme@zz.test"}]})
+    contact.refresh_from_db()
+    assert contact.email_id == "acme@zz.test"
+
+    ContactEmail.objects.get(parent_contact=contact).delete()
+
+    contact.refresh_from_db()
+    assert contact.email_id == ""
