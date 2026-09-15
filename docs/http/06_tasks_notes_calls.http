@@ -83,13 +83,17 @@ Authorization: Bearer {{token}}
 DELETE {{call}}/ZZ-CALL-1
 Authorization: Bearer {{token}}
 
-### 0.14 leftover leads -> 200
+### 0.14 leftover leads: the fixture lead and the one 4.7c creates from a call -> 200
 # @name old_leads
-GET {{lead}}?fields=["name"]&filters=[["first_name","like","ZZ Task%25"]]
+GET {{lead}}?fields=["name"]&filters=[["first_name","in",["ZZ Task Lead","ZZ Call Lead"]]]
 Authorization: Bearer {{token}}
 
 ### 0.15 -> 200|404
 DELETE {{lead}}/{{old_leads.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.15b -> 200|404
+DELETE {{lead}}/{{old_leads.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.16 cleanup contact -> 200|404
@@ -256,7 +260,7 @@ POST {{call}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"id": "ZZ-CALL-1", "type": "Incoming", "status": "No Answer", "from": "+49 30 9", "to": "+49 30 7", "receiver": "{{admin}}"}
+{"id": "ZZ-CALL-1", "type": "Incoming", "status": "No Answer", "from": "+49 30 5", "to": "+49 30 7", "receiver": "{{admin}}"}
 
 ### 4.3 a status outside the Select -> 417
 POST {{call}}
@@ -304,6 +308,58 @@ Content-Type: application/json
 # @expect $.data.links count 2
 GET {{call}}/{{call1}}
 Authorization: Bearer {{token}}
+
+### 4.7b get_call_log, the call as the timeline opens it (crm_call_log.py:189-242) -> parsed, with its notes, tasks and lead
+# The doctype-module path CallLogs.vue and CallArea.vue call; unserved until 15 Sep 2026.
+# @expect $.message._duration == 2m
+# @expect $.message.activity_type == outgoing_call
+# @expect $.message._lead == {{lead_name}}
+# @expect $.message._notes count 1
+# @expect $.message._notes[0].title == ZZ Call note
+# @expect $.message._tasks count 1
+# @expect $.message._tasks[0].title == ZZ Follow up
+# (_notes holds the call's own `note` and then every linked note; add_note_to_call_log
+# only links, so the note appears once - the second link in 4.5 was deduplicated)
+POST {{host}}/api/method/crm.fcrm.doctype.crm_call_log.crm_call_log.get_call_log
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "{{call1}}"}
+
+### 4.7c create_lead_from_call_log on the unanswered call from an unknown number (crm_call_log.py:245-297) -> the new lead's name
+# The modal sends the call's own record; the name alone works too. The owner defaults to
+# the caller and the mobile to the call's from number. (The number must not be ZZ Caller's:
+# get_contact consults a lead before a plain contact, and 5.1 / 5.4 expect the contact.)
+# @name calllead_req
+# @expect $.message contains CRM-LEAD-
+POST {{host}}/api/method/crm.fcrm.doctype.crm_call_log.crm_call_log.create_lead_from_call_log
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"call_log": {"name": "ZZ-CALL-1"}, "lead_details": {"first_name": "ZZ Call Lead"}}
+
+###
+@calllead = {{calllead_req.response.body.$.message}}
+
+### 4.7d -> mobile from the call, owner the caller, and the call now links to the lead
+# @expect $.data.mobile_no == +49 30 5
+# @expect $.data.lead_owner == Administrator
+GET {{lead}}/{{calllead}}
+Authorization: Bearer {{token}}
+
+### 4.7e -> the link row on the call
+# @expect $.data.links count 1
+# @expect $.data.links[0].link_name == {{calllead}}
+GET {{call}}/ZZ-CALL-1
+Authorization: Bearer {{token}}
+
+### 4.7f a call that does not exist -> 403, upstream's sentence (the write check on the call refuses)
+# @expect $.message == You are not permitted to update this call log.
+POST {{host}}/api/method/crm.fcrm.doctype.crm_call_log.crm_call_log.create_lead_from_call_log
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"call_log": "ZZ-NOPE"}
 
 ### 4.8 a call log that does not exist -> 404
 # @expect $.exc_type == DoesNotExistError
@@ -443,6 +499,10 @@ Authorization: Bearer {{token}}
 
 ### 7.8 delete the lead -> 200
 DELETE {{lead}}/{{lead_name}}
+Authorization: Bearer {{token}}
+
+### 7.8b delete the lead 4.7c made from the call -> 200
+DELETE {{lead}}/{{calllead}}
 Authorization: Bearer {{token}}
 
 ### 7.9 nothing left behind -> 200, empty

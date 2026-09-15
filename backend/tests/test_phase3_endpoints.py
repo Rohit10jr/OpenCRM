@@ -274,6 +274,13 @@ _DIRECT_ACCESS_ALLOWED = {
     "doc.py",
     "notifications.py",
     "settings.py",
+    # The doctype-module endpoints (crm.fcrm.doctype.*): single-object fetches of the
+    # deal, lead or call log named in the call, each behind check_object_permission or
+    # _require_readable, and the rows created on the way (a contact, an organization,
+    # a lead) behind the create check on the document being created.
+    "deal.py",
+    "lead.py",
+    "call_log.py",
     "views.py",
     "dashboard.py",
     # Phase 4. Saved views are fetched by primary key and then gated by

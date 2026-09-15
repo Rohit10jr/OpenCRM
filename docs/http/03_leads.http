@@ -31,6 +31,19 @@ Content-Type: application/json
 
 # ---- cleanup first ---------------------------------------------------------------------
 
+### 0.1b a deal left by an earlier run's conversion (6.10) must go before its lead can -> 200
+# @name old_deal
+GET {{host}}/api/resource/CRM%20Deal?fields=["name"]&filters=[["next_step","=","ZZ converted"]]
+Authorization: Bearer {{token}}
+
+### 0.1c -> 200|404
+DELETE {{host}}/api/resource/CRM%20Deal/{{old_deal.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.1d and the contact the conversion made from lead 4's email -> 200|404
+DELETE {{host}}/api/resource/Contact/zz.mail
+Authorization: Bearer {{token}}
+
 ### 0.2 find leads left by an earlier run -> 200
 # @name leftovers
 GET {{lead}}?fields=["name"]&or_filters=[["first_name","like","ZZ%25"],["organization","in",["ZZ Org","Does Not Exist Inc"]],["email","=","zz.mail@example.test"]]&limit_page_length=10
@@ -466,7 +479,53 @@ Content-Type: application/json
 
 {"doctype": "CRM Lead", "filters": {"first_name": ["like", "ZZ%"]}, "column_field": "status", "title_field": "lead_name", "page_length": 20, "view": {"view_type": "kanban"}}
 
+# ---- convert to deal (crm_lead.py:494-516), the modal's and the bulk action's call -------------
+# The doctype-module path ConvertToDealModal.vue and ListBulkActions.vue call; unserved
+# until 15 Sep 2026. Lead 4 has only an email, so the conversion makes a contact from it.
+
+### 6.10 convert_to_deal -> the new deal's name
+# @name convert_req
+# @expect $.message contains CRM-DEAL-
+POST {{host}}/api/method/crm.fcrm.doctype.crm_lead.crm_lead.convert_to_deal
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"lead": "{{lead4}}", "deal": {"next_step": "ZZ converted"}}
+
+###
+@converted = {{convert_req.response.body.$.message}}
+
+### 6.11 -> the deal remembers its lead, took the form's field, and carries the contact made from the email
+# @expect $.data.lead == {{lead4}}
+# @expect $.data.next_step == ZZ converted
+# @expect $.data.contacts count 1
+# @expect $.data.contacts[0].email == zz.mail@example.test
+GET {{host}}/api/resource/CRM%20Deal/{{converted}}
+Authorization: Bearer {{token}}
+
+### 6.12 -> the lead is marked converted and moved to Qualified (db_set, so no status-log row)
+# @expect $.data.converted == true
+# @expect $.data.status == Qualified
+GET {{lead}}/{{lead4}}
+Authorization: Bearer {{token}}
+
+### 6.13 a lead that does not exist -> 404
+# @expect $.exc_type == DoesNotExistError
+POST {{host}}/api/method/crm.fcrm.doctype.crm_lead.crm_lead.convert_to_deal
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"lead": "CRM-LEAD-2099-00001"}
+
 # ---- teardown --------------------------------------------------------------------------------------
+
+### 7.0 delete the converted deal first: it points at lead 4 -> 200
+DELETE {{host}}/api/resource/CRM%20Deal/{{converted}}
+Authorization: Bearer {{token}}
+
+### 7.0b delete the contact the conversion made -> 200
+DELETE {{host}}/api/resource/Contact/zz.mail
+Authorization: Bearer {{token}}
 
 ### 7.1 delete lead 1 -> 200
 DELETE {{lead}}/{{lead1}}

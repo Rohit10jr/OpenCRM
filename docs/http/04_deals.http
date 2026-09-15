@@ -73,8 +73,16 @@ Authorization: Bearer {{token}}
 DELETE {{contact}}/ZZ%20Second
 Authorization: Bearer {{token}}
 
+### 0.11b cleanup contact ZZ Modal Person (made by create_deal in 5.17) -> 200|404
+DELETE {{contact}}/ZZ%20Modal%20Person
+Authorization: Bearer {{token}}
+
 ### 0.12 cleanup org -> 200|404
 DELETE {{host}}/api/resource/CRM%20Organization/ZZ%20Deal%20Org
+Authorization: Bearer {{token}}
+
+### 0.12b cleanup org ZZ Modal Org (made by create_deal in 5.17) -> 200|404
+DELETE {{host}}/api/resource/CRM%20Organization/ZZ%20Modal%20Org
 Authorization: Bearer {{token}}
 
 ### 0.13 cleanup status ZZ Hot -> 200|404
@@ -451,6 +459,117 @@ Content-Type: application/json
 
 {"contacts": [{"contact": "ZZ Nobody"}]}
 
+# ---- the contacts panel's endpoints and the Create Deal modal (crm_deal.py:358-475) --------
+# These are the doctype-module paths the deal page and DealModal.vue call; they were the
+# first of the twenty unserved paths in 14_unserved_paths.http until 15 Sep 2026.
+
+### 5.9 add_contact appends a row; the lone contact becomes primary -> true
+# @expect $.message == true
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.crm_deal.add_contact
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"deal": "{{deal3}}", "contact": "ZZ Primary"}
+
+### 5.10 get_deal_contacts -> the panel's rows: name, image, full_name, email, mobile_no, is_primary
+# @expect $.message count 1
+# @expect $.message[0].name == ZZ Primary
+# @expect $.message[0].email == zz.primary@example.test
+# @expect $.message[0].is_primary == true
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.api.get_deal_contacts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "{{deal3}}"}
+
+### 5.11 a second contact -> true
+# @expect $.message == true
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.crm_deal.add_contact
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"deal": "{{deal3}}", "contact": "ZZ Second"}
+
+### 5.12 set_primary_contact on the second -> true; the first is demoted
+# @expect $.message == true
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.crm_deal.set_primary_contact
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"deal": "{{deal3}}", "contact": "ZZ Second"}
+
+### 5.13 -> the panel shows the swap
+# @expect $.message[0].is_primary == false
+# @expect $.message[1].is_primary == true
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.api.get_deal_contacts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "{{deal3}}"}
+
+### 5.14 remove_contact -> true
+# @expect $.message == true
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.crm_deal.remove_contact
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"deal": "{{deal3}}", "contact": "ZZ Primary"}
+
+### 5.15 -> one row left
+# @expect $.message count 1
+# @expect $.message[0].name == ZZ Second
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.api.get_deal_contacts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "{{deal3}}"}
+
+### 5.16 a contact that does not exist -> 417 LinkValidationError
+# @expect $.exc_type == LinkValidationError
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.crm_deal.add_contact
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"deal": "{{deal3}}", "contact": "ZZ Nobody"}
+
+### 5.17 create_deal, the modal's one call: the contact and organization are made on the way -> the new name
+# @name modal_req
+# @expect $.message contains CRM-DEAL-
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.crm_deal.create_deal
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doc": {"first_name": "ZZ Modal", "last_name": "Person", "email": "zz.modal@example.test", "mobile_no": "+1 777", "organization_name": "ZZ Modal Org", "website": "https://modal.example", "deal_owner": "{{admin}}", "status": "Qualification", "next_step": "ZZ modal"}}
+
+###
+@modal = {{modal_req.response.body.$.message}}
+
+### 5.18 -> the deal points at the new organization and carries the contact as primary; email derived
+# @expect $.data.organization == ZZ Modal Org
+# @expect $.data.contacts count 1
+# @expect $.data.contacts[0].contact == ZZ Modal Person
+# @expect $.data.contacts[0].is_primary == true
+# @expect $.data.email == zz.modal@example.test
+GET {{deal}}/{{modal}}
+Authorization: Bearer {{token}}
+
+### 5.19 the same email again reuses the contact (crm_deal.py:415-425) -> a second deal
+# @name modal2_req
+# @expect $.message contains CRM-DEAL-
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.crm_deal.create_deal
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doc": {"first_name": "Someone", "email": "zz.modal@example.test", "deal_owner": "{{admin}}", "next_step": "ZZ modal two"}}
+
+###
+@modal2 = {{modal2_req.response.body.$.message}}
+
+### 5.20 -> ZZ Modal Person again, and no contact named Someone
+# @expect $.data.contacts[0].contact == ZZ Modal Person
+GET {{deal}}/{{modal2}}
+Authorization: Bearer {{token}}
+
 # ---- owner and the list engine ----------------------------------------------------------
 
 ### 6.1 the deal is assigned to its owner on create -> _assign holds Administrator
@@ -500,6 +619,14 @@ Authorization: Bearer {{token}}
 DELETE {{deal}}/{{deal6}}
 Authorization: Bearer {{token}}
 
+### 7.6b delete the two deals the modal made -> 200
+DELETE {{deal}}/{{modal}}
+Authorization: Bearer {{token}}
+
+### 7.6c -> 200
+DELETE {{deal}}/{{modal2}}
+Authorization: Bearer {{token}}
+
 ### 7.7 delete contact ZZ Primary -> 200
 DELETE {{contact}}/ZZ%20Primary
 Authorization: Bearer {{token}}
@@ -508,8 +635,16 @@ Authorization: Bearer {{token}}
 DELETE {{contact}}/ZZ%20Second
 Authorization: Bearer {{token}}
 
+### 7.8b delete contact ZZ Modal Person -> 200
+DELETE {{contact}}/ZZ%20Modal%20Person
+Authorization: Bearer {{token}}
+
 ### 7.9 delete org -> 200
 DELETE {{host}}/api/resource/CRM%20Organization/ZZ%20Deal%20Org
+Authorization: Bearer {{token}}
+
+### 7.9b delete org ZZ Modal Org -> 200
+DELETE {{host}}/api/resource/CRM%20Organization/ZZ%20Modal%20Org
 Authorization: Bearer {{token}}
 
 ### 7.10 delete status ZZ Hot -> 200
