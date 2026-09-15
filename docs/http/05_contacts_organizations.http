@@ -595,3 +595,22 @@ Authorization: Bearer {{token}}
 # @expect $.data count 0
 GET {{contact}}?fields=["name"]&filters=[["name","like","ZZ %25"]]
 Authorization: Bearer {{token}}
+
+### 8.14 delete what 8.13 listed, by name -> 200|417
+# A helper for hand testing. Creating a fixture contact a second time while the first
+# still exists gives "ZZ Primary-1", "ZZ Second-2" and so on (contact.py:54 appends -N
+# on a name collision), and nothing in the teardown knows those names. Paste the names
+# 8.13 listed into the list, send, run 8.13 again; empty the list after. Ten names at
+# most per call: above that delete_bulk_docs hands the batch to Celery
+# (crm/api/doc.py:833), which is not running on a dev machine, so nothing happens.
+# With the list empty the server answers 417 "Items are required", which is what a
+# clean run sees. Names that no longer exist are simply skipped.
+#
+# Example body (it must stay up here: a line below the blank one is part of the body
+# and would be sent):
+#   {"doctype": "Contact", "items": ["ZZ Jane Renamed", "ZZ Primary-1", "ZZ Second-1"]}
+POST {{host}}/api/method/crm.api.doc.delete_bulk_docs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "Contact", "items": []}
