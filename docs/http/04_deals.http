@@ -108,7 +108,7 @@ POST {{contact}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"first_name": "ZZ", "last_name": "Primary", "email_id": "zz.primary@example.test", "mobile_no": "+1 111"}
+{"first_name": "ZZ", "last_name": "Primary", "email_ids": [{"email_id": "zz.primary@example.test", "is_primary": 1}], "phone_nos": [{"phone": "+1 111", "is_primary_mobile_no": 1}]}
 
 ### 1.3 contact two -> 201
 # @expect $.data.name == ZZ Second
@@ -116,7 +116,7 @@ POST {{contact}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"first_name": "ZZ", "last_name": "Second", "email_id": "zz.second@example.test", "phone": "+1 222"}
+{"first_name": "ZZ", "last_name": "Second", "email_ids": [{"email_id": "zz.second@example.test", "is_primary": 1}], "phone_nos": [{"phone": "+1 222", "is_primary_phone": 1}]}
 
 ### 1.4 a deal status carrying a probability -> 201
 POST {{host}}/api/resource/CRM%20Deal%20Status

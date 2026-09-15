@@ -147,6 +147,14 @@ def test_a_deals_email_comes_from_its_contact_rows(auth_api, alice):
     assert response.json()["data"]["email"] == ""
 
 
+def test_a_semicolon_is_not_a_separator(auth_api, contact):
+    """``frappe.utils.split_emails`` splits on commas and newlines only, so a
+    semicolon-joined pair is one invalid address upstream, not two valid ones."""
+    response = _put(auth_api, contact, {"email_ids": [{"email_id": "a@zz.test;b@zz.test"}]})
+    assert response.status_code == 417
+    assert response.json()["exc_type"] == "InvalidEmailAddressError"
+
+
 def test_the_invalid_address_is_html_escaped(auth_api, contact):
     response = _put(auth_api, contact, {"email_ids": [{"email_id": "<b>x</b>"}]})
     assert response.json()["message"] == "&lt;b&gt;x&lt;/b&gt; is not a valid Email Address"

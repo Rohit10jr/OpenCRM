@@ -187,6 +187,20 @@ def test_deal_status_change_counts_in_position_order(alice, pipeline):
     ]
 
 
+def test_a_status_without_a_position_sorts_first(alice, pipeline, statuses, administrator):
+    """``ORDER BY st.position`` ascending, and MariaDB sorts NULL before every number."""
+    with session_user(administrator.name):
+        CRMDealStatus.objects.create(deal_status="Unranked", type="Open", position=None)
+    with session_user(alice.name):
+        CRMStatusChangeLog.objects.create(
+            parenttype="CRM Deal", parentfield="status_change_log",
+            parent=pipeline["open_deal"].name, **{"to": "Unranked"},
+        )
+        rows = get_deal_status_change_counts(FROM, TO)
+    assert rows[0] == {"stage": "Unranked", "count": 1}
+    assert [row["stage"] for row in rows[1:]] == ["Qualification", "Negotiation", "Won"]
+
+
 def test_funnel_conversion_starts_with_the_leads(alice, pipeline):
     with session_user(alice.name):
         chart = get_funnel_conversion(FROM, TO)

@@ -93,6 +93,41 @@ def test_dynamic_links_and_versions_follow(auth_api, alice, linked):
     assert Comment.objects.filter(reference_doctype="CRM Lead", reference_name="ZZ Jane Roe").count() == 1
 
 
+def test_a_notifications_type_reference_follows_too(auth_api, alice, linked):
+    """CRM Notification names the document twice: as the thing notified about
+    (``notification_type_*``) and as the place to land (``reference_*``)."""
+    from crm_app.models import CRMNotification
+
+    with session_user(alice.name):
+        CRMNotification.objects.create(
+            from_user=alice, to_user=alice, type="Mention", message="m",
+            notification_type_doctype="Contact", notification_type_doc="ZZ Jane Roe",
+            reference_doctype="Contact", reference_name="ZZ Jane Roe",
+        )
+    assert rename(auth_api, "Contact", "ZZ Jane Roe", "ZZ Jane Renamed").status_code == 200
+    row = CRMNotification.objects.get(notification_type_doctype="Contact")
+    assert row.notification_type_doc == "ZZ Jane Renamed"
+    assert row.reference_name == "ZZ Jane Renamed"
+
+
+def test_a_row_under_a_non_key_unique_constraint_can_be_renamed(auth_api, alice):
+    """A lead with Facebook ids is unique per form; the copy inserted beside the
+    original would collide where upstream's in-place UPDATE never could, so the values
+    are parked until the original is gone."""
+    from crm_app.models import CRMLead, CRMLeadStatus
+
+    with session_user(alice.name):
+        CRMLeadStatus.objects.create(lead_status="New", type="Open")
+        lead = CRMLead.objects.create(
+            first_name="ZZ Social", lead_owner=alice, facebook_form_id="f1", facebook_lead_id="l1"
+        )
+    response = rename(auth_api, "CRM Lead", lead.name, "CRM-LEAD-2099-00001")
+    assert response.status_code == 200, response.content[:300]
+    renamed = CRMLead.objects.get(pk="CRM-LEAD-2099-00001")
+    assert (renamed.facebook_form_id, renamed.facebook_lead_id) == ("f1", "l1")
+    assert not CRMLead.objects.filter(pk=lead.name).exists()
+
+
 def test_the_renamed_row_keeps_its_stamps(auth_api, linked):
     org, contact, deal = linked
     rename(auth_api, "CRM Organization", "ZZ Contact Org", "ZZ Renamed Org")

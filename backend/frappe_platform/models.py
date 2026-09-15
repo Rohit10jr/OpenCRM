@@ -106,6 +106,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     derive from ``AbstractBaseUser``, and a user has no ``owner``/``_assign`` of its own.
     """
 
+    #: ``options: Email`` upstream; a Django EmailField's own validator does not run on
+    #: ``save()``, so the Frappe check is declared like everywhere else.
+    EMAIL_FIELDS = ("email",)
+
     name = models.CharField(max_length=140, primary_key=True)
     email = models.EmailField(max_length=140, blank=True, default="")
     first_name = models.CharField(max_length=140, blank=True, default="")
@@ -688,6 +692,9 @@ class EmailAccount(EncryptedFieldsMixin, BaseDocument):
     Naming: ``field:email_account_name`` - Frappe's Email Account is titled by that
     field and the CRM passes it explicitly on create.
     """
+
+    #: ``email_id`` is ``options: Email`` in email_account.json.
+    EMAIL_FIELDS = ("email_id",)
 
     email_account_name = models.CharField(max_length=140)
     email_id = models.CharField(max_length=140, blank=True, default="")

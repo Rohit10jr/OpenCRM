@@ -400,8 +400,11 @@ Content-Type: application/json
 GET {{call}}/{{call1}}
 Authorization: Bearer {{token}}
 
-### 6.6 only the note and the second call log are still linked -> no CRM Task in the list
-# @expect $.message count 0
+### 6.6 nothing but the assignment notifications is still linked -> no task, note or call log in the list
+# (upstream lists CRM Notification rows among linked documents, titled by their message: doc.py:707)
+# @expect $.message excludes "doc": "CRM Task"
+# @expect $.message excludes "doc": "CRM Call Log"
+# @expect $.message excludes "doc": "FCRM Note"
 POST {{host}}/api/method/crm.api.doc.get_linked_docs_of_document
 Authorization: Bearer {{token}}
 Content-Type: application/json

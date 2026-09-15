@@ -647,7 +647,8 @@ def get_deal_status_change_counts(from_date, to_date, user=None):
         .annotate(count=Count("pk"))
     )
     result = [{"stage": row["to"], "count": row["count"]} for row in rows if row["to"] in positions]
-    result.sort(key=lambda row: (positions[row["stage"]] is None, positions[row["stage"]] or 0))
+    # ORDER BY position ascending, and MariaDB sorts NULL before every number.
+    result.sort(key=lambda row: (positions[row["stage"]] is not None, positions[row["stage"]] or 0))
     return result
 
 

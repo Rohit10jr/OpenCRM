@@ -34,6 +34,7 @@ DYNAMIC_LINK_PAIRS: tuple[tuple[str, str], ...] = (
     ("attached_to_doctype", "attached_to_name"),
     ("ref_doctype", "docname"),
     ("link_doctype", "link_name"),
+    ("notification_type_doctype", "notification_type_doc"),
 )
 
 
@@ -79,15 +80,60 @@ def _repoint_dynamic_links(doctype: str, old: str, new: str) -> None:
                 ).update(**{name_column: new})
 
 
+def _unique_columns(model) -> list:
+    """The concrete fields under a unique constraint other than the primary key. A copy
+    inserted beside the original collides on them, where upstream's in-place UPDATE of
+    ``name`` never could (CRM Lead's Facebook ids, for one)."""
+    fields = []
+    by_name = {f.name: f for f in model._meta.concrete_fields}
+    for field in model._meta.concrete_fields:
+        if field.unique and not field.primary_key:
+            fields.append(field)
+    for constraint in model._meta.constraints:
+        for fieldname in getattr(constraint, "fields", ()) or ():
+            if fieldname in by_name:
+                fields.append(by_name[fieldname])
+    for group in model._meta.unique_together:
+        for fieldname in group:
+            if fieldname in by_name:
+                fields.append(by_name[fieldname])
+    return list(dict.fromkeys(f for f in fields if not f.primary_key))
+
+
+def _blank_for(field):
+    """A value the column accepts that no live row carries: NULL where allowed, else the
+    empty string for text. Anything else cannot be parked, and is left to collide."""
+    if field.null:
+        return None
+    if getattr(field, "empty_strings_allowed", False) and not field.is_relation:
+        return ""
+    raise ValueError(field.name)
+
+
 def rename_document(doctype: str, old: str, new: str) -> str:
     """Rename ``old`` to ``new`` and repoint every reference. The caller has already
     validated the names and the permission, as ``validate_rename`` does upstream."""
     model = registry.get_model(doctype)
     with transaction.atomic():
         original = model._default_manager.select_for_update().get(pk=old)
-        model._default_manager.bulk_create([_copy_under(original, new)])
+        copy = _copy_under(original, new)
+        # Park the values of non-key unique columns on the copy until the original is
+        # gone, then put them back with a bare update.
+        parked: dict = {}
+        for field in _unique_columns(model):
+            value = getattr(copy, field.attname)
+            if value in (None, ""):
+                continue
+            try:
+                setattr(copy, field.attname, _blank_for(field))
+            except ValueError:
+                continue
+            parked[field.attname] = value
+        model._default_manager.bulk_create([copy])
         _repoint_foreign_keys(model, old, new)
         _repoint_child_parents(model, doctype, old, new)
         _repoint_dynamic_links(doctype, old, new)
         model._default_manager.filter(pk=old).delete()
+        if parked:
+            model._default_manager.filter(pk=new).update(**parked)
     return new

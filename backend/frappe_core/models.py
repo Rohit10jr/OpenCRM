@@ -21,14 +21,15 @@ from frappe_core.session import get_current_user
 
 def validate_email_address(email_str: str) -> str:
     """``frappe.utils.validate_email_address(email_str, throw=True)`` (utils/__init__.py:
-    166-206): every address in a comma- or semicolon-separated string is checked, an
-    address may carry a display name (``Jane <jane@x.test>``), a bare string with a space
-    is not an address, and the first bad one throws ``InvalidEmailAddressError`` with the
-    value HTML-escaped: "<value> is not a valid Email Address". Returns the addresses
-    found, joined with ", ", as upstream does.
+    166-206): every address in a comma- or newline-separated string is checked (the split
+    ``frappe.utils.split_emails`` makes; a semicolon is not a separator), an address may
+    carry a display name (``Jane <jane@x.test>``), a bare string with a space is not an
+    address, and the first bad one throws ``InvalidEmailAddressError`` with the value
+    HTML-escaped: "<value> is not a valid Email Address". Returns the addresses found,
+    joined with ", ", as upstream does.
     """
     out = []
-    for candidate in re.split(r"[,;]", (email_str or "").strip()):
+    for candidate in re.split(r"[,\n]", (email_str or "").strip()):
         candidate = candidate.strip()
         if not candidate:
             continue
