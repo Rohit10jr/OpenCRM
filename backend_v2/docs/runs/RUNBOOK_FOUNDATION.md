@@ -66,8 +66,8 @@ command that produced it:
 4. `backend_v2/scripts/parity_diff.py` over the same blocks, against `backend/` on
    port 8000.
 5. Each guard test broken on purpose, seen to fail, restored.
-6. Independent review, tier 1 first (root `CLAUDE.md`), run from `backend_v2/`. State the
-   tier that worked. Report findings to the owner, including where you disagree; do not
+6. Independent review, tier 1 first (root `CLAUDE.md`), with the root `AGENTS.md` as the
+   reviewer's brief. State the tier that worked. Report findings to the owner, including where you disagree; do not
    apply them unasked.
 
 Before step 3, check the ports: `netstat -ano | findstr :8000` and `:8001`. A stale server

@@ -81,7 +81,9 @@ frontend does not change. Why, and every decision taken so far:
   the Celery schedule) are finished before any parallel work starts.
 - **The reviewer policy**: tier 1 Codex on PowerShell 7, tier 2 on PowerShell 5.1, tier 3
   a fresh Claude subagent; never trust `codex exec`'s exit code; give a run 40 minutes.
-  **Run Codex from `backend_v2/`** so it loads `backend_v2/AGENTS.md`.
+  Codex's brief is the repository-root `AGENTS.md`, written for this rebuild, so it loads
+  wherever Codex is run from. **A tier-3 subagent gets the same brief**: point it at that
+  file.
 - **Security is the standing exception.** When the old backend protects something, the
   protection is carried over even where upstream Frappe registers no hook.
 

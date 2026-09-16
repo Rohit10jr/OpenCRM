@@ -88,7 +88,7 @@ backend_v2/
 │   ├── ...                 one package per app below
 │   └── integrations/
 ├── scripts/                parity tooling
-├── CLAUDE.md  AGENTS.md
+├── CLAUDE.md               rules for Claude here; Codex's brief is the root AGENTS.md
 ├── docs/                   this plan, the contract, the map, as-built, exceptions, runs/
 └── specs/                  one spec per unit, and the index
 ```
