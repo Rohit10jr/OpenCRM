@@ -20,6 +20,7 @@ from crm_app.api import (  # noqa: F401
     call_log,
     client,
     comment,
+    communication,
     contact,
     dashboard,
     deal,

@@ -84,6 +84,16 @@ class InvalidEmailAddressError(ValidationError):
     Data field whose options is Email - "<value> is not a valid Email Address"."""
 
 
+class OutgoingEmailError(ValidationError):
+    """``frappe.OutgoingEmailError``: there is no Email Account to send through.
+
+    Thrown by ``frappe/core/doctype/communication/email.py:_make`` when ``send_email`` is
+    set and ``comm.get_outgoing_email_account()`` finds nothing, and by
+    ``EmailAccount.find_outgoing``. Upstream declares it as a ``ValidationError``
+    subclass (``frappe/exceptions.py``), so it answers 417 like every other throw.
+    """
+
+
 class LinkValidationError(ValidationError):
     """``frappe.LinkValidationError``: a Link names a document that does not exist.
     ``document.py:_validate_links`` throws it as "Could not find <Label>: <name>", and

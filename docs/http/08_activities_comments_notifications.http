@@ -518,6 +518,113 @@ Content-Type: application/json
 
 {"name": "CRM-LEAD-0000-99999"}
 
+# ---- the send button: frappe.core.doctype.communication.email.make -----------------------------------
+#
+# What 5.1 logs by hand, the frontend does through this one endpoint
+# (CommunicationArea.vue:206-229). Everything below needs no SMTP server: either
+# send_email is 0, or the call is refused before anything is sent.
+#
+# 6.22 assumes this site has **no outgoing Email Account** - no account whose email_id is
+# the sender's address, and none marked default_outgoing. That is the state of a clean
+# demo database, and no .http file here creates one. If somebody has configured an account
+# through Settings, that block sends for real instead and answers 200; that is the endpoint
+# working, not a regression - unset default_outgoing to get the refusal back.
+#
+# Subjects are prefixed ZZMAKE so 6.28 can sweep them: deleting lead2 does **not** take its
+# communications with it - clear_references blanks the reference and keeps the email, which
+# is delete_doc.py's own behaviour (finding 19).
+
+### 6.20 make logs the row and sends nothing when send_email is 0 -> 200
+# @name k1_req
+# @expect $.message.name exists
+# @expect $.message.emails_not_sent_to ==
+POST {{host}}/api/method/frappe.core.doctype.communication.email.make
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{lead2}}", "subject": "ZZMAKE logged only", "content": "<p>Sending you the revised terms.</p>", "recipients": "buyer@example.test, cfo@example.test", "cc": "assistant@example.test", "sender": "{{manager}}", "sender_full_name": "Grace", "send_email": 0}
+
+###
+@k1 = {{k1_req.response.body.$.message.name}}
+
+### 6.21 the row it made -> 200, the reference, the sender and the recipients as stored
+# @expect $.data.reference_doctype == CRM Lead
+# @expect $.data.reference_name == {{lead2}}
+# @expect $.data.sender == {{manager}}
+# @expect $.data.sender_full_name == Grace
+# @expect $.data.recipients == buyer@example.test, cfo@example.test
+# @expect $.data.cc == assistant@example.test
+# @expect $.data.communication_type == Communication
+# @expect $.data.sent_or_received == Sent
+# @expect $.data.message_id exists
+GET {{comm}}/{{k1}}
+Authorization: Bearer {{mtoken}}
+
+### 6.22 send_email 1 with no Email Account -> 417 OutgoingEmailError (email.py:_make, verbatim)
+# @expect $.exc_type == OutgoingEmailError
+# @expect $.message == Unable to send mail because of a missing email account. Please setup default Email Account from Settings > Email Account
+POST {{host}}/api/method/frappe.core.doctype.communication.email.make
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{lead2}}", "subject": "ZZMAKE no account", "content": "<p>This one cannot go out.</p>", "recipients": "buyer@example.test", "sender": "{{manager}}", "send_email": 1, "now": 1}
+
+### 6.23 ...and the row it inserted before that check is still there -> 200, 1 row
+# (upstream inserts, copies attachments, *then* looks for an account - so the draft survives)
+# @expect $.data count 1
+GET {{comm}}?fields=["name","subject"]&filters=[["subject","=","ZZMAKE no account"]]
+Authorization: Bearer {{mtoken}}
+
+### 6.24 an invalid recipient -> 417 InvalidEmailAddressError (validate_email, verbatim)
+# @expect $.exc_type == InvalidEmailAddressError
+# @expect $.message == not-an-address is not a valid Email Address
+POST {{host}}/api/method/frappe.core.doctype.communication.email.make
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{lead2}}", "subject": "ZZMAKE invalid", "content": "x", "recipients": "buyer@example.test, not-an-address", "sender": "{{manager}}", "send_email": 0}
+
+### 6.25 ada may not email a lead she cannot see -> 403
+# (upstream checks ptype "email"; this port has no such type, so it is read on the lead)
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/method/frappe.core.doctype.communication.email.make
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{lead2}}", "subject": "ZZMAKE forged mail", "content": "x", "recipients": "buyer@example.test", "send_email": 0}
+
+### 6.26 a lead that does not exist -> 404
+# @expect $.exc_type == DoesNotExistError
+POST {{host}}/api/method/frappe.core.doctype.communication.email.make
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "CRM-LEAD-0000-99999", "subject": "ZZMAKE missing lead", "content": "x", "recipients": "buyer@example.test", "send_email": 0}
+
+### 6.27 GET is refused - make writes -> 403
+# @expect $.exc_type == PermissionError
+GET {{host}}/api/method/frappe.core.doctype.communication.email.make?doctype=CRM%20Lead&name={{lead2}}
+Authorization: Bearer {{mtoken}}
+
+### 6.28 sweep the two rows make left -> 200, 2 of them
+# @name sweep_k
+# @expect $.data count 2
+GET {{comm}}?fields=["name"]&filters=[["subject","like","ZZMAKE%25"]]
+Authorization: Bearer {{token}}
+
+### 6.29 -> 200|404
+DELETE {{comm}}/{{sweep_k.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 6.30 -> 200|404
+DELETE {{comm}}/{{sweep_k.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 6.31 nothing of make's left behind -> 200, empty
+# @expect $.data count 0
+GET {{comm}}?fields=["name"]&filters=[["subject","like","ZZMAKE%25"]]
+Authorization: Bearer {{token}}
+
 # ---- deleting a document takes its dependants with it (delete_doc.py:delete_dynamic_links) ---------
 
 ### 7.1 delete lead1 -> 200

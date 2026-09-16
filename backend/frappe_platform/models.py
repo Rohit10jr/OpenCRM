@@ -556,7 +556,24 @@ class Communication(BaseDocument):
     read_by_recipient = models.BooleanField(default=False)
     seen = models.BooleanField(default=False)
     has_attachment = models.BooleanField(default=False)
+    #: **Also the "this has been sent" stamp** — read ``crm_app/communication.py`` before
+    #: changing it. Upstream defaults this to ``Now`` on insert (``communication.json``:
+    #: ``"default": "Now"``) and tracks delivery separately, in ``delivery_status`` and the
+    #: ``Email Queue`` row; this port has neither column and Celery is the queue (phase 5),
+    #: so the send stamps this field and a redelivered task skips a row that already
+    #: carries one. Nothing observes the difference: the only reader is
+    #: ``activities.py:_communication_activities``, which already falls back to
+    #: ``creation``, and ``EmailArea.vue`` renders what that returns.
     communication_date = models.DateTimeField(null=True, blank=True)
+    #: RFC 5322 ``Message-ID``, stored **without** the angle brackets, as upstream stores
+    #: it (``email.py:_make`` -> ``get_string_between("<", get_message_id(), ">")``).
+    message_id = models.CharField(max_length=280, blank=True, default="", db_index=True)
+    #: The name of the Communication this one answers; its ``message_id`` becomes the
+    #: outgoing ``In-Reply-To`` header.
+    in_reply_to = models.CharField(max_length=140, blank=True, default="", db_index=True)
+    #: The ``Email Account`` that sent it, recorded as ``get_outgoing_email_account``
+    #: records it (``mixins.py:181-193`` — ``db_set("email_account", ...)``).
+    email_account = models.CharField(max_length=140, blank=True, default="")
 
     class Meta:
         ordering = ["-creation"]

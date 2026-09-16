@@ -57,6 +57,41 @@ def _timeout() -> int:
     return int(getattr(settings, "MAIL_CONNECT_TIMEOUT", DEFAULT_MAIL_CONNECT_TIMEOUT))
 
 
+def smtp_settings(account, password: str | None = None) -> dict:
+    """The SMTP connection an ``Email Account`` describes, as Django backend arguments.
+
+    ``EmailAccount.get_smtp_server``'s rules (``email_account.py``), in one place so the
+    save-time check and the send cannot disagree - a check that passed with one set of
+    flags while the send used another was Codex finding 3 on the email.make stage:
+
+    * the login is ``login_id`` when ``login_id_is_different``, else ``email_id``;
+    * ``use_ssl_for_outgoing`` is implicit TLS on 465 and excludes STARTTLS (Django
+      refuses both flags at once); otherwise ``use_tls`` on 587;
+    * ``no_smtp_authentication`` sends no credentials at all.
+
+    ``password`` is the decrypted credential when the caller already has it (validation
+    runs on an unsaved account whose password is still plaintext); otherwise the stored
+    value is decrypted here.
+    """
+    use_ssl = bool(getattr(account, "use_ssl_for_outgoing", False))
+    authenticate = not getattr(account, "no_smtp_authentication", False)
+    username = ""
+    secret = ""
+    if authenticate:
+        login_id = getattr(account, "login_id", "") or ""
+        different = bool(getattr(account, "login_id_is_different", False))
+        username = login_id if different and login_id else account.email_id
+        secret = password if password is not None else decrypt(account.password)
+    return {
+        "host": account.smtp_server,
+        "port": account.smtp_port or (465 if use_ssl else 587),
+        "username": username,
+        "password": secret or "",
+        "use_tls": bool(account.use_tls) and not use_ssl,
+        "use_ssl": use_ssl,
+    }
+
+
 def check_smtp(
     host: str,
     port: int | None,
@@ -64,6 +99,7 @@ def check_smtp(
     password: str = "",
     use_tls: bool = True,
     *,
+    use_ssl: bool = False,
     authenticate: bool = True,
 ) -> None:
     """Open an SMTP session, then close it. Raises :class:`ValidationError` on failure.
@@ -82,10 +118,11 @@ def check_smtp(
 
     backend = EmailBackend(
         host=host,
-        port=port or 587,
+        port=port or (465 if use_ssl else 587),
         username=username if authenticate else "",
         password=password if authenticate else "",
-        use_tls=bool(use_tls),
+        use_tls=bool(use_tls) and not use_ssl,
+        use_ssl=bool(use_ssl),
         timeout=_timeout(),
         fail_silently=False,
     )
@@ -168,12 +205,15 @@ def validate_email_account(account) -> None:
         return
 
     if account.enable_outgoing:
+        # The very settings the send will use (crm_app.communication.open_backend).
+        smtp = smtp_settings(account, password)
         check_smtp(
-            account.smtp_server,
-            account.smtp_port,
-            username=account.email_id,
-            password=password,
-            use_tls=account.use_tls,
+            smtp["host"],
+            smtp["port"],
+            username=smtp["username"],
+            password=smtp["password"],
+            use_tls=smtp["use_tls"],
+            use_ssl=smtp["use_ssl"],
             authenticate=not account.no_smtp_authentication,
         )
 
