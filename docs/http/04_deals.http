@@ -1,0 +1,687 @@
+# 04 - CRM Deal: what is specific to a deal. Status default and the Won/closed_date
+# rule, lost reasons, probability inherited from the status, the two forecasting flags in
+# FCRM Settings, the contacts child table and the primary-contact rules, products totals
+# feeding expected_deal_value.
+#
+# Expectations from crm/fcrm/doctype/crm_deal/crm_deal.py (main): validate() at line 89
+# runs validate_status, set_primary_contact, set_primary_email_mobile_no, the status log
+# (closed_date on Won), validate_forecasting_fields, validate_lost_reason. Fixture rows
+# are prefixed "ZZ". The file toggles enable_forecasting on and restores it; if a run
+# dies between 4.2 and 4.6, block 4.6 of the next run restores it.
+
+@host = http://localhost:8000
+@admin = Administrator
+@admin_pwd = {{$dotenv ADMIN_PWD}}
+@sales = ada@example.com
+@deal = {{host}}/api/resource/CRM%20Deal
+@contact = {{host}}/api/resource/Contact
+@settings = {{host}}/api/resource/FCRM%20Settings/Settings
+
+### 0.1 login -> 200
+# @name login
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}", "pwd": "{{admin_pwd}}"}
+
+###
+@token = {{login.response.body.$.message.access}}
+
+# ---- cleanup first ---------------------------------------------------------------------
+
+### 0.2 forecasting off, in case an earlier run died with it on -> 200
+PUT {{settings}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"enable_forecasting": 0}
+
+### 0.3 find deals left by an earlier run -> 200
+# @name leftovers
+GET {{deal}}?fields=["name"]&or_filters=[["organization","=","ZZ Deal Org"],["next_step","like","ZZ%25"]]&limit_page_length=10
+Authorization: Bearer {{token}}
+
+### 0.4 delete leftover 1 -> 200|404
+DELETE {{deal}}/{{leftovers.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.5 delete leftover 2 -> 200|404
+DELETE {{deal}}/{{leftovers.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 0.6 delete leftover 3 -> 200|404
+DELETE {{deal}}/{{leftovers.response.body.$.data[2].name}}
+Authorization: Bearer {{token}}
+
+### 0.7 delete leftover 4 -> 200|404
+DELETE {{deal}}/{{leftovers.response.body.$.data[3].name}}
+Authorization: Bearer {{token}}
+
+### 0.8 delete leftover 5 -> 200|404
+DELETE {{deal}}/{{leftovers.response.body.$.data[4].name}}
+Authorization: Bearer {{token}}
+
+### 0.9 delete leftover 6 -> 200|404
+DELETE {{deal}}/{{leftovers.response.body.$.data[5].name}}
+Authorization: Bearer {{token}}
+
+### 0.10 cleanup contact ZZ Primary -> 200|404
+DELETE {{contact}}/ZZ%20Primary
+Authorization: Bearer {{token}}
+
+### 0.11 cleanup contact ZZ Second -> 200|404
+DELETE {{contact}}/ZZ%20Second
+Authorization: Bearer {{token}}
+
+### 0.11b cleanup contact ZZ Modal Person (made by create_deal in 5.17) -> 200|404
+DELETE {{contact}}/ZZ%20Modal%20Person
+Authorization: Bearer {{token}}
+
+### 0.12 cleanup org -> 200|404
+DELETE {{host}}/api/resource/CRM%20Organization/ZZ%20Deal%20Org
+Authorization: Bearer {{token}}
+
+### 0.12b cleanup org ZZ Modal Org (made by create_deal in 5.17) -> 200|404
+DELETE {{host}}/api/resource/CRM%20Organization/ZZ%20Modal%20Org
+Authorization: Bearer {{token}}
+
+### 0.13 cleanup status ZZ Hot -> 200|404
+DELETE {{host}}/api/resource/CRM%20Deal%20Status/ZZ%20Hot
+Authorization: Bearer {{token}}
+
+### 0.14 cleanup lost reason Other -> 200|404
+DELETE {{host}}/api/resource/CRM%20Lost%20Reason/Other
+Authorization: Bearer {{token}}
+
+### 0.15 cleanup lost reason ZZ Churn -> 200|404
+DELETE {{host}}/api/resource/CRM%20Lost%20Reason/ZZ%20Churn
+Authorization: Bearer {{token}}
+
+### 0.16 cleanup product ZZ-P1 -> 200|404
+DELETE {{host}}/api/resource/CRM%20Product/ZZ-P1
+Authorization: Bearer {{token}}
+
+# ---- fixtures ----------------------------------------------------------------------------
+
+### 1.1 organization -> 201
+POST {{host}}/api/resource/CRM%20Organization
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization_name": "ZZ Deal Org", "website": "https://zzdeal.example"}
+
+### 1.2 contact one -> 201, named "first last" by the Contact controller
+# @expect $.data.name == ZZ Primary
+POST {{contact}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ", "last_name": "Primary", "email_ids": [{"email_id": "zz.primary@example.test", "is_primary": 1}], "phone_nos": [{"phone": "+1 111", "is_primary_mobile_no": 1}]}
+
+### 1.3 contact two -> 201
+# @expect $.data.name == ZZ Second
+POST {{contact}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ", "last_name": "Second", "email_ids": [{"email_id": "zz.second@example.test", "is_primary": 1}], "phone_nos": [{"phone": "+1 222", "is_primary_phone": 1}]}
+
+### 1.4 a deal status carrying a probability -> 201
+POST {{host}}/api/resource/CRM%20Deal%20Status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"deal_status": "ZZ Hot", "type": "Ongoing", "probability": 60, "position": 99, "color": "orange"}
+
+### 1.5 lost reason Other -> 201
+POST {{host}}/api/resource/CRM%20Lost%20Reason
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"lost_reason": "Other"}
+
+### 1.6 lost reason ZZ Churn -> 201
+POST {{host}}/api/resource/CRM%20Lost%20Reason
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"lost_reason": "ZZ Churn"}
+
+### 1.7 a product master row, for the product_code Link on a product line -> 201
+POST {{host}}/api/resource/CRM%20Product
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"product_code": "ZZ-P1", "product_name": "ZZ P1", "standard_rate": 75}
+
+# ---- create and defaults -------------------------------------------------------------------
+
+### 2.1 minimal deal -> 201; series name, status Qualification, probability 0, exchange_rate 1
+# @name deal1_req
+# @expect $.data.name contains CRM-DEAL-
+# @expect $.data.status == Qualification
+# @expect $.data.probability == 0
+# @expect $.data.exchange_rate == 1
+# @expect $.data.deal_owner == Administrator
+# @expect $.data.closed_date == null
+POST {{deal}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization": "ZZ Deal Org", "deal_owner": "{{admin}}", "next_step": "ZZ one"}
+
+###
+@deal1 = {{deal1_req.response.body.$.data.name}}
+
+### 2.2 the status's probability is inherited when the deal has none -> 60
+# @name deal2_req
+# @expect $.data.status == ZZ Hot
+# @expect $.data.probability == 60
+POST {{deal}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization": "ZZ Deal Org", "deal_owner": "{{admin}}", "status": "ZZ Hot", "next_step": "ZZ two"}
+
+###
+@deal2 = {{deal2_req.response.body.$.data.name}}
+
+### 2.3 an explicit probability is kept -> 25
+# @name deal3_req
+# @expect $.data.probability == 25
+POST {{deal}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization": "ZZ Deal Org", "deal_owner": "{{admin}}", "status": "ZZ Hot", "probability": 25, "next_step": "ZZ three"}
+
+###
+@deal3 = {{deal3_req.response.body.$.data.name}}
+
+### 2.4 nothing is mandatory server-side beyond what the model defaults -> 201
+# @name deal4_req
+# @expect $.data.status == Qualification
+POST {{deal}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"next_step": "ZZ four"}
+
+###
+@deal4 = {{deal4_req.response.body.$.data.name}}
+
+### 2.5 organization on a deal IS a Link, unlike on a lead -> 417
+# @expect $.exc_type == ValidationError
+POST {{deal}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization": "No Such Org", "next_step": "ZZ bad"}
+
+# ---- status lifecycle ----------------------------------------------------------------------
+
+### 3.1 move to a status whose name contains a slash -> 200, log has two rows
+# @expect $.data.status == Demo/Making
+# @expect $.data.status_change_log count 2
+# @expect $.data.status_change_log[0].to == Demo/Making
+# @expect $.data.status_change_log[1].from_type == Ongoing
+PUT {{deal}}/{{deal1}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status": "Demo/Making"}
+
+### 3.2 Lost without a reason -> 417, crm_deal.py:267 verbatim ("deal", not "lead")
+# @expect $.message == Please specify a reason for losing the deal.
+PUT {{deal}}/{{deal1}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status": "Lost"}
+
+### 3.3 reason Other needs notes -> 417, crm_deal.py:269 verbatim
+# @expect $.message == Please specify the reason for losing the deal.
+PUT {{deal}}/{{deal1}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status": "Lost", "lost_reason": "Other"}
+
+### 3.4 Lost with a reason -> 200
+# @expect $.data.status == Lost
+# @expect $.data.status_change_log count 3
+PUT {{deal}}/{{deal1}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status": "Lost", "lost_reason": "ZZ Churn"}
+
+### 3.5 Won stamps closed_date -> 200, closed_date set
+# @expect $.data.status == Won
+# @expect $.data.closed_date != null
+PUT {{deal}}/{{deal2}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status": "Won"}
+
+### 3.6 leaving Won does not clear closed_date -> 200, still set
+# @expect $.data.status == Negotiation
+# @expect $.data.closed_date != null
+PUT {{deal}}/{{deal2}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status": "Negotiation"}
+
+# ---- forecasting, driven by FCRM Settings -------------------------------------------------
+
+### 4.1 with forecasting OFF a deal needs no expected value -> 201
+# @name deal5_req
+POST {{deal}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization": "ZZ Deal Org", "deal_owner": "{{admin}}", "next_step": "ZZ five"}
+
+###
+@deal5 = {{deal5_req.response.body.$.data.name}}
+
+### 4.2 turn forecasting ON (manager-only write on the settings singleton) -> 200
+# @expect $.data.enable_forecasting == true
+PUT {{settings}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"enable_forecasting": 1}
+
+### 4.3 now a deal without an expected value -> 417 MandatoryError, crm_deal.py:257 verbatim
+# @expect $.exc_type == MandatoryError
+# @expect $.message == Expected deal value is required.
+POST {{deal}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization": "ZZ Deal Org", "deal_owner": "{{admin}}", "next_step": "ZZ six"}
+
+### 4.4 a value but no closure date -> 417, crm_deal.py:259 verbatim
+# @expect $.exc_type == MandatoryError
+# @expect $.message == Expected closure date is required.
+POST {{deal}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization": "ZZ Deal Org", "deal_owner": "{{admin}}", "expected_deal_value": 5000, "next_step": "ZZ six"}
+
+### 4.5 both -> 201
+# @name deal6_req
+# @expect $.data.expected_deal_value contains 5000
+# @expect $.data.expected_closure_date == 2026-12-31
+POST {{deal}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization": "ZZ Deal Org", "deal_owner": "{{admin}}", "expected_deal_value": 5000, "expected_closure_date": "2026-12-31", "next_step": "ZZ six"}
+
+###
+@deal6 = {{deal6_req.response.body.$.data.name}}
+
+### 4.6 existing deals are checked on every save too: deal5 can no longer be saved -> 417
+# @expect $.exc_type == MandatoryError
+PUT {{deal}}/{{deal5}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"next_step": "ZZ five edited"}
+
+### 4.7 turn forecasting OFF again -> 200
+# @expect $.data.enable_forecasting == false
+PUT {{settings}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"enable_forecasting": 0}
+
+### 4.8 auto_update_expected_deal_value: products total overwrites a SET expected value -> 200
+# Upstream computes totals client-side and validate() sees them in the same save, so the
+# expected value moves to 200 in this request. crm_deal.py:240-248.
+# @name products_put
+PUT {{deal}}/{{deal6}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"products": [{"product_name": "ZZ Thing", "qty": 2, "rate": 100}]}
+
+### 4.9 -> expected_deal_value now equals the net total, 200, in the same request (crm_deal.py:240-248)
+# @expect $.data.total contains 200
+# @expect $.data.expected_deal_value contains 200
+GET {{deal}}/{{deal6}}
+Authorization: Bearer {{token}}
+
+### 4.9b any later save catches up, because by then the totals are on the row -> 200
+PUT {{deal}}/{{deal6}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"next_step": "ZZ six edited"}
+
+### 4.9c -> 200, unchanged: there is no one-save lag any more (finding 8, fixed)
+# @expect $.data.expected_deal_value contains 200
+GET {{deal}}/{{deal6}}
+Authorization: Bearer {{token}}
+
+### 4.10 ...but an EMPTY expected value is never filled in from the total (upstream's odd guard)
+# deal4 has products worth 300 and no expected value: it stays empty.
+PUT {{deal}}/{{deal4}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"products": [{"product_name": "ZZ Other Thing", "qty": 3, "rate": 100}]}
+
+### 4.11 -> total 300, expected_deal_value still null
+# @expect $.data.total contains 300
+# @expect $.data.expected_deal_value == null
+GET {{deal}}/{{deal4}}
+Authorization: Bearer {{token}}
+
+### 4.12 a product line naming its product_code, as the form sends it -> 200
+# @expect $.data.products[0].product_code == ZZ-P1
+PUT {{deal}}/{{deal4}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"products": [{"product_code": "ZZ-P1", "product_name": "ZZ P1", "qty": 1, "rate": 75}]}
+
+# ---- the contacts child table and the primary-contact rules ---------------------------------
+
+### 5.1 one contact row: it becomes primary and its details are copied onto the deal -> 200
+# crm_deal.py:120-149 runs inside validate(), so the same save that adds the row derives
+# email / mobile_no / phone from it. Read back in 5.2.
+PUT {{deal}}/{{deal3}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"contacts": [{"contact": "ZZ Primary"}]}
+
+### 5.2 -> is_primary true, email and mobile from the contact (fetch_from), deal.email derived
+# @expect $.data.contacts count 1
+# @expect $.data.contacts[0].is_primary == true
+# @expect $.data.contacts[0].email == zz.primary@example.test
+# @expect $.data.contacts[0].full_name == ZZ Primary
+# @expect $.data.email == zz.primary@example.test
+# @expect $.data.mobile_no == +1 111
+GET {{deal}}/{{deal3}}
+Authorization: Bearer {{token}}
+
+### 5.3 two rows, the second flagged primary -> 200
+PUT {{deal}}/{{deal3}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"contacts": [{"contact": "ZZ Primary"}, {"contact": "ZZ Second", "is_primary": 1}]}
+
+### 5.4 -> the deal's email follows the primary; phone from ZZ Second, mobile now empty
+# @expect $.data.contacts count 2
+# @expect $.data.email == zz.second@example.test
+# @expect $.data.phone == +1 222
+# @expect $.data.mobile_no ==
+GET {{deal}}/{{deal3}}
+Authorization: Bearer {{token}}
+
+### 5.5 two primaries -> 417, crm_deal.py:141 verbatim
+# @expect $.message == Only one Contact can be set as primary.
+PUT {{deal}}/{{deal3}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"contacts": [{"contact": "ZZ Primary", "is_primary": 1}, {"contact": "ZZ Second", "is_primary": 1}]}
+
+### 5.6 removing every contact clears the derived fields -> 200
+PUT {{deal}}/{{deal3}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"contacts": []}
+
+### 5.7 -> email, mobile_no, phone all empty
+# @expect $.data.contacts count 0
+# @expect $.data.email ==
+# @expect $.data.phone ==
+GET {{deal}}/{{deal3}}
+Authorization: Bearer {{token}}
+
+### 5.8 a contact row pointing at a contact that does not exist -> 417 LinkValidationError (document.py:_validate_links)
+# @expect $.exc_type == LinkValidationError
+# @expect $.message contains Could not find Row #1: Contact:
+PUT {{deal}}/{{deal3}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"contacts": [{"contact": "ZZ Nobody"}]}
+
+# ---- the contacts panel's endpoints and the Create Deal modal (crm_deal.py:358-475) --------
+# These are the doctype-module paths the deal page and DealModal.vue call; they were the
+# first of the twenty unserved paths in 14_unserved_paths.http until 15 Sep 2026.
+
+### 5.9 add_contact appends a row; the lone contact becomes primary -> true
+# @expect $.message == true
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.crm_deal.add_contact
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"deal": "{{deal3}}", "contact": "ZZ Primary"}
+
+### 5.10 get_deal_contacts -> the panel's rows: name, image, full_name, email, mobile_no, is_primary
+# @expect $.message count 1
+# @expect $.message[0].name == ZZ Primary
+# @expect $.message[0].email == zz.primary@example.test
+# @expect $.message[0].is_primary == true
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.api.get_deal_contacts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "{{deal3}}"}
+
+### 5.11 a second contact -> true
+# @expect $.message == true
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.crm_deal.add_contact
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"deal": "{{deal3}}", "contact": "ZZ Second"}
+
+### 5.12 set_primary_contact on the second -> true; the first is demoted
+# @expect $.message == true
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.crm_deal.set_primary_contact
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"deal": "{{deal3}}", "contact": "ZZ Second"}
+
+### 5.13 -> the panel shows the swap
+# @expect $.message[0].is_primary == false
+# @expect $.message[1].is_primary == true
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.api.get_deal_contacts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "{{deal3}}"}
+
+### 5.14 remove_contact -> true
+# @expect $.message == true
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.crm_deal.remove_contact
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"deal": "{{deal3}}", "contact": "ZZ Primary"}
+
+### 5.15 -> one row left
+# @expect $.message count 1
+# @expect $.message[0].name == ZZ Second
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.api.get_deal_contacts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "{{deal3}}"}
+
+### 5.16 a contact that does not exist -> 417 LinkValidationError
+# @expect $.exc_type == LinkValidationError
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.crm_deal.add_contact
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"deal": "{{deal3}}", "contact": "ZZ Nobody"}
+
+### 5.17 create_deal, the modal's one call: the contact and organization are made on the way -> the new name
+# @name modal_req
+# @expect $.message contains CRM-DEAL-
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.crm_deal.create_deal
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doc": {"first_name": "ZZ Modal", "last_name": "Person", "email": "zz.modal@example.test", "mobile_no": "+1 777", "organization_name": "ZZ Modal Org", "website": "https://modal.example", "deal_owner": "{{admin}}", "status": "Qualification", "next_step": "ZZ modal"}}
+
+###
+@modal = {{modal_req.response.body.$.message}}
+
+### 5.18 -> the deal points at the new organization and carries the contact as primary; email derived
+# @expect $.data.organization == ZZ Modal Org
+# @expect $.data.contacts count 1
+# @expect $.data.contacts[0].contact == ZZ Modal Person
+# @expect $.data.contacts[0].is_primary == true
+# @expect $.data.email == zz.modal@example.test
+GET {{deal}}/{{modal}}
+Authorization: Bearer {{token}}
+
+### 5.19 the same email again reuses the contact (crm_deal.py:415-425) -> a second deal
+# @name modal2_req
+# @expect $.message contains CRM-DEAL-
+POST {{host}}/api/method/crm.fcrm.doctype.crm_deal.crm_deal.create_deal
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doc": {"first_name": "Someone", "email": "zz.modal@example.test", "deal_owner": "{{admin}}", "next_step": "ZZ modal two"}}
+
+###
+@modal2 = {{modal2_req.response.body.$.message}}
+
+### 5.20 -> ZZ Modal Person again, and no contact named Someone
+# @expect $.data.contacts[0].contact == ZZ Modal Person
+GET {{deal}}/{{modal2}}
+Authorization: Bearer {{token}}
+
+# ---- owner and the list engine ----------------------------------------------------------
+
+### 6.1 the deal is assigned to its owner on create -> _assign holds Administrator
+# @expect $.data._assign contains Administrator
+GET {{deal}}/{{deal1}}?fields=["name","_assign"]&filters=[["name","=","{{deal1}}"]]
+Authorization: Bearer {{token}}
+
+### 6.2 get_data for the six ZZ deals -> the deal's default columns
+# @expect $.message.data count 6
+# @expect $.message.columns[0].key == organization
+# @expect $.message.rows contains deal_owner
+# @expect $.message.rows contains currency
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Deal", "filters": {"name": ["in", ["{{deal1}}", "{{deal2}}", "{{deal3}}", "{{deal4}}", "{{deal5}}", "{{deal6}}"]]}, "order_by": "modified desc", "page_length": 20, "view": {"view_type": "list"}}
+
+### 6.3 a deal can be filtered by the Link's key -> the four ZZ Deal Org deals
+# @expect $.data count 5
+GET {{deal}}?fields=["name"]&filters=[["organization","=","ZZ Deal Org"]]
+Authorization: Bearer {{token}}
+
+# ---- teardown ---------------------------------------------------------------------------
+
+### 7.1 delete deal 1 -> 200
+DELETE {{deal}}/{{deal1}}
+Authorization: Bearer {{token}}
+
+### 7.2 delete deal 2 -> 200
+DELETE {{deal}}/{{deal2}}
+Authorization: Bearer {{token}}
+
+### 7.3 delete deal 3 -> 200
+DELETE {{deal}}/{{deal3}}
+Authorization: Bearer {{token}}
+
+### 7.4 delete deal 4 -> 200
+DELETE {{deal}}/{{deal4}}
+Authorization: Bearer {{token}}
+
+### 7.5 delete deal 5 -> 200
+DELETE {{deal}}/{{deal5}}
+Authorization: Bearer {{token}}
+
+### 7.6 delete deal 6 -> 200
+DELETE {{deal}}/{{deal6}}
+Authorization: Bearer {{token}}
+
+### 7.6b delete the two deals the modal made -> 200
+DELETE {{deal}}/{{modal}}
+Authorization: Bearer {{token}}
+
+### 7.6c -> 200
+DELETE {{deal}}/{{modal2}}
+Authorization: Bearer {{token}}
+
+### 7.7 delete contact ZZ Primary -> 200
+DELETE {{contact}}/ZZ%20Primary
+Authorization: Bearer {{token}}
+
+### 7.8 delete contact ZZ Second -> 200
+DELETE {{contact}}/ZZ%20Second
+Authorization: Bearer {{token}}
+
+### 7.8b delete contact ZZ Modal Person -> 200
+DELETE {{contact}}/ZZ%20Modal%20Person
+Authorization: Bearer {{token}}
+
+### 7.9 delete org -> 200
+DELETE {{host}}/api/resource/CRM%20Organization/ZZ%20Deal%20Org
+Authorization: Bearer {{token}}
+
+### 7.9b delete org ZZ Modal Org -> 200
+DELETE {{host}}/api/resource/CRM%20Organization/ZZ%20Modal%20Org
+Authorization: Bearer {{token}}
+
+### 7.10 delete status ZZ Hot -> 200
+DELETE {{host}}/api/resource/CRM%20Deal%20Status/ZZ%20Hot
+Authorization: Bearer {{token}}
+
+### 7.11 delete lost reason Other -> 200
+DELETE {{host}}/api/resource/CRM%20Lost%20Reason/Other
+Authorization: Bearer {{token}}
+
+### 7.12 delete lost reason ZZ Churn -> 200
+DELETE {{host}}/api/resource/CRM%20Lost%20Reason/ZZ%20Churn
+Authorization: Bearer {{token}}
+
+### 7.12b delete product ZZ-P1 -> 200
+DELETE {{host}}/api/resource/CRM%20Product/ZZ-P1
+Authorization: Bearer {{token}}
+
+### 7.13 nothing left behind -> 200, empty
+# @expect $.data count 0
+GET {{deal}}?fields=["name"]&filters=[["next_step","like","ZZ%25"]]
+Authorization: Bearer {{token}}
+
+### 7.14 delete what 7.13 listed, by name -> 200|417
+# A helper for hand testing. Deals made while trying things keep 7.9 and 7.10 red,
+# because the organization and the status are still linked to them. Paste the names
+# 7.13 listed into the list, send, then run 7.9 to 7.13 again; empty the list after.
+# Ten names at most per call: above that delete_bulk_docs hands the batch to Celery
+# (crm/api/doc.py:833), which is not running on a dev machine, so nothing happens.
+# With the list empty the server answers 417 "Items are required", which is what a
+# clean run sees. Names that no longer exist are simply skipped.
+#
+# Example body, three names as 7.13 lists them (the example must stay up here: a line
+# below the blank one is part of the body and would be sent):
+#   {"doctype": "CRM Deal", "items": ["CRM-DEAL-2026-00290", "CRM-DEAL-2026-00291", "CRM-DEAL-2026-00292"]}
+POST {{host}}/api/method/crm.api.doc.delete_bulk_docs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Deal", "items": []}

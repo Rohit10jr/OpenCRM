@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 
 from frappe_core import doc_caches, permissions, registry
+from frappe_core.exceptions import DoesNotExistError
 from frappe_core.exceptions import PermissionError as FrappePermissionError
 from frappe_core.exceptions import throw
 from frappe_core.query import parse_json_param
@@ -130,14 +131,16 @@ def add_comment(
     """
     from frappe_platform.models import Comment, File, User
 
+    # Upstream reaches frappe.get_doc(reference_doctype, reference_name), which raises
+    # DoesNotExistError - a 404, not a validation failure (FINDINGS.md 12).
     if not registry.has_doctype(reference_doctype):
-        throw(f"DocType {reference_doctype} not found")
+        raise DoesNotExistError(f"DocType {reference_doctype} not found")
 
     reference = (
         registry.get_model(reference_doctype)._default_manager.filter(pk=reference_name).first()
     )
     if reference is None:
-        throw(f"{reference_doctype} {reference_name} not found")
+        raise DoesNotExistError(f"{reference_doctype} {reference_name} not found")
 
     user = get_current_user()
     if not permissions.check_object_permission(reference, "write", user):

@@ -67,23 +67,29 @@ def rebuild_sales_hierarchy() -> None:
     """
     from crm_app.models import CRMSalesHierarchy
 
+    rebuild_nested_set(CRMSalesHierarchy, "reports_to_id", _HIERARCHY_LOCK_KEY)
+
+
+def rebuild_nested_set(model, parent_attname: str, lock_key: int) -> None:
+    """Recompute ``lft``/``rgt`` for every row of a tree doctype, under its own lock."""
     with transaction.atomic():
         if connection.vendor == "postgresql":
             with connection.cursor() as cursor:
-                cursor.execute("SELECT pg_advisory_xact_lock(%s)", [_HIERARCHY_LOCK_KEY])
-        _rebuild_locked(CRMSalesHierarchy)
+                cursor.execute("SELECT pg_advisory_xact_lock(%s)", [lock_key])
+        _rebuild_locked(model, parent_attname)
 
 
-def _rebuild_locked(CRMSalesHierarchy) -> None:
-    """Caller must hold the advisory lock."""
-    nodes = list(CRMSalesHierarchy._default_manager.order_by("name"))
+def _rebuild_locked(model, parent_attname: str = "reports_to_id") -> None:
+    """Caller must hold the advisory lock. Siblings are visited by name, which is the
+    order ``frappe/utils/nestedset.py:rebuild_node`` uses."""
+    nodes = list(model._default_manager.order_by("name"))
     if not nodes:
         return
 
     children: dict[str | None, list] = {}
     by_pk = {node.pk: node for node in nodes}
     for node in nodes:
-        parent = node.reports_to_id
+        parent = getattr(node, parent_attname)
         # A dangling or self-referential parent is treated as a root rather than being
         # allowed to break the walk.
         if parent not in by_pk or parent == node.pk:
@@ -109,7 +115,7 @@ def _rebuild_locked(CRMSalesHierarchy) -> None:
         visit(root)
 
     if updated:
-        CRMSalesHierarchy._default_manager.bulk_update(updated, ["lft", "rgt"])
+        model._default_manager.bulk_update(updated, ["lft", "rgt"])
 
 
 def _on_hierarchy_write(sender, instance, **kwargs):
@@ -119,8 +125,52 @@ def _on_hierarchy_write(sender, instance, **kwargs):
     rebuild_sales_hierarchy()
 
 
+# --- CRM Territory -----------------------------------------------------------------------
+#
+# ``is_tree`` upstream, so ``frappe/utils/nestedset.py`` maintains its ``lft``/``rgt`` on
+# every write and the ``descendants of`` / ``ancestors of`` operators resolve through
+# them. Same treatment as the sales hierarchy: a full rebuild on every write, under its
+# own advisory lock (FINDINGS.md 14).
+
+_TERRITORY_LOCK_KEY = 8_724_100_2
+
+
+def rebuild_territory_tree() -> None:
+    from crm_app.models import CRMTerritory
+
+    rebuild_nested_set(CRMTerritory, "parent_crm_territory_id", _TERRITORY_LOCK_KEY)
+
+
+def _on_territory_write(sender, instance, **kwargs):
+    rebuild_territory_tree()
+
+
+def territory_subtree_q(*, fieldname, path, value, inclusive, ancestors):
+    """The ``register_tree_resolver`` contract for ``CRM Territory``: a ``Q`` over the
+    filtered doctype's Link column (``path``) for the names below - or above - ``value``.
+    ``frappe/model/db_query.py`` answers ``descendants of`` with ``get_descendants_of``,
+    which excludes the node itself unless the operator says ``(inclusive)``; a node that
+    does not exist matches nothing."""
+    from django.db.models import Q
+
+    from crm_app.models import CRMTerritory
+
+    node = CRMTerritory._default_manager.filter(pk=value).first()
+    if node is None or node.lft is None or node.rgt is None:
+        return Q(pk__in=[])
+    if ancestors:
+        related = CRMTerritory._default_manager.filter(lft__lt=node.lft, rgt__gt=node.rgt)
+    else:
+        related = CRMTerritory._default_manager.filter(lft__gt=node.lft, rgt__lt=node.rgt)
+    names = list(related.values_list("pk", flat=True))
+    if inclusive:
+        names.append(node.pk)
+    return Q(**{f"{path}__in": names})
+
+
 def connect_signals() -> None:
-    from crm_app.models import CRMSalesHierarchy
+    from crm_app.models import CRMSalesHierarchy, CRMTerritory
+    from frappe_core import filters
 
     post_save.connect(
         _on_hierarchy_write, sender=CRMSalesHierarchy, dispatch_uid="crm.hierarchy.save"
@@ -128,3 +178,8 @@ def connect_signals() -> None:
     post_delete.connect(
         _on_hierarchy_write, sender=CRMSalesHierarchy, dispatch_uid="crm.hierarchy.delete"
     )
+    post_save.connect(_on_territory_write, sender=CRMTerritory, dispatch_uid="crm.territory.save")
+    post_delete.connect(
+        _on_territory_write, sender=CRMTerritory, dispatch_uid="crm.territory.delete"
+    )
+    filters.register_tree_resolver("CRM Territory", territory_subtree_q)

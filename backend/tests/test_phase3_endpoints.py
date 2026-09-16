@@ -46,25 +46,19 @@ def call(client, path: str, payload: dict | None = None):
 # ---------------------------------------------------------------------------
 
 #: Paths the frontend calls that are **out of phase-3 scope**, with the reason.
-OUT_OF_SCOPE = {
-    # phase 7 - integrations behind feature flags
-    # PHASE_3_ENDPOINTS.md section 3 - controller methods ship with their doctype
-    "crm.fcrm.doctype.crm_call_log.crm_call_log.get_call_log",
-    "crm.fcrm.doctype.crm_deal.api.get_deal_contacts",
-    "crm.fcrm.doctype.crm_deal.crm_deal.create_deal",
-    "crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout",
-    "crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections",
-    # demo data - PORT_PLAN.md section 2 says regenerate, do not port
-    "crm.demo.api.clear_demo_data",
-    # framework endpoints outside the ported surface
-    "frappe.apps.get_apps",
-    "frappe.core.doctype.user.user.get_timezones",
-    "frappe.desk.form.load.getdoctype",
-    "frappe.integrations.frappe_providers.frappecloud_billing.current_site_info",
-    "frappe.model.utils.user_settings.save",
-}
+#:
+#: Empty since 16 Sep 2026. The controller methods (create_deal, get_deal_contacts,
+#: get_call_log, the fields-layout pair) and the Desk plumbing calls (get_apps,
+#: get_timezones, getdoctype, user_settings.save, current_site_info, clear_demo_data)
+#: that used to be listed here are all served now. The set stays so a future exclusion
+#: has a place, and `test_out_of_scope_list_is_not_hiding_a_regression` keeps it honest.
+OUT_OF_SCOPE: set[str] = set()
 
-_PATH_RE = re.compile(r"(?:url|method):\s*'([a-z_]+(?:\.[a-z_]+)+)'")
+#: A dotted path at a `url:` / `method:` key, or as the first argument of `call(...)`.
+#: The second form was missed until 16 Sep 2026, which is how twenty paths the Vue app
+#: calls stayed unserved through eight phases (docs/TESTING_GUIDE.md, "Gaps you will
+#: hit"); every one of them was a `call('...')` site.
+_PATH_RE = re.compile(r"(?:(?:url|method):\s*|\bcall\(\s*)'([a-z_]+(?:\.[a-z_]+)+)'")
 
 
 def frontend_called_paths() -> set[str]:
@@ -274,6 +268,13 @@ _DIRECT_ACCESS_ALLOWED = {
     "doc.py",
     "notifications.py",
     "settings.py",
+    # The doctype-module endpoints (crm.fcrm.doctype.*): single-object fetches of the
+    # deal, lead or call log named in the call, each behind check_object_permission or
+    # _require_readable, and the rows created on the way (a contact, an organization,
+    # a lead) behind the create check on the document being created.
+    "deal.py",
+    "lead.py",
+    "call_log.py",
     "views.py",
     "dashboard.py",
     # Phase 4. Saved views are fetched by primary key and then gated by

@@ -1,0 +1,489 @@
+# 02 - the generic resource layer: every filter operator, every list parameter, every
+# error case, on one doctype with no permission rule (CRM Organization) so nothing
+# else interferes. This is the code path every list screen in the product goes through.
+#
+# Expectations come from frappe_core/filters.py + query.py, checked against Frappe's
+# own grammar (frappe/model/db_query.py). Run:  scripts/run_http.py ../docs/http/02_resource_grammar.http
+#
+# Fixture: three organizations and one industry, all named "ZZ Grammar ..." so a
+# `name like ZZ Grammar%` clause isolates them from the demo data:
+#   Alpha  website https://alpha.example  revenue 100   staff 1-10    industry set
+#   Beta   website https://beta.example   revenue 500   staff 11-50   no industry
+#   Gamma  website (empty)                revenue 1000  staff 51-200  industry set
+
+@host = http://localhost:8000
+@admin = Administrator
+@admin_pwd = {{$dotenv ADMIN_PWD}}
+@org = {{host}}/api/resource/CRM%20Organization
+@scope = ["name","like","ZZ Grammar%25"]
+
+### 0.1 Login -> 200
+# @name login
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}", "pwd": "{{admin_pwd}}"}
+
+###
+@token = {{login.response.body.$.message.access}}
+
+# ---- cleanup first, so a run that died halfway does not poison the next --------------
+
+### 0.2 cleanup Alpha -> 200|404
+DELETE {{org}}/ZZ%20Grammar%20Alpha
+Authorization: Bearer {{token}}
+
+### 0.3 cleanup Beta -> 200|404
+DELETE {{org}}/ZZ%20Grammar%20Beta
+Authorization: Bearer {{token}}
+
+### 0.4 cleanup Gamma -> 200|404
+DELETE {{org}}/ZZ%20Grammar%20Gamma
+Authorization: Bearer {{token}}
+
+### 0.5 cleanup industry -> 200|404
+DELETE {{host}}/api/resource/CRM%20Industry/ZZ%20Grammar%20Industry
+Authorization: Bearer {{token}}
+
+# ---- fixture ---------------------------------------------------------------------------
+
+### 1.1 create the industry -> 201
+# @expect $.data.name == ZZ Grammar Industry
+POST {{host}}/api/resource/CRM%20Industry
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"industry": "ZZ Grammar Industry"}
+
+### 1.2 create Alpha -> 201
+# @expect $.data.name == ZZ Grammar Alpha
+POST {{org}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization_name": "ZZ Grammar Alpha", "website": "https://alpha.example", "annual_revenue": 100, "no_of_employees": "1-10", "industry": "ZZ Grammar Industry"}
+
+### 1.3 create Beta -> 201
+POST {{org}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization_name": "ZZ Grammar Beta", "website": "https://beta.example", "annual_revenue": 500, "no_of_employees": "11-50"}
+
+### 1.4 create Gamma -> 201
+POST {{org}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization_name": "ZZ Grammar Gamma", "website": "", "annual_revenue": 1000, "no_of_employees": "51-200", "industry": "ZZ Grammar Industry"}
+
+# ---- comparison operators ----------------------------------------------------------------
+
+### 2.1 = -> 200, Beta only
+# @expect $.data count 1
+# @expect $.data[0].name == ZZ Grammar Beta
+GET {{org}}?fields=["name"]&filters=[{{scope}},["no_of_employees","=","11-50"]]&order_by=name asc
+Authorization: Bearer {{token}}
+
+### 2.2 != -> 200, the other two
+# @expect $.data count 2
+GET {{org}}?fields=["name"]&filters=[{{scope}},["no_of_employees","!=","11-50"]]&order_by=name asc
+Authorization: Bearer {{token}}
+
+### 2.3 > -> 200, revenue above 100
+# @expect $.data count 2
+# @expect $.data[0].name == ZZ Grammar Beta
+GET {{org}}?fields=["name"]&filters=[{{scope}},["annual_revenue",">",100]]&order_by=name asc
+Authorization: Bearer {{token}}
+
+### 2.4 >= -> 200, all three
+# @expect $.data count 3
+GET {{org}}?fields=["name"]&filters=[{{scope}},["annual_revenue",">=",100]]&order_by=name asc
+Authorization: Bearer {{token}}
+
+### 2.5 < -> 200, Alpha only
+# @expect $.data count 1
+# @expect $.data[0].name == ZZ Grammar Alpha
+GET {{org}}?fields=["name"]&filters=[{{scope}},["annual_revenue","<",500]]&order_by=name asc
+Authorization: Bearer {{token}}
+
+### 2.6 <= -> 200, two
+# @expect $.data count 2
+GET {{org}}?fields=["name"]&filters=[{{scope}},["annual_revenue","<=",500]]&order_by=name asc
+Authorization: Bearer {{token}}
+
+### 2.7 between is inclusive at both ends -> 200, Alpha and Beta
+# @expect $.data count 2
+# @expect $.data[1].name == ZZ Grammar Beta
+GET {{org}}?fields=["name"]&filters=[{{scope}},["annual_revenue","between",[100,500]]]&order_by=name asc
+Authorization: Bearer {{token}}
+
+### 2.8 between with three values -> 400
+# @expect $.exc_type == ValidationError
+GET {{org}}?fields=["name"]&filters=[{{scope}},["annual_revenue","between",[1,2,3]]]
+Authorization: Bearer {{token}}
+
+# ---- like, in all four shapes. Frappe's LIKE is case-insensitive (MariaDB); Postgres' is
+# ---- not, so every form maps to an i-lookup. A bare % must be written %25 in a URL.
+
+### 3.1 like %x% -> contains -> 200, Alpha
+# @expect $.data count 1
+# @expect $.data[0].name == ZZ Grammar Alpha
+GET {{org}}?fields=["name"]&filters=[{{scope}},["website","like","%25alpha%25"]]
+Authorization: Bearer {{token}}
+
+### 3.2 like x% -> starts with -> 200, Beta
+# @expect $.data count 1
+# @expect $.data[0].name == ZZ Grammar Beta
+GET {{org}}?fields=["name"]&filters=[{{scope}},["website","like","https://b%25"]]
+Authorization: Bearer {{token}}
+
+### 3.3 like %x -> ends with -> 200, Alpha and Beta (Gamma has no website)
+# @expect $.data count 2
+GET {{org}}?fields=["name"]&filters=[{{scope}},["website","like","%25.example"]]
+Authorization: Bearer {{token}}
+
+### 3.4 like with no wildcard -> exact, case-insensitive -> 200, Alpha
+# @expect $.data count 1
+GET {{org}}?fields=["name"]&filters=[{{scope}},["website","like","HTTPS://ALPHA.EXAMPLE"]]
+Authorization: Bearer {{token}}
+
+### 3.5 like is case-insensitive with wildcards too -> 200, Alpha
+# @expect $.data count 1
+GET {{org}}?fields=["name"]&filters=[{{scope}},["website","like","%25ALPHA%25"]]
+Authorization: Bearer {{token}}
+
+### 3.6 like with an interior wildcard -> regex fallback -> 200, Alpha and Beta
+# @expect $.data count 2
+GET {{org}}?fields=["name"]&filters=[{{scope}},["website","like","https://%25.example"]]
+Authorization: Bearer {{token}}
+
+### 3.7 not like -> 200, Beta and Gamma
+# @expect $.data count 2
+# @expect $.data[0].name == ZZ Grammar Beta
+GET {{org}}?fields=["name"]&filters=[{{scope}},["website","not like","%25alpha%25"]]&order_by=name asc
+Authorization: Bearer {{token}}
+
+# ---- in / not in ---------------------------------------------------------------------
+
+### 4.1 in with a list -> 200, two
+# @expect $.data count 2
+GET {{org}}?fields=["name"]&filters=[["name","in",["ZZ Grammar Alpha","ZZ Grammar Gamma"]]]
+Authorization: Bearer {{token}}
+
+### 4.2 in with a comma-joined string, which Frappe also accepts -> 200, two
+# @expect $.data count 2
+GET {{org}}?fields=["name"]&filters=[["name","in","ZZ Grammar Alpha,ZZ Grammar Gamma"]]
+Authorization: Bearer {{token}}
+
+### 4.3 not in -> 200, Beta and Gamma
+# @expect $.data count 2
+GET {{org}}?fields=["name"]&filters=[{{scope}},["name","not in",["ZZ Grammar Alpha"]]]
+Authorization: Bearer {{token}}
+
+# ---- is set / is not set. Frappe treats '' as unset for text columns (ifnull(x,'') != '')
+
+### 5.1 is set on a Link -> 200, Alpha and Gamma
+# @expect $.data count 2
+GET {{org}}?fields=["name"]&filters=[{{scope}},["industry","is","set"]]
+Authorization: Bearer {{token}}
+
+### 5.2 is not set on a Link -> 200, Beta
+# @expect $.data count 1
+# @expect $.data[0].name == ZZ Grammar Beta
+GET {{org}}?fields=["name"]&filters=[{{scope}},["industry","is","not set"]]
+Authorization: Bearer {{token}}
+
+### 5.3 is set on text: the empty string counts as unset -> 200, Alpha and Beta
+# @expect $.data count 2
+GET {{org}}?fields=["name"]&filters=[{{scope}},["website","is","set"]]
+Authorization: Bearer {{token}}
+
+### 5.4 is not set on text -> 200, Gamma
+# @expect $.data count 1
+# @expect $.data[0].name == ZZ Grammar Gamma
+GET {{org}}?fields=["name"]&filters=[{{scope}},["website","is","not set"]]
+Authorization: Bearer {{token}}
+
+### 5.5 is with a bad token -> 400
+# @expect $.exc_type == ValidationError
+GET {{org}}?fields=["name"]&filters=[{{scope}},["website","is","maybe"]]
+Authorization: Bearer {{token}}
+
+# ---- the three input shapes and or_filters ------------------------------------------------
+
+### 6.1 dict form, plain value means equals -> 200, Beta
+# @expect $.data count 1
+GET {{org}}?fields=["name"]&filters={"no_of_employees":"11-50","name":["like","ZZ Grammar%25"]}
+Authorization: Bearer {{token}}
+
+### 6.2 dict form with an operator pair -> 200, two
+# @expect $.data count 2
+GET {{org}}?fields=["name"]&filters={"annual_revenue":[">",100],"name":["like","ZZ Grammar%25"]}
+Authorization: Bearer {{token}}
+
+### 6.3 four-element tuple carries the doctype, which is dropped -> 200, Beta
+# @expect $.data count 1
+GET {{org}}?fields=["name"]&filters=[["CRM Organization","no_of_employees","=","11-50"],{{scope}}]
+Authorization: Bearer {{token}}
+
+### 6.4 two-element tuple means equals -> 200, Beta
+# @expect $.data count 1
+GET {{org}}?fields=["name"]&filters=[["no_of_employees","11-50"],{{scope}}]
+Authorization: Bearer {{token}}
+
+### 6.5 or_filters are OR-ed together, then AND-ed with filters -> 200, Alpha and Gamma
+# @expect $.data count 2
+GET {{org}}?fields=["name"]&filters=[{{scope}}]&or_filters=[["no_of_employees","=","1-10"],["no_of_employees","=","51-200"]]
+Authorization: Bearer {{token}}
+
+### 6.6 a filter entry with five elements -> 400
+# @expect $.exc_type == ValidationError
+GET {{org}}?fields=["name"]&filters=[["a","b","c","d","e"]]
+Authorization: Bearer {{token}}
+
+### 6.7 unsupported operator -> 400, and the message lists the supported ones
+# @expect $.exc_type == ValidationError
+# @expect $.message contains Unsupported filter operator
+GET {{org}}?fields=["name"]&filters=[["name","~","x"]]
+Authorization: Bearer {{token}}
+
+### 6.8 filters that are not JSON at all -> 400
+# @expect $.exc_type == ValidationError
+GET {{org}}?fields=["name"]&filters=garbage
+Authorization: Bearer {{token}}
+
+### 6.9 filter on a field the doctype does not have -> 400, the port's FilterError (upstream: a database error)
+# @expect $.exc_type == ValidationError
+# @expect $.message contains Unknown field 'no_such_field'
+GET {{org}}?fields=["name"]&filters=[["no_such_field","=","x"]]
+Authorization: Bearer {{token}}
+
+# ---- ordering ----------------------------------------------------------------------------
+
+### 7.1 order_by name desc -> 200, Gamma first
+# @expect $.data[0].name == ZZ Grammar Gamma
+GET {{org}}?fields=["name"]&filters=[{{scope}}]&order_by=name desc
+Authorization: Bearer {{token}}
+
+### 7.2 order_by a number asc -> 200, Alpha first
+# @expect $.data[0].name == ZZ Grammar Alpha
+GET {{org}}?fields=["name"]&filters=[{{scope}}]&order_by=annual_revenue asc
+Authorization: Bearer {{token}}
+
+### 7.3 table-qualified clause, as Frappe itself emits -> 200, Gamma first
+# @expect $.data[0].name == ZZ Grammar Gamma
+GET {{org}}?fields=["name"]&filters=[{{scope}}]&order_by=%60tabCRM%20Organization%60.name%20desc
+Authorization: Bearer {{token}}
+
+### 7.4 two clauses, comma-separated -> 200
+# @expect $.data[0].name == ZZ Grammar Alpha
+GET {{org}}?fields=["name"]&filters=[{{scope}}]&order_by=no_of_employees asc, name desc
+Authorization: Bearer {{token}}
+
+### 7.5 no order_by -> newest modified first (the BaseDocument default) -> 200, Gamma first
+# @expect $.data[0].name == ZZ Grammar Gamma
+GET {{org}}?fields=["name"]&filters=[{{scope}}]
+Authorization: Bearer {{token}}
+
+### 7.6 order_by an unknown field -> 417
+# @expect $.exc_type == ValidationError
+GET {{org}}?fields=["name"]&order_by=no_such_field desc
+Authorization: Bearer {{token}}
+
+### 7.7 order_by that is not a clause at all -> 417
+# @expect $.message contains Cannot parse sort clause
+GET {{org}}?fields=["name"]&order_by=name; drop table
+Authorization: Bearer {{token}}
+
+### 7.8 group_by is validated even though the list route does not aggregate -> 417
+# @expect $.exc_type == ValidationError
+GET {{org}}?fields=["name"]&group_by=no_such_field
+Authorization: Bearer {{token}}
+
+# ---- field selection ---------------------------------------------------------------------
+
+### 8.1 fields=["*"] -> every concrete column, including the underscore caches
+# @expect $.data[0].organization_name exists
+# @expect $.data[0]._assign exists
+# @expect $.data[0].docstatus exists
+GET {{org}}?fields=["*"]&filters=[["name","=","ZZ Grammar Alpha"]]
+Authorization: Bearer {{token}}
+
+### 8.2 a bare string is accepted as a one-field list -> 200, only name
+# @expect $.data[0].name exists
+# @expect $.data[0].organization_name absent
+GET {{org}}?fields=name&filters=[["name","=","ZZ Grammar Alpha"]]
+Authorization: Bearer {{token}}
+
+### 8.3 no fields -> every concrete column
+# @expect $.data[0].website exists
+GET {{org}}?filters=[["name","=","ZZ Grammar Alpha"]]
+Authorization: Bearer {{token}}
+
+### 8.4 a Link field comes back as its key, not an object
+# @expect $.data[0].industry == ZZ Grammar Industry
+GET {{org}}?fields=["industry"]&filters=[["name","=","ZZ Grammar Alpha"]]
+Authorization: Bearer {{token}}
+
+### 8.5 unknown field -> 417, never silently dropped
+# @expect $.message contains Unknown field
+GET {{org}}?fields=["name","no_such_field"]
+Authorization: Bearer {{token}}
+
+### 8.6 relation traversal -> 417
+GET {{org}}?fields=["owner__password"]
+Authorization: Bearer {{token}}
+
+# ---- paging ------------------------------------------------------------------------------
+
+### 9.1 limit_page_length=1, limit_start=1 -> the second row only
+# @expect $.data count 1
+# @expect $.data[0].name == ZZ Grammar Beta
+GET {{org}}?fields=["name"]&filters=[{{scope}}]&order_by=name asc&limit_page_length=1&limit_start=1
+Authorization: Bearer {{token}}
+
+### 9.2 limit_start past the end -> 200, empty list
+# @expect $.data count 0
+GET {{org}}?fields=["name"]&filters=[{{scope}}]&limit_start=50
+Authorization: Bearer {{token}}
+
+### 9.3 limit_page_length=0 means no limit -> all three
+# @expect $.data count 3
+GET {{org}}?fields=["name"]&filters=[{{scope}}]&limit_page_length=0
+Authorization: Bearer {{token}}
+
+### 9.4 negative page length -> 417
+GET {{org}}?fields=["name"]&limit_page_length=-1
+Authorization: Bearer {{token}}
+
+### 9.5 non-numeric page length -> 417
+GET {{org}}?fields=["name"]&limit_page_length=abc
+Authorization: Bearer {{token}}
+
+# ---- the detail route --------------------------------------------------------------------
+
+### 10.1 read one -> 200, the whole document, Link as key, BaseDocument columns stamped
+# @expect $.data.industry == ZZ Grammar Industry
+# @expect $.data.owner == Administrator
+# @expect $.data.modified_by == Administrator
+# @expect $.data.creation exists
+GET {{org}}/ZZ%20Grammar%20Alpha
+Authorization: Bearer {{token}}
+
+### 10.2 trailing slash is tolerated -> 200
+GET {{org}}/ZZ%20Grammar%20Alpha/
+Authorization: Bearer {{token}}
+
+### 10.3 PUT is partial: one field changes, the rest stay -> 200
+# @expect $.data.website == https://alpha2.example
+# @expect $.data.annual_revenue contains 100
+# @expect $.data.no_of_employees == 1-10
+PUT {{org}}/ZZ%20Grammar%20Alpha
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"website": "https://alpha2.example"}
+
+### 10.4 PUT with a value outside the Select's options -> 417
+# @expect $.exc_type == ValidationError
+PUT {{org}}/ZZ%20Grammar%20Alpha
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"no_of_employees": "lots"}
+
+### 10.5 PUT a Link to a row that does not exist -> 417
+# @expect $.exc_type == ValidationError
+PUT {{org}}/ZZ%20Grammar%20Alpha
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"industry": "No Such Industry"}
+
+### 10.6 PUT an unknown field is ignored, as Frappe ignores non-columns -> 200
+PUT {{org}}/ZZ%20Grammar%20Alpha
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"no_such_field": "whatever"}
+
+### 10.7 PUT cannot write the underscore caches -> 200, _assign unchanged
+# @expect $.data._assign count 0
+PUT {{org}}/ZZ%20Grammar%20Alpha
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"_assign": ["ada@example.com"]}
+
+### 10.8 PUT cannot change owner or creation -> 200, both unchanged
+# @expect $.data.owner == Administrator
+PUT {{org}}/ZZ%20Grammar%20Alpha
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"owner": "ada@example.com", "creation": "2000-01-01T00:00:00Z"}
+
+### 10.9 POST without the naming field -> 417, "Organization Name is required" (naming.py:206-210, the field's label)
+# @expect $.exc_type == ValidationError
+# @expect $.message == Organization Name is required
+POST {{org}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"website": "https://nameless.example"}
+
+### 10.10 POST a name containing < -> 409, Frappe's NameError (validate_name, naming.py:498-501)
+# @expect $.exc_type == NameError
+# @expect $.message == Name cannot contain special characters like '<', '>'
+POST {{org}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization_name": "ZZ <script>"}
+
+### 10.11 deleting a row another row links to -> 417 LinkExistsError (delete_doc.py:452)
+# @expect $.exc_type == LinkExistsError
+# @expect $.message == Cannot delete or cancel because CRM Industry ZZ Grammar Industry is linked with CRM Organization ZZ Grammar Alpha
+DELETE {{host}}/api/resource/CRM%20Industry/ZZ%20Grammar%20Industry
+Authorization: Bearer {{token}}
+
+### 10.12 DELETE a name that does not exist -> 404
+# @expect $.exc_type == DoesNotExistError
+DELETE {{org}}/ZZ%20Grammar%20Nobody
+Authorization: Bearer {{token}}
+
+### 10.13 a doctype that does not exist -> 404
+GET {{host}}/api/resource/No%20Such%20Doctype
+Authorization: Bearer {{token}}
+
+### 10.14 a child table has no route of its own -> 404, indistinguishable from 10.13
+GET {{host}}/api/resource/CRM%20Products
+Authorization: Bearer {{token}}
+
+### 10.15 no token on the list route -> 401
+GET {{org}}
+
+# ---- teardown ------------------------------------------------------------------------------
+
+### 11.1 delete Alpha -> 200
+# @expect $.data == null
+DELETE {{org}}/ZZ%20Grammar%20Alpha
+Authorization: Bearer {{token}}
+
+### 11.2 delete Beta -> 200
+DELETE {{org}}/ZZ%20Grammar%20Beta
+Authorization: Bearer {{token}}
+
+### 11.3 delete Gamma -> 200
+DELETE {{org}}/ZZ%20Grammar%20Gamma
+Authorization: Bearer {{token}}
+
+### 11.4 delete the industry, now unreferenced -> 200
+DELETE {{host}}/api/resource/CRM%20Industry/ZZ%20Grammar%20Industry
+Authorization: Bearer {{token}}
+
+### 11.5 nothing left behind -> 200, empty
+# @expect $.data count 0
+GET {{org}}?fields=["name"]&filters=[{{scope}}]
+Authorization: Bearer {{token}}

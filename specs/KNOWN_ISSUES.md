@@ -13,6 +13,7 @@ and anything a future agent would otherwise rediscover the hard way.
 | 3 | `Communication`, `File` and `Comment` leak content from records the caller cannot open | ✅ **Fixed** — see below for what it took |
 | 4 | The async stack had never run against a real broker, worker or scheduler | ✅ **Smoke-tested** — passed; see below for what is still untested |
 | 5 | The frontend test suite had never been executed; the realtime layer had never run on real Redis | ✅ **Both run** — 152 frontend tests pass, cross-process delivery confirmed |
+| 6 | Logging out does not stop an access token already issued — it works for up to 5 more minutes | ⏸️ **Open, accepted** — inherent to stateless JWT; three ways out are costed below |
 
 ---
 
@@ -429,3 +430,122 @@ each of which could be wrong independently of whether Redis relays bytes.
   here. The actual ASGI server and a real browser socket remain untested.
 * **The frontend tests use a fake WebSocket.** Backoff and reconnect are verified as
   logic, not against a server that really drops a connection.
+
+---
+
+## 6. Logging out does not revoke an access token that has already been issued
+
+**Status: open, and accepted deliberately.** Recorded so the next person meets it here
+rather than discovering it during an incident.
+
+> **A note on where this was.** `docs/internal/PROGRESS_PHASE_8.md` and the docstring on
+> `_blacklist_outstanding_tokens` both say this is *"recorded in `KNOWN_ISSUES` §4"*. It
+> was not — §4 is the async smoke test, and this entry did not exist until now. The claim
+> was written in good faith and nobody checked it. **This is that entry.**
+
+### What happens
+
+Login issues two tokens (`frappe_core/api/auth.py`):
+
+| Token | Lifetime | How it is checked |
+|---|---|---|
+| **access** | 5 minutes (`SIMPLE_JWT.ACCESS_TOKEN_LIFETIME`) | **Signature only.** Nothing is looked up |
+| **refresh** | 7 days | Looked up, and can be blacklisted |
+
+`logout` blacklists the refresh token it is given; `logout_all_sessions` blacklists every
+outstanding refresh token for the account (`crm_app/api/auth_pages.py:_blacklist_outstanding_tokens`).
+Both stop the holder obtaining a **new** access token. Neither can stop one already issued,
+because verifying it consults no state — that is what "stateless" means.
+
+**So:** a user who believes they are compromised changes their password with *log out all
+sessions* ticked, and the attacker keeps full read and write access **for up to five more
+minutes**.
+
+Upstream Frappe does not have this window: it uses server-side sessions, which die the
+moment they are deleted. This port swapped to JWT as one of phase 0's two sanctioned
+deviations (`PORT_PLAN.md` §3), and this is the part of that trade that was never paid.
+
+### Three ways to close it
+
+**1. Accept it.** Five minutes, documented, and the attacker must already hold a live
+access token. This is the current state and the right one for a project that is not
+holding anything an attacker would spend five minutes on.
+
+*Cost: nothing. Risk: a five-minute window after every revocation.*
+
+**2. Check a blacklist on every request.** The complete fix, and what the docstring means
+by "a different decision". Every authenticated request asks whether this token's family
+has been revoked.
+
+*Cost: a cache or database round trip on **every** authenticated request, forever. It also
+gives away the main thing JWT was chosen for. If the answer is going to be stateful, a
+session is the simpler stateful thing.*
+
+**3. Stamp the user, and reject tokens older than the stamp.** The targeted middle.
+Add `password_changed_at` (or an integer `token_version`) to `User`; bump it in
+`update_password` and wherever sessions are dropped; in the authentication class, reject an
+access token whose `iat` predates it.
+
+*Cost: one migration, one comparison per request — **and the user row is already loaded on
+every authenticated request** for permission checks, so no extra query. Closes the window
+for the case that actually matters (a deliberate revocation) and leaves ordinary requests
+stateless.*
+
+**Recommendation if this is ever picked up: option 3.** Option 2 is more complete and buys
+little the project needs; option 1 is fine until the data is worth something. Whichever is
+chosen, the test to write first is the one that fails today — call `logout_all_sessions`,
+then use the access token issued before it, and require a 401.
+
+### If option 1 stands, two things follow
+
+* **`ACCESS_TOKEN_LIFETIME` is the size of the window.** It is 5 minutes and env-tunable
+  (`JWT_ACCESS_TOKEN_LIFETIME_MINUTES`). Raising it in production for convenience widens
+  this hole by exactly the same amount, and that trade should be made knowingly.
+* **Do not describe logout as revocation** in any UI copy. "Signed out everywhere" is
+  true; "your other sessions have been terminated" is not, for another five minutes.
+
+## 7. Sending email from a lead or deal: the edges of what was ported
+
+**Status: open, recorded 16 Sep 2026** with `frappe.core.doctype.communication.email.make`
+(`crm_app/api/communication.py`, `crm_app/communication.py`). None of these breaks the
+send button; each is a case the port answers differently from upstream, or not at all,
+and the next person to touch mail should meet them here.
+
+### A subject with a line break is a 500 on the inline path
+
+Django refuses a header containing CR or LF (`BadHeaderError`, a `ValueError`) when the
+message is built, which is the right security answer - it is header injection - but the
+inline send (`now: 1`) catches only `SMTPException` / `OSError`, so the caller gets a
+500 rather than a 417. Queued, the task fails without retry, since the exception is not
+on its retry list, and the row stays claimed (see below). Upstream does not validate
+the subject either. Left as is because choosing a sentence would be inventing copy
+upstream does not have; if it is picked up, catch `BadHeaderError` in
+`crm_app/api/communication.py:_send` and `throw` a 417, and clear the claim in the task.
+
+### A worker killed between the claim and the send leaves the mail unsent
+
+`send_communication` stamps `communication_date` under a row lock *before* the message
+goes out, so two deliveries cannot both send, and clears it when the send raises. A
+process killed in between leaves the row stamped and the mail unsent, and nothing
+retries it. That is the same state as an upstream `Email Queue` row stuck in "Sending":
+both designs err toward no duplicate. Upstream has a Desk screen to resend from; this
+port has no screen and no `delivery_status`, so the only sign is a timeline entry whose
+mail never arrived. If it matters, the fix is a `delivery_status` column set to
+"Sending" at the claim and "Sent" after, plus a periodic task that re-queues rows stuck
+in "Sending" older than a few minutes.
+
+### Nothing sends without a Celery worker
+
+Real clicks queue on `crm.send_communication_email`. A development machine with no
+worker running logs the Communication and sends nothing; the http blocks and hand
+testing pass `now: 1` to send inside the request. Not a defect, but the first thing to
+check when "the email never arrived".
+
+### Two smaller divergences, both stated in the code
+
+* `frappe.desk.form.assign_to.remove_multiple` clears every open assignment; upstream's
+  `get()` carries `limit=5`, so on a document with six assignees upstream leaves one.
+* `submit_cancel_or_update_docs` cannot show upstream's "Bulk operation is enqueued in
+  background." alert on the 20-to-500 path: a success response here carries no message
+  channel. The frontend reloads the list either way.
+

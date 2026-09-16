@@ -1,0 +1,406 @@
+# 12 - the settings singletons and the lock checks on them. Not integration behaviour:
+# whether a Sales User can read or rewrite the rows that hold credentials, whether a
+# secret ever appears in any response, and whether frappe.client.get_single_value - a
+# second door to the same rows - applies the same rule.
+#
+#   FCRM Settings         everyone reads, managers write; access_key managers-only (bug #20)
+#   CRM Twilio Settings   managers only; api_secret / auth_token never on the wire, encrypted
+#   CRM Exotel Settings   managers only; api_token never on the wire; webhook_verify_token
+#                         restricted (plaintext at rest, a recorded gap)
+#   ERPNext CRM Settings  managers only; api_secret never on the wire
+#
+# Expectations from specs/SECURITY_MODEL.md and the doctype JSON permission tables
+# upstream. The three telephony/ERPNext rows do not exist in the demo database; the file
+# creates them as Administrator and deletes them at the end.
+
+@host = http://localhost:8000
+@admin = Administrator
+@admin_pwd = {{$dotenv ADMIN_PWD}}
+@sales = ada@example.com
+@sales_pwd = {{$dotenv SALES_PWD}}
+@manager = grace@example.com
+@manager_pwd = {{$dotenv MANAGER_PWD}}
+@fcrm = {{host}}/api/resource/FCRM%20Settings
+@twilio = {{host}}/api/resource/CRM%20Twilio%20Settings
+@exotel = {{host}}/api/resource/CRM%20Exotel%20Settings
+@erp = {{host}}/api/resource/ERPNext%20CRM%20Settings
+@gsv = {{host}}/api/method/frappe.client.get_single_value
+
+### 0.1 login as Administrator -> 200
+# @name login
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}", "pwd": "{{admin_pwd}}"}
+
+###
+@token = {{login.response.body.$.message.access}}
+
+### 0.2 login as the Sales Manager -> 200
+# @name mlogin
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{manager}}", "pwd": "{{manager_pwd}}"}
+
+###
+@mtoken = {{mlogin.response.body.$.message.access}}
+
+### 0.3 login as the Sales User -> 200
+# @name slogin
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{sales}}", "pwd": "{{sales_pwd}}"}
+
+###
+@stoken = {{slogin.response.body.$.message.access}}
+
+# ---- cleanup first: rows an earlier run may have left -------------------------------------------
+
+### 0.4 -> 200
+# @name old_tw
+GET {{twilio}}?fields=["name"]
+Authorization: Bearer {{token}}
+
+### 0.5 -> 200|404
+DELETE {{twilio}}/{{old_tw.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.6 -> 200
+# @name old_ex
+GET {{exotel}}?fields=["name"]
+Authorization: Bearer {{token}}
+
+### 0.7 -> 200|404
+DELETE {{exotel}}/{{old_ex.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.8 -> 200
+# @name old_erp
+GET {{erp}}?fields=["name"]
+Authorization: Bearer {{token}}
+
+### 0.9 -> 200|404
+DELETE {{erp}}/{{old_erp.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.10 FCRM access_key cleared -> 200
+PUT {{fcrm}}/Settings
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"access_key": ""}
+
+# ---- FCRM Settings: read for all, write for managers, one restricted field --------------------------
+
+### 1.1 a Sales User reads the settings (the timeline needs them on every screen) -> 200
+# @expect $.data.name == Settings
+# @expect $.data.enable_forecasting exists
+# @expect $.data.currency exists
+GET {{fcrm}}/Settings
+Authorization: Bearer {{stoken}}
+
+### 1.2 ...but access_key is not in her response (RESTRICTED_FIELDS, stricter than upstream: bug #20)
+# @expect $.data.access_key absent
+GET {{fcrm}}/Settings
+Authorization: Bearer {{stoken}}
+
+### 1.3 nor in a list with fields=["*"]
+# @expect $.data[0].access_key absent
+# @expect $.data[0].brand_name exists
+GET {{fcrm}}?fields=["*"]
+Authorization: Bearer {{stoken}}
+
+### 1.4 naming it explicitly -> 417 "not readable"
+# @expect $.message contains not readable
+GET {{fcrm}}?fields=["access_key"]
+Authorization: Bearer {{stoken}}
+
+### 1.5 filtering on it -> 400 (a filter would turn the row count into an oracle)
+# @expect $.message contains Cannot filter
+GET {{fcrm}}?fields=["name"]&filters=[["access_key","like","a%25"]]
+Authorization: Bearer {{stoken}}
+
+### 1.6 she may not write it -> 403
+# @expect $.exc_type == PermissionError
+PUT {{fcrm}}/Settings
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"brand_name": "ZZ hijacked"}
+
+### 1.7 a Sales Manager may -> 200
+# @expect $.data.brand_name == ZZ Brand
+PUT {{fcrm}}/Settings
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"brand_name": "ZZ Brand"}
+
+### 1.8 and sees access_key -> present
+# @expect $.data.access_key exists
+GET {{fcrm}}/Settings
+Authorization: Bearer {{mtoken}}
+
+### 1.9 Administrator sets the FX key -> 200, and reads it back
+# @expect $.data.access_key == ZZ-fx-key
+PUT {{fcrm}}/Settings
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"access_key": "ZZ-fx-key"}
+
+### 1.10 get_single_value, the second door: a public field for a Sales User -> 200
+# @expect $.message == ZZ Brand
+POST {{gsv}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "FCRM Settings", "field": "brand_name"}
+
+### 1.11 the restricted field through the same door -> 403 (this was open before the phase-7 review)
+# @expect $.exc_type == PermissionError
+# @expect $.message contains not readable
+POST {{gsv}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "FCRM Settings", "field": "access_key"}
+
+### 1.12 ...and for a manager -> the value
+# @expect $.message == ZZ-fx-key
+POST {{gsv}}
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"doctype": "FCRM Settings", "field": "access_key"}
+
+### 1.13 get_single_value on a doctype that is not a singleton -> 417
+# @expect $.message contains not a single DocType
+POST {{gsv}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "field": "status"}
+
+### 1.14 a Sales User may not create a second settings row -> 403
+# @expect $.exc_type == PermissionError
+POST {{fcrm}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"brand_name": "ZZ second"}
+
+### 1.15 nor delete the row -> 403
+# @expect $.exc_type == PermissionError
+DELETE {{fcrm}}/Settings
+Authorization: Bearer {{stoken}}
+
+### 1.16 restore brand and key -> 200
+PUT {{fcrm}}/Settings
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"brand_name": "", "access_key": ""}
+
+# ---- CRM Twilio Settings: managers only, secrets never on the wire ---------------------------------
+
+### 2.1 a Sales User may not create it -> 403
+# @expect $.exc_type == PermissionError
+POST {{twilio}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"enabled": 0, "account_sid": "ZZ-sid"}
+
+### 2.2 Administrator creates it -> 201; the two secrets are absent from the response
+# @name tw_req
+# @expect $.data.account_sid == ZZ-sid
+# @expect $.data.api_key == ZZ-key
+# @expect $.data.api_secret absent
+# @expect $.data.auth_token absent
+POST {{twilio}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"enabled": 0, "account_sid": "ZZ-sid", "api_key": "ZZ-key", "api_secret": "ZZ-secret", "auth_token": "ZZ-token", "twiml_sid": "ZZ-twiml", "app_name": "ZZ app"}
+
+###
+@tw = {{tw_req.response.body.$.data.name}}
+
+### 2.3 a Sales User's list is empty, not merely filtered -> 0 rows
+# @expect $.data count 0
+GET {{twilio}}?fields=["name"]
+Authorization: Bearer {{stoken}}
+
+### 2.4 reading it directly -> 403
+# @expect $.exc_type == PermissionError
+GET {{twilio}}/{{tw}}
+Authorization: Bearer {{stoken}}
+
+### 2.5 a Sales Manager reads it, restricted fields included, secrets excluded
+# @expect $.data.api_key == ZZ-key
+# @expect $.data.twiml_sid == ZZ-twiml
+# @expect $.data.api_secret absent
+# @expect $.data.auth_token absent
+GET {{twilio}}/{{tw}}
+Authorization: Bearer {{mtoken}}
+
+### 2.6 even Administrator never gets a secret back -> absent
+# @expect $.data.api_secret absent
+# @expect $.data.auth_token absent
+GET {{twilio}}/{{tw}}?fields=["*"]
+Authorization: Bearer {{token}}
+
+### 2.7 naming a secret in fields= -> 417, for anyone
+# @expect $.message contains not readable
+GET {{twilio}}?fields=["api_secret"]
+Authorization: Bearer {{token}}
+
+### 2.8 filtering on a secret -> 400, for anyone (this is how a real SMTP password was once recovered)
+# @expect $.message contains Cannot filter
+GET {{twilio}}?fields=["name"]&filters=[["auth_token","like","ZZ%25"]]
+Authorization: Bearer {{token}}
+
+### 2.9 ordering by a secret -> 417
+# @expect $.message contains Cannot order by
+GET {{twilio}}?fields=["name"]&order_by=api_secret asc
+Authorization: Bearer {{token}}
+
+### 2.10 get_single_value for a Sales User -> 403 before it even looks at the field
+# @expect $.exc_type == PermissionError
+POST {{gsv}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Twilio Settings", "field": "account_sid"}
+
+### 2.11 get_single_value on a secret, as Administrator -> 403 "not readable"
+# @expect $.message contains not readable
+POST {{gsv}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Twilio Settings", "field": "api_secret"}
+
+### 2.12 get_single_value on a restricted field, as a manager -> the value
+# @expect $.message == ZZ-key
+POST {{gsv}}
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Twilio Settings", "field": "api_key"}
+
+### 2.13 a Sales User may not rewrite it -> 403 (set_value shares _get_checked)
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/method/frappe.client.set_value
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Twilio Settings", "name": "{{tw}}", "fieldname": "account_sid", "value": "stolen"}
+
+### 2.14 nor delete it -> 403
+# @expect $.exc_type == PermissionError
+DELETE {{twilio}}/{{tw}}
+Authorization: Bearer {{stoken}}
+
+### 2.15 a manager may edit it -> 200
+# @expect $.data.app_name == ZZ app 2
+PUT {{twilio}}/{{tw}}
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"app_name": "ZZ app 2"}
+
+# ---- CRM Exotel Settings and ERPNext CRM Settings: the same shape -------------------------------------
+
+### 3.1 Exotel: Administrator creates it -> 201, api_token absent
+# @name ex_req
+# @expect $.data.api_token absent
+# @expect $.data.webhook_verify_token == ZZ-verify
+POST {{exotel}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"enabled": 0, "account_sid": "ZZ-ex-sid", "api_key": "ZZ-ex-key", "api_token": "ZZ-ex-token", "subdomain": "zz", "webhook_verify_token": "ZZ-verify"}
+
+###
+@ex = {{ex_req.response.body.$.data.name}}
+
+### 3.2 a Sales User cannot read the webhook secret through get_single_value -> 403
+# (open before the phase-7 review: this token is the entire authentication on a public webhook)
+# @expect $.exc_type == PermissionError
+POST {{gsv}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Exotel Settings", "field": "webhook_verify_token"}
+
+### 3.3 nor read the row -> 403
+# @expect $.exc_type == PermissionError
+GET {{exotel}}/{{ex}}
+Authorization: Bearer {{stoken}}
+
+### 3.4 the api_token is never served, even to Administrator
+# @expect $.data.api_token absent
+GET {{exotel}}/{{ex}}
+Authorization: Bearer {{token}}
+
+### 3.5 ERPNext: Administrator creates it -> 201, api_secret absent
+# @name erp_req
+# @expect $.data.api_secret absent
+# @expect $.data.api_key == ZZ-erp-key
+POST {{erp}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"enabled": 0, "api_key": "ZZ-erp-key", "api_secret": "ZZ-erp-secret", "erpnext_site_url": "https://erp.example"}
+
+###
+@erp_name = {{erp_req.response.body.$.data.name}}
+
+### 3.6 a Sales User's list of ERPNext settings is empty -> 0
+# @expect $.data count 0
+GET {{erp}}?fields=["name"]
+Authorization: Bearer {{stoken}}
+
+### 3.7 nor may she read the site URL through get_single_value -> 403
+# @expect $.exc_type == PermissionError
+POST {{gsv}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "ERPNext CRM Settings", "field": "erpnext_site_url"}
+
+### 3.8 Lead Sync Source (Meta page tokens) is manager-only too: a Sales User may not create one -> 403
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/resource/Lead%20Sync%20Source
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"source_name": "ZZ fb", "access_token": "ZZ-page-token"}
+
+### 3.9 ...and lists nothing -> 0
+# @expect $.data count 0
+GET {{host}}/api/resource/Lead%20Sync%20Source?fields=["name"]
+Authorization: Bearer {{stoken}}
+
+# ---- teardown ------------------------------------------------------------------------------------------
+
+### 4.1 delete the Twilio row -> 200
+DELETE {{twilio}}/{{tw}}
+Authorization: Bearer {{token}}
+
+### 4.2 delete the Exotel row -> 200
+DELETE {{exotel}}/{{ex}}
+Authorization: Bearer {{token}}
+
+### 4.3 delete the ERPNext row -> 200
+DELETE {{erp}}/{{erp_name}}
+Authorization: Bearer {{token}}
+
+### 4.4 nothing left behind -> 200, empty
+# @expect $.data count 0
+GET {{twilio}}?fields=["name"]
+Authorization: Bearer {{token}}

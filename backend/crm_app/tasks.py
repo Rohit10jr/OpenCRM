@@ -272,6 +272,41 @@ def send_invitation_email(invitation_name: str) -> bool:
     return True
 
 
+@shared_task(
+    name="crm.send_communication_email",
+    # Same narrow retry list as `send_invitation_email`, for the same reason: these two
+    # exceptions are the transport failing, and `autoretry_for=(Exception,)` would turn a
+    # bug in the message builder into four tracebacks and a delayed failure.
+    autoretry_for=(smtplib.SMTPException, OSError),
+    retry_backoff=True,
+    retry_jitter=True,
+    max_retries=3,
+)
+def send_communication_email(communication_name: str, copy_to: str | None = None) -> bool:
+    """The queued half of ``frappe.core.doctype.communication.email.make``.
+
+    **Celery is this port's Email Queue** (decided in phase 5), so this is what upstream's
+    ``frappe.sendmail(now=False, ...)`` reaches — the ``Email Queue`` row and its retry.
+    ``make(now=1)`` bypasses it and sends inside the request instead, which is upstream's
+    ``now`` argument.
+
+    Idempotent: :func:`crm_app.communication.send_communication` claims the row under a
+    lock (``communication_date``) before sending and returns without sending when it is
+    already claimed, so two deliveries cannot both send; a failed send clears the claim
+    and the retry does the work.
+
+    ``copy_to`` is the resolved "send me a copy" address, worked out at request time
+    because a worker has no session user to resolve it from.
+
+    It takes the Communication's *name*, not a built message: a queued message is an
+    argument list that may be replayed much later, and re-reading the row means the worker
+    sends what is stored rather than a snapshot that may since have been deleted.
+    """
+    from crm_app import communication
+
+    return communication.send_communication(communication_name, copy_to=copy_to or None)
+
+
 @shared_task(name="crm.delete_bulk_docs")
 def delete_bulk_docs_task(doctype: str, items: list, delete_linked: bool = False, user: str | None = None):
     """``crm/api/doc.py:833-836`` — the enqueued half of ``delete_bulk_docs``.

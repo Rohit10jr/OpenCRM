@@ -2,8 +2,13 @@
 
 Defects found in **upstream** while porting. Not our bugs.
 
-Companion to `UPSTREAM_BUGS_PHASE_0-2.md`, which holds bugs 1–9 from the earlier
-phases. Numbering continues from there.
+Companion to `UPSTREAM_BUGS_PHASE_0-2.md`, which holds bugs **1–9** from the earlier
+phases, and **36–38** appended after this file had filled 10–35. Numbering is one
+sequence across both files.
+
+**This file now holds 10–35, which span phases 3–8**, not 3–6 as the name says. The name
+is stale and is left alone deliberately: renaming a tracked file that eight documents
+cite by name costs more than the confusion saves.
 
 Two reasons this file exists:
 
@@ -753,6 +758,41 @@ product, aimed at whoever the caller names.
 requested address in the bucket as well, so the cap is per IP **and** per target.
 `frappe_core.security.rate_limit` already supported `key` from phase 3; this is the first
 caller to use it.
+
+---
+
+## 39. One missing name aborts a whole bulk update, and loses its report
+
+**Where:** `frappe/desk/doctype/bulk_update/bulk_update.py:82-124` (`_bulk_action`),
+found on 16 Sep 2026 while porting `submit_cancel_or_update_docs` for the list view's
+bulk edit.
+
+```python
+for idx, docname in enumerate(docnames, 1):
+    doc = frappe.get_doc(doctype, docname)
+    try:
+        ...
+        frappe.db.commit()
+    except Exception:
+        frappe.log_error("Bulk action failed")
+        failed.append(docname)
+        frappe.db.rollback()
+return failed
+```
+
+The `get_doc` sits *outside* the `try`. A name that no longer exists - a row someone
+deleted between the list loading and the click, which is exactly the situation a bulk
+action on a shared list runs into - raises `DoesNotExistError` straight out of the loop.
+Every document before it is already committed, every document after it is untouched,
+and the caller gets an error instead of the `failed` list, so it cannot tell which. The
+`except Exception` two lines down was written for precisely this class of failure and
+never sees it.
+
+**Us:** *Diverge - fix.* `crm_app/bulk_update.py:bulk_action` looks the name up inside
+the per-document guard, so a missing document joins `failed` like a refused or invalid
+one, and the rest of the batch is reported. User-visible upstream (a spinner, then an
+error dialog, for a batch that half-applied), so reproduced as the outcome upstream's
+own handler intended rather than the one it delivers.
 
 ---
 

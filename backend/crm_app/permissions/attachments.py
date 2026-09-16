@@ -195,9 +195,13 @@ def file_query_conditions(doctype: str, user: str | None = None):
     if user == "Administrator":
         return None
     base = _query_conditions("File", user)
-    # Public files and your own uploads are visible whatever they hang off.
+    # file.py:918-922, then 932-951: public files and your own uploads are visible
+    # whatever they hang off; anything else only through a document you may see. A
+    # private file attached to nothing is its owner's alone (FINDINGS.md 22).
     allowed = Q(is_private=False) | Q(owner=user)
-    return allowed if base is None else (base | allowed)
+    attached = ~Q(attached_to_doctype="") & ~Q(attached_to_name="")
+    via_parent = attached if base is None else (attached & base)
+    return allowed | via_parent
 
 
 def file_has_permission(doc, ptype: str = "read", user: str | None = None):
@@ -207,4 +211,13 @@ def file_has_permission(doc, ptype: str = "read", user: str | None = None):
     short_circuit = _file_short_circuits(doc, ptype, user)
     if short_circuit is not None:
         return short_circuit
+    # file.py:932-951: past the public and own-upload short-circuits, only a file
+    # attached to a document can be reached, through that document; a private file
+    # attached to nothing is nobody's but its owner's - ``return False``. The
+    # "an orphan hides nothing" carve-out is for comments and communications, not files
+    # (FINDINGS.md 22). Creating one is still allowed: that is the upload itself.
+    if ptype != "create" and not (
+        getattr(doc, "attached_to_doctype", "") and getattr(doc, "attached_to_name", "")
+    ):
+        return False
     return _has_permission(doc, ptype, user, "File")

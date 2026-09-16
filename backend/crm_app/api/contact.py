@@ -30,10 +30,13 @@ def _require_contact(contact: str, ptype: str):
     """
     from frappe_platform.models import Contact
 
+    # Upstream asks has_permission("Contact", ptype, name), which is False for a name
+    # that does not exist, so a missing contact is the same PermissionError as a denied
+    # one - the frontend branches on that class (FINDINGS.md 12).
     instance = Contact._default_manager.filter(pk=contact).first()
-    if instance is None:
-        throw("Not permitted")
-    if not permissions.check_object_permission(instance, ptype, get_current_user()):
+    if instance is None or not permissions.check_object_permission(
+        instance, ptype, get_current_user()
+    ):
         raise FrappePermissionError("Not permitted")
     return instance
 

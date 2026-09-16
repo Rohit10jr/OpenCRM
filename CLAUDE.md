@@ -36,8 +36,9 @@ Read them whenever behaviour is unclear. **Never invent semantics** — match th
 or flag the ambiguity in your report. If something looks impossible, suspect a missing
 framework mechanism before suspecting your own code.
 
-**When upstream is wrong** — and it sometimes is; **21 cases** are recorded across the
-`UPSTREAM_BUGS_PHASE_*.md` files (1–9 from phases 0–2, 10–21 from phases 3–6) — diverge
+**When upstream is wrong** — and it sometimes is; **39 cases** are recorded across the
+`UPSTREAM_BUGS_PHASE_*.md` files (1–9 and 36–38 in the `0-2` file, 10–35 and 39 in the
+`3-6` file, which despite its name now spans phases 3–8 and the follow-up) — diverge
 only on bugs nothing can observe, and reproduce user-visible ones. Check whether anything
 actually reads the field before deciding, and record the choice.
 
@@ -139,10 +140,13 @@ codex exec --approve-for-me "<task>"         # only if I ask Codex to make edits
 asks you to paste files — the review **did not happen**. Escalate a tier; do not accept
 it. Phases 0–2 were reviewed blind this way.
 
-**A run that does not return within ~10 minutes is also a failure.** Broad prompts over
-a large repo can run indefinitely. Re-run once with a narrower prompt — name the exact
-files and the exact claims to check rather than asking it to go looking — then escalate
-a tier if it times out again.
+**Give a run up to 40 minutes; do not kill it at 10.** A review that names files and
+claims takes anywhere from one to thirty minutes, and a run that is still reading the
+right files is not a failure. At the 20-minute mark look at its output so far and tell
+the user where it is. Only a run that passes 40 minutes, or one that has wandered off
+into unrelated files, is treated as failed: re-run once with a narrower prompt — name
+the exact files and the exact claims to check rather than asking it to go looking —
+then escalate a tier if that times out too.
 
 ## Tier 3 — Claude subagent
 

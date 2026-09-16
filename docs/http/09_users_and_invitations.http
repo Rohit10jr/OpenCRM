@@ -1,0 +1,591 @@
+# 09 - users: the session endpoints (get_users, get_user_info), the User resource rule
+# (read anyone but the built-ins, write only yourself, create/delete for admins),
+# role changes through crm.api.user.*, invitations, change_password, the email
+# signature, translations, upload defaults and delete_attachment.
+#
+# Expectations from crm/api/session.py, crm/api/user.py, crm/api/__init__.py (main),
+# frappe/core/doctype/user/user.py:1173 (standard users hidden from non-admins).
+#
+# Role changes are made on a throwaway account so ada and grace keep their roles for
+# the files after this one. change_password is rate-limited to 5 per 5 minutes per
+# address; this file spends 3, so do not rerun it twice within five minutes.
+
+@host = http://localhost:8000
+@admin = Administrator
+@admin_pwd = {{$dotenv ADMIN_PWD}}
+@sales = ada@example.com
+@sales_pwd = {{$dotenv SALES_PWD}}
+@manager = grace@example.com
+@manager_pwd = {{$dotenv MANAGER_PWD}}
+@temp = zz.temp@example.com
+@user = {{host}}/api/resource/User
+@inv = {{host}}/api/resource/CRM%20Invitation
+@temp_pwd = Walkthrough#Temp-2026
+
+### 0.1 login as Administrator -> 200
+# @name login
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}", "pwd": "{{admin_pwd}}"}
+
+###
+@token = {{login.response.body.$.message.access}}
+
+### 0.2 login as the Sales Manager -> 200
+# @name mlogin
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{manager}}", "pwd": "{{manager_pwd}}"}
+
+###
+@mtoken = {{mlogin.response.body.$.message.access}}
+
+### 0.3 login as the Sales User -> 200
+# @name slogin
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{sales}}", "pwd": "{{sales_pwd}}"}
+
+###
+@stoken = {{slogin.response.body.$.message.access}}
+
+# ---- cleanup first ---------------------------------------------------------------------
+
+### 0.4 leftover throwaway user -> 200|404
+DELETE {{user}}/{{temp}}
+Authorization: Bearer {{token}}
+
+### 0.5 leftover invitations -> 200
+# @name old_inv
+GET {{inv}}?fields=["name"]&filters=[["email","like","zz.%25"]]
+Authorization: Bearer {{token}}
+
+### 0.6 -> 200|404
+DELETE {{inv}}/{{old_inv.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.7 -> 200|404
+DELETE {{inv}}/{{old_inv.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 0.8 leftover leads -> 200
+# @name old_l
+GET {{host}}/api/resource/CRM%20Lead?fields=["name"]&filters=[["first_name","like","ZZ Attach%25"]]
+Authorization: Bearer {{token}}
+
+### 0.9 -> 200|404
+DELETE {{host}}/api/resource/CRM%20Lead/{{old_l.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+# ---- the session endpoints ---------------------------------------------------------------------
+
+### 1.1 get_users as a Sales User -> [users, crm_users]; herself flagged, Administrator present
+# @expect $.message count 2
+# @expect $.message[0] contains "session_user": true
+# @expect $.message[0] contains "name": "ada@example.com"
+# @expect $.message[0] contains "name": "Administrator"
+# @expect $.message[0] contains "role": "Sales User"
+# @expect $.message[0] excludes "name": "Guest"
+POST {{host}}/api/method/crm.api.session.get_users
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"include_all": false}
+
+### 1.2 include_all is ignored for a Sales User -> still only CRM users, no Guest
+# @expect $.message[0] excludes "name": "Guest"
+POST {{host}}/api/method/crm.api.session.get_users
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"include_all": true}
+
+### 1.3 a System Manager with include_all -> every enabled account in the first list, CRM users in the second
+# @expect $.message[0] contains "name": "Guest"
+# @expect $.message[1] excludes "name": "Guest"
+# @expect $.message[1] contains "role": "Sales Manager"
+POST {{host}}/api/method/crm.api.session.get_users
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"include_all": true}
+
+### 1.4 the roles list mirrors frappe.get_roles: the implicit All and Guest are appended
+# @expect $.message[0] contains "All"
+POST {{host}}/api/method/crm.api.session.get_users
+Authorization: Bearer {{stoken}}
+
+### 1.5 get_user_info -> the five display fields per name
+# @expect $.message count 2
+# @expect $.message[0].full_name exists
+# @expect $.message[0].user_image exists
+POST {{host}}/api/method/crm.api.session.get_user_info
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"users": ["{{sales}}", "{{manager}}"]}
+
+### 1.6 get_user_info with a string is accepted as a one-element list -> 1
+# @expect $.message count 1
+POST {{host}}/api/method/crm.api.session.get_user_info
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"users": "{{manager}}"}
+
+# ---- the User resource rule ----------------------------------------------------------------------
+
+### 2.1 a Sales User lists users -> colleagues yes, the built-ins never (user.py:1173)
+# @expect $.data contains ada@example.com
+# @expect $.data contains grace@example.com
+# @expect $.data excludes "Administrator"
+# @expect $.data excludes "Guest"
+GET {{user}}?fields=["name"]&limit_page_length=100
+Authorization: Bearer {{stoken}}
+
+### 2.2 reading Administrator directly -> 403
+# @expect $.exc_type == PermissionError
+GET {{user}}/Administrator
+Authorization: Bearer {{stoken}}
+
+### 2.3 her own row: the credential and role columns are never on the wire, enabled is visible
+# @expect $.data.name == ada@example.com
+# @expect $.data.enabled == true
+# @expect $.data.password absent
+# @expect $.data.groups absent
+# @expect $.data.is_superuser absent
+# @expect $.data.reset_password_key absent
+GET {{user}}/{{sales}}
+Authorization: Bearer {{stoken}}
+
+### 2.4 she may edit her own row -> 200
+# @expect $.data.first_name == Ada
+# @expect $.data.mobile_no == +1 555 0100
+PUT {{user}}/{{sales}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"first_name": "Ada", "mobile_no": "+1 555 0100"}
+
+### 2.5 ...but cannot disable herself: enabled is read-only -> 200, unchanged
+# @expect $.data.enabled == true
+PUT {{user}}/{{sales}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"enabled": 0}
+
+### 2.6 nor grant herself roles: the field is not writable, the request is a no-op -> 200
+PUT {{user}}/{{sales}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"groups": ["System Manager"], "is_superuser": true}
+
+### 2.7 -> she is still a plain Sales User (3.1 below proves it: only_for refuses her)
+# @expect $.message[0] contains "role": "Sales User"
+POST {{host}}/api/method/crm.api.session.get_users
+Authorization: Bearer {{stoken}}
+
+### 2.8 she may not edit a colleague -> 403
+# @expect $.exc_type == PermissionError
+PUT {{user}}/{{manager}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"first_name": "Hacked"}
+
+### 2.9 nor create an account -> 403
+# @expect $.exc_type == PermissionError
+POST {{user}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"name": "{{temp}}", "email": "{{temp}}", "first_name": "ZZ Temp"}
+
+### 2.10 nor delete one, even her own -> 403
+# @expect $.exc_type == PermissionError
+DELETE {{user}}/{{sales}}
+Authorization: Bearer {{stoken}}
+
+### 2.11 Administrator creates the throwaway account -> 201, name lowercased from the email
+# @expect $.data.name == zz.temp@example.com
+# @expect $.data.enabled == true
+POST {{user}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "ZZ.Temp@Example.com", "email": "ZZ.Temp@Example.com", "first_name": "ZZ Temp", "enabled": 1}
+
+### 2.12 a Sales Manager may NOT edit other rows either: User writes are System Manager only upstream -> 403
+# @expect $.exc_type == PermissionError
+PUT {{user}}/{{temp}}
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"last_name": "Account"}
+
+### 2.13 a System Manager may -> 200
+# @expect $.data.last_name == Account
+PUT {{user}}/{{temp}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"last_name": "Account"}
+
+# ---- roles: crm.api.user.* ---------------------------------------------------------------------
+
+### 3.1 a Sales User may not change roles -> 403 "Not permitted" (frappe.only_for)
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/method/crm.api.user.update_user_role
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"user": "{{temp}}", "new_role": "Sales User"}
+
+### 3.2 a Sales Manager may grant Sales User -> 200
+POST {{host}}/api/method/crm.api.user.add_existing_users
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"users": ["{{temp}}"], "role": "Sales User"}
+
+### 3.3 -> the account now shows in get_users as a Sales User
+# @expect $.message[1] contains "name": "zz.temp@example.com"
+POST {{host}}/api/method/crm.api.session.get_users
+Authorization: Bearer {{token}}
+
+### 3.4 a Sales Manager may not grant Sales Manager -> 403, crm/api/user.py:157 verbatim
+# @expect $.exc_type == PermissionError
+# @expect $.message == Only System Managers can assign the Sales Manager role
+POST {{host}}/api/method/crm.api.user.update_user_role
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"user": "{{temp}}", "new_role": "Sales Manager"}
+
+### 3.5 nor System Manager -> 403, :151 verbatim
+# @expect $.message == Only System Managers can assign the System Manager role
+POST {{host}}/api/method/crm.api.user.update_user_role
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"user": "{{temp}}", "new_role": "System Manager"}
+
+### 3.6 a role outside the three -> 417 "Cannot assign this role"
+# @expect $.message == Cannot assign this role
+POST {{host}}/api/method/crm.api.user.update_user_role
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"user": "{{temp}}", "new_role": "Accounts Manager"}
+
+### 3.7 a System Manager grants Sales Manager -> 200
+POST {{host}}/api/method/crm.api.user.update_user_role
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"user": "{{temp}}", "new_role": "Sales Manager"}
+
+### 3.8 -> Sales Manager (which implies Sales User too)
+# @expect $.message[1] contains "name": "zz.temp@example.com"
+# @expect $.message[1] contains "role": "Sales Manager"
+POST {{host}}/api/method/crm.api.session.get_users
+Authorization: Bearer {{token}}
+
+### 3.9 promote to System Manager -> 200
+POST {{host}}/api/method/crm.api.user.update_user_role
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"user": "{{temp}}", "new_role": "System Manager"}
+
+### 3.10 a Sales Manager may not touch a System Manager -> 403, :154 verbatim
+# @expect $.message == Only System Managers can modify other System Managers
+POST {{host}}/api/method/crm.api.user.update_user_role
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"user": "{{temp}}", "new_role": "Sales User"}
+
+### 3.11 ...nor remove their roles -> 403, same message
+# @expect $.message == Only System Managers can modify other System Managers
+POST {{host}}/api/method/crm.api.user.remove_crm_roles_from_user
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"user": "{{temp}}"}
+
+### 3.12 demote back to Sales User -> 200
+POST {{host}}/api/method/crm.api.user.update_user_role
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"user": "{{temp}}", "new_role": "Sales User"}
+
+### 3.13 you cannot remove yourself -> 403, :191 verbatim
+# @expect $.message == You cannot remove yourself.
+POST {{host}}/api/method/crm.api.user.remove_crm_roles_from_user
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"user": "{{manager}}"}
+
+### 3.14 remove the throwaway account's CRM roles -> 200 with the sentence
+# @expect $.message == User zz.temp@example.com has been removed from CRM roles.
+POST {{host}}/api/method/crm.api.user.remove_crm_roles_from_user
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"user": "{{temp}}"}
+
+### 3.15 -> gone from the CRM users list
+# @expect $.message[1] excludes "name": "zz.temp@example.com"
+POST {{host}}/api/method/crm.api.session.get_users
+Authorization: Bearer {{token}}
+
+### 3.16 a user that does not exist -> 417
+# @expect $.message contains not found
+POST {{host}}/api/method/crm.api.user.update_user_role
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"user": "nobody@example.com", "new_role": "Sales User"}
+
+# ---- invitations -----------------------------------------------------------------------------------
+
+### 4.1 a Sales User may not invite -> 403 "Not permitted"
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/method/crm.api.invite_by_email
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"emails": "zz.invitee@example.test", "role": "Sales User"}
+
+### 4.2 a Sales Manager may not invite a System Manager -> 403, crm/api/__init__.py:116 verbatim
+# @expect $.message == You are not allowed to invite System Managers
+POST {{host}}/api/method/crm.api.invite_by_email
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"emails": "zz.invitee@example.test", "role": "System Manager"}
+
+### 4.3 nor a Sales Manager -> 403, :119 verbatim
+# @expect $.message == You are not allowed to invite Sales Managers
+POST {{host}}/api/method/crm.api.invite_by_email
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"emails": "zz.invitee@example.test", "role": "Sales Manager"}
+
+### 4.4 a role outside the three -> 403 "Cannot invite for this role"
+# @expect $.message == Cannot invite for this role
+POST {{host}}/api/method/crm.api.invite_by_email
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"emails": "zz.invitee@example.test", "role": "Guest"}
+
+### 4.5 a Sales Manager invites two addresses as Sales User; one is already a member -> the three-way split
+# @expect $.message.to_invite contains zz.invitee@example.test
+# @expect $.message.existing_members contains ada@example.com
+# @expect $.message.existing_invites count 0
+POST {{host}}/api/method/crm.api.invite_by_email
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"emails": "zz.invitee@example.test, ada@example.com, not-an-address", "role": "Sales User"}
+
+### 4.6 the same address again -> existing_invites, nothing new
+# @expect $.message.existing_invites contains zz.invitee@example.test
+# @expect $.message.to_invite count 0
+POST {{host}}/api/method/crm.api.invite_by_email
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"emails": "zz.invitee@example.test", "role": "Sales User"}
+
+### 4.7 the invitation row, as a manager: Pending, the role, and NO key on the wire
+# @name invrow
+# @expect $.data count 1
+# @expect $.data[0].status == Pending
+# @expect $.data[0].role == Sales User
+# @expect $.data[0].key absent
+GET {{inv}}?fields=["*"]&filters=[["email","=","zz.invitee@example.test"]]
+Authorization: Bearer {{mtoken}}
+
+### 4.8 a Sales User cannot see invitations at all -> empty list
+# @expect $.data count 0
+GET {{inv}}?fields=["name"]&filters=[["email","=","zz.invitee@example.test"]]
+Authorization: Bearer {{stoken}}
+
+### 4.9 ...nor forge one that grants System Manager -> 403
+# @expect $.exc_type == PermissionError
+POST {{inv}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"email": "zz.evil@example.test", "role": "System Manager", "status": "Pending", "key": "chosen-by-me"}
+
+### 4.10 filtering on the key is refused rather than answered -> 400
+# @expect $.message contains Cannot filter
+GET {{inv}}?fields=["name"]&filters=[["key","like","a%25"]]
+Authorization: Bearer {{mtoken}}
+
+### 4.11 an empty address list -> 200, null
+# @expect $.message == null
+POST {{host}}/api/method/crm.api.invite_by_email
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"emails": "", "role": "Sales User"}
+
+# ---- change_password -------------------------------------------------------------------------------
+
+### 5.1 wrong current password -> 417, crm/api/user.py:32 verbatim
+# @expect $.message == Incorrect current password. Please try again.
+POST {{host}}/api/method/crm.api.user.change_password
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"old_password": "not-it", "new_password": "{{temp_pwd}}"}
+
+### 5.2 change -> 200 "Password Updated Successfully"
+# @expect $.message == Password Updated Successfully
+POST {{host}}/api/method/crm.api.user.change_password
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"old_password": "{{sales_pwd}}", "new_password": "{{temp_pwd}}"}
+
+### 5.3 change it back -> 200 (if this fails, ada's password is the temp one)
+# @expect $.message == Password Updated Successfully
+POST {{host}}/api/method/crm.api.user.change_password
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"old_password": "{{temp_pwd}}", "new_password": "{{sales_pwd}}"}
+
+### 5.4 the original still logs in -> 200
+# @expect $.message.user == ada@example.com
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{sales}}", "pwd": "{{sales_pwd}}"}
+
+### 5.5 change_password without a token -> 401 (not allow_guest)
+# @expect $.exc_type == AuthenticationError
+POST {{host}}/api/method/crm.api.user.change_password
+Content-Type: application/json
+
+{"old_password": "x", "new_password": "y"}
+
+# ---- signature, translations, upload defaults -------------------------------------------------------
+
+### 6.1 no signature set -> null
+# @expect $.message == null
+POST {{host}}/api/method/crm.api.get_user_signature
+Authorization: Bearer {{stoken}}
+
+### 6.2 set one on her own row -> 200
+PUT {{user}}/{{sales}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"email_signature": "Ada, Sales"}
+
+### 6.3 -> wrapped the way the composer inserts it (crm/api/__init__.py:22-50)
+# @expect $.message == <br><p class="signature">Ada, Sales</p>
+POST {{host}}/api/method/crm.api.get_user_signature
+Authorization: Bearer {{stoken}}
+
+### 6.4 clear it again -> 200
+PUT {{user}}/{{sales}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"email_signature": "", "mobile_no": ""}
+
+### 6.5 get_translations is guest-callable and returns the (empty) catalogue -> 200, {}
+# @expect $.message count 0
+GET {{host}}/api/method/crm.api.get_translations
+
+### 6.6 get_file_uploader_defaults -> the upload limits the file picker reads
+# @expect $.message.allowed_file_types contains PDF
+# @expect $.message.max_file_size == 26214400
+# @expect $.message.make_attachments_public == false
+POST {{host}}/api/method/crm.api.get_file_uploader_defaults
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead"}
+
+# ---- delete_attachment ------------------------------------------------------------------------------
+
+### 7.1 a lead the manager owns -> 201
+# @name lead_req
+POST {{host}}/api/resource/CRM%20Lead
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"first_name": "ZZ Attach Lead", "lead_owner": "{{manager}}"}
+
+###
+@lead = {{lead_req.response.body.$.data.name}}
+
+### 7.2 a File row attached to it (metadata only; nothing serves bytes in this port) -> 201
+# @name file
+# @expect $.data.attached_to_name == {{lead}}
+POST {{host}}/api/resource/File
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"file_name": "zz-quote.pdf", "file_url": "/private/files/zz-quote.pdf", "is_private": 1, "attached_to_doctype": "CRM Lead", "attached_to_name": "{{lead}}"}
+
+### 7.3 ada cannot delete an attachment on a lead she cannot see -> 403, crm/api/__init__.py:161 verbatim
+# @expect $.exc_type == PermissionError
+# @expect $.message == You don't have permission to delete this attachment
+POST {{host}}/api/method/crm.api.delete_attachment
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "docname": "{{lead}}", "file_url": "/private/files/zz-quote.pdf"}
+
+### 7.4 ...nor read the File row (a private file defers to its document) -> 403
+# @expect $.exc_type == PermissionError
+GET {{host}}/api/resource/File/{{file.response.body.$.data.name}}
+Authorization: Bearer {{stoken}}
+
+### 7.5 the manager deletes it -> 200
+POST {{host}}/api/method/crm.api.delete_attachment
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "docname": "{{lead}}", "file_url": "/private/files/zz-quote.pdf"}
+
+### 7.6 -> the File row is gone
+# @expect $.data count 0
+GET {{host}}/api/resource/File?fields=["name"]&filters=[["attached_to_name","=","{{lead}}"]]
+Authorization: Bearer {{mtoken}}
+
+# ---- teardown ---------------------------------------------------------------------------------------
+
+### 8.1 delete the lead -> 200
+DELETE {{host}}/api/resource/CRM%20Lead/{{lead}}
+Authorization: Bearer {{mtoken}}
+
+### 8.2 delete the invitation -> 200
+DELETE {{inv}}/{{invrow.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 8.3 delete the throwaway account -> 200
+DELETE {{user}}/{{temp}}
+Authorization: Bearer {{token}}
+
+### 8.4 nothing left behind -> 200, empty
+# @expect $.data count 0
+GET {{user}}?fields=["name"]&filters=[["name","like","zz.%25"]]
+Authorization: Bearer {{token}}

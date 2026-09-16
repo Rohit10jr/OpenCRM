@@ -1,0 +1,569 @@
+# 03 - CRM Lead: what is specific to a lead, on top of the shared CRUD mechanics that
+# 02 already proved. Naming series, the lead_name rules, the status lifecycle and its
+# change log, the lost-reason rules, owner assignment, and the products child table
+# with its computed totals.
+#
+# Expectations from crm/fcrm/doctype/crm_lead/crm_lead.py (main): validate() at line 87
+# runs validate_status, set_full_name, set_lead_name, set_title, validate_email,
+# validate_lost_reason in that order; add_status_change_log fires when status changed.
+# Product totals are a client-side form script upstream (crm_products.py:112-195); the
+# port computes them server-side, a recorded divergence (UPSTREAM_BUGS), so the numbers
+# here are what an honest client would have sent.
+#
+# Fixture rows are prefixed "ZZ". Leads are named by the series, so leftovers from a
+# run that died are found by a list and deleted before anything is created.
+
+@host = http://localhost:8000
+@admin = Administrator
+@admin_pwd = {{$dotenv ADMIN_PWD}}
+@sales = ada@example.com
+@lead = {{host}}/api/resource/CRM%20Lead
+
+### 0.1 login -> 200
+# @name login
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}", "pwd": "{{admin_pwd}}"}
+
+###
+@token = {{login.response.body.$.message.access}}
+
+# ---- cleanup first ---------------------------------------------------------------------
+
+### 0.1b a deal left by an earlier run's conversion (6.10) must go before its lead can -> 200
+# @name old_deal
+GET {{host}}/api/resource/CRM%20Deal?fields=["name"]&filters=[["next_step","=","ZZ converted"]]
+Authorization: Bearer {{token}}
+
+### 0.1c -> 200|404
+DELETE {{host}}/api/resource/CRM%20Deal/{{old_deal.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.1d and the contact the conversion made from lead 4's email -> 200|404
+DELETE {{host}}/api/resource/Contact/zz.mail
+Authorization: Bearer {{token}}
+
+### 0.2 find leads left by an earlier run -> 200
+# @name leftovers
+GET {{lead}}?fields=["name"]&or_filters=[["first_name","like","ZZ%25"],["organization","in",["ZZ Org","Does Not Exist Inc"]],["email","=","zz.mail@example.test"]]&limit_page_length=10
+Authorization: Bearer {{token}}
+
+### 0.3 delete leftover 1 -> 200|404
+DELETE {{lead}}/{{leftovers.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.4 delete leftover 2 -> 200|404
+DELETE {{lead}}/{{leftovers.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 0.5 delete leftover 3 -> 200|404
+DELETE {{lead}}/{{leftovers.response.body.$.data[2].name}}
+Authorization: Bearer {{token}}
+
+### 0.6 delete leftover 4 -> 200|404
+DELETE {{lead}}/{{leftovers.response.body.$.data[3].name}}
+Authorization: Bearer {{token}}
+
+### 0.7 delete leftover 5 -> 200|404
+DELETE {{lead}}/{{leftovers.response.body.$.data[4].name}}
+Authorization: Bearer {{token}}
+
+### 0.8 cleanup lost reason "Other" -> 200|404
+DELETE {{host}}/api/resource/CRM%20Lost%20Reason/Other
+Authorization: Bearer {{token}}
+
+### 0.9 cleanup lost reason "ZZ No Budget" -> 200|404
+DELETE {{host}}/api/resource/CRM%20Lost%20Reason/ZZ%20No%20Budget
+Authorization: Bearer {{token}}
+
+### 0.10 cleanup lead source -> 200|404
+DELETE {{host}}/api/resource/CRM%20Lead%20Source/ZZ%20Source
+Authorization: Bearer {{token}}
+
+# ---- fixtures ----------------------------------------------------------------------------
+
+### 1.1 lost reason "Other" - the one name validate_lost_reason treats specially -> 201
+POST {{host}}/api/resource/CRM%20Lost%20Reason
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"lost_reason": "Other"}
+
+### 1.2 lost reason "ZZ No Budget" -> 201
+POST {{host}}/api/resource/CRM%20Lost%20Reason
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"lost_reason": "ZZ No Budget"}
+
+### 1.3 lead source -> 201
+POST {{host}}/api/resource/CRM%20Lead%20Source
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"source_name": "ZZ Source"}
+
+# ---- naming: the series, and the four ways lead_name is derived -----------------------------
+
+### 2.1 first name only -> 201; series name, status defaulted to New, lead_name = first_name
+# @name lead1_req
+# @expect $.data.name contains CRM-LEAD-
+# @expect $.data.status == New
+# @expect $.data.lead_name == ZZ Solo
+# @expect $.data.lead_owner == Administrator
+# @expect $.data.converted == false
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Solo", "lead_owner": "{{admin}}", "source": "ZZ Source"}
+
+###
+@lead1 = {{lead1_req.response.body.$.data.name}}
+
+### 2.2 salutation + first + middle + last -> lead_name includes the salutation
+# @name lead2_req
+# @expect $.data.lead_name == Ms ZZ Ada Byron Lovelace
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"salutation": "Ms", "first_name": "ZZ Ada", "middle_name": "Byron", "last_name": "Lovelace", "lead_owner": "{{admin}}"}
+
+###
+@lead2 = {{lead2_req.response.body.$.data.name}}
+
+### 2.3 no person's name, an organization -> lead_name = organization
+# @name lead3_req
+# @expect $.data.lead_name == ZZ Org
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization": "ZZ Org", "lead_owner": "{{admin}}"}
+
+###
+@lead3 = {{lead3_req.response.body.$.data.name}}
+
+### 2.4 no name, no organization, an email -> lead_name = the local part only
+# @name lead4_req
+# @expect $.data.lead_name == zz.mail
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"email": "zz.mail@example.test", "lead_owner": "{{admin}}"}
+
+###
+@lead4 = {{lead4_req.response.body.$.data.name}}
+
+### 2.5 nothing to name it by -> 417, crm_lead.py:133 verbatim
+# @expect $.exc_type == ValidationError
+# @expect $.message == A Lead requires either a person's name or an organization's name
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"lead_owner": "{{admin}}", "job_title": "nobody"}
+
+### 2.6 email equal to the owner's address -> 417, crm_lead.py:150 verbatim
+# @expect $.message == Lead Owner cannot be same as the Lead Email Address
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Self", "email": "{{sales}}", "lead_owner": "{{sales}}"}
+
+### 2.7 an explicit status is kept, not overridden by the default -> 201
+# @name lead5_req
+# @expect $.data.status == Contacted
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Explicit", "status": "Contacted", "lead_owner": "{{admin}}"}
+
+###
+@lead5 = {{lead5_req.response.body.$.data.name}}
+
+### 2.8 a status that does not exist -> 417
+# @expect $.exc_type == ValidationError
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Bad Status", "status": "No Such Status", "lead_owner": "{{admin}}"}
+
+### 2.9 a lead_owner that is not a user -> 417
+# @expect $.exc_type == ValidationError
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Bad Owner", "lead_owner": "nobody@example.com"}
+
+### 2.10 lead_name is derived on every save: changing first_name recomputes it -> 200
+# @expect $.data.lead_name == ZZ Solo Renamed
+PUT {{lead}}/{{lead1}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Solo Renamed"}
+
+### 2.11 organization on a lead is free text, not a Link: any value is accepted -> 200
+# @expect $.data.organization == Does Not Exist Inc
+PUT {{lead}}/{{lead3}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization": "Does Not Exist Inc"}
+
+# ---- status lifecycle and the change log -----------------------------------------------------
+
+### 3.1 a new lead has one open log row: from New, to nothing yet -> 200
+# @expect $.data.status_change_log count 1
+# @expect $.data.status_change_log[0].from == New
+# @expect $.data.status_change_log[0].from_type == Open
+# @expect $.data.status_change_log[0].to ==
+# @expect $.data.status_change_log[0].to_date == null
+GET {{lead}}/{{lead1}}
+Authorization: Bearer {{token}}
+
+### 3.2 moving the status closes that row and opens a new one -> 200
+# @expect $.data.status == Contacted
+# @expect $.data.status_change_log count 2
+# @expect $.data.status_change_log[0].to == Contacted
+# @expect $.data.status_change_log[0].to_type == Ongoing
+# @expect $.data.status_change_log[0].duration exists
+# @expect $.data.status_change_log[1].from == Contacted
+# @expect $.data.status_change_log[1].to_date == null
+PUT {{lead}}/{{lead1}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status": "Contacted"}
+
+### 3.3 saving without moving the status writes no log row -> 200, still 2
+# @expect $.data.status_change_log count 2
+PUT {{lead}}/{{lead1}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status": "Contacted", "job_title": "CTO"}
+
+### 3.4 a Lost status needs a reason -> 417, crm_lead.py:158 verbatim
+# @expect $.message == Please specify a reason for losing the lead.
+PUT {{lead}}/{{lead1}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status": "Unqualified"}
+
+### 3.5 reason "Other" needs notes -> 417, crm_lead.py:160 verbatim (one word differs)
+# @expect $.message == Please specify the reason for losing the lead.
+PUT {{lead}}/{{lead1}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status": "Unqualified", "lost_reason": "Other"}
+
+### 3.6 "Other" with notes -> 200, and the log records the Lost transition
+# @expect $.data.status == Unqualified
+# @expect $.data.lost_reason == Other
+# @expect $.data.status_change_log count 3
+# @expect $.data.status_change_log[2].from_type == Lost
+PUT {{lead}}/{{lead1}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status": "Unqualified", "lost_reason": "Other", "lost_notes": "No budget this year"}
+
+### 3.7 any other reason needs no notes -> 200
+# @expect $.data.status == Junk
+# @expect $.data.lost_reason == ZZ No Budget
+PUT {{lead}}/{{lead2}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status": "Junk", "lost_reason": "ZZ No Budget"}
+
+### 3.8 a lost reason that does not exist -> 417
+# @expect $.exc_type == ValidationError
+PUT {{lead}}/{{lead2}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status": "Junk", "lost_reason": "No Such Reason"}
+
+### 3.9 back to an open status: the reason may stay, no rule clears it -> 200
+# @expect $.data.status == Nurture
+# @expect $.data.status_change_log count 3
+PUT {{lead}}/{{lead2}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status": "Nurture"}
+
+# ---- owner and assignment --------------------------------------------------------------------
+
+### 4.1 a lead is assigned to its own owner on create -> _assign holds the owner
+# @expect $.data._assign contains Administrator
+GET {{lead}}/{{lead3}}
+Authorization: Bearer {{token}}
+
+### 4.2 changing lead_owner assigns the new owner too -> 200
+# The PUT response still shows the OLD _assign: the cache is refreshed with a bare
+# update() after the save, so the in-memory document is stale. Upstream's save response
+# is stale in the same way (assign_to.add writes _assign with db.set_value). Read it back.
+# @expect $.data.lead_owner == ada@example.com
+PUT {{lead}}/{{lead3}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"lead_owner": "{{sales}}"}
+
+### 4.2b read back: both the old and the new owner are assigned; nothing was removed -> 200
+# @expect $.data._assign contains ada@example.com
+# @expect $.data._assign contains Administrator
+GET {{lead}}/{{lead3}}
+Authorization: Bearer {{token}}
+
+### 4.3 get_assigned_users reads the ToDo rows behind _assign -> 200, both users
+# @expect $.message contains ada@example.com
+# @expect $.message contains Administrator
+POST {{host}}/api/method/crm.api.doc.get_assigned_users
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{lead3}}"}
+
+### 4.4 remove_assignments cancels a ToDo rather than deleting it -> 200
+POST {{host}}/api/method/crm.api.doc.remove_assignments
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{lead3}}", "assignees": ["Administrator"]}
+
+### 4.5 ...and _assign no longer lists them -> 200
+# @expect $.data._assign count 1
+# @expect $.data._assign[0] == ada@example.com
+GET {{lead}}/{{lead3}}?fields=["name","_assign"]&filters=[["name","=","{{lead3}}"]]
+Authorization: Bearer {{token}}
+
+### 4.6 assigning the same user twice is a no-op, not an error -> 200
+POST {{host}}/api/method/frappe.desk.form.assign_to.add
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{lead3}}", "assign_to": ["{{sales}}"]}
+
+### 4.7 a lead created with no lead_owner gets no assignment -> 201, _assign empty
+# @name lead6_req
+# @expect $.data._assign count 0
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Unowned"}
+
+###
+@lead6 = {{lead6_req.response.body.$.data.name}}
+
+# ---- products child table and totals -------------------------------------------------------------
+
+### 5.1 write two product rows -> 200; per-row amounts computed, idx assigned in order
+# @expect $.data.products count 2
+# @expect $.data.products[0].product_name == ZZ Widget
+# @expect $.data.products[0].idx == 1
+# @expect $.data.products[0].amount contains 200
+# @expect $.data.products[1].idx == 2
+# @expect $.data.products[1].discount_amount contains 5
+# @expect $.data.products[1].net_amount contains 45
+PUT {{lead}}/{{lead5}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"products": [{"product_name": "ZZ Widget", "qty": 2, "rate": 100}, {"product_name": "ZZ Gadget", "qty": 1, "rate": 50, "discount_percentage": 10}]}
+
+### 5.2 the parent's totals follow: total = 250, net_total = 245 -> 200
+# @expect $.data.total contains 250
+# @expect $.data.net_total contains 245
+GET {{lead}}/{{lead5}}
+Authorization: Bearer {{token}}
+
+### 5.3 a totals refresh does not bump modified, so lists keep their order -> 200
+# (compare with 5.2: modified is unchanged by the totals write)
+# @expect $.data.modified exists
+GET {{lead}}/{{lead5}}?fields=["name","modified","total"]&filters=[["name","=","{{lead5}}"]]
+Authorization: Bearer {{token}}
+
+### 5.4 child rows are replaced wholesale, not merged: one row in, one row left -> 200
+# @expect $.data.products count 1
+# @expect $.data.products[0].product_name == ZZ Only
+PUT {{lead}}/{{lead5}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"products": [{"product_name": "ZZ Only", "qty": 3, "rate": 10}]}
+
+### 5.5 and the totals follow again -> total 30
+# @expect $.data.total contains 30
+# @expect $.data.net_total contains 30
+GET {{lead}}/{{lead5}}
+Authorization: Bearer {{token}}
+
+### 5.6 an empty list clears the table -> 200, totals 0
+# @expect $.data.products count 0
+PUT {{lead}}/{{lead5}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"products": []}
+
+### 5.7 -> total 0 after clearing
+# @expect $.data.total contains 0
+GET {{lead}}/{{lead5}}
+Authorization: Bearer {{token}}
+
+### 5.8 a row without the mandatory rate -> 417 MandatoryError, the child-row wording (base_document.py:747-756)
+# @expect $.message == Error: <strong>CRM Products</strong> Row #1: Value missing for: Rate
+# @expect $.exc_type == MandatoryError
+PUT {{lead}}/{{lead5}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"products": [{"product_name": "ZZ No Rate", "qty": 1}]}
+
+### 5.9 a full discount leaves net_total at a real zero, not the gross fallback -> 0
+# @expect $.data.products[0].net_amount contains 0
+PUT {{lead}}/{{lead5}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"products": [{"product_name": "ZZ Free", "qty": 1, "rate": 100, "discount_percentage": 100}]}
+
+### 5.10 -> total 100, net_total 0
+# @expect $.data.total contains 100
+# @expect $.data.net_total contains 0
+GET {{lead}}/{{lead5}}
+Authorization: Bearer {{token}}
+
+# ---- the list engine, lead specifics ---------------------------------------------------------
+
+### 6.1 get_data for the six ZZ leads -> data, columns, rows, and the lead's default columns
+# @expect $.message.data count 6
+# @expect $.message.columns[0].key == lead_name
+# @expect $.message.rows contains _assign
+# @expect $.message.rows contains lead_owner
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "filters": {"name": ["in", ["{{lead1}}", "{{lead2}}", "{{lead3}}", "{{lead4}}", "{{lead5}}", "{{lead6}}"]]}, "order_by": "modified desc", "page_length": 20, "view": {"view_type": "list"}}
+
+### 6.2 `converted` is deliberately not filterable (crm_lead.py:409) -> absent from the list
+# @expect $.message exists
+POST {{host}}/api/method/crm.api.doc.get_filterable_fields
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead"}
+
+### 6.3 kanban view groups by status: one column per CRM Lead Status -> 200
+# @expect $.message.data exists
+# @expect $.message.kanban_columns exists
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "filters": {"first_name": ["like", "ZZ%"]}, "column_field": "status", "title_field": "lead_name", "page_length": 20, "view": {"view_type": "kanban"}}
+
+# ---- convert to deal (crm_lead.py:494-516), the modal's and the bulk action's call -------------
+# The doctype-module path ConvertToDealModal.vue and ListBulkActions.vue call; unserved
+# until 15 Sep 2026. Lead 4 has only an email, so the conversion makes a contact from it.
+
+### 6.10 convert_to_deal -> the new deal's name
+# @name convert_req
+# @expect $.message contains CRM-DEAL-
+POST {{host}}/api/method/crm.fcrm.doctype.crm_lead.crm_lead.convert_to_deal
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"lead": "{{lead4}}", "deal": {"next_step": "ZZ converted"}}
+
+###
+@converted = {{convert_req.response.body.$.message}}
+
+### 6.11 -> the deal remembers its lead, took the form's field, and carries the contact made from the email
+# @expect $.data.lead == {{lead4}}
+# @expect $.data.next_step == ZZ converted
+# @expect $.data.contacts count 1
+# @expect $.data.contacts[0].email == zz.mail@example.test
+GET {{host}}/api/resource/CRM%20Deal/{{converted}}
+Authorization: Bearer {{token}}
+
+### 6.12 -> the lead is marked converted and moved to Qualified (db_set, so no status-log row)
+# @expect $.data.converted == true
+# @expect $.data.status == Qualified
+GET {{lead}}/{{lead4}}
+Authorization: Bearer {{token}}
+
+### 6.13 a lead that does not exist -> 404
+# @expect $.exc_type == DoesNotExistError
+POST {{host}}/api/method/crm.fcrm.doctype.crm_lead.crm_lead.convert_to_deal
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"lead": "CRM-LEAD-2099-00001"}
+
+# ---- teardown --------------------------------------------------------------------------------------
+
+### 7.0 delete the converted deal first: it points at lead 4 -> 200
+DELETE {{host}}/api/resource/CRM%20Deal/{{converted}}
+Authorization: Bearer {{token}}
+
+### 7.0b delete the contact the conversion made -> 200
+DELETE {{host}}/api/resource/Contact/zz.mail
+Authorization: Bearer {{token}}
+
+### 7.1 delete lead 1 -> 200
+DELETE {{lead}}/{{lead1}}
+Authorization: Bearer {{token}}
+
+### 7.2 delete lead 2 -> 200
+DELETE {{lead}}/{{lead2}}
+Authorization: Bearer {{token}}
+
+### 7.3 delete lead 3 -> 200
+DELETE {{lead}}/{{lead3}}
+Authorization: Bearer {{token}}
+
+### 7.4 delete lead 4 -> 200
+DELETE {{lead}}/{{lead4}}
+Authorization: Bearer {{token}}
+
+### 7.5 delete lead 5 -> 200
+DELETE {{lead}}/{{lead5}}
+Authorization: Bearer {{token}}
+
+### 7.6 delete lead 6 -> 200
+DELETE {{lead}}/{{lead6}}
+Authorization: Bearer {{token}}
+
+### 7.7 delete lost reason Other -> 200
+DELETE {{host}}/api/resource/CRM%20Lost%20Reason/Other
+Authorization: Bearer {{token}}
+
+### 7.8 delete lost reason ZZ No Budget -> 200
+DELETE {{host}}/api/resource/CRM%20Lost%20Reason/ZZ%20No%20Budget
+Authorization: Bearer {{token}}
+
+### 7.9 delete lead source -> 200
+DELETE {{host}}/api/resource/CRM%20Lead%20Source/ZZ%20Source
+Authorization: Bearer {{token}}
+
+### 7.10 nothing left behind -> 200, empty
+# @expect $.data count 0
+GET {{lead}}?fields=["name"]&filters=[["first_name","like","ZZ%25"]]
+Authorization: Bearer {{token}}

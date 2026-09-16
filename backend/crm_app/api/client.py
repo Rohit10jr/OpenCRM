@@ -26,7 +26,8 @@ from frappe_core.exceptions import PermissionError as FrappePermissionError
 from frappe_core.exceptions import throw
 from frappe_core.views import _candidate_instance, check_destination
 from frappe_core.naming import validate_name
-from frappe_core.query import fetch_rows, parse_json_param
+from frappe_core.query import by_name, fetch_rows, parse_json_param
+from frappe_core.rename import rename_document
 from frappe_core.session import get_current_user
 from frappe_core.whitelist import whitelist
 
@@ -42,7 +43,7 @@ def _entry_or_404(doctype: str):
 
 def _get_checked(doctype: str, name: str, ptype: str):
     entry = _entry_or_404(doctype)
-    instance = entry.model._default_manager.filter(pk=name).first()
+    instance = by_name(entry.model, name).first()
     if instance is None:
         raise DoesNotExistError(f"{doctype} {name} not found")
     if not permissions.check_object_permission(instance, ptype, get_current_user()):
@@ -210,32 +211,38 @@ def client_delete(doctype: str, name: str):
 
 @whitelist("frappe.client.rename_doc", methods=("POST",))
 def client_rename_doc(doctype: str, old_name: str, new_name: str, merge: bool = False):
-    """``frappe/rename_doc.py:rename_doc``.
+    """``frappe/model/rename_doc.py:rename_doc``.
 
-    Renaming a string PK is a real operation in Frappe - the frontend uses it to rename
-    an Email Template. ``merge`` is **not** supported: merging two documents means
-    repointing every inbound reference, which needs the framework's link map. It raises
+    Renames in place - every Link, Dynamic Link, child ``parent`` and version that named
+    the document is repointed (:mod:`frappe_core.rename`); the frontend uses it on
+    organizations, email templates, email accounts, assignment rules and SLA policies.
+    The refusals are ``validate_rename``'s, in its order and with its wording, and all
+    of them are a plain ``frappe.throw`` - 417, the permission one included.
+
+    ``merge`` is **not** supported: merging two documents means folding one's references
+    into the other's and deleting it, which nothing in the CRM asks for. It raises
     rather than silently ignoring the flag and losing data.
     """
-    entry, instance = _get_checked(doctype, old_name, "write")
+    entry = _entry_or_404(doctype)
 
     if merge:
         throw("Merging documents is not supported")
 
-    new_name = validate_name(doctype, str(new_name))
-    if new_name == old_name:
-        return old_name
+    old_name = str(old_name)
+    new_name = str(new_name)
+    instance = entry.model._default_manager.filter(pk=old_name).first()
+    if instance is None:
+        throw(f"Can't rename {old_name} to {new_name} because {old_name} doesn't exist.")
+    if old_name == new_name:
+        throw("No changes made because old and new name are the same.")
     if entry.model._default_manager.filter(pk=new_name).exists():
-        throw(f"{doctype} {new_name} already exists")
+        throw(f"Another {doctype} with name {new_name} exists, select another name")
+    if not permissions.check_object_permission(instance, "write", get_current_user()):
+        throw(f"You need write permission on {doctype} {old_name} to rename")
+    # "validate naming like it's done in doc.py" - validate_rename's last step.
+    new_name = validate_name(doctype, new_name)
 
-    with transaction.atomic():
-        # A string PK change is an insert + delete in Django, not an UPDATE.
-        instance.pk = new_name
-        instance._state.adding = True
-        instance.save(force_insert=True)
-        entry.model._default_manager.filter(pk=old_name).delete()
-
-    return new_name
+    return rename_document(doctype, old_name, new_name)
 
 
 @whitelist("frappe.client.get_doc_permissions")
@@ -247,7 +254,7 @@ def client_get_doc_permissions(doctype: str, docname: str):
     "what may I do", and the honest answer for an invisible row is "nothing".
     """
     entry = _entry_or_404(doctype)
-    instance = entry.model._default_manager.filter(pk=docname).first()
+    instance = by_name(entry.model, docname).first()
     if instance is None:
         return {"permissions": {}}
 
@@ -281,6 +288,89 @@ def assign_to_add(doctype: str, name: str, assign_to=None, description: str = ""
         if assignment.assign_to_user(doctype, name, user, description=description):
             added.append(user)
     return assignment.get_assigned_users(doctype, name)
+
+
+@whitelist("frappe.desk.form.assign_to.add_multiple", methods=("POST",))
+def assign_to_add_multiple(doctype: str, name=None, assign_to=None, description: str = "", **extra):
+    """``frappe/desk/form/assign_to.py:148-156`` - ``add_multiple``.
+
+    Upstream is ``json.loads(args["name"])`` and then :func:`add` per document, so this
+    runs exactly what :func:`assign_to_add` runs for each name, write check included.
+    ``name`` is the *list*, not a document - that odd shape is upstream's and the
+    frontend sends it (``AssignmentModal.vue:160``, ``name: JSON.stringify(list)``).
+
+    **Returns ``None``.** Upstream's ``add_multiple`` has no ``return`` statement; only
+    the single-document ``add`` returns the assignee list. ``AssignmentModal.vue`` ignores
+    the body and reloads the list, so the empty answer is what the frontend expects.
+
+    ``bulk_assign`` / ``re_assign`` arrive from that same call and are **swallowed by
+    ``**extra``**: upstream ignores them too - ``add`` reads neither out of ``args``, and
+    nothing downstream of it does either. They are frontend-side analytics flags that
+    happen to be sent along with the payload.
+
+    **Divergence: the whole batch is one transaction.** Upstream loops with no
+    transaction around it, so a document that refuses half way through leaves the earlier
+    ones assigned and reports an error - the caller cannot tell which half applied. The
+    port's other bulk paths (``crm.api.doc.delete_bulk_docs``) refuse the whole batch
+    instead, and this follows them: a 403 on the third document unassigns the first two.
+    """
+    from frappe_core import assignment
+
+    names = parse_json_param(name, []) or []
+    if not isinstance(names, list):
+        names = [names]
+
+    users = parse_json_param(assign_to, []) or []
+    if isinstance(users, str):
+        users = [users]
+
+    with transaction.atomic():
+        for docname in names:
+            # Same check `add` makes, per document: assigning grants the assignee read
+            # access, so it takes write permission on the document being given away.
+            _get_checked(doctype, docname, "write")
+            for user in users:
+                assignment.assign_to_user(doctype, docname, user, description=description)
+
+
+@whitelist("frappe.desk.form.assign_to.remove_multiple", methods=("POST",))
+def assign_to_remove_multiple(doctype: str, names=None, **extra):
+    """``frappe/desk/form/assign_to.py:191-201`` - ``remove_multiple``.
+
+    Upstream loops ``get()`` (the open assignments - status not in Cancelled/Closed) and
+    calls ``remove()`` on each, which is ``set_status(..., status="Cancelled")``. Here
+    that is :func:`assignment.get_assigned_users` (the same status filter - it is the
+    display filter, ``INACTIVE_FOR_DISPLAY``) followed by
+    :func:`assignment.cancel_assignment`, which cancels rather than deletes and fires the
+    ToDo signal, so the assignee is notified exactly as upstream's ``notify_assignment``
+    does.
+
+    **``ignore_permissions`` is swallowed.** ``ListBulkActions.vue:154`` sends it, but
+    upstream's ``remove_multiple`` takes only ``doctype`` and ``names`` - the framework
+    drops the surplus argument before the function sees it, so it has no effect there
+    either. This is *not* the ``crm.api.doc.remove_assignments`` case, where upstream
+    really does accept the flag and honour it (see that function's note).
+
+    Write permission per document, and the same one-transaction divergence
+    :func:`assign_to_add_multiple` documents. Returns ``None``, as upstream does.
+
+    One more divergence, deliberate: upstream's ``get()`` carries ``limit=5`` - it feeds
+    the form sidebar, which shows five - so ``remove_multiple`` on a document with six
+    assignees cancels five and leaves one. The button says "clear assignment"; here every
+    open assignment goes.
+    """
+    from frappe_core import assignment
+
+    parsed = parse_json_param(names, []) or []
+    if not isinstance(parsed, list):
+        parsed = [parsed]
+
+    with transaction.atomic():
+        for docname in parsed:
+            _get_checked(doctype, docname, "write")
+            assigned = assignment.get_assigned_users(doctype, docname)
+            if assigned:
+                assignment.cancel_assignment(doctype, docname, assigned)
 
 
 @whitelist("frappe.desk.like.toggle_like", methods=("POST",))

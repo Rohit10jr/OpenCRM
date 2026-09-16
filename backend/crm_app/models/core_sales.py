@@ -510,6 +510,8 @@ class CRMLead(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
     #: Filled in by ``validate_status`` on create, so the serializer must not demand it
     #: (frappe_core/serializers.py). Upstream's client omits it too.
     AUTO_DEFAULTED_FIELDS = ("status",)
+    #: ``crm_lead.py:146`` validates the address explicitly on top of the Email option.
+    EMAIL_FIELDS = ("email",)
 
     #: ``image`` is hidden in the JSON; get_data drops hidden columns
     #: (``crm/api/doc.py:350-352``).
@@ -755,6 +757,7 @@ class CRMDeal(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
 
     #: Filled in by ``validate_status`` on create - see the note on ``CRMLead``.
     AUTO_DEFAULTED_FIELDS = ("status",)
+    EMAIL_FIELDS = ("email",)
 
     # -- lifecycle (crm_deal.py) --------------------------------------------------
 
@@ -1029,6 +1032,71 @@ class CRMTask(AutoIncrementDocument):
             ),
         ]
 
+    @staticmethod
+    def default_list_data():
+        """Verbatim from ``crm_task.py:default_list_data``."""
+        return {
+            "columns": [
+                {"label": "Title", "type": "Data", "key": "title", "width": "16rem"},
+                {"label": "Status", "type": "Select", "key": "status", "width": "8rem"},
+                {"label": "Priority", "type": "Select", "key": "priority", "width": "8rem"},
+                {"label": "Due Date", "type": "Date", "key": "due_date", "width": "8rem"},
+                {"label": "Assigned To", "type": "Link", "key": "assigned_to", "width": "10rem"},
+                {"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
+            ],
+            "rows": [
+                "name",
+                "title",
+                "description",
+                "assigned_to",
+                "due_date",
+                "status",
+                "priority",
+                "reference_doctype",
+                "reference_docname",
+                "modified",
+            ],
+        }
+
+    # -- assignment: crm_task.py:30-56 --------------------------------------------------
+    #
+    # ``after_insert`` assigns the task to ``assigned_to`` through ``assign_to.add``, so
+    # a ToDo exists and ``_assign`` names the user; ``validate`` on a later save, when
+    # ``assigned_to`` changed and is set, unassigns the previous user and assigns the new
+    # one. The task board's assignee chip reads ``_assign`` and the assignee's own task
+    # list is built from ToDo (FINDINGS.md 15). Clearing ``assigned_to`` leaves the
+    # previous assignment in place, as upstream's early return does.
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        instance._loaded_assigned_to = instance.assigned_to_id
+        return instance
+
+    def save(self, *args, **kwargs):
+        creating = self._state.adding
+        previous = getattr(self, "_loaded_assigned_to", None)
+        super().save(*args, **kwargs)
+        if creating:
+            self.assign_to()
+        elif self.assigned_to_id and previous != self.assigned_to_id:
+            self.unassign_from_previous_user(previous)
+            self.assign_to()
+        self._loaded_assigned_to = self.assigned_to_id
+
+    def unassign_from_previous_user(self, user) -> None:
+        if user:
+            assignment.cancel_assignment(self.get_doctype(), self.pk, [user])
+
+    def assign_to(self) -> None:
+        if self.assigned_to_id:
+            assignment.assign_to_user(
+                self.get_doctype(),
+                self.pk,
+                self.assigned_to_id,
+                description=self.title or self.description,
+            )
+
 
 @register_doctype("FCRM Note")
 class FCRMNote(BaseDocument):
@@ -1049,6 +1117,23 @@ class FCRMNote(BaseDocument):
                 fields=["reference_doctype", "reference_docname"], name="fcrm_note_reference_idx"
             ),
         ]
+
+    @staticmethod
+    def default_list_data():
+        """Verbatim from ``fcrm_note.py:default_list_data``: no columns, the Notes page
+        is a card grid that reads these rows."""
+        return {
+            "columns": [],
+            "rows": [
+                "name",
+                "title",
+                "content",
+                "reference_doctype",
+                "reference_docname",
+                "owner",
+                "modified",
+            ],
+        }
 
 
 __all__ = [

@@ -1,0 +1,515 @@
+# 06 - CRM Task (an integer-PK doctype), FCRM Note, CRM Call Log logged by hand, the
+# call-log helpers that need no telephony provider, and the linked-document endpoints
+# (get_linked_docs_of_document, remove_linked_doc_reference).
+#
+# Expectations from crm_task.py (after_insert/validate assign the task to assigned_to
+# through assign_to.add, and re-assign when it changes), fcrm_note.py, crm_call_log.py
+# (before_insert generates the id and sets telephony_medium Manual; default_list_data;
+# links child table), crm/integrations/api.py (add_note_to_call_log, add_task_to_call_log,
+# the phone lookups) and crm/api/doc.py:677-792.
+#
+# Fixture rows are prefixed "ZZ"; tasks and call logs are found by list for cleanup.
+
+@host = http://localhost:8000
+@admin = Administrator
+@admin_pwd = {{$dotenv ADMIN_PWD}}
+@sales = ada@example.com
+@manager = grace@example.com
+@task = {{host}}/api/resource/CRM%20Task
+@note = {{host}}/api/resource/FCRM%20Note
+@call = {{host}}/api/resource/CRM%20Call%20Log
+@lead = {{host}}/api/resource/CRM%20Lead
+
+### 0.1 login -> 200
+# @name login
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}", "pwd": "{{admin_pwd}}"}
+
+###
+@token = {{login.response.body.$.message.access}}
+
+# ---- cleanup first ---------------------------------------------------------------------
+
+### 0.2 leftover tasks -> 200
+# @name old_tasks
+GET {{task}}?fields=["name"]&filters=[["title","like","ZZ%25"]]
+Authorization: Bearer {{token}}
+
+### 0.3 -> 200|404
+# When 0.2 found nothing, REST Client cannot resolve `$.data[0].name` and sends the
+# placeholder text itself as the name. A task's name is a number, so that name cannot
+# exist and the answer is 404 - which is what the block accepts. (It answered 500 until
+# 16 Sep 2026: FINDINGS.md 24.)
+DELETE {{task}}/{{old_tasks.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.4 -> 200|404
+DELETE {{task}}/{{old_tasks.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 0.5 -> 200|404
+DELETE {{task}}/{{old_tasks.response.body.$.data[2].name}}
+Authorization: Bearer {{token}}
+
+### 0.6 leftover notes -> 200
+# @name old_notes
+GET {{note}}?fields=["name"]&filters=[["title","like","ZZ%25"]]
+Authorization: Bearer {{token}}
+
+### 0.7 -> 200|404
+DELETE {{note}}/{{old_notes.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.8 -> 200|404
+DELETE {{note}}/{{old_notes.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 0.9 -> 200|404
+DELETE {{note}}/{{old_notes.response.body.$.data[2].name}}
+Authorization: Bearer {{token}}
+
+### 0.10 leftover call logs -> 200
+# @name old_calls
+GET {{call}}?fields=["name"]&filters=[["to","=","+49 30 7"]]
+Authorization: Bearer {{token}}
+
+### 0.11 -> 200|404
+DELETE {{call}}/{{old_calls.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.12 -> 200|404
+DELETE {{call}}/{{old_calls.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 0.13 -> 200|404
+DELETE {{call}}/ZZ-CALL-1
+Authorization: Bearer {{token}}
+
+### 0.14 leftover leads: the fixture lead and the one 4.7c creates from a call -> 200
+# @name old_leads
+GET {{lead}}?fields=["name"]&filters=[["first_name","in",["ZZ Task Lead","ZZ Call Lead"]]]
+Authorization: Bearer {{token}}
+
+### 0.15 -> 200|404
+DELETE {{lead}}/{{old_leads.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.15b -> 200|404
+DELETE {{lead}}/{{old_leads.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 0.16 cleanup contact -> 200|404
+DELETE {{host}}/api/resource/Contact/ZZ%20Caller
+Authorization: Bearer {{token}}
+
+# ---- fixtures ----------------------------------------------------------------------------
+
+### 1.1 a lead to hang things off -> 201
+# @name lead_req
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Task Lead", "lead_owner": "{{admin}}", "mobile_no": "+49 30 8"}
+
+###
+@lead_name = {{lead_req.response.body.$.data.name}}
+
+### 1.2 a contact with a mobile number, for the phone lookups -> 201
+POST {{host}}/api/resource/Contact
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ", "last_name": "Caller", "mobile_no": "+49 30 9", "phone_nos": [{"phone": "+49 30 9", "is_primary_mobile_no": 1}]}
+
+# ---- tasks -----------------------------------------------------------------------------------
+
+### 2.1 create a task -> 201; the name is an integer (autoincrement)
+# @name task1_req
+# @expect $.data.name exists
+# @expect $.data.status == Todo
+# @expect $.data.assigned_to == ada@example.com
+# @expect $.data.reference_docname == {{lead_name}}
+POST {{task}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"title": "ZZ Call back", "priority": "Medium", "status": "Todo", "assigned_to": "{{sales}}", "due_date": "2026-12-01T10:00:00", "reference_doctype": "CRM Lead", "reference_docname": "{{lead_name}}"}
+
+###
+@task1 = {{task1_req.response.body.$.data.name}}
+
+### 2.2 the task is assigned to assigned_to through a ToDo (crm_task.py:30, after_insert) -> _assign holds ada
+# @expect $.data._assign contains ada@example.com
+GET {{task}}/{{task1}}
+Authorization: Bearer {{token}}
+
+### 2.3 changing assigned_to re-assigns: the old assignee is removed, the new one added -> 200
+PUT {{task}}/{{task1}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"assigned_to": "{{manager}}"}
+
+### 2.4 -> _assign is exactly [grace]
+# @expect $.data._assign count 1
+# @expect $.data._assign[0] == grace@example.com
+GET {{task}}/{{task1}}
+Authorization: Bearer {{token}}
+
+### 2.5 a status outside the Select -> 417
+# @expect $.exc_type == ValidationError
+PUT {{task}}/{{task1}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status": "Started"}
+
+### 2.6 a task without a title -> 417, title is mandatory
+POST {{task}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status": "Todo"}
+
+### 2.7 a second task with no assignee and no reference -> 201, both allowed
+# @name task2_req
+# @expect $.data._assign count 0
+# @expect $.data.reference_docname ==
+POST {{task}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"title": "ZZ Loose task", "priority": "Low", "status": "Backlog"}
+
+###
+@task2 = {{task2_req.response.body.$.data.name}}
+
+### 2.8 the task list screen: upstream's default columns are title, status, priority, ... (crm_task.py:57)
+# @expect $.message.columns[0].key == title
+# @expect $.message.rows contains assigned_to
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Task", "filters": {"title": ["like", "ZZ%"]}, "page_length": 20, "view": {"view_type": "list"}}
+
+### 2.9 tasks can be filtered by their integer name -> 200, one row
+# @expect $.data count 1
+GET {{task}}?fields=["name","title"]&filters=[["name","=",{{task1}}]]
+Authorization: Bearer {{token}}
+
+# ---- notes -------------------------------------------------------------------------------------
+
+### 3.1 create a note -> 201; hash name, reference_doctype defaults to CRM Lead
+# @name note1_req
+# @expect $.data.reference_doctype == CRM Lead
+# @expect $.data.content == <p>ZZ first note</p>
+POST {{note}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"title": "ZZ Meeting notes", "content": "<p>ZZ first note</p>", "reference_docname": "{{lead_name}}"}
+
+###
+@note1 = {{note1_req.response.body.$.data.name}}
+
+### 3.2 edit the content -> 200
+# @expect $.data.content == <p>ZZ edited</p>
+PUT {{note}}/{{note1}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"content": "<p>ZZ edited</p>"}
+
+### 3.3 a note needs a title -> 417
+POST {{note}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"content": "untitled"}
+
+### 3.4 the notes page: upstream declares rows only (fcrm_note.py:24), the page is a card grid
+# @expect $.message.rows contains content
+# @expect $.message.rows contains reference_docname
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "FCRM Note", "filters": {"title": ["like", "ZZ%"]}, "page_length": 20, "view": {"view_type": "list"}}
+
+# ---- call logs logged by hand ------------------------------------------------------------------
+
+### 4.1 "Log a call" with no provider -> 201; id generated, telephony_medium Manual, name == id
+# @name call1_req
+# @expect $.data.telephony_medium == Manual
+# @expect $.data.id exists
+# @expect $.data.type == Outgoing
+# @expect $.data.status == Completed
+POST {{call}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"type": "Outgoing", "status": "Completed", "from": "+49 30 1", "to": "+49 30 7", "duration": 120, "caller": "{{admin}}", "reference_doctype": "CRM Lead", "reference_docname": "{{lead_name}}"}
+
+###
+@call1 = {{call1_req.response.body.$.data.name}}
+
+### 4.2 an explicit id is the name (autoname=field:id) -> 201
+# @name call2
+# @expect $.data.name == ZZ-CALL-1
+POST {{call}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"id": "ZZ-CALL-1", "type": "Incoming", "status": "No Answer", "from": "+49 30 5", "to": "+49 30 7", "receiver": "{{admin}}"}
+
+### 4.3 a status outside the Select -> 417
+POST {{call}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"type": "Incoming", "status": "Hung Up", "from": "x", "to": "+49 30 7"}
+
+### 4.4 add_note_to_call_log creates the note and links it -> 200
+# @name callnote_req
+# @expect $.message.name exists
+# @expect $.message.title == ZZ Call note
+POST {{host}}/api/method/crm.integrations.api.add_note_to_call_log
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"call_sid": "{{call1}}", "note": {"title": "ZZ Call note", "content": "<p>spoke briefly</p>"}}
+
+###
+@callnote = {{callnote_req.response.body.$.message.name}}
+
+### 4.5 calling it again with the note's name updates rather than duplicates -> same name
+# @expect $.message.name == {{callnote}}
+# @expect $.message.content == <p>spoke at length</p>
+POST {{host}}/api/method/crm.integrations.api.add_note_to_call_log
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"call_sid": "{{call1}}", "note": {"name": "{{callnote}}", "title": "ZZ Call note", "content": "<p>spoke at length</p>"}}
+
+### 4.6 add_task_to_call_log -> 200, a task with the given fields
+# @name calltask_req
+# @expect $.message.title == ZZ Follow up
+# @expect $.message.status == Todo
+POST {{host}}/api/method/crm.integrations.api.add_task_to_call_log
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"call_sid": "{{call1}}", "task": {"title": "ZZ Follow up", "status": "Todo", "priority": "High", "assigned_to": "{{sales}}"}}
+
+###
+@calltask = {{calltask_req.response.body.$.message.name}}
+
+### 4.7 the call log carries both links in its `links` child table (crm_call_log.py:139) -> 2
+# @expect $.data.links count 2
+GET {{call}}/{{call1}}
+Authorization: Bearer {{token}}
+
+### 4.7b get_call_log, the call as the timeline opens it (crm_call_log.py:189-242) -> parsed, with its notes, tasks and lead
+# The doctype-module path CallLogs.vue and CallArea.vue call; unserved until 15 Sep 2026.
+# @expect $.message._duration == 2m
+# @expect $.message.activity_type == outgoing_call
+# @expect $.message._lead == {{lead_name}}
+# @expect $.message._notes count 1
+# @expect $.message._notes[0].title == ZZ Call note
+# @expect $.message._tasks count 1
+# @expect $.message._tasks[0].title == ZZ Follow up
+# (_notes holds the call's own `note` and then every linked note; add_note_to_call_log
+# only links, so the note appears once - the second link in 4.5 was deduplicated)
+POST {{host}}/api/method/crm.fcrm.doctype.crm_call_log.crm_call_log.get_call_log
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "{{call1}}"}
+
+### 4.7c create_lead_from_call_log on the unanswered call from an unknown number (crm_call_log.py:245-297) -> the new lead's name
+# The modal sends the call's own record; the name alone works too. The owner defaults to
+# the caller and the mobile to the call's from number. (The number must not be ZZ Caller's:
+# get_contact consults a lead before a plain contact, and 5.1 / 5.4 expect the contact.)
+# @name calllead_req
+# @expect $.message contains CRM-LEAD-
+POST {{host}}/api/method/crm.fcrm.doctype.crm_call_log.crm_call_log.create_lead_from_call_log
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"call_log": {"name": "ZZ-CALL-1"}, "lead_details": {"first_name": "ZZ Call Lead"}}
+
+###
+@calllead = {{calllead_req.response.body.$.message}}
+
+### 4.7d -> mobile from the call, owner the caller, and the call now links to the lead
+# @expect $.data.mobile_no == +49 30 5
+# @expect $.data.lead_owner == Administrator
+GET {{lead}}/{{calllead}}
+Authorization: Bearer {{token}}
+
+### 4.7e -> the link row on the call
+# @expect $.data.links count 1
+# @expect $.data.links[0].link_name == {{calllead}}
+GET {{call}}/ZZ-CALL-1
+Authorization: Bearer {{token}}
+
+### 4.7f a call that does not exist -> 404 (frappe.get_doc runs before the write check)
+# @expect $.exc_type == DoesNotExistError
+POST {{host}}/api/method/crm.fcrm.doctype.crm_call_log.crm_call_log.create_lead_from_call_log
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"call_log": "ZZ-NOPE"}
+
+### 4.8 a call log that does not exist -> 404
+# @expect $.exc_type == DoesNotExistError
+POST {{host}}/api/method/crm.integrations.api.add_note_to_call_log
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"call_sid": "ZZ-NOPE", "note": {"title": "x"}}
+
+### 4.9 the call-log list: upstream's columns (crm_call_log.py:57), not Name / Last Modified
+# and each row is parsed by parse_call_log (crm_call_log.py:150): _duration, _caller, _receiver
+# @expect $.message.columns[0].key == caller
+# @expect $.message.data[0].activity_type exists
+# @expect $.message.data[0]._duration exists
+# @expect $.message.data[0]._caller exists
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Call Log", "filters": {"to": "+49 30 7"}, "page_length": 20, "view": {"view_type": "list"}}
+
+# ---- phone lookups (no provider needed) ------------------------------------------------------
+
+### 5.1 get_contact_by_phone_number finds the contact -> its row
+# @expect $.message.name == ZZ Caller
+POST {{host}}/api/method/crm.integrations.api.get_contact_by_phone_number
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"phone_number": "+49 30 9"}
+
+### 5.2 an unknown number -> just the number back, no error
+# @expect $.message.mobile_no == +49 30 0
+# @expect $.message.name absent
+POST {{host}}/api/method/crm.integrations.api.get_contact_by_phone_number
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"phone_number": "+49 30 0"}
+
+### 5.3 get_contact_lead_or_deal_from_number: a lead's mobile resolves to [lead, "CRM Lead"]
+# @expect $.message[0] == {{lead_name}}
+# @expect $.message[1] == CRM Lead
+POST {{host}}/api/method/crm.integrations.api.get_contact_lead_or_deal_from_number
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"number": "+49 30 8"}
+
+### 5.4 ...and a contact's mobile resolves to [contact, "Contact"]
+# @expect $.message[0] == ZZ Caller
+# @expect $.message[1] == Contact
+POST {{host}}/api/method/crm.integrations.api.get_contact_lead_or_deal_from_number
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"number": "+49 30 9"}
+
+# ---- linked documents ------------------------------------------------------------------------
+
+### 6.1 everything hanging off the lead: the task, the note, the call log -> 200
+# @expect $.message contains CRM Task
+# @expect $.message contains FCRM Note
+# @expect $.message contains CRM Call Log
+POST {{host}}/api/method/crm.api.doc.get_linked_docs_of_document
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "docname": "{{lead_name}}"}
+
+### 6.2 remove_linked_doc_reference blanks the reference, keeps the row -> "success"
+# @expect $.message == success
+POST {{host}}/api/method/crm.api.doc.remove_linked_doc_reference
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"items": [{"doctype": "CRM Task", "docname": "{{task1}}"}, {"doctype": "FCRM Note", "docname": "{{note1}}"}]}
+
+### 6.3 -> the task still exists, pointing at nothing
+# @expect $.data.reference_docname ==
+# @expect $.data.reference_doctype ==
+GET {{task}}/{{task1}}
+Authorization: Bearer {{token}}
+
+### 6.4 with delete=true the row goes too -> "success"
+# @expect $.message == success
+POST {{host}}/api/method/crm.api.doc.remove_linked_doc_reference
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"items": [{"doctype": "CRM Call Log", "docname": "{{call1}}"}], "delete": 1}
+
+### 6.5 -> 404
+GET {{call}}/{{call1}}
+Authorization: Bearer {{token}}
+
+### 6.6 nothing but the assignment notifications is still linked -> no task, note or call log in the list
+# (upstream lists CRM Notification rows among linked documents, titled by their message: doc.py:707)
+# @expect $.message excludes "doc": "CRM Task"
+# @expect $.message excludes "doc": "CRM Call Log"
+# @expect $.message excludes "doc": "FCRM Note"
+POST {{host}}/api/method/crm.api.doc.get_linked_docs_of_document
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "docname": "{{lead_name}}"}
+
+# ---- teardown ----------------------------------------------------------------------------------
+
+### 7.1 delete tasks -> 200
+DELETE {{task}}/{{task1}}
+Authorization: Bearer {{token}}
+
+### 7.2 -> 200
+DELETE {{task}}/{{task2}}
+Authorization: Bearer {{token}}
+
+### 7.3 -> 200
+DELETE {{task}}/{{calltask}}
+Authorization: Bearer {{token}}
+
+### 7.4 delete notes -> 200
+DELETE {{note}}/{{note1}}
+Authorization: Bearer {{token}}
+
+### 7.5 -> 200
+DELETE {{note}}/{{callnote}}
+Authorization: Bearer {{token}}
+
+### 7.6 delete the second call log -> 200
+DELETE {{call}}/ZZ-CALL-1
+Authorization: Bearer {{token}}
+
+### 7.7 delete the contact -> 200
+DELETE {{host}}/api/resource/Contact/ZZ%20Caller
+Authorization: Bearer {{token}}
+
+### 7.8 delete the lead -> 200
+DELETE {{lead}}/{{lead_name}}
+Authorization: Bearer {{token}}
+
+### 7.8b delete the lead 4.7c made from the call -> 200
+DELETE {{lead}}/{{calllead}}
+Authorization: Bearer {{token}}
+
+### 7.9 nothing left behind -> 200, empty
+# @expect $.data count 0
+GET {{task}}?fields=["name"]&filters=[["title","like","ZZ%25"]]
+Authorization: Bearer {{token}}

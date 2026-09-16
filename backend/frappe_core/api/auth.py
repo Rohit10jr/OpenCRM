@@ -65,21 +65,38 @@ def login(usr: str = "", pwd: str = "", **extra) -> dict:
     ip_key = get_client_ip()
     check_login_allowed(ip_key, account_key)
 
-    user = authenticate(username=username, password=password)
+    # Upstream's ``User.find_by_credentials`` (user.py) looks the name up with
+    # ``frappe.db.get_value``, and MariaDB's default collation compares case-insensitively,
+    # so "Ada@Example.com" logs in as ada@example.com. Django's ModelBackend matches
+    # ``USERNAME_FIELD`` exactly, so resolve the stored spelling first: the exact
+    # spelling, then the case-insensitive match. Not a blanket ``.lower()``, and not
+    # ``iexact`` alone: the built-in ``Administrator`` keeps its capital, and a user
+    # literally named "administrator" must not share its login name.
+    from django.contrib.auth import get_user_model
+
+    users = get_user_model()._default_manager
+    typed = str(username).strip()
+    existing = users.filter(name=typed).first() or (
+        users.filter(name__iexact=typed).order_by("name").first()
+    )
+    user = authenticate(
+        username=existing.name if existing is not None else username, password=password
+    )
 
     if user is None:
         # Django's ModelBackend rejects inactive users inside authenticate(), so a
-        # disabled account and a wrong password both arrive here as None. They are not
-        # the same event and must not be counted the same: a disabled account cannot be
-        # logged into by anyone, so counting those attempts only serves to keep it locked
-        # after an admin re-enables it. Distinguish them by looking the user up.
-        from django.contrib.auth import get_user_model
-
-        existing = get_user_model()._default_manager.filter(pk=account_key).first()
-        if existing is not None and not existing.is_active:
-            raise AuthenticationError("User is disabled")
-
+        # disabled account and a wrong password both arrive here as None. Upstream's
+        # ``LoginManager.authenticate`` (auth.py:271-278) checks the password first and
+        # says "User disabled or missing" only for the right password on a disabled
+        # account; any other order tells a caller without the password that the
+        # account exists. Both failures count on both trackers, as they do upstream.
         record_login_failure(ip_key, account_key)
+        if (
+            existing is not None
+            and not existing.is_active
+            and existing.check_password(password)
+        ):
+            raise AuthenticationError("User disabled or missing")
         # Frappe's own wording on a failed desk login.
         raise AuthenticationError("Invalid login credentials")
 

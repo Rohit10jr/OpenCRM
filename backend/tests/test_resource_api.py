@@ -211,7 +211,7 @@ def test_prompt_doctype_rejects_a_missing_name(auth_api):
     response = auth_api.post(
         "/api/resource/" + quote("Phase Zero Prompt"), {"label": "x"}, format="json"
     )
-    assert response.status_code == 400
+    assert response.status_code == 417
     assert any("name" in m for m in response.json()["messages"])
 
 

@@ -11,9 +11,11 @@ from __future__ import annotations
 
 from rest_framework import status
 from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
 
 from frappe_core.exceptions import AuthenticationError, DoesNotExistError, PermissionError as FrappePermissionError
 from frappe_core.query import parse_json_param
+from frappe_core.renderers import Envelope, WithResponseKeys
 from frappe_core.views import FrappeAPIView
 from frappe_core.whitelist import MethodNotFound, bind_arguments, get_method
 
@@ -58,6 +60,12 @@ class MethodView(FrappeAPIView):
         if getattr(func, "__frappe_wants_request__", False):
             payload["_request"] = request
         result = func(**bind_arguments(func, payload))
+        if isinstance(result, WithResponseKeys):
+            # ``frappe.response[...]`` siblings of ``message``, e.g. getdoctype's ``docs``.
+            return Response(
+                Envelope(result.message, self.envelope_key, extra=result.keys),
+                status=status.HTTP_200_OK,
+            )
         return self.envelope(result, status.HTTP_200_OK)
 
     @staticmethod

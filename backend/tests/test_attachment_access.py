@@ -188,6 +188,31 @@ def test_your_own_upload_is_yours(alice, hidden_deal, api_as):
     assert api_as(alice).get(f"/api/resource/File/{mine.name}").status_code == 200
 
 
+def test_a_private_file_attached_to_nothing_is_its_owners_alone(alice, bob, api_as):
+    """`file.py:932-951`: past the public and own-upload short-circuits a file is only
+    reachable through the document it is attached to; one attached to nothing falls to
+    `return False` (FINDINGS.md 22). The orphan carve-out is for comments, not files."""
+    with session_user(alice.name):
+        mine = File.objects.create(
+            file_name="draft.pdf", file_url="/private/files/draft.pdf", is_private=True
+        )
+    assert api_as(alice).get(f"/api/resource/File/{mine.name}").status_code == 200
+    response = api_as(bob).get(f"/api/resource/File/{mine.name}")
+    assert response.status_code == 403
+    assert response.json()["exc_type"] == "PermissionError"
+    names = [r["name"] for r in api_as(bob).get("/api/resource/File").json()["data"]]
+    assert mine.name not in names
+    assert mine.name in [r["name"] for r in api_as(alice).get("/api/resource/File").json()["data"]]
+
+
+def test_a_public_file_attached_to_nothing_is_still_public(alice, bob, api_as):
+    with session_user(alice.name):
+        logo = File.objects.create(
+            file_name="avatar.png", file_url="/files/avatar.png", is_private=False
+        )
+    assert api_as(bob).get(f"/api/resource/File/{logo.name}").status_code == 200
+
+
 def test_a_row_referencing_nothing_is_not_hidden(alice, api_as, administrator):
     """Orphans hide nothing, and the product creates them - refusing them here would break
     rows that were never about a record in the first place."""

@@ -12,12 +12,15 @@ which fields exist but never the ``autoname`` of a platform doctype. Each choice
 carries a confidence note; the set is flagged in docs/internal/PROGRESS.md for review.
 """
 
+import contextvars
+
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
-from django.db.models.signals import post_delete, post_save
+from django.db.models.signals import post_delete, post_save, pre_delete
 from django.utils import timezone
 
 from frappe_core.assignment import register_todo_model
+from frappe_core.exceptions import ValidationError
 from frappe_core.models import BaseDocument
 from frappe_core.naming import FieldValue, Hash, Prompt, append_number_if_name_exists
 from frappe_core.registry import register_doctype
@@ -56,10 +59,40 @@ class UserManager(BaseUserManager):
         return user
 
     def create_superuser(self, name, password=None, **extra):
+        """Django's ``createsuperuser`` calls this. It must produce a working CRM admin.
+
+        **The role is the point.** Authority in this port comes from a user's roles, which
+        are Django groups (:meth:`User.get_roles`), or from being the literal
+        ``Administrator``. ``is_superuser`` is deliberately read **nowhere** in the
+        permission layer: it is a flag an attacker would try to set on their own record,
+        and the self-escalation route for it is closed
+        (``crm_app/permissions/platform_docs.py``). Leaving it inert means a leak there buys
+        nothing, and that is worth keeping.
+
+        Which left ``createsuperuser`` producing an account that authenticated and then saw
+        an empty CRM — every check asks for ``System Manager`` or the Administrator name,
+        and it had neither. Granting the group here is what makes the built-in command mean
+        what an operator reading its name assumes it means.
+
+        ``System Manager`` and not ``Administrator``: the latter is Frappe's single
+        built-in principal, granted by name rather than held as a group, and handing it to
+        an ordinary account would make the two indistinguishable in the permission checks
+        that test for it.
+        """
         extra.setdefault("is_staff", True)
         extra.setdefault("is_superuser", True)
         extra.setdefault("enabled", True)
-        return self.create_user(name, password, **extra)
+        user = self.create_user(name, password, **extra)
+
+        from django.contrib.auth.models import Group
+
+        # get_or_create, not get: a fresh database that has run migrations always has this
+        # row, but createsuperuser is also the first thing reached for on a database that
+        # has been through something unusual, and failing there with DoesNotExist would be
+        # an unhelpful place to learn about it.
+        group, _ = Group.objects.get_or_create(name="System Manager")
+        user.groups.add(group)
+        return user
 
 
 @register_doctype("User")
@@ -74,6 +107,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     Deliberately **not** a ``BaseDocument``: Django requires ``AUTH_USER_MODEL`` to
     derive from ``AbstractBaseUser``, and a user has no ``owner``/``_assign`` of its own.
     """
+
+    #: ``options: Email`` upstream; a Django EmailField's own validator does not run on
+    #: ``save()``, so the Frappe check is declared like everywhere else.
+    EMAIL_FIELDS = ("email",)
 
     name = models.CharField(max_length=140, primary_key=True)
     email = models.EmailField(max_length=140, blank=True, default="")
@@ -257,6 +294,8 @@ class Contact(BaseDocument):
     first_name = models.CharField(max_length=140, blank=True, default="")
     middle_name = models.CharField(max_length=140, blank=True, default="")
     last_name = models.CharField(max_length=140, blank=True, default="")
+    EMAIL_FIELDS = ("email_id",)
+
     full_name = models.CharField(max_length=420, blank=True, default="")
     salutation = models.CharField(max_length=140, blank=True, default="")
     company_name = models.CharField(max_length=140, blank=True, default="")
@@ -342,23 +381,52 @@ class Contact(BaseDocument):
         self.pk = append_number_if_name_exists(type(self), base)
         return True
 
-    def sync_primary_values(self) -> None:
-        """Recompute the denormalised primary email/phone from the child rows."""
-        if not self.pk:
+    def set_primary_email(self) -> None:
+        """``contact.py:175-194``, verbatim: no rows clears the column; two primaries
+        throw; a lone row is made primary and that is persisted; the column mirrors
+        the primary row, or is empty when none is flagged."""
+        rows = list(self.email_ids.all().order_by("idx", "pk"))
+        if not rows:
+            self.email_id = ""
             return
-        primary_email = self.email_ids.filter(is_primary=True).first() or self.email_ids.first()
-        self.email_id = primary_email.email_id if primary_email else ""
+        if len([row for row in rows if row.is_primary]) > 1:
+            raise ValidationError("Only one <strong>Email ID</strong> can be set as primary.")
+        if len(rows) == 1 and not rows[0].is_primary:
+            rows[0].is_primary = True
+            type(rows[0])._default_manager.filter(pk=rows[0].pk).update(is_primary=True)
+        primary = next((row for row in rows if row.is_primary), None)
+        self.email_id = primary.email_id.strip() if primary else ""
 
-        primary_mobile = (
-            self.phone_nos.filter(is_primary_mobile_no=True).first() or self.phone_nos.first()
-        )
-        self.mobile_no = primary_mobile.phone if primary_mobile else ""
+    def set_primary(self, fieldname: str) -> None:
+        """``contact.py:196-219``, verbatim, for ``phone`` and ``mobile_no``: unlike the
+        email rule, a lone row is **not** promoted."""
+        rows = list(self.phone_nos.all().order_by("idx", "pk"))
+        if not rows:
+            setattr(self, fieldname, "")
+            return
+        flag = "is_primary_" + fieldname
+        if len([row for row in rows if getattr(row, flag)]) > 1:
+            label = fieldname.replace("_", " ").title()  # frappe.unscrub
+            raise ValidationError(f"Only one <strong>{label}</strong> can be set as primary.")
+        primary = next((row for row in rows if getattr(row, flag)), None)
+        setattr(self, fieldname, primary.phone if primary else "")
 
-        primary_phone = self.phone_nos.filter(is_primary_phone=True).first()
-        self.phone = primary_phone.phone if primary_phone else ""
+    def sync_primary_values(self) -> None:
+        """The three primary rules ``Contact.validate`` runs (``contact.py:65-68``)."""
+        self.set_primary_email()
+        self.set_primary("phone")
+        self.set_primary("mobile_no")
 
     def save(self, *args, **kwargs):
         self.full_name = self.build_full_name()
+        # ``validate`` upstream: the mirror columns follow the rows on every save. A row
+        # cannot exist before the contact does, so a create clears them; the document
+        # route saves again once its rows are written (FINDINGS.md 8), and the rows the
+        # endpoints add re-sync through their own signal.
+        if self._state.adding:
+            self.email_id = self.mobile_no = self.phone = ""
+        else:
+            self.sync_primary_values()
         return super().save(*args, **kwargs)
 
 
@@ -371,6 +439,8 @@ class ContactEmail(BaseDocument):
     )
     parenttype = models.CharField(max_length=140, default="Contact")
     parentfield = models.CharField(max_length=140, default="email_ids")
+    EMAIL_FIELDS = ("email_id",)
+
     email_id = models.CharField(max_length=140)
     is_primary = models.BooleanField(default=False)
 
@@ -486,7 +556,24 @@ class Communication(BaseDocument):
     read_by_recipient = models.BooleanField(default=False)
     seen = models.BooleanField(default=False)
     has_attachment = models.BooleanField(default=False)
+    #: **Also the "this has been sent" stamp** — read ``crm_app/communication.py`` before
+    #: changing it. Upstream defaults this to ``Now`` on insert (``communication.json``:
+    #: ``"default": "Now"``) and tracks delivery separately, in ``delivery_status`` and the
+    #: ``Email Queue`` row; this port has neither column and Celery is the queue (phase 5),
+    #: so the send stamps this field and a redelivered task skips a row that already
+    #: carries one. Nothing observes the difference: the only reader is
+    #: ``activities.py:_communication_activities``, which already falls back to
+    #: ``creation``, and ``EmailArea.vue`` renders what that returns.
     communication_date = models.DateTimeField(null=True, blank=True)
+    #: RFC 5322 ``Message-ID``, stored **without** the angle brackets, as upstream stores
+    #: it (``email.py:_make`` -> ``get_string_between("<", get_message_id(), ">")``).
+    message_id = models.CharField(max_length=280, blank=True, default="", db_index=True)
+    #: The name of the Communication this one answers; its ``message_id`` becomes the
+    #: outgoing ``In-Reply-To`` header.
+    in_reply_to = models.CharField(max_length=140, blank=True, default="", db_index=True)
+    #: The ``Email Account`` that sent it, recorded as ``get_outgoing_email_account``
+    #: records it (``mixins.py:181-193`` — ``db_set("email_account", ...)``).
+    email_account = models.CharField(max_length=140, blank=True, default="")
 
     class Meta:
         ordering = ["-creation"]
@@ -625,6 +712,9 @@ class EmailAccount(EncryptedFieldsMixin, BaseDocument):
     field and the CRM passes it explicitly on create.
     """
 
+    #: ``email_id`` is ``options: Email`` in email_account.json.
+    EMAIL_FIELDS = ("email_id",)
+
     email_account_name = models.CharField(max_length=140)
     email_id = models.CharField(max_length=140, blank=True, default="")
     service = models.CharField(max_length=140, blank=True, default="")
@@ -748,11 +838,99 @@ class DynamicLink(BaseDocument):
         ]
 
 
+class UserSettings(models.Model):
+    """Per-user, per-doctype UI state - list filters, page length, grid columns.
+
+    Ported from ``frappe/model/utils/user_settings.py``, which reads and writes the
+    ``__UserSettings`` table with raw SQL (``get_user_settings``, ``sync_user_settings``).
+
+    **Deliberately a plain ``models.Model``**, not a :class:`BaseDocument`, and
+    deliberately *not* passed through ``register_doctype``:
+
+    * Upstream's ``__UserSettings`` is **not a DocType**. It has no ``.json``, no
+      controller and no DocField rows - the double underscore is Frappe's marker for a
+      framework-private table. It has no ``owner``/``modified_by``/``docstatus`` either,
+      so there is nothing for ``BaseDocument`` to carry.
+    * Registering it would publish it: hard rule 7 in ``CLAUDE.md`` - every registered
+      doctype gets an ``/api/resource/`` route and every field becomes readable and
+      writable there. That would hand any authenticated user a way to read and rewrite
+      *other people's* saved views and filters, which upstream has no route for at all.
+      The two whitelisted methods in ``crm_app/api/user_settings.py`` are the only way
+      in, and both are scoped to ``frappe.session.user``.
+
+    ``data`` is the JSON string exactly as the client sent it, merged at the top level -
+    the same contract as ``update_user_settings``; nothing here interprets its contents.
+    """
+
+    user = models.ForeignKey(
+        "frappe_platform.User",
+        on_delete=models.CASCADE,
+        db_column="user",
+        related_name="+",
+    )
+    doctype = models.CharField(max_length=140)
+    data = models.TextField(default="{}")
+
+    class Meta:
+        # Upstream's key: one row per (user, doctype), which is what makes
+        # ``sync_user_settings``' upsert well-defined.
+        unique_together = [("user", "doctype")]
+
+    # -- storage -----------------------------------------------------------------------
+    # The two table operations live here rather than in ``crm_app/api/user_settings.py``
+    # for a reason that is worth stating: an endpoint module may not touch a manager at
+    # all (``test_no_endpoint_bypasses_the_permission_layer``), because a list read that
+    # goes straight to the ORM skips the phase-2 permission hook. The usual way round
+    # that is ``frappe_core.query``, which applies the hook - but it addresses documents
+    # by doctype string, and this is deliberately not a doctype. So the table's own model
+    # owns its two accesses, and both are keyed on the user, which is the entirety of
+    # this table's access rule.
+
+    @classmethod
+    def load(cls, user: str, doctype: str) -> str:
+        """The stored JSON string for one user and doctype, ``"{}"`` when there is none."""
+        row = cls._default_manager.filter(user_id=user, doctype=doctype).only("data").first()
+        return (row.data if row is not None else None) or "{}"
+
+    @classmethod
+    def store(cls, user: str, doctype: str, data: str) -> None:
+        """Upsert on ``(user, doctype)`` - ``sync_user_settings``' ``ON CONFLICT`` clause."""
+        cls._default_manager.update_or_create(
+            user_id=user, doctype=doctype, defaults={"data": data}
+        )
+
+    def __str__(self) -> str:  # pragma: no cover - debugging aid
+        return f"{self.user_id}::{self.doctype}"
+
+
 # Contact's denormalised email_id / mobile_no / phone follow its child rows. Upstream
 # recomputes them on validate; children are written after the parent (they need its PK),
 # so a save-time hook would not see them. Signals on the child tables are the faithful
 # equivalent.
+#: Greater than zero while a Contact is being deleted. The cascade removes its rows one
+#: by one, and re-deriving the primaries after each would run the save-time rules on a
+#: document that is going away - a contact whose rows had two primaries could not be
+#: deleted at all (FINDINGS.md 23). Upstream's ``delete_doc`` removes the child rows
+#: without validating anything (``delete_doc.py:207-227``).
+_DELETING = contextvars.ContextVar("frappe_platform.contact.deleting", default=0)
+
+
+def _contact_deleting(sender, instance, **kwargs):
+    _DELETING.set(_DELETING.get() + 1)
+
+
+def _contact_deleted(sender, instance, **kwargs):
+    _DELETING.set(max(_DELETING.get() - 1, 0))
+
+
 def _resync_contact(sender, instance, **kwargs):
+    from frappe_core import children
+
+    # A document write replaces the rows as one unit and the contact's own save then
+    # applies the rules over all of them; re-deriving after each row would promote the
+    # first email row before the second exists (contact.py:183 needs the whole table).
+    if children.replacing_children() or _DELETING.get():
+        return
     contact = instance.parent_contact
     if contact is None:
         return
@@ -767,3 +945,8 @@ for _child in (ContactEmail, ContactPhone):
     post_delete.connect(
         _resync_contact, sender=_child, dispatch_uid=f"contact.unsync.{_child.__name__}"
     )
+
+# Django sends pre_delete for the contact before its rows are removed and post_delete
+# after, for a model delete and a queryset delete alike; the counter brackets the cascade.
+pre_delete.connect(_contact_deleting, sender=Contact, dispatch_uid="contact.deleting")
+post_delete.connect(_contact_deleted, sender=Contact, dispatch_uid="contact.deleted")

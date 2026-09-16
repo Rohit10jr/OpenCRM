@@ -19,7 +19,9 @@ lead and deal stores it as a Link.
 
 import pytest
 
-from frappe_core.naming import NameError_, append_number_if_name_exists
+from frappe_core.exceptions import NameError as FrappeNameError
+from frappe_core.exceptions import ValidationError
+from frappe_core.naming import append_number_if_name_exists
 from frappe_platform.models import Contact
 
 pytestmark = pytest.mark.django_db
@@ -74,7 +76,7 @@ def test_a_contact_with_no_name_at_all_is_rejected():
     ``first_name or lead_name``, and ``lead_name`` itself falls back to the email local
     part - so raising cannot strand a real CRM flow.
     """
-    with pytest.raises(NameError_, match="No Name Specified"):
+    with pytest.raises(ValidationError, match="No Name Specified"):
         Contact.objects.create(email_id="ada@example.com")
 
 
@@ -148,7 +150,7 @@ def test_links_suffix_is_empty_until_dynamic_link_is_ported():
 
 
 def test_a_generated_contact_name_is_validated():
-    with pytest.raises(NameError_, match="cannot contain special characters"):
+    with pytest.raises(FrappeNameError, match="cannot contain special characters"):
         Contact.objects.create(first_name="<script>", last_name="alert")
 
 

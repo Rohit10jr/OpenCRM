@@ -69,6 +69,56 @@ def test_disabled_user_cannot_log_in(api, make_user):
     assert response.status_code == 401
 
 
+def test_login_is_case_insensitive_on_the_email(api, alice):
+    """Upstream's ``find_by_credentials`` compares the name under MariaDB's collation, so
+    any casing of the address logs in; the token names the stored, lowercased account."""
+    response = login(api, "ALICE@Example.com", "secret123")
+    assert response.status_code == 200
+    assert response.json()["message"]["user"] == alice.name
+
+
+def test_administrator_logs_in_under_its_capitalised_name(api, administrator):
+    administrator.set_password("secret123")
+    administrator.save()
+    response = login(api, "administrator", "secret123")
+    assert response.status_code == 200
+    assert response.json()["message"]["user"] == "Administrator"
+
+
+def test_disabled_user_is_reported_disabled_whatever_the_casing(api, make_user):
+    """``LoginManager.authenticate`` (auth.py:275-278): the right password on a
+    disabled account answers "User disabled or missing"."""
+    make_user("disabled@example.com", enabled=False)
+    response = login(api, "Disabled@Example.com", "secret123")
+    assert response.status_code == 401
+    assert response.json()["messages"] == ["User disabled or missing"]
+
+
+def test_a_wrong_password_on_a_disabled_account_reads_like_any_wrong_password(api, make_user):
+    """auth.py:271-274 checks the password first, so a disabled account cannot be told
+    apart from a missing one without its password."""
+    make_user("disabled@example.com", enabled=False)
+    response = login(api, "disabled@example.com", "wrong")
+    assert response.status_code == 401
+    assert response.json()["messages"] == ["Invalid login credentials"]
+
+
+def test_an_exact_name_wins_over_a_case_insensitive_match(api, administrator, make_user):
+    """A user literally named "administrator" would otherwise share a login name with
+    the built-in. Exact spelling first, then the case-insensitive fallback."""
+    administrator.set_password("admin-secret")
+    administrator.save()
+    make_user("administrator", password="shadow-secret")
+
+    assert login(api, "Administrator", "admin-secret").json()["message"]["user"] == (
+        "Administrator"
+    )
+    assert login(api, "administrator", "shadow-secret").json()["message"]["user"] == (
+        "administrator"
+    )
+    assert login(api, "administrator", "admin-secret").status_code == 401
+
+
 # --- the token actually authenticates -----------------------------------------
 
 
@@ -89,6 +139,17 @@ def test_the_same_endpoint_is_401_without_the_header(api, alice):
 def test_a_garbage_token_is_rejected(api):
     api.credentials(HTTP_AUTHORIZATION="Bearer not-a-real-token")
     assert api.get(WIDGETS).status_code == 401
+
+
+def test_a_garbage_token_is_an_authentication_error(api):
+    """SimpleJWT raises ``InvalidToken``, a subclass of ``AuthenticationFailed``; the
+    envelope must label it as every other authentication failure, which is what
+    ``stores/users.js`` branches on, and carry one sentence, not SimpleJWT's nested
+    per-token-class breakdown."""
+    api.credentials(HTTP_AUTHORIZATION="Bearer not-a-real-token")
+    body = api.get(WIDGETS).json()
+    assert body["exc_type"] == "AuthenticationError"
+    assert body["messages"] == ["Given token not valid for any token type"]
 
 
 def test_token_identifies_the_right_user(api, alice, bob):

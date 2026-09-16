@@ -19,7 +19,8 @@ import datetime
 
 import pytest
 
-from crm_app.api.dashboard import _period_before
+from crm_app.api.dashboard import _period_before, resolve_range
+from frappe_core.exceptions import ValidationError
 
 
 def _window_length(from_date, to_date) -> int:
@@ -113,3 +114,27 @@ def test_upstreams_arithmetic_would_fail_this():
     assert upstream_diff == 30, "March 1 to March 31 is a 30-day gap"
     assert (from_date - upstream_baseline).days == 30
     assert (to_date - from_date).days + 1 == 31, "but March has 31 days"
+
+
+# --- the dates themselves: frappe.utils.getdate (FINDINGS.md 21) ------------------
+
+
+def test_an_unparseable_date_is_a_validation_error():
+    """``getdate`` (data.py:87-107) throws ``"{} is not a valid date string."`` with
+    the value in ``frappe.bold``, titled "Invalid Date". It was a bare ``ValueError``
+    from ``date.fromisoformat``, a 500."""
+    with pytest.raises(ValidationError) as caught:
+        resolve_range("yesterday", None)
+    assert caught.value.message == "<strong>yesterday</strong> is not a valid date string."
+    assert caught.value.title == "Invalid Date"
+
+
+def test_the_formats_getdate_takes_are_taken():
+    """dateutil, as upstream: an ISO date, an ISO datetime, and a spelled-out date."""
+    assert resolve_range("2026-03-05", "2026-03-09") == (
+        datetime.date(2026, 3, 5),
+        datetime.date(2026, 3, 9),
+    )
+    assert resolve_range("2026-03-05T10:20:30Z", "March 9, 2026")[1] == datetime.date(
+        2026, 3, 9
+    )

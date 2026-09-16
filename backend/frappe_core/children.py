@@ -22,9 +22,12 @@ Both shapes serialise identically on the wire, which is what matters to the fron
 
 from __future__ import annotations
 
+import contextvars
+
 from django.db import transaction
 
 from frappe_core import registry
+from frappe_core.exceptions import LinkValidationError, MandatoryError
 
 
 def discover_child_tables(model) -> dict[str, dict]:
@@ -72,12 +75,133 @@ def read_children(instance, spec: dict) -> list:
     return list(queryset.order_by("idx"))
 
 
+#: Columns every child row carries that are never "mandatory" in Frappe's sense: the
+#: BaseDocument stamps, the caches, and the parent pointers this module fills in.
+_STAMPS = frozenset(
+    {
+        "name",
+        "owner",
+        "modified_by",
+        "creation",
+        "modified",
+        "idx",
+        "docstatus",
+        "_assign",
+        "_liked_by",
+        "_comments",
+        "_user_tags",
+        "parent",
+        "parenttype",
+        "parentfield",
+    }
+)
+
+
+def _label(field) -> str:
+    """The field's label for a message: Django's automatic ``verbose_name`` is the
+    fieldname with spaces, lowercased, so it is title-cased back; an explicit one is
+    used as written. (``rate`` -> "Rate", ``product_name`` -> "Product Name".)"""
+    label = str(field.verbose_name)
+    return label.title() if label == field.name.replace("_", " ") else label
+
+
+def _is_mandatory(field) -> bool:
+    """Frappe's ``reqd`` as the models encode it: a writable column that allows neither
+    NULL nor blank and has no default."""
+    if field.name in _STAMPS or field.primary_key or not field.editable:
+        return False
+    if field.null or field.blank:
+        return False
+    return not field.has_default()
+
+
+def _is_link(field) -> bool:
+    return field.is_relation and (field.many_to_one or field.one_to_one)
+
+
+def prepare_rows(
+    child_model, rows: list[dict], *, fieldname: str, parent_field: str | None = None
+) -> list[dict]:
+    """Validate ``rows`` the way upstream validates a document's child rows, and return
+    the payloads to write.
+
+    Two checks, in upstream's order (``document.py:_validate_links`` runs before
+    ``_validate_mandatory``), each collecting every row's problems before raising:
+
+    * A Link given **by name**, as every form sends it (``{"contact": "Ada Lovelace"}``),
+      is moved to the column Django writes (``contact_id``) after confirming the target
+      exists; a missing target is ``LinkValidationError`` with upstream's wording,
+      ``Could not find Row #1: Contact: ZZ Nobody`` (base_document.py:790-796). Before
+      this the dict reached ``create()`` untouched and Django raised a 500 (FINDINGS.md 9).
+    * A mandatory column with no value is ``MandatoryError`` with upstream's wording for
+      a child row, ``Error: <strong>CRM Products</strong> Row #1: Value missing for:
+      Rate`` (base_document.py:747-756), one message per missing value. Before this the
+      NOT NULL constraint fired and answered 409 "Duplicate" (FINDINGS.md 7).
+
+    A caller may still pass an instance or the raw key under the attname, as the models
+    do when they build the status-change log.
+    """
+    doctype = child_model.get_doctype()
+    fields = [f for f in child_model._meta.get_fields() if getattr(f, "concrete", False)]
+    accepted = {f.name for f in fields} | {f.attname for f in fields}
+    missing_links: list[str] = []
+    missing_values: list[str] = []
+    payloads: list[dict] = []
+
+    for index, row in enumerate(rows or [], start=1):
+        payload = {k: v for k, v in (row or {}).items() if k in accepted and k != "name"}
+        for field in fields:
+            if not _is_link(field) or field.name not in payload:
+                continue
+            value = payload.pop(field.name)
+            if value is None or value == "":
+                payload[field.attname] = None
+            elif hasattr(value, "pk"):
+                payload[field.attname] = value.pk
+            elif field.related_model._default_manager.filter(pk=value).exists():
+                payload[field.attname] = value
+            else:
+                missing_links.append(f"Row #{index}: {_label(field)}: {value}")
+        for field in fields:
+            if field.name == parent_field or not _is_mandatory(field):
+                continue
+            value = payload.get(field.attname if _is_link(field) else field.name)
+            if value is None or value == "":
+                missing_values.append(
+                    f"Error: <strong>{doctype}</strong> Row #{index}: "
+                    f"Value missing for: {_label(field)}"
+                )
+        payload["idx"] = index
+        payload.setdefault("parentfield", fieldname)
+        payloads.append(payload)
+
+    if missing_links:
+        raise LinkValidationError("Could not find " + ", ".join(missing_links))
+    if missing_values:
+        raise MandatoryError(messages=missing_values)
+    return payloads
+
+
+#: True while :func:`replace_children` is writing a document's rows. Upstream saves a
+#: document and its rows as one unit and runs ``validate`` once over all of them; a
+#: per-row signal that re-derives the parent (Contact's primary mirror) would see the
+#: rows one at a time and, for instance, promote the first email row to primary before
+#: the second exists. Such signals check this and stand down; the parent's own save,
+#: which follows, applies the rules over the finished set.
+_REPLACING = contextvars.ContextVar("frappe_core.children.replacing", default=False)
+
+
+def replacing_children() -> bool:
+    return _REPLACING.get()
+
+
 @transaction.atomic
 def replace_children(instance, fieldname: str, spec: dict, rows: list[dict]) -> None:
     """Delete the parent's existing rows and recreate them from ``rows``.
 
     Wholesale replacement, not a merge - Frappe's semantics. ``idx`` is assigned from
-    list position, which is what orders a child table in the UI.
+    list position, which is what orders a child table in the UI. The rows are validated
+    by :func:`prepare_rows` before anything is deleted.
     """
     child_model = spec["model"]
     parent_doctype = type(instance).get_doctype()
@@ -87,23 +211,17 @@ def replace_children(instance, fieldname: str, spec: dict, rows: list[dict]) -> 
     else:
         base_filter = {spec["fk"]: instance}
 
-    child_model._default_manager.filter(**base_filter).delete()
+    payloads = prepare_rows(child_model, rows, fieldname=fieldname, parent_field=spec["fk"])
 
-    # Both the field name and its attname, so a caller may pass either ``log_owner``
-    # (an instance) or ``log_owner_id`` (a raw PK). Without the attname, FK values
-    # supplied by PK were silently dropped and the column came back NULL.
-    concrete = set()
-    for f in child_model._meta.get_fields():
-        if getattr(f, "concrete", False):
-            concrete.add(f.name)
-            concrete.add(getattr(f, "attname", f.name))
-    for index, row in enumerate(rows or [], start=1):
-        payload = {k: v for k, v in (row or {}).items() if k in concrete and k != "name"}
-        payload.update(base_filter)
-        payload.setdefault("parenttype", parent_doctype)
-        payload.setdefault("parentfield", fieldname)
-        payload["idx"] = index
-        child_model._default_manager.create(**payload)
+    token = _REPLACING.set(True)
+    try:
+        child_model._default_manager.filter(**base_filter).delete()
+        for payload in payloads:
+            payload.update(base_filter)
+            payload.setdefault("parenttype", parent_doctype)
+            child_model._default_manager.create(**payload)
+    finally:
+        _REPLACING.reset(token)
 
 
 def delete_polymorphic_children(instance) -> int:
@@ -136,8 +254,67 @@ def delete_polymorphic_children(instance) -> int:
     return removed
 
 
+#: ``frappe/model/delete_doc.py:delete_dynamic_links`` (459-467) and the
+#: ``clear_references`` that follow it (470-473), for the reference doctypes this port
+#: has: rows keyed to the document by doctype and name are deleted, except a
+#: Communication, whose reference is cleared - an email is kept, it just no longer
+#: points anywhere. Files go with the document too (``remove_all``, delete_doc.py:160).
+_REFERENCE_CLEANUP: tuple[tuple[str, str, str, str], ...] = (
+    ("ToDo", "reference_type", "reference_name", "delete"),
+    ("Version", "ref_doctype", "docname", "delete"),
+    ("Comment", "reference_doctype", "reference_name", "delete"),
+    ("File", "attached_to_doctype", "attached_to_name", "delete"),
+    ("Communication", "reference_doctype", "reference_name", "clear"),
+)
+
+
+#: True while a caller has already cleaned the references for a whole batch, so the
+#: per-row hook below stands down: a bulk delete does one query per reference doctype
+#: for every name at once (the C9 shape), not one per deleted row.
+_REFERENCES_HANDLED = contextvars.ContextVar("frappe_core.children.references_handled", default=False)
+
+
+def delete_references_batch(doctype: str, names: list[str]) -> int:
+    """Remove what named the deleted documents by doctype and name (FINDINGS.md 19).
+    Returns the number of rows deleted or cleared."""
+    if not names:
+        return 0
+    touched = 0
+    for reference_doctype, doctype_column, name_column, action in _REFERENCE_CLEANUP:
+        if not registry.has_doctype(reference_doctype):
+            continue
+        rows = registry.get_model(reference_doctype)._default_manager.filter(
+            **{doctype_column: doctype, f"{name_column}__in": names}
+        )
+        if action == "delete":
+            count, _ = rows.delete()
+        else:
+            count = rows.update(**{doctype_column: "", name_column: ""})
+        touched += count
+    return touched
+
+
+def delete_references(instance) -> int:
+    return delete_references_batch(type(instance).get_doctype(), [str(instance.pk)])
+
+
+class references_handled:  # noqa: N801 - used as a context manager
+    """``with children.references_handled():`` around a bulk delete whose caller ran
+    :func:`delete_references_batch` itself."""
+
+    def __enter__(self):
+        self._token = _REFERENCES_HANDLED.set(True)
+        return self
+
+    def __exit__(self, *exc):
+        _REFERENCES_HANDLED.reset(self._token)
+        return False
+
+
 def _on_parent_delete(sender, instance, **kwargs):
     delete_polymorphic_children(instance)
+    if not _REFERENCES_HANDLED.get():
+        delete_references(instance)
 
 
 def connect_cascade(model) -> None:

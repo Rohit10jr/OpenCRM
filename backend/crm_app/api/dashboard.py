@@ -4,11 +4,12 @@ Three whitelisted endpoints - ``reset_to_default``, ``get_dashboard``, ``get_cha
 dispatching by name to ~18 internal chart builders. The dispatch contract is what the
 frontend depends on; the chart bodies are independent of each other.
 
-**Not every chart is ported.** :data:`CHART_BUILDERS` is the list that is; anything else
-resolves to ``None``, which is exactly what upstream does for a name it cannot find
-(``crm/api/dashboard.py:57-59``). The unported ones are the time-series and
-duration-arithmetic charts, and they are named in docs/internal/PROGRESS_PHASE_3.md rather than left
-to be discovered.
+**Every chart is ported.** :data:`CHART_BUILDERS` is the dispatch table; a name that
+is not there answers ``{"error": "Invalid chart name"}``, which is exactly what
+upstream does for a name it cannot find (``crm/api/dashboard.py:57-59``). The six
+time-series and duration-arithmetic charts came last (FINDINGS.md 20) and aggregate in
+Python over small result sets rather than in SQL, because MariaDB's ``TIMESTAMPDIFF``
+and ``DATE_FORMAT`` have no one-to-one ORM spelling and the numbers must match.
 
 **Sales-User scoping is load-bearing.** Upstream forces ``user = session.user`` for a
 plain Sales User (``dashboard.py:38-40``), so a rep's dashboard only counts their own
@@ -22,9 +23,15 @@ from __future__ import annotations
 
 import datetime
 
+from dateutil import parser as date_parser
+from dateutil.parser import ParserError
+from dateutil.relativedelta import relativedelta
 from django.db.models import Avg, Count, Q, Sum
+from django.db.models.functions import TruncDate
+from django.utils import timezone
 
 from frappe_core.exceptions import PermissionError as FrappePermissionError
+from frappe_core.exceptions import ValidationError
 from frappe_core.query import base_queryset
 from frappe_core.session import get_current_user
 from frappe_core.whitelist import whitelist
@@ -78,7 +85,16 @@ def _parse_date(value) -> datetime.date | None:
         return value.date()
     if isinstance(value, datetime.date):
         return value
-    return datetime.date.fromisoformat(str(value)[:10])
+    # ``frappe.utils.getdate`` (data.py:87-107): dateutil's parser, so the formats it
+    # takes are the ones upstream takes, and a string it cannot read is a
+    # ValidationError titled "Invalid Date" - verbatim, ``frappe.bold`` included - not
+    # the 500 that ``date.fromisoformat`` raised (FINDINGS.md 21).
+    try:
+        return date_parser.parse(str(value)).date()
+    except (ParserError, ValueError, OverflowError):
+        raise ValidationError(
+            f"<strong>{value}</strong> is not a valid date string.", title="Invalid Date"
+        ) from None
 
 
 def resolve_range(from_date, to_date) -> tuple[datetime.date, datetime.date]:
@@ -431,6 +447,230 @@ def get_lost_deal_reasons(from_date, to_date, user=None):
     }
 
 
+# ---------------------------------------------------------------------------
+# Time-series and duration charts (FINDINGS.md 20)
+# ---------------------------------------------------------------------------
+
+
+def _today() -> datetime.date:
+    return datetime.date.today()
+
+
+def _days_between(start: datetime.datetime, end) -> int:
+    """``TIMESTAMPDIFF(DAY, start, end)``: whole days, truncated toward zero. A
+    ``closed_date`` is a Date and stands for its midnight, in the site's time zone."""
+    if isinstance(end, datetime.date) and not isinstance(end, datetime.datetime):
+        end = timezone.make_aware(datetime.datetime.combine(end, datetime.time.min))
+    return int((end - start).total_seconds() / 86400)
+
+
+def _average_days_to_close(from_date, to_date, user, *, from_lead: bool, title, tooltip):
+    """``dashboard.py:427-554``: the two average-time charts share everything but where
+    the clock starts - the lead's creation when the deal came from one
+    (``Coalesce(Lead.creation, Deal.creation)``), or the deal's own. Won deals by
+    ``closed_date``, the current window against the one before it, the delta in days."""
+    prev_from, prev_to = _period_before(from_date, to_date)
+    rows = (
+        _deal_queryset(user)
+        .filter(
+            status__type="Won",
+            closed_date__isnull=False,
+            closed_date__gte=prev_from,
+            closed_date__lte=to_date,
+        )
+        .order_by()
+        .values("creation", "closed_date", "lead__creation")
+    )
+    current: list[int] = []
+    previous: list[int] = []
+    for row in rows:
+        start = row["creation"]
+        if from_lead and row["lead__creation"]:
+            start = row["lead__creation"]
+        days = _days_between(start, row["closed_date"])
+        if from_date <= row["closed_date"] <= to_date:
+            current.append(days)
+        elif prev_from <= row["closed_date"] < from_date:
+            previous.append(days)
+    current_avg = sum(current) / len(current) if current else 0
+    previous_avg = sum(previous) / len(previous) if previous else 0
+    return {
+        "title": title,
+        "tooltip": tooltip,
+        "value": current_avg,
+        "suffix": " days",
+        "delta": current_avg - previous_avg if previous_avg else 0,
+        "deltaSuffix": " days",
+        "negativeIsBetter": True,
+    }
+
+
+def get_average_time_to_close_a_lead(from_date, to_date, user=None):
+    """``dashboard.py:427-489``."""
+    return _average_days_to_close(
+        from_date, to_date, user, from_lead=True,
+        title="Avg. time to close a lead",
+        tooltip="Average time taken from lead creation to deal closure",
+    )
+
+
+def get_average_time_to_close_a_deal(from_date, to_date, user=None):
+    """``dashboard.py:492-552``."""
+    return _average_days_to_close(
+        from_date, to_date, user, from_lead=False,
+        title="Avg. time to close a deal",
+        tooltip="Average time taken from deal creation to deal closure",
+    )
+
+
+def get_sales_trend(from_date, to_date, user=None):
+    """``dashboard.py:555-656`` - leads, deals and won deals created per day."""
+    leads = base_queryset("CRM Lead", get_current_user())
+    if user:
+        leads = leads.filter(lead_owner=user)
+    in_range = {"creation__date__gte": from_date, "creation__date__lte": to_date}
+
+    by_day: dict[str, dict] = {}
+
+    def bucket(day):
+        key = day.strftime("%Y-%m-%d")
+        return by_day.setdefault(key, {"date": key, "leads": 0, "deals": 0, "won_deals": 0})
+
+    lead_rows = (
+        leads.filter(**in_range)
+        .order_by()
+        .annotate(day=TruncDate("creation"))
+        .values("day")
+        .annotate(count=Count("pk"))
+    )
+    for row in lead_rows:
+        bucket(row["day"])["leads"] += row["count"]
+    deal_rows = (
+        _deal_queryset(user)
+        .filter(**in_range)
+        .order_by()
+        .annotate(day=TruncDate("creation"))
+        .values("day")
+        .annotate(count=Count("pk"), won=Count("pk", filter=Q(status__type="Won")))
+    )
+    for row in deal_rows:
+        day = bucket(row["day"])
+        day["deals"] += row["count"]
+        day["won_deals"] += row["won"]
+
+    return {
+        "data": [by_day[key] for key in sorted(by_day)],
+        "title": "Sales trend",
+        "subtitle": "Daily performance of leads, deals, and wins",
+        "xAxis": {"title": "Date", "key": "date", "type": "time", "timeGrain": "day"},
+        "yAxis": {"title": "Count"},
+        "series": [
+            {"name": "leads", "type": "line", "showDataPoints": True},
+            {"name": "deals", "type": "line", "showDataPoints": True},
+            {"name": "won_deals", "type": "line", "showDataPoints": True},
+        ],
+    }
+
+
+def get_forecasted_revenue(from_date, to_date, user=None):
+    """``dashboard.py:657-735`` - by month of ``expected_closure_date``, over the twelve
+    months before today whatever the dashboard's range (upstream ignores it here).
+    Forecast: a lost deal counts its full expected value, any other its expected value
+    weighted by probability; actual: a won deal's value. Both in base currency, and an
+    empty string rather than 0 where there is nothing, which is what the chart plots."""
+    twelve_months_ago = _today() - relativedelta(months=12)
+    rows = (
+        _deal_queryset(user)
+        .filter(expected_closure_date__gte=twelve_months_ago)
+        .order_by()
+        .values(
+            "expected_closure_date", "expected_deal_value", "deal_value",
+            "probability", "exchange_rate", "status__type",
+        )
+    )
+    months: dict[str, dict] = {}
+    for row in rows:
+        key = row["expected_closure_date"].strftime("%Y-%m-01")
+        month = months.setdefault(key, {"forecasted": 0.0, "actual": 0.0})
+        rate = row["exchange_rate"] if row["exchange_rate"] is not None else 1
+        expected = float(row["expected_deal_value"] or 0)
+        if row["status__type"] == "Lost":
+            month["forecasted"] += expected * rate
+        else:
+            month["forecasted"] += expected * (row["probability"] or 0) / 100 * rate
+        if row["status__type"] == "Won":
+            month["actual"] += float(row["deal_value"] or 0) * rate
+    data = [
+        {
+            "month": key,
+            "forecasted": months[key]["forecasted"] or "",
+            "actual": months[key]["actual"] or "",
+        }
+        for key in sorted(months)
+    ]
+    return {
+        "data": data,
+        "title": "Forecasted revenue",
+        "subtitle": "Projected vs actual revenue based on deal probability",
+        "xAxis": {"title": "Month", "key": "month", "type": "time", "timeGrain": "month"},
+        "yAxis": {"title": f"Revenue ({get_base_currency_symbol()})"},
+        "series": [
+            {"name": "forecasted", "type": "line", "showDataPoints": True},
+            {"name": "actual", "type": "line", "showDataPoints": True},
+        ],
+    }
+
+
+def get_deal_status_change_counts(from_date, to_date, user=None):
+    """``dashboard.py:1158-1204`` - how many deals created in the range reached each
+    status, from the status-change log, deals currently Lost excluded, in the order of
+    the statuses' ``position``. A bare list: the funnel appends it after its leads
+    count. Upstream's dispatch hands ``user`` to this function's ``deal_conds`` slot,
+    where it is never read; the scope is applied here, as the funnel applies it."""
+    from crm_app.models import CRMDealStatus, CRMStatusChangeLog
+
+    deals = list(
+        _deal_queryset(user)
+        .filter(creation__date__gte=from_date, creation__date__lte=to_date)
+        .exclude(status__type="Lost")
+        .values_list("pk", flat=True)
+    )
+    if not deals:
+        return []
+    positions = dict(CRMDealStatus._default_manager.values_list("pk", "position"))
+    rows = (
+        CRMStatusChangeLog._default_manager.filter(parenttype="CRM Deal", parent__in=deals)
+        .exclude(to="")
+        .exclude(to__isnull=True)
+        .order_by()
+        .values("to")
+        .annotate(count=Count("pk"))
+    )
+    result = [{"stage": row["to"], "count": row["count"]} for row in rows if row["to"] in positions]
+    # ORDER BY position ascending, and MariaDB sorts NULL before every number.
+    result.sort(key=lambda row: (positions[row["stage"]] is not None, positions[row["stage"]] or 0))
+    return result
+
+
+def get_funnel_conversion(from_date, to_date, user=None):
+    """``dashboard.py:736-809``."""
+    leads = base_queryset("CRM Lead", get_current_user())
+    if user:
+        leads = leads.filter(lead_owner=user)
+    total_leads = leads.filter(creation__date__gte=from_date, creation__date__lte=to_date).count()
+    data = [{"stage": "Leads", "count": total_leads}]
+    data += get_deal_status_change_counts(from_date, to_date, user)
+    return {
+        "data": data,
+        "title": "Funnel conversion",
+        "subtitle": "Lead to deal conversion pipeline",
+        "xAxis": {"title": "Stage", "key": "stage", "type": "category"},
+        "yAxis": {"title": "Count"},
+        "swapXY": True,
+        "series": [{"name": "count", "type": "bar", "echartOptions": {"colorBy": "data"}}],
+    }
+
+
 #: Name -> builder. ``get_dashboard`` and ``get_chart`` dispatch through this; a name
 #: that is not here yields ``None``, matching upstream's unknown-name branch.
 CHART_BUILDERS = {
@@ -447,20 +687,13 @@ CHART_BUILDERS = {
     "deals_by_territory": get_deals_by_territory,
     "deals_by_salesperson": get_deals_by_salesperson,
     "lost_deal_reasons": get_lost_deal_reasons,
+    "average_time_to_close_a_lead": get_average_time_to_close_a_lead,
+    "average_time_to_close_a_deal": get_average_time_to_close_a_deal,
+    "sales_trend": get_sales_trend,
+    "forecasted_revenue": get_forecasted_revenue,
+    "funnel_conversion": get_funnel_conversion,
+    "deal_status_change_counts": get_deal_status_change_counts,
 }
-
-#: Named so the gap is visible rather than discovered. All are time-series or
-#: duration-arithmetic charts: sales_trend, forecasted_revenue, funnel_conversion,
-#: average_time_to_close_a_lead, average_time_to_close_a_deal,
-#: deal_status_change_counts.
-UNPORTED_CHARTS = (
-    "sales_trend",
-    "forecasted_revenue",
-    "funnel_conversion",
-    "average_time_to_close_a_lead",
-    "average_time_to_close_a_deal",
-    "deal_status_change_counts",
-)
 
 
 @whitelist("crm.api.dashboard.reset_to_default", methods=("POST",))

@@ -35,6 +35,7 @@ matches; the place you change it does not.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from contextvars import ContextVar
 from functools import wraps
 
@@ -202,7 +203,7 @@ def record_login_success(*keys: str) -> None:
 def rate_limit(
     limit: int = 5,
     seconds: int = 86400,
-    key: str | None = None,
+    key: str | Callable[[dict], str] | None = None,
     normalise=None,
 ):
     """Port of ``frappe/rate_limiter.py:105-171``. Cap calls to one endpoint per window.
@@ -220,6 +221,14 @@ def rate_limit(
     ``key`` names a parameter to include in the bucket - use it where one IP legitimately
     serves many users and you want per-account limits instead.
 
+    ``key`` may instead be a **callable** taking the call's kwargs and returning the value
+    to bucket on, for an endpoint where the account is not a single parameter - it may be
+    under either of two names, or come from the session, or deliberately not apply at all.
+    Returning ``""`` falls back to bucketing on the IP alone, which is the right answer
+    when the caller is anonymous and their address is genuinely all you know about them.
+    A callable that raises is treated as returning ``""``: a rate limiter must not be the
+    thing that takes an endpoint down.
+
     ``normalise`` is applied to that parameter before it becomes part of the bucket.
     **Without it the limit is bypassable**, which the phase-8 review found on
     forgot-password: the raw value went straight into the key, so ``Alice@x.com``,
@@ -232,7 +241,13 @@ def rate_limit(
         def wrapper(*args, **kwargs):
             identity = get_client_ip() or ""
             if key:
-                value = kwargs.get(key, "")
+                if callable(key):
+                    try:
+                        value = key(kwargs) or ""
+                    except Exception:
+                        value = ""
+                else:
+                    value = kwargs.get(key, "")
                 if normalise is not None:
                     try:
                         value = normalise(value)

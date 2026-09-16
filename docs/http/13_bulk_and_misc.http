@@ -1,0 +1,814 @@
+# 13 - delete_bulk_docs and its linked-document handling, the frappe.client built-ins not
+# yet covered (get by filters, insert, get_list paging), Tag, Email Template, File's
+# public/own-upload carve-outs, and the small endpoints that exist so the login and
+# settings screens do not break: oauth_providers, exchange rate, onboarding, assignment
+# rules.
+#
+# Expectations from crm/api/doc.py:796-837 (delete_bulk_docs: three messages, >10 items
+# go to a background job), frappe/client.py, frappe/core/doctype/file/file.py:908-921
+# (public files are public, your own upload is yours), crm/api/onboarding.py,
+# crm/api/exchange_rate.py, crm/api/auth.py. Assignment Rule is a framework doctype the
+# port does not model; its two endpoints answer as an unconfigured site would.
+#
+# The >10 path of delete_bulk_docs hands the batch to Celery, which has no worker in
+# this setup, so it is not exercised here; the inline path is.
+
+@host = http://localhost:8000
+@admin = Administrator
+@admin_pwd = {{$dotenv ADMIN_PWD}}
+@sales = ada@example.com
+@sales_pwd = {{$dotenv SALES_PWD}}
+@manager = grace@example.com
+@manager_pwd = {{$dotenv MANAGER_PWD}}
+@org = {{host}}/api/resource/CRM%20Organization
+@lead = {{host}}/api/resource/CRM%20Lead
+@note = {{host}}/api/resource/FCRM%20Note
+@file = {{host}}/api/resource/File
+
+### 0.1 login as Administrator -> 200
+# @name login
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}", "pwd": "{{admin_pwd}}"}
+
+###
+@token = {{login.response.body.$.message.access}}
+
+### 0.2 login as the Sales Manager -> 200
+# @name mlogin
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{manager}}", "pwd": "{{manager_pwd}}"}
+
+###
+@mtoken = {{mlogin.response.body.$.message.access}}
+
+### 0.3 login as the Sales User -> 200
+# @name slogin
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{sales}}", "pwd": "{{sales_pwd}}"}
+
+###
+@stoken = {{slogin.response.body.$.message.access}}
+
+# ---- cleanup first ---------------------------------------------------------------------------
+
+### 0.4 leftover orgs -> 200
+# @name old_o
+GET {{org}}?fields=["name"]&filters=[["name","like","ZZ Bulk%25"]]
+Authorization: Bearer {{token}}
+
+### 0.5 -> 200|404
+DELETE {{org}}/{{old_o.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.6 -> 200|404
+DELETE {{org}}/{{old_o.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 0.7 -> 200|404
+DELETE {{org}}/{{old_o.response.body.$.data[2].name}}
+Authorization: Bearer {{token}}
+
+### 0.8 -> 200|404
+DELETE {{org}}/ZZ%20Inserted
+Authorization: Bearer {{token}}
+
+### 0.9 leftover leads -> 200
+# @name old_l
+GET {{lead}}?fields=["name"]&filters=[["first_name","like","ZZ Bulk%25"]]
+Authorization: Bearer {{token}}
+
+### 0.10 -> 200|404
+DELETE {{lead}}/{{old_l.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.11 -> 200|404
+DELETE {{lead}}/{{old_l.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 0.12 -> 200|404
+DELETE {{lead}}/{{old_l.response.body.$.data[2].name}}
+Authorization: Bearer {{token}}
+
+### 0.13 leftover notes -> 200
+# @name old_n
+GET {{note}}?fields=["name"]&filters=[["title","like","ZZ Bulk%25"]]
+Authorization: Bearer {{token}}
+
+### 0.14 -> 200|404
+DELETE {{note}}/{{old_n.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.15 -> 200|404
+DELETE {{note}}/{{old_n.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 0.16 leftover tag, templates -> 200|404
+DELETE {{host}}/api/resource/Tag/ZZ%20Hot
+Authorization: Bearer {{token}}
+
+### 0.17 -> 200|404
+DELETE {{host}}/api/resource/Email%20Template/ZZ%20Welcome
+Authorization: Bearer {{token}}
+
+### 0.18 -> 200|404
+DELETE {{host}}/api/resource/Email%20Template/ZZ%20Welcome%202
+Authorization: Bearer {{token}}
+
+### 0.19 leftover files -> 200
+# @name old_f
+GET {{file}}?fields=["name"]&filters=[["file_name","like","zz-%25"]]
+Authorization: Bearer {{token}}
+
+### 0.20 -> 200|404
+DELETE {{file}}/{{old_f.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.21 -> 200|404
+DELETE {{file}}/{{old_f.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+# ---- delete_bulk_docs ----------------------------------------------------------------------------
+
+### 1.1 three organizations -> 201
+POST {{org}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization_name": "ZZ Bulk 1"}
+
+### 1.2 -> 201
+POST {{org}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization_name": "ZZ Bulk 2"}
+
+### 1.3 -> 201
+POST {{org}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization_name": "ZZ Bulk 3"}
+
+### 1.4 delete two of them -> "success", upstream's literal return value
+# @expect $.message == success
+POST {{host}}/api/method/crm.api.doc.delete_bulk_docs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Organization", "items": ["ZZ Bulk 1", "ZZ Bulk 2"]}
+
+### 1.5 gone -> 404
+# @expect $.exc_type == DoesNotExistError
+GET {{org}}/ZZ%20Bulk%201
+Authorization: Bearer {{token}}
+
+### 1.6 -> the third survived
+# @expect $.data.name == ZZ Bulk 3
+GET {{org}}/ZZ%20Bulk%203
+Authorization: Bearer {{token}}
+
+### 1.7 items as a JSON string are accepted (the frontend sends them stringified) -> "success"
+# @expect $.message == success
+POST {{host}}/api/method/crm.api.doc.delete_bulk_docs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Organization", "items": "[\"ZZ Bulk 3\"]"}
+
+### 1.8 no items -> 417, crm/api/doc.py:803 verbatim
+# @expect $.message == Items are required
+POST {{host}}/api/method/crm.api.doc.delete_bulk_docs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Organization", "items": []}
+
+### 1.9 no doctype -> 417, :800 verbatim
+# @expect $.message == Doctype is required
+POST {{host}}/api/method/crm.api.doc.delete_bulk_docs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "", "items": ["x"]}
+
+### 1.10 items that are not a list -> 417, :807 verbatim
+# @expect $.message == Items must be a list
+POST {{host}}/api/method/crm.api.doc.delete_bulk_docs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Organization", "items": {"name": "x"}}
+
+### 1.11 names that no longer exist are dropped, not an error -> "success"
+# @expect $.message == success
+POST {{host}}/api/method/crm.api.doc.delete_bulk_docs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Organization", "items": ["ZZ Bulk 1", "ZZ Nobody"]}
+
+### 1.12 a lead with a note hanging off it -> 201
+# @name l1_req
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Bulk Lead 1", "lead_owner": "{{admin}}"}
+
+###
+@l1 = {{l1_req.response.body.$.data.name}}
+
+### 1.13 -> 201
+# @name n1_req
+POST {{note}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"title": "ZZ Bulk note 1", "content": "x", "reference_doctype": "CRM Lead", "reference_docname": "{{l1}}"}
+
+###
+@n1 = {{n1_req.response.body.$.data.name}}
+
+### 1.14 delete the lead with delete_linked=false -> the note survives, its reference is cleared
+# @expect $.message == success
+POST {{host}}/api/method/crm.api.doc.delete_bulk_docs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "items": ["{{l1}}"], "delete_linked": false}
+
+### 1.15 -> note still there, pointing at nothing
+# @expect $.data.reference_docname ==
+GET {{note}}/{{n1}}
+Authorization: Bearer {{token}}
+
+### 1.16 a second lead and note -> 201
+# @name l2_req
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Bulk Lead 2", "lead_owner": "{{admin}}"}
+
+###
+@l2 = {{l2_req.response.body.$.data.name}}
+
+### 1.17 -> 201
+# @name n2_req
+POST {{note}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"title": "ZZ Bulk note 2", "content": "x", "reference_doctype": "CRM Lead", "reference_docname": "{{l2}}"}
+
+###
+@n2 = {{n2_req.response.body.$.data.name}}
+
+### 1.18 delete_linked=true takes the note with the lead -> "success"
+# @expect $.message == success
+POST {{host}}/api/method/crm.api.doc.delete_bulk_docs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "items": ["{{l2}}"], "delete_linked": true}
+
+### 1.19 -> 404
+# @expect $.exc_type == DoesNotExistError
+GET {{note}}/{{n2}}
+Authorization: Bearer {{token}}
+
+# ---- frappe.client.get by filters, insert, get_list paging ----------------------------------------
+
+### 2.1 frappe.client.insert -> the created document
+# @expect $.message.name == ZZ Inserted
+# @expect $.message.owner == Administrator
+POST {{host}}/api/method/frappe.client.insert
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doc": {"doctype": "CRM Organization", "organization_name": "ZZ Inserted", "website": "https://inserted.example"}}
+
+### 2.2 the doc may arrive as a JSON string -> 409 now, because it already exists (proves it was parsed)
+# @expect $.exc_type == DuplicateEntryError
+POST {{host}}/api/method/frappe.client.insert
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doc": "{\"doctype\": \"CRM Organization\", \"organization_name\": \"ZZ Inserted\"}"}
+
+### 2.3 without a doctype -> 417
+# @expect $.message == doctype is required
+POST {{host}}/api/method/frappe.client.insert
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doc": {"organization_name": "ZZ No Doctype"}}
+
+### 2.4 insert enforces create permission: a Sales User cannot mint a notification -> 403
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/method/frappe.client.insert
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doc": {"doctype": "CRM Notification", "type": "Mention", "to_user": "{{manager}}", "from_user": "{{sales}}", "message": "ZZ"}}
+
+### 2.5 frappe.client.get by filters instead of a name -> the document
+# @expect $.message.name == ZZ Inserted
+# @expect $.message.website == https://inserted.example
+POST {{host}}/api/method/frappe.client.get
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Organization", "filters": {"website": "https://inserted.example"}}
+
+### 2.6 filters matching nothing -> 404
+# @expect $.exc_type == DoesNotExistError
+POST {{host}}/api/method/frappe.client.get
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Organization", "filters": {"website": "https://nobody.example"}}
+
+### 2.7 neither name nor filters -> 417
+# @expect $.message == name or filters is required
+POST {{host}}/api/method/frappe.client.get
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Organization"}
+
+### 2.8 an unknown doctype -> 404
+# @expect $.exc_type == DoesNotExistError
+POST {{host}}/api/method/frappe.client.get
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "No Such Doctype", "name": "x"}
+
+### 2.9 get_list with or_filters, ordering and paging -> the second page of one
+# @expect $.message count 1
+POST {{host}}/api/method/frappe.client.get_list
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Organization", "fields": ["name"], "or_filters": [["name", "=", "ZZ Inserted"], ["name", "=", "Globex"]], "order_by": "name asc", "limit_start": 1, "limit_page_length": 1}
+
+# ---- tags and email templates (prompt-named doctypes) -------------------------------------------
+
+### 3.1 a tag, named by the client -> 201
+# @expect $.data.name == ZZ Hot
+POST {{host}}/api/resource/Tag
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "ZZ Hot"}
+
+### 3.2 the same tag again -> 409
+# @expect $.exc_type == DuplicateEntryError
+POST {{host}}/api/resource/Tag
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "ZZ Hot"}
+
+### 3.3 an email template -> 201; enabled by default
+# @expect $.data.name == ZZ Welcome
+# @expect $.data.enabled == true
+POST {{host}}/api/resource/Email%20Template
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "ZZ Welcome", "subject": "Welcome aboard", "response": "<p>Thanks for your interest.</p>", "reference_doctype": "CRM Lead"}
+
+### 3.4 renaming an unreferenced document works (finding 13 is about referenced ones) -> the new name
+# @expect $.message == ZZ Welcome 2
+POST {{host}}/api/method/frappe.client.rename_doc
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "Email Template", "old_name": "ZZ Welcome", "new_name": "ZZ Welcome 2"}
+
+### 3.5 the old name is gone -> 404
+# @expect $.exc_type == DoesNotExistError
+GET {{host}}/api/resource/Email%20Template/ZZ%20Welcome
+Authorization: Bearer {{token}}
+
+### 3.6 -> the new one carries the content
+# @expect $.data.subject == Welcome aboard
+GET {{host}}/api/resource/Email%20Template/ZZ%20Welcome%202
+Authorization: Bearer {{token}}
+
+### 3.7 a Sales User may read templates (the composer lists them) -> 200
+# @expect $.data.name == ZZ Welcome 2
+GET {{host}}/api/resource/Email%20Template/ZZ%20Welcome%202
+Authorization: Bearer {{stoken}}
+
+# ---- File: the two carve-outs upstream makes (file.py:916, 919) ----------------------------------
+
+### 4.1 a lead the manager owns, invisible to ada -> 201
+# @name lead_req
+POST {{lead}}
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"first_name": "ZZ Bulk File Lead", "lead_owner": "{{manager}}"}
+
+###
+@lead_name = {{lead_req.response.body.$.data.name}}
+
+### 4.2 a PUBLIC file attached to it -> 201
+# @name pub_req
+POST {{file}}
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"file_name": "zz-logo.png", "file_url": "/files/zz-logo.png", "is_private": 0, "attached_to_doctype": "CRM Lead", "attached_to_name": "{{lead_name}}"}
+
+###
+@pub = {{pub_req.response.body.$.data.name}}
+
+### 4.3 a public file is readable by anyone, whatever it hangs off (file.py:916) -> 200
+# @expect $.data.file_url == /files/zz-logo.png
+GET {{file}}/{{pub}}
+Authorization: Bearer {{stoken}}
+
+### 4.4 ...but not writable by someone who cannot write the document -> 403
+# @expect $.exc_type == PermissionError
+PUT {{file}}/{{pub}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"file_name": "zz-renamed.png"}
+
+### 4.5 ada uploads a private file with no attachment -> 201
+# @name own_req
+POST {{file}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"file_name": "zz-mine.pdf", "file_url": "/private/files/zz-mine.pdf", "is_private": 1}
+
+###
+@own = {{own_req.response.body.$.data.name}}
+
+### 4.6 your own upload is yours (file.py:919) -> 200
+# @expect $.data.owner == ada@example.com
+GET {{file}}/{{own}}
+Authorization: Bearer {{stoken}}
+
+### 4.6b a private file attached to nothing is its owner's alone (file.py:932-951 falls to return False) -> 403
+# The manager sees every lead, but this file hangs off nothing, so there is no document
+# to reach it through.
+# @expect $.exc_type == PermissionError
+GET {{file}}/{{own}}
+Authorization: Bearer {{mtoken}}
+
+### 4.6c ...and it is not in her list either -> 200, absent
+# @expect $.data excludes {{own}}
+GET {{file}}?fields=["name"]&filters=[["name","=","{{own}}"]]
+Authorization: Bearer {{mtoken}}
+
+### 4.7 ...and may even attach it to a lead she cannot see -> 200: upstream's own-upload carve-out
+# (file.py:919) is checked BEFORE the attached document, so the owner keeps write on the File row.
+# The row does not grant her the lead; it only records where the file hangs.
+# @expect $.data.attached_to_name == {{lead_name}}
+PUT {{file}}/{{own}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"attached_to_doctype": "CRM Lead", "attached_to_name": "{{lead_name}}"}
+
+### 4.8 once attached, the file is reachable through its document: the manager reads the lead, so the file -> 200
+# @expect $.data.attached_to_name == {{lead_name}}
+GET {{file}}/{{own}}
+Authorization: Bearer {{mtoken}}
+
+# ---- the stubs the login and settings screens depend on ------------------------------------------
+
+### 5.1 oauth_providers, guest-callable -> [] (no Social Login Key doctype here; same as an unconfigured site)
+# @expect $.message count 0
+GET {{host}}/api/method/crm.api.auth.oauth_providers
+
+### 5.2 get_exchange_rate, same currency -> 1
+# @expect $.message == 1
+POST {{host}}/api/method/crm.api.exchange_rate.get_exchange_rate
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"from_currency": "USD", "to_currency": "USD"}
+
+### 5.3 different currencies with no provider configured -> 1, never 0 (a missing rate must not zero a deal)
+# @expect $.message == 1
+POST {{host}}/api/method/crm.api.exchange_rate.get_exchange_rate
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"from_currency": "EUR", "to_currency": "USD", "date": "2026-09-01"}
+
+### 5.4 get_first_lead -> the oldest unconverted lead's name
+# @expect $.message contains CRM-LEAD-
+POST {{host}}/api/method/crm.api.onboarding.get_first_lead
+Authorization: Bearer {{token}}
+
+### 5.5 get_first_deal -> the oldest deal's name
+# @expect $.message contains CRM-DEAL-
+POST {{host}}/api/method/crm.api.onboarding.get_first_deal
+Authorization: Bearer {{token}}
+
+### 5.6 get_assignment_rules_list -> [] (Assignment Rule is a framework doctype the port does not model)
+# @expect $.message count 0
+POST {{host}}/api/method/crm.api.assignment_rule.get_assignment_rules_list
+Authorization: Bearer {{token}}
+
+### 5.7 duplicate_assignment_rule refuses rather than faking a rule -> 417 (port decision)
+# @expect $.message == Assignment Rule is not available in this deployment
+POST {{host}}/api/method/crm.api.assignment_rule.duplicate_assignment_rule
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"docname": "x", "new_name": "y"}
+
+### 5.8 search_link on User is permission-filtered: a Sales User never sees Administrator
+# @expect $.message excludes "Administrator"
+# @expect $.message contains ada@example.com
+POST {{host}}/api/method/frappe.desk.search.search_link
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "User", "txt": "a", "page_length": 50}
+
+# ---- teardown ------------------------------------------------------------------------------------------
+
+### 6.1 delete files -> 200
+DELETE {{file}}/{{pub}}
+Authorization: Bearer {{mtoken}}
+
+### 6.2 -> 200
+DELETE {{file}}/{{own}}
+Authorization: Bearer {{stoken}}
+
+### 6.3 delete the lead -> 200
+DELETE {{lead}}/{{lead_name}}
+Authorization: Bearer {{mtoken}}
+
+### 6.4 delete the template, tag, inserted org, surviving note -> 200
+DELETE {{host}}/api/resource/Email%20Template/ZZ%20Welcome%202
+Authorization: Bearer {{token}}
+
+### 6.5 -> 200
+DELETE {{host}}/api/resource/Tag/ZZ%20Hot
+Authorization: Bearer {{token}}
+
+### 6.6 -> 200
+DELETE {{org}}/ZZ%20Inserted
+Authorization: Bearer {{token}}
+
+### 6.7 -> 200
+DELETE {{note}}/{{n1}}
+Authorization: Bearer {{token}}
+
+### 6.8 nothing left behind -> 200, empty
+# @expect $.data count 0
+GET {{org}}?fields=["name"]&filters=[["name","like","ZZ %25"]]
+Authorization: Bearer {{token}}
+
+# ---- the framework plumbing the pages call on load -------------------------------------------------
+#
+# Four framework calls and one CRM call that are not about CRM records at all:
+# frappe/apps.py:17-55 (the app switcher), frappe/core/doctype/user/user.py:783-792 (the
+# time-zone dropdown), frappe/integrations/frappe_providers/frappecloud_billing.py:43-71
+# (Frappe Cloud billing), the telemetry boot config - which does not exist in version-15,
+# but the router calls it on every navigation - and crm/demo/api.py:clear_demo_data.
+#
+# No teardown: none of these writes anything. current_site_info and clear_demo_data both
+# reproduce frappe.only_for, in its two different forms - one silent, one naming the roles
+# - and both refusals are checked, because they are the only observable behaviour either
+# endpoint has.
+
+### 9.1 get_apps as Administrator -> 200, the CRM's own add_to_apps_screen entry (this is a one-app site)
+# @expect $.message count 1
+# @expect $.message[0].name == crm
+GET {{host}}/api/method/frappe.apps.get_apps
+Authorization: Bearer {{token}}
+
+### 9.2 ...and for a Sales User too: check_app_permission passes on FCRM module access -> 200
+# @expect $.message count 1
+# @expect $.message[0].route == /crm
+GET {{host}}/api/method/frappe.apps.get_apps
+Authorization: Bearer {{stoken}}
+
+### 9.3 get_timezones -> 200, the options PreferencesSettings.vue puts in the dropdown
+# @expect $.message.timezones contains Asia/Kolkata
+GET {{host}}/api/method/frappe.core.doctype.user.user.get_timezones
+Authorization: Bearer {{token}}
+
+### 9.4 current_site_info as Administrator -> 200, and empty: this port is never a Frappe Cloud site
+# @expect $.message exists
+GET {{host}}/api/method/frappe.integrations.frappe_providers.frappecloud_billing.current_site_info
+Authorization: Bearer {{token}}
+
+### 9.5 ...but System Manager only, so the Sales User -> 403 (only_for with message=False)
+# @expect $.message == Not permitted
+GET {{host}}/api/method/frappe.integrations.frappe_providers.frappecloud_billing.current_site_info
+Authorization: Bearer {{stoken}}
+
+### 9.6 boot_config -> 200, off until POSTHOG_PROJECT_ID and POSTHOG_HOST are both set
+# @expect $.message.enabled == false
+GET {{host}}/api/method/frappe.utils.telemetry.pulse.client.boot_config
+Authorization: Bearer {{token}}
+
+### 9.7 clear_demo_data as Administrator -> 200, and a no-op: no demo state is ever recorded here
+POST {{host}}/api/method/crm.demo.api.clear_demo_data
+Authorization: Bearer {{token}}
+
+### 9.8 ...Sales Manager or System Manager only, so the Sales User -> 403 (only_for with message=True)
+# @expect $.message == This action is only allowed for <strong>Sales Manager</strong>, <strong>System Manager</strong>
+POST {{host}}/api/method/crm.demo.api.clear_demo_data
+Authorization: Bearer {{stoken}}
+
+# ---- the list view's bulk actions, and the composer's template renderer --------------------------
+#
+# frappe/desk/form/assign_to.py:148-156 and :191-201 (assign and clear assignment over a
+# selection - AssignmentModal.vue:157-170 and ListBulkActions.vue:145-156),
+# frappe/desk/doctype/bulk_update/bulk_update.py:54-124 (the bulk edit dialog,
+# EditValueModal.vue:109-125) and
+# frappe/email/doctype/email_template/email_template.py:52-58 (EmailEditor.vue:297-313).
+#
+# Two bands of submit_cancel_or_update_docs are not exercised here and are covered by
+# backend/tests/test_bulk_actions.py instead: the >500 refusal, which needs a generated
+# list of 501 names that no static file should carry, and the 20-500 enqueue band, which
+# hands the batch to Celery and there is no worker in this setup.
+#
+# Section 3's Email Template is renamed to "ZZ Welcome 2" and deleted by the section 6
+# teardown, so this section makes one of its own and deletes it at the end, with the two
+# leads.
+#
+# The leads are named "ZZ Bulk Batch ..." so the leftover sweep in section 0 reclaims them
+# if a run stops half way.
+
+### 10.1 a leftover template from an interrupted run -> 200|404
+DELETE {{host}}/api/resource/Email%20Template/ZZ%20Render
+Authorization: Bearer {{token}}
+
+### 10.2 a lead to act on -> 201
+# @name b1
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Bulk Batch A", "lead_owner": "{{admin}}"}
+
+###
+@b1n = {{b1.response.body.$.data.name}}
+
+### 10.3 and a second -> 201
+# @name b2
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Bulk Batch B", "lead_owner": "{{admin}}"}
+
+###
+@b2n = {{b2.response.body.$.data.name}}
+
+### 10.4 assign both to ada in one call -> 200, and a null body: upstream's add_multiple returns nothing
+# @expect $.message == null
+# `name` is the JSON-encoded *list*, which is the odd shape AssignmentModal.vue sends;
+# bulk_assign and re_assign ride along with it and upstream's `add` reads neither.
+POST {{host}}/api/method/frappe.desk.form.assign_to.add_multiple
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "[\"{{b1n}}\", \"{{b2n}}\"]", "assign_to": ["{{sales}}"], "bulk_assign": true, "re_assign": true}
+
+### 10.5 the assignment landed on the first of them -> 200
+# @expect $.message contains {{sales}}
+GET {{host}}/api/method/crm.api.doc.get_assigned_users?doctype=CRM%20Lead&name={{b1n}}
+Authorization: Bearer {{token}}
+
+### 10.6 ...and on the second -> 200
+# @expect $.message contains {{sales}}
+GET {{host}}/api/method/crm.api.doc.get_assigned_users?doctype=CRM%20Lead&name={{b2n}}
+Authorization: Bearer {{token}}
+
+### 10.7 clear the assignment on both -> 200, null again
+# @expect $.message == null
+# `ignore_permissions` is what ListBulkActions.vue sends and buys nothing: upstream's
+# remove_multiple does not accept the argument, so the framework drops it there too.
+POST {{host}}/api/method/frappe.desk.form.assign_to.remove_multiple
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "names": "[\"{{b1n}}\", \"{{b2n}}\"]", "ignore_permissions": true}
+
+### 10.8 every open assignment is gone, the owner's own included -> 200, empty
+# @expect $.message count 0
+GET {{host}}/api/method/crm.api.doc.get_assigned_users?doctype=CRM%20Lead&name={{b1n}}
+Authorization: Bearer {{token}}
+
+### 10.9 bulk edit a field on both -> 200 and an empty `failed` list
+# @expect $.message count 0
+# Under 20 names runs in the request and answers with the names that did not go through.
+# `next_step` is a Deal field, so the lead equivalent (`job_title`) is what is set here.
+POST {{host}}/api/method/frappe.desk.doctype.bulk_update.bulk_update.submit_cancel_or_update_docs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "docnames": ["{{b1n}}", "{{b2n}}"], "action": "update", "data": {"job_title": "ZZ Batch Edited"}}
+
+### 10.10 -> the field changed on the first
+# @expect $.data.job_title == ZZ Batch Edited
+GET {{lead}}/{{b1n}}
+Authorization: Bearer {{token}}
+
+### 10.11 -> and on the second
+# @expect $.data.job_title == ZZ Batch Edited
+GET {{lead}}/{{b2n}}
+Authorization: Bearer {{token}}
+
+### 10.12 "submit" fails every document -> 200, both names come back
+# @expect $.message count 2
+# Nothing in this port is submittable: there is no docstatus, so there is no document
+# submit or cancel can apply to. Upstream reaches the same answer by raising inside
+# doc.submit() and catching it per document.
+POST {{host}}/api/method/frappe.desk.doctype.bulk_update.bulk_update.submit_cancel_or_update_docs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "docnames": ["{{b1n}}", "{{b2n}}"], "action": "submit"}
+
+###
+# A literal `{`. The runner substitutes every {{name}} it finds and errors on one it does
+# not know, so a Jinja placeholder in a template body has to be assembled rather than typed.
+@lb = {
+
+### 10.13 a template of this section's own -> 201
+POST {{host}}/api/resource/Email%20Template
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "ZZ Render", "subject": "Welcome aboard, {{lb}}{{lb}} first_name }}", "response": "<p>Hello {{lb}}{{lb}} first_name }} of {{lb}}{{lb}} organization }}.</p>", "reference_doctype": "CRM Lead"}
+
+### 10.14 the document's fields are the template's variables -> 200
+# @expect $.message.subject == Welcome aboard, ZZ Bulk Batch A
+# @expect $.message.message contains Hello ZZ Bulk Batch A
+# The composer sends the whole lead as `doc`, and upstream renders against that dict
+# directly - so a template says {{lb}}{{lb}} first_name }}, not {{lb}}{{lb}} doc.first_name }}.
+POST {{host}}/api/method/frappe.email.doctype.email_template.email_template.get_email_template
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"template_name": "ZZ Render", "doc": {"first_name": "{{b1.response.body.$.data.first_name}}"}}
+
+### 10.15 a name the document does not carry comes back as its own placeholder -> 200
+# @expect $.message.message contains {{lb}}{{lb}} organization }}
+# get_jenv sets undefined=DebugUndefined (frappe/utils/jinja.py:35): the gap is shown to
+# the user to fill in, rather than raising or silently rendering as nothing.
+POST {{host}}/api/method/frappe.email.doctype.email_template.email_template.get_email_template
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"template_name": "ZZ Render", "doc": {"first_name": "Ada"}}
+
+### 10.16 a template that does not exist -> 404
+# @expect $.exc_type == DoesNotExistError
+POST {{host}}/api/method/frappe.email.doctype.email_template.email_template.get_email_template
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"template_name": "ZZ No Such Template", "doc": {"first_name": "Ada"}}
+
+### 10.17 a Sales User may render one too: no row rule guards Email Template -> 200
+# @expect $.message.subject == Welcome aboard, Ada
+POST {{host}}/api/method/frappe.email.doctype.email_template.email_template.get_email_template
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"template_name": "ZZ Render", "doc": {"first_name": "Ada"}}
+
+# ---- section 10 teardown ------------------------------------------------------------------------
+
+### 10.18 delete the template -> 200
+DELETE {{host}}/api/resource/Email%20Template/ZZ%20Render
+Authorization: Bearer {{token}}
+
+### 10.19 delete the first lead -> 200
+DELETE {{lead}}/{{b1n}}
+Authorization: Bearer {{token}}
+
+### 10.20 delete the second -> 200
+DELETE {{lead}}/{{b2n}}
+Authorization: Bearer {{token}}
+
+### 10.21 nothing left behind -> 200, empty
+# @expect $.data count 0
+GET {{lead}}?fields=["name"]&filters=[["first_name","like","ZZ Bulk Batch%25"]]
+Authorization: Bearer {{token}}

@@ -32,7 +32,7 @@ import re
 from frappe_core import permissions, registry
 from frappe_core.exceptions import DoesNotExistError
 from frappe_core.exceptions import PermissionError as FrappePermissionError
-from frappe_core.query import base_queryset, fetch_rows
+from frappe_core.query import base_queryset, by_name, fetch_rows
 from frappe_core.session import get_current_user
 from frappe_core.whitelist import whitelist
 
@@ -362,7 +362,7 @@ def parse_grouped_versions(versions: list) -> dict:
 
 def _require_readable(doctype: str, name: str):
     """Upstream guards both branches with ``frappe.has_permission``; message verbatim."""
-    instance = registry.get_model(doctype)._default_manager.filter(pk=name).first()
+    instance = by_name(registry.get_model(doctype), name).first()
     if instance is None:
         raise DoesNotExistError("Document not found")
     if not permissions.check_object_permission(instance, "read", get_current_user()):
@@ -455,8 +455,8 @@ def get_activities(name: str):
     """``activities.py:13-20``. Deal first, then lead, else 404. Message verbatim."""
     from crm_app.models import CRMDeal, CRMLead
 
-    if CRMDeal._default_manager.filter(pk=name).exists():
+    if by_name(CRMDeal, name).exists():
         return get_deal_activities(name)
-    if CRMLead._default_manager.filter(pk=name).exists():
+    if by_name(CRMLead, name).exists():
         return get_lead_activities(name)
     raise DoesNotExistError("Document not found")

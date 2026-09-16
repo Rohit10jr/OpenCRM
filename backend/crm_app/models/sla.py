@@ -83,7 +83,7 @@ class CRMServiceLevelAgreement(BaseDocument):
 
     class Meta:
         ordering = ["-modified"]
-        name_strategy = FieldValue("sla_name")
+        name_strategy = FieldValue("sla_name", label="SLA Name")
 
 
 @register_doctype("CRM Service Day", is_child_table=True)

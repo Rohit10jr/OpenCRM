@@ -23,6 +23,8 @@ from django.apps import apps
 from django.db import transaction
 from django.db.models.functions import Length
 
+from frappe_core import exceptions as frappe_exceptions
+
 DEFAULT_SERIES_DIGITS = 5
 
 # Date tokens Frappe substitutes inside a naming series, longest first so that
@@ -30,8 +32,20 @@ DEFAULT_SERIES_DIGITS = 5
 _SERIES_DATE_TOKENS = ("YYYY", "YY", "MM", "DD", "WW")
 
 
-class NameError_(ValueError):
-    """Raised when a strategy cannot produce a name."""
+def _field_label(instance, fieldname: str) -> str:
+    """``meta.get_label(fieldname)`` for the ``{0} is required`` message.
+
+    Django's automatic ``verbose_name`` is the fieldname with spaces, lowercased;
+    title-cased it reads as the DocType JSON label does for every ``field:`` doctype
+    (``organization_name`` -> ``Organization Name``). An explicit ``verbose_name`` is
+    used as written.
+    """
+    try:
+        field = instance._meta.get_field(fieldname)
+    except Exception:
+        return fieldname
+    label = str(field.verbose_name)
+    return label.title() if label == field.name.replace("_", " ") else label
 
 
 #: Characters Frappe refuses in a document name. Only these two - slashes, spaces,
@@ -76,27 +90,32 @@ def validate_name(doctype: str, name: str, is_single: bool = False) -> str:
     strategy, supplied by a ``prompt`` client, or forced by a caller. Returns the
     stripped name, mirroring upstream, which reassigns the result to ``doc.name``.
 
-    Messages are reproduced verbatim; they are user-facing copy (CLAUDE.md rule 4).
+    Messages are reproduced verbatim; they are user-facing copy (CLAUDE.md rule 4), and
+    so are the exception classes: the empty name is upstream's default ``frappe.throw``
+    (``ValidationError``, 417); the other three are ``frappe.NameError`` (409). Both
+    are ``FrappeError`` so the handler renders them instead of a 500 (FINDINGS.md 2).
 
     The integer branch upstream (``naming.py:480-487``) is deliberately absent:
     autoincrement doctypes never reach here because the database assigns their PK.
     """
     if not name:
-        raise NameError_(f"No Name Specified for {doctype}")
+        raise frappe_exceptions.ValidationError(f"No Name Specified for {doctype}")
 
     if name.startswith("New " + doctype):
-        raise NameError_(
+        raise frappe_exceptions.NameError(
             "There were some errors setting the name, please contact the administrator"
         )
 
     name = name.strip()
 
     if not is_single and doctype == name and name != "DocType":
-        raise NameError_(f"Name of {doctype} cannot be {name}")
+        raise frappe_exceptions.NameError(f"Name of {doctype} cannot be {name}")
 
     if re.findall(f"[{FORBIDDEN_NAME_CHARACTERS}]+", name):
         message = ", ".join(f"'{c}'" for c in FORBIDDEN_NAME_CHARACTERS)
-        raise NameError_(f"Name cannot contain special characters like {message}")
+        raise frappe_exceptions.NameError(
+            f"Name cannot contain special characters like {message}"
+        )
 
     return name
 
@@ -189,10 +208,13 @@ class FieldValue(NameStrategy):
     matching Frappe's ``DuplicateEntryError``.
     """
 
-    def __init__(self, fieldname: str):
+    def __init__(self, fieldname: str, label: str | None = None):
         if not fieldname:
             raise ValueError("FieldValue requires a fieldname")
         self.fieldname = fieldname
+        #: The DocType JSON label for the "{0} is required" message, where it is not
+        #: the title-cased fieldname: ``id`` is "ID", ``lead_status`` is "Status".
+        self.label = label
 
     def __repr__(self) -> str:
         return f"FieldValue({self.fieldname!r})"
@@ -204,7 +226,11 @@ class FieldValue(NameStrategy):
             value = value.pk
         value = ("" if value is None else str(value)).strip()
         if not value:
-            raise NameError_(f"{self.fieldname} is required to name this document")
+            # set_name_from_naming_options (naming.py:206-210): a ``field:`` doctype
+            # with nothing in the field answers "<Label> is required", not the generic
+            # "No Name Specified" that validate_name would give.
+            label = self.label or _field_label(instance, self.fieldname)
+            raise frappe_exceptions.ValidationError(f"{label} is required")
         return value
 
 
@@ -261,10 +287,9 @@ class Format(NameStrategy):
                 value = value.pk
             return "" if value is None else str(value)
 
-        name = _FORMAT_TOKEN.sub(substitute, self.template).strip()
-        if not name:
-            raise NameError_(f"Could not build a name from {self.template!r}")
-        return name
+        # An empty result is handed on: validate_name answers "No Name Specified",
+        # which is what upstream's _format_autoname leads to (naming.py:572-590).
+        return _FORMAT_TOKEN.sub(substitute, self.template).strip()
 
 
 class Prompt(NameStrategy):
@@ -279,7 +304,8 @@ class Prompt(NameStrategy):
         value = (instance.pk or "") if instance.pk is not None else ""
         value = str(value).strip()
         if not value:
-            raise NameError_("Name is required")
+            # _prompt_autoname (naming.py:562-569), verbatim.
+            raise frappe_exceptions.ValidationError("Please set the document name")
         return value
 
 

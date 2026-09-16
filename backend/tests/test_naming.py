@@ -11,7 +11,8 @@ import pytest
 from django.db import connection, connections
 
 from frappe_core.models import NamingSeriesCounter
-from frappe_core.naming import Format, Hash, NameError_, NamingSeries, next_series_value
+from frappe_core.exceptions import ValidationError
+from frappe_core.naming import Format, Hash, NamingSeries, next_series_value
 from tests_support.models import (
     CounterDoc,
     FieldDoc,
@@ -96,7 +97,8 @@ def test_field_value_strips_whitespace():
 
 
 def test_field_value_rejects_empty():
-    with pytest.raises(NameError_):
+    """naming.py:206-210 - "<Label> is required", the default ``frappe.throw`` class."""
+    with pytest.raises(ValidationError, match="Organization Name is required"):
         FieldDoc.objects.create(organization_name="   ")
 
 
@@ -148,9 +150,10 @@ def test_format_interpolates_field_values():
     assert doc.name == "CRM Lead-Quick Entry"
 
 
-def test_format_rejects_an_empty_result():
-    with pytest.raises(NameError_):
-        Format("{missing}").generate(FormatDoc(dt="", type=""))
+def test_format_hands_an_empty_result_to_validate_name():
+    """Upstream's ``_format_autoname`` does not check for an empty result; it is
+    ``validate_name`` that refuses it with "No Name Specified" (naming.py:476-478)."""
+    assert Format("{missing}").generate(FormatDoc(dt="", type="")) == ""
 
 
 # --- strategy 6: prompt -------------------------------------------------------
@@ -164,7 +167,8 @@ def test_prompt_accepts_a_client_supplied_name():
 
 
 def test_prompt_rejects_a_missing_name():
-    with pytest.raises(NameError_):
+    """naming.py:562-569, verbatim."""
+    with pytest.raises(ValidationError, match="Please set the document name"):
         PromptDoc(label="x").save()
 
 

@@ -11,6 +11,7 @@ DRF's default ``PrimaryKeyRelatedField`` already does exactly that.
 
 from __future__ import annotations
 
+from django.db import transaction
 from rest_framework import serializers
 
 from frappe_core import children, registry
@@ -98,16 +99,37 @@ class DocumentSerializer(serializers.ModelSerializer):
                 payloads[fieldname] = validated_data.pop(fieldname)
         return payloads
 
+    # Upstream validates a document together with its child rows in one pass, so a
+    # save that adds product lines answers with the new expected value, and a save that
+    # adds a contact row answers with that contact primary and its email copied onto
+    # the deal (crm_deal.py:120-149, 240-248). Here the rows are written **before** the
+    # parent's save on update, and on create - where the parent must exist first so the
+    # rows have something to point at - the parent is saved again once they do, so the
+    # derivations that read them run in the same request (FINDINGS.md 8). Atomic, so
+    # a parent-level refusal takes the rows written before it back with it.
+
+    # After the rows are written the parent is re-read: a child row's own save may have
+    # updated columns on the parent directly (the product rows keep the lead's and
+    # deal's totals with a bare ``update()``), and saving the stale in-memory parent
+    # afterwards would write the old values back over them.
+
     def create(self, validated_data):
         payloads = self._pop_child_payloads(validated_data)
-        instance = super().create(validated_data)
-        self._write_children(instance, payloads)
+        with transaction.atomic():
+            instance = super().create(validated_data)
+            if payloads:
+                self._write_children(instance, payloads)
+                instance.refresh_from_db()
+                instance.save()
         return instance
 
     def update(self, instance, validated_data):
         payloads = self._pop_child_payloads(validated_data)
-        instance = super().update(instance, validated_data)
-        self._write_children(instance, payloads)
+        with transaction.atomic():
+            if payloads:
+                self._write_children(instance, payloads)
+                instance.refresh_from_db()
+            instance = super().update(instance, validated_data)
         return instance
 
     def _write_children(self, instance, payloads):

@@ -19,6 +19,7 @@ from rest_framework.views import APIView
 from frappe_core import permissions, registry
 from frappe_core.exceptions import DoesNotExistError, PermissionError as FrappePermissionError
 from frappe_core.query import (
+    by_name,
     coerce_offset,
     coerce_page_length,
     fetch_rows,
@@ -90,7 +91,7 @@ def _candidate_instance(entry, data):
     excluding relations costs nothing and avoids a class of error entirely.
 
     Falls back to an empty instance if the payload will not construct one. A malformed
-    body is the serializer's business to reject with a 400; failing here would answer a
+    body is the serializer's business to reject with a 417; failing here would answer a
     validation problem with a permission error.
     """
     model = entry.model
@@ -202,10 +203,11 @@ class ResourceDetailView(FrappeAPIView):
 
     def _get_object(self, doctype: str, name: str, ptype: str):
         entry = _resolve_routable_entry(doctype)
-        try:
-            instance = entry.model._default_manager.get(pk=name)
-        except entry.model.DoesNotExist:
-            raise DoesNotExistError(f"{doctype} {name} not found") from None
+        # by_name, not get(pk=): a name the key cannot hold (letters for CRM Task) is
+        # "not found", as frappe.get_doc has it, not Django's ValueError (FINDINGS.md 24).
+        instance = by_name(entry.model, name).first()
+        if instance is None:
+            raise DoesNotExistError(f"{doctype} {name} not found")
 
         if not permissions.check_object_permission(instance, ptype, get_current_user()):
             # Frappe's own wording for a denied document read.

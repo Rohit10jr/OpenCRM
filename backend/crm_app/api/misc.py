@@ -13,6 +13,7 @@ import secrets
 from frappe_core import permissions, registry
 from frappe_core.exceptions import PermissionError as FrappePermissionError
 from frappe_core.exceptions import throw
+from frappe_core.query import by_name
 from frappe_core.session import GUEST_USER, get_current_user
 from frappe_core.whitelist import whitelist
 
@@ -134,7 +135,7 @@ def delete_attachment(doctype: str, docname: str, file_url: str):
     if not registry.has_doctype(doctype):
         throw(f"DocType {doctype} not found")
 
-    reference = registry.get_model(doctype)._default_manager.filter(pk=docname).first()
+    reference = by_name(registry.get_model(doctype), docname).first()
     if reference is None or not permissions.check_object_permission(
         reference, "write", get_current_user()
     ):

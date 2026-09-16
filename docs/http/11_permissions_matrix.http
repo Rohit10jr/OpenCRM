@@ -1,0 +1,646 @@
+# 11 - the row-level permission engine for leads and deals, as HTTP. The phase-2 matrix:
+#
+#   Administrator / System Manager       -> everything
+#   Sales Manager, not in the tree       -> everything (legacy see-all, deliberate upstream)
+#   Sales Manager, in the tree (hier ON) -> own + subtree + subtree-assigned, and NOT the rest
+#   Sales User                           -> own + directly assigned (via ToDo, never _assign)
+#
+# Plus what every rule must survive: fields= / order_by= cannot widen a list, 403 and 404
+# are distinguishable on purpose, the frappe.client.* built-ins share the same checks,
+# assignment is the only way to widen access and it requires write on the document, the
+# ToDo route is withheld, and the org tree is writable by System Managers only.
+#
+# Expectations from crm/permissions/org_hierarchy.py (main) and crm/hooks.py; the tree
+# rule from specs/SECURITY_MODEL.md. Four people: Administrator, grace (Sales Manager),
+# ada and alan (Sales Users). The file switches the hierarchy on mid-way and off again.
+
+@host = http://localhost:8000
+@admin = Administrator
+@admin_pwd = {{$dotenv ADMIN_PWD}}
+@sales = ada@example.com
+@sales_pwd = {{$dotenv SALES_PWD}}
+@sales2 = alan@example.com
+@sales2_pwd = {{$dotenv SALES2_PWD}}
+@manager = grace@example.com
+@manager_pwd = {{$dotenv MANAGER_PWD}}
+@lead = {{host}}/api/resource/CRM%20Lead
+@deal = {{host}}/api/resource/CRM%20Deal
+@tree = {{host}}/api/resource/CRM%20Sales%20Hierarchy
+@settings = {{host}}/api/resource/FCRM%20Settings/Settings
+@scope = ["first_name","like","ZZ Matrix%25"]
+
+### 0.1 login as Administrator -> 200
+# @name login
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{admin}}", "pwd": "{{admin_pwd}}"}
+
+###
+@token = {{login.response.body.$.message.access}}
+
+### 0.2 login as grace, Sales Manager -> 200
+# @name mlogin
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{manager}}", "pwd": "{{manager_pwd}}"}
+
+###
+@mtoken = {{mlogin.response.body.$.message.access}}
+
+### 0.3 login as ada, Sales User -> 200
+# @name slogin
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{sales}}", "pwd": "{{sales_pwd}}"}
+
+###
+@stoken = {{slogin.response.body.$.message.access}}
+
+### 0.4 login as alan, Sales User -> 200
+# @name s2login
+POST {{host}}/api/method/login
+Content-Type: application/json
+
+{"usr": "{{sales2}}", "pwd": "{{sales2_pwd}}"}
+
+###
+@s2token = {{s2login.response.body.$.message.access}}
+
+# ---- cleanup first -------------------------------------------------------------------------
+
+### 0.5 hierarchy off, in case an earlier run died with it on -> 200
+PUT {{settings}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"enable_sales_hierarchy": 0}
+
+### 0.6 leftover tree rows -> 200
+# @name old_tree
+GET {{tree}}?fields=["name"]&order_by=lft desc
+Authorization: Bearer {{token}}
+
+### 0.7 -> 200|404
+DELETE {{tree}}/{{old_tree.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.8 -> 200|404
+DELETE {{tree}}/{{old_tree.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 0.9 -> 200|404
+DELETE {{tree}}/{{old_tree.response.body.$.data[2].name}}
+Authorization: Bearer {{token}}
+
+### 0.10 leftover leads -> 200
+# @name old_l
+GET {{lead}}?fields=["name"]&filters=[{{scope}}]
+Authorization: Bearer {{token}}
+
+### 0.11 -> 200|404
+DELETE {{lead}}/{{old_l.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.12 -> 200|404
+DELETE {{lead}}/{{old_l.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+### 0.13 -> 200|404
+DELETE {{lead}}/{{old_l.response.body.$.data[2].name}}
+Authorization: Bearer {{token}}
+
+### 0.14 -> 200|404
+DELETE {{lead}}/{{old_l.response.body.$.data[3].name}}
+Authorization: Bearer {{token}}
+
+### 0.15 -> 200|404
+DELETE {{lead}}/{{old_l.response.body.$.data[4].name}}
+Authorization: Bearer {{token}}
+
+### 0.16 leftover deals -> 200
+# @name old_d
+GET {{deal}}?fields=["name"]&filters=[["next_step","like","ZZ Matrix%25"]]
+Authorization: Bearer {{token}}
+
+### 0.17 -> 200|404
+DELETE {{deal}}/{{old_d.response.body.$.data[0].name}}
+Authorization: Bearer {{token}}
+
+### 0.18 -> 200|404
+DELETE {{deal}}/{{old_d.response.body.$.data[1].name}}
+Authorization: Bearer {{token}}
+
+# ---- fixtures: one lead per person, two deals -----------------------------------------------------
+
+### 1.1 ada's lead -> 201
+# @name l_ada_req
+POST {{lead}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"first_name": "ZZ Matrix Ada", "lead_owner": "{{sales}}", "annual_revenue": 100}
+
+###
+@l_ada = {{l_ada_req.response.body.$.data.name}}
+
+### 1.2 alan's lead -> 201
+# @name l_alan_req
+POST {{lead}}
+Authorization: Bearer {{s2token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Matrix Alan", "lead_owner": "{{sales2}}", "annual_revenue": 200}
+
+###
+@l_alan = {{l_alan_req.response.body.$.data.name}}
+
+### 1.3 grace's lead -> 201
+# @name l_grace_req
+POST {{lead}}
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"first_name": "ZZ Matrix Grace", "lead_owner": "{{manager}}", "annual_revenue": 300}
+
+###
+@l_grace = {{l_grace_req.response.body.$.data.name}}
+
+### 1.4 Administrator's lead -> 201
+# @name l_admin_req
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Matrix Admin", "lead_owner": "{{admin}}", "annual_revenue": 400}
+
+###
+@l_admin = {{l_admin_req.response.body.$.data.name}}
+
+### 1.5 alan's deal -> 201
+# @name d_alan_req
+POST {{deal}}
+Authorization: Bearer {{s2token}}
+Content-Type: application/json
+
+{"deal_owner": "{{sales2}}", "deal_value": 777777, "next_step": "ZZ Matrix alan"}
+
+###
+@d_alan = {{d_alan_req.response.body.$.data.name}}
+
+### 1.6 grace's deal -> 201
+# @name d_grace_req
+POST {{deal}}
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"deal_owner": "{{manager}}", "deal_value": 888888, "next_step": "ZZ Matrix grace"}
+
+###
+@d_grace = {{d_grace_req.response.body.$.data.name}}
+
+# ---- hierarchy OFF: Sales Users see their own; a Sales Manager sees everything -----------------------
+
+### 2.1 ada's list -> her one lead
+# @expect $.data count 1
+# @expect $.data[0].name == {{l_ada}}
+GET {{lead}}?fields=["name"]&filters=[{{scope}}]
+Authorization: Bearer {{stoken}}
+
+### 2.2 alan's list -> his one
+# @expect $.data count 1
+# @expect $.data[0].name == {{l_alan}}
+GET {{lead}}?fields=["name"]&filters=[{{scope}}]
+Authorization: Bearer {{s2token}}
+
+### 2.3 grace, a Sales Manager not in any tree, sees all four
+# @expect $.data count 4
+GET {{lead}}?fields=["name"]&filters=[{{scope}}]
+Authorization: Bearer {{mtoken}}
+
+### 2.4 Administrator sees all four
+# @expect $.data count 4
+GET {{lead}}?fields=["name"]&filters=[{{scope}}]
+Authorization: Bearer {{token}}
+
+### 2.5 ada reading alan's lead -> 403, exc_type PermissionError (it exists; she may not)
+# @expect $.exc_type == PermissionError
+GET {{lead}}/{{l_alan}}
+Authorization: Bearer {{stoken}}
+
+### 2.6 a lead that does not exist -> 404: the two answers differ on purpose, matching upstream
+# @expect $.exc_type == DoesNotExistError
+GET {{lead}}/CRM-LEAD-0000-99999
+Authorization: Bearer {{stoken}}
+
+### 2.7 fields= cannot widen the list: asking for the money column changes nothing
+# @expect $.data count 1
+GET {{lead}}?fields=["name","annual_revenue","lead_owner"]&filters=[{{scope}}]&order_by=annual_revenue desc
+Authorization: Bearer {{stoken}}
+
+### 2.8 nor can a filter that names another owner: the rule is AND-ed with hers
+# @expect $.data count 0
+GET {{lead}}?fields=["name"]&filters=[{{scope}},["lead_owner","=","{{sales2}}"]]
+Authorization: Bearer {{stoken}}
+
+### 2.9 get_data agrees with the resource route: total_count 1
+# @expect $.message.total_count == 1
+# @expect $.message.data count 1
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "filters": {"first_name": ["like", "ZZ Matrix%"]}, "page_length": 20, "view": {"view_type": "list"}}
+
+### 2.10 the @me token resolves to the caller, never to a supplied name
+# @expect $.message.data count 1
+# @expect $.message.data[0].lead_owner == ada@example.com
+POST {{host}}/api/method/crm.api.doc.get_data
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "filters": {"lead_owner": "@me", "first_name": ["like", "ZZ Matrix%"]}, "page_length": 20, "view": {"view_type": "list"}}
+
+### 2.11 ada may not edit alan's lead -> 403
+# @expect $.exc_type == PermissionError
+PUT {{lead}}/{{l_alan}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"job_title": "taken over"}
+
+### 2.12 nor delete it -> 403
+# @expect $.exc_type == PermissionError
+DELETE {{lead}}/{{l_alan}}
+Authorization: Bearer {{stoken}}
+
+### 2.13 the built-ins share the check: frappe.client.get -> 403
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/method/frappe.client.get
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{l_alan}}"}
+
+### 2.14 frappe.client.set_value -> 403
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/method/frappe.client.set_value
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{l_alan}}", "fieldname": "job_title", "value": "x"}
+
+### 2.15 frappe.client.delete -> 403
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/method/frappe.client.delete
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{l_alan}}"}
+
+### 2.16 frappe.client.get_list is filtered the same way -> only hers
+# @expect $.message count 1
+# @expect $.message[0].name == {{l_ada}}
+POST {{host}}/api/method/frappe.client.get_list
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "fields": ["name"], "filters": [["first_name", "like", "ZZ Matrix%"]]}
+
+### 2.17 get_doc_permissions is honest about it -> read false
+# @expect $.message.permissions.read == false
+# @expect $.message.permissions.write == false
+POST {{host}}/api/method/frappe.client.get_doc_permissions
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "docname": "{{l_alan}}"}
+
+### 2.18 delete_bulk_docs refuses the whole batch if one item is not hers -> 403
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/method/crm.api.doc.delete_bulk_docs
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "items": ["{{l_ada}}", "{{l_alan}}"]}
+
+### 2.19 -> and her own lead survived the refused batch
+# @expect $.data.name == {{l_ada}}
+GET {{lead}}/{{l_ada}}
+Authorization: Bearer {{stoken}}
+
+# ---- assignment is the only way to widen access, and it needs write on the document ----------------
+
+### 3.1 ada cannot assign herself to alan's lead -> 403 (assign_to.add checks write first)
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/method/frappe.desk.form.assign_to.add
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{l_alan}}", "assign_to": ["{{sales}}"]}
+
+### 3.2 nor write the ToDo behind it: the route is withheld -> 404, indistinguishable from "no such doctype"
+# @expect $.exc_type == DoesNotExistError
+POST {{host}}/api/resource/ToDo
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"allocated_to": "{{sales}}", "reference_type": "CRM Lead", "reference_name": "{{l_alan}}"}
+
+### 3.3 nor write _assign directly: it is read-only on the wire -> 200 on her own lead, value unchanged
+# @expect $.data._assign contains ada@example.com
+# @expect $.data._assign excludes alan@example.com
+PUT {{lead}}/{{l_ada}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"_assign": ["alan@example.com"]}
+
+### 3.4 alan (the owner) assigns ada -> 200
+POST {{host}}/api/method/frappe.desk.form.assign_to.add
+Authorization: Bearer {{s2token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{l_alan}}", "assign_to": ["{{sales}}"]}
+
+### 3.5 now she sees two
+# @expect $.data count 2
+GET {{lead}}?fields=["name"]&filters=[{{scope}}]
+Authorization: Bearer {{stoken}}
+
+### 3.6 and may read and write it (write reduces to visibility in this rule) -> 200
+# @expect $.data.job_title == assigned and edited
+PUT {{lead}}/{{l_alan}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"job_title": "assigned and edited"}
+
+### 3.7 alan removes the assignment (the ToDo is Cancelled, not deleted) -> 200
+POST {{host}}/api/method/crm.api.doc.remove_assignments
+Authorization: Bearer {{s2token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{l_alan}}", "assignees": ["{{sales}}"]}
+
+### 3.8 a cancelled assignment grants nothing -> 403 again
+# @expect $.exc_type == PermissionError
+GET {{lead}}/{{l_alan}}
+Authorization: Bearer {{stoken}}
+
+### 3.9 ignore_permissions on remove_assignments is accepted and ignored (UPSTREAM_BUGS: an escalation upstream) -> 403
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/method/crm.api.doc.remove_assignments
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{l_grace}}", "assignees": ["{{manager}}"], "ignore_permissions": true}
+
+# ---- deals follow the same rule on deal_owner --------------------------------------------------------
+
+### 4.1 ada's deal list -> none of the two
+# @expect $.data count 0
+GET {{deal}}?fields=["name"]&filters=[["next_step","like","ZZ Matrix%25"]]
+Authorization: Bearer {{stoken}}
+
+### 4.2 alan's deal directly -> 403
+# @expect $.exc_type == PermissionError
+GET {{deal}}/{{d_alan}}
+Authorization: Bearer {{stoken}}
+
+### 4.3 grace sees both (not in a tree)
+# @expect $.data count 2
+GET {{deal}}?fields=["name","deal_value"]&filters=[["next_step","like","ZZ Matrix%25"]]
+Authorization: Bearer {{mtoken}}
+
+### 4.4 a deal created by ada with deal_owner alan is invisible to her afterwards -> 201 then 403
+# @name d_orphan_req
+POST {{deal}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"deal_owner": "{{sales2}}", "next_step": "ZZ Matrix orphan"}
+
+###
+@d_orphan = {{d_orphan_req.response.body.$.data.name}}
+
+### 4.5 -> 403 (upstream's rule: the owner column decides, not who created it)
+# @expect $.exc_type == PermissionError
+GET {{deal}}/{{d_orphan}}
+Authorization: Bearer {{stoken}}
+
+### 4.6 alan, its owner, can -> 200
+# @expect $.data.deal_owner == alan@example.com
+GET {{deal}}/{{d_orphan}}
+Authorization: Bearer {{s2token}}
+
+# ---- the org tree: System Manager only, because it is an input to this engine ----------------------
+
+### 5.1 a Sales User may not add herself to the tree -> 403
+# @expect $.exc_type == PermissionError
+POST {{tree}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"user": "{{sales}}"}
+
+### 5.2 a Sales Manager may not either (System Manager only; the tree decides what she can see) -> 403
+# @expect $.exc_type == PermissionError
+POST {{tree}}
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"user": "{{manager}}"}
+
+### 5.3 Administrator builds it: grace at the root -> 201
+# @name n_grace_req
+POST {{tree}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"user": "{{manager}}", "is_group": 1}
+
+###
+@n_grace = {{n_grace_req.response.body.$.data.name}}
+
+### 5.4 ada reports to grace -> 201; full_name is fetched from the user
+# @name n_ada_req
+# @expect $.data.reports_to == {{n_grace}}
+# @expect $.data.full_name exists
+POST {{tree}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"user": "{{sales}}", "reports_to": "{{n_grace}}"}
+
+###
+@n_ada = {{n_ada_req.response.body.$.data.name}}
+
+### 5.5 the nested-set bounds were rebuilt: grace's node spans ada's
+# @expect $.data.lft != null
+# @expect $.data.rgt != null
+GET {{tree}}/{{n_grace}}
+Authorization: Bearer {{token}}
+
+### 5.6 everyone may READ the tree (upstream grants all three roles read) -> 200, both rows
+# @expect $.data count 2
+GET {{tree}}?fields=["name","user","reports_to"]
+Authorization: Bearer {{stoken}}
+
+### 5.7 but ada may not re-parent anyone -> 403
+# @expect $.exc_type == PermissionError
+PUT {{tree}}/{{n_grace}}
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"reports_to": "{{n_ada}}"}
+
+### 5.8 nor delete a node -> 403
+# @expect $.exc_type == PermissionError
+DELETE {{tree}}/{{n_ada}}
+Authorization: Bearer {{stoken}}
+
+### 5.9 the tree exists but the feature is OFF: grace still sees everything -> 4
+# @expect $.data count 4
+GET {{lead}}?fields=["name"]&filters=[{{scope}}]
+Authorization: Bearer {{mtoken}}
+
+# ---- hierarchy ON: the tree now decides ----------------------------------------------------------------
+
+### 6.1 switch it on (manager-writable setting, Administrator here) -> 200
+# @expect $.data.enable_sales_hierarchy == true
+PUT {{settings}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"enable_sales_hierarchy": 1}
+
+### 6.2 grace, now IN the tree, loses see-all: own + her subtree (ada) = 2, not alan's or Administrator's
+# @expect $.data count 2
+# @expect $.data excludes {{l_alan}}
+GET {{lead}}?fields=["name"]&filters=[{{scope}}]
+Authorization: Bearer {{mtoken}}
+
+### 6.3 alan's lead is refused to her directly too -> 403
+# @expect $.exc_type == PermissionError
+GET {{lead}}/{{l_alan}}
+Authorization: Bearer {{mtoken}}
+
+### 6.4 -> but ada's, in her subtree, is not
+# @expect $.data.name == {{l_ada}}
+GET {{lead}}/{{l_ada}}
+Authorization: Bearer {{mtoken}}
+
+### 6.5 ada, in the tree with nobody under her -> still her own only
+# @expect $.data count 1
+GET {{lead}}?fields=["name"]&filters=[{{scope}}]
+Authorization: Bearer {{stoken}}
+
+### 6.6 alan, not in the tree -> unchanged, his own only
+# @expect $.data count 1
+GET {{lead}}?fields=["name"]&filters=[{{scope}}]
+Authorization: Bearer {{s2token}}
+
+### 6.7 Administrator -> everything, always
+# @expect $.data count 4
+GET {{lead}}?fields=["name"]&filters=[{{scope}}]
+Authorization: Bearer {{token}}
+
+### 6.8 subtree-assigned: alan assigns his lead to ada -> 200
+POST {{host}}/api/method/frappe.desk.form.assign_to.add
+Authorization: Bearer {{s2token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "{{l_alan}}", "assign_to": ["{{sales}}"]}
+
+### 6.9 -> grace sees it through her subtree member's assignment: 3
+# @expect $.data count 3
+GET {{lead}}?fields=["name"]&filters=[{{scope}}]
+Authorization: Bearer {{mtoken}}
+
+### 6.10 -> ada sees it directly: 2
+# @expect $.data count 2
+GET {{lead}}?fields=["name"]&filters=[{{scope}}]
+Authorization: Bearer {{stoken}}
+
+### 6.11 deals obey the same tree: grace sees her own deal, not alan's
+# @expect $.data count 1
+# @expect $.data[0].name == {{d_grace}}
+GET {{deal}}?fields=["name"]&filters=[["next_step","like","ZZ Matrix%25"]]
+Authorization: Bearer {{mtoken}}
+
+### 6.12 a manager in the tree cannot be demoted while she has reports -> 417, crm/api/user.py:172 verbatim
+# @expect $.message == Remove this user from the sales hierarchy before changing their role to Sales User
+POST {{host}}/api/method/crm.api.user.update_user_role
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"user": "{{manager}}", "new_role": "Sales User"}
+
+### 6.13 the dashboard reads through the same permission layer (base_queryset), so a manager in the
+# tree counts her subtree's leads plus the demo rows she may see, never the whole company -> 200
+# (the exact number depends on who owns the demo leads; 6.2 and 6.9 pin the rule on the list route)
+# @expect $.message.value exists
+POST {{host}}/api/method/crm.api.dashboard.get_chart
+Authorization: Bearer {{mtoken}}
+Content-Type: application/json
+
+{"name": "total_leads", "type": "number", "from_date": "2026-01-01", "to_date": "2026-12-31"}
+
+### 6.14 switch it off again -> 200
+# @expect $.data.enable_sales_hierarchy == false
+PUT {{settings}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"enable_sales_hierarchy": 0}
+
+### 6.15 -> grace is back to seeing everything: 4
+# @expect $.data count 4
+GET {{lead}}?fields=["name"]&filters=[{{scope}}]
+Authorization: Bearer {{mtoken}}
+
+# ---- teardown ---------------------------------------------------------------------------------------------
+
+### 7.1 delete the tree, leaf first -> 200
+DELETE {{tree}}/{{n_ada}}
+Authorization: Bearer {{token}}
+
+### 7.2 -> 200
+DELETE {{tree}}/{{n_grace}}
+Authorization: Bearer {{token}}
+
+### 7.3 delete the leads -> 200
+DELETE {{lead}}/{{l_ada}}
+Authorization: Bearer {{token}}
+
+### 7.4 -> 200
+DELETE {{lead}}/{{l_alan}}
+Authorization: Bearer {{token}}
+
+### 7.5 -> 200
+DELETE {{lead}}/{{l_grace}}
+Authorization: Bearer {{token}}
+
+### 7.6 -> 200
+DELETE {{lead}}/{{l_admin}}
+Authorization: Bearer {{token}}
+
+### 7.7 delete the deals -> 200
+DELETE {{deal}}/{{d_alan}}
+Authorization: Bearer {{token}}
+
+### 7.8 -> 200
+DELETE {{deal}}/{{d_grace}}
+Authorization: Bearer {{token}}
+
+### 7.9 -> 200
+DELETE {{deal}}/{{d_orphan}}
+Authorization: Bearer {{token}}
+
+### 7.10 nothing left behind -> 200, empty
+# @expect $.data count 0
+GET {{lead}}?fields=["name"]&filters=[{{scope}}]
+Authorization: Bearer {{token}}

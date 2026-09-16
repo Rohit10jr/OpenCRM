@@ -21,18 +21,28 @@ from typing import Callable
 
 from django.db import models
 
+from frappe_core.exceptions import DoesNotExistError
+
 #: Doctype string -> entry. Populated at import time by the decorator, so every module
 #: defining doctypes must be imported before the registry is read; ``AppConfig.ready``
 #: handles that for the local apps.
 _REGISTRY: dict[str, "DocTypeEntry"] = {}
 
 
-class DocTypeNotFound(KeyError):
-    """Raised when a doctype string has no registered model."""
+class DocTypeNotFound(DoesNotExistError, KeyError):
+    """Raised when a doctype string has no registered model.
+
+    A ``DoesNotExistError`` so that a method endpoint handed a doctype that does not
+    exist answers 404, as upstream's ``frappe.get_meta`` does, instead of the 500 a bare
+    ``KeyError`` produced (FINDINGS.md 17). Still a ``KeyError`` for the callers that
+    catch it as one.
+    """
+
+    exc_type = "DoesNotExistError"
 
     def __init__(self, doctype: str):
         self.doctype = doctype
-        super().__init__(doctype)
+        super().__init__(f"DocType {doctype} not found")
 
     def __str__(self) -> str:
         return f"DocType {self.doctype} not found"
