@@ -578,3 +578,57 @@ Authorization: Bearer {{token}}
 # @expect $.data count 0
 GET {{org}}?fields=["name"]&filters=[["name","like","ZZ %25"]]
 Authorization: Bearer {{token}}
+
+# ---- the framework plumbing the pages call on load -------------------------------------------------
+#
+# Four framework calls and one CRM call that are not about CRM records at all:
+# frappe/apps.py:17-55 (the app switcher), frappe/core/doctype/user/user.py:783-792 (the
+# time-zone dropdown), frappe/integrations/frappe_providers/frappecloud_billing.py:43-71
+# (Frappe Cloud billing), the telemetry boot config - which does not exist in version-15,
+# but the router calls it on every navigation - and crm/demo/api.py:clear_demo_data.
+#
+# No teardown: none of these writes anything. current_site_info and clear_demo_data both
+# reproduce frappe.only_for, in its two different forms - one silent, one naming the roles
+# - and both refusals are checked, because they are the only observable behaviour either
+# endpoint has.
+
+### 9.1 get_apps as Administrator -> 200, the CRM's own add_to_apps_screen entry (this is a one-app site)
+# @expect $.message count 1
+# @expect $.message[0].name == crm
+GET {{host}}/api/method/frappe.apps.get_apps
+Authorization: Bearer {{token}}
+
+### 9.2 ...and for a Sales User too: check_app_permission passes on FCRM module access -> 200
+# @expect $.message count 1
+# @expect $.message[0].route == /crm
+GET {{host}}/api/method/frappe.apps.get_apps
+Authorization: Bearer {{stoken}}
+
+### 9.3 get_timezones -> 200, the options PreferencesSettings.vue puts in the dropdown
+# @expect $.message.timezones contains Asia/Kolkata
+GET {{host}}/api/method/frappe.core.doctype.user.user.get_timezones
+Authorization: Bearer {{token}}
+
+### 9.4 current_site_info as Administrator -> 200, and empty: this port is never a Frappe Cloud site
+# @expect $.message exists
+GET {{host}}/api/method/frappe.integrations.frappe_providers.frappecloud_billing.current_site_info
+Authorization: Bearer {{token}}
+
+### 9.5 ...but System Manager only, so the Sales User -> 403 (only_for with message=False)
+# @expect $.message == Not permitted
+GET {{host}}/api/method/frappe.integrations.frappe_providers.frappecloud_billing.current_site_info
+Authorization: Bearer {{stoken}}
+
+### 9.6 boot_config -> 200, off until POSTHOG_PROJECT_ID and POSTHOG_HOST are both set
+# @expect $.message.enabled == false
+GET {{host}}/api/method/frappe.utils.telemetry.pulse.client.boot_config
+Authorization: Bearer {{token}}
+
+### 9.7 clear_demo_data as Administrator -> 200, and a no-op: no demo state is ever recorded here
+POST {{host}}/api/method/crm.demo.api.clear_demo_data
+Authorization: Bearer {{token}}
+
+### 9.8 ...Sales Manager or System Manager only, so the Sales User -> 403 (only_for with message=True)
+# @expect $.message == This action is only allowed for <strong>Sales Manager</strong>, <strong>System Manager</strong>
+POST {{host}}/api/method/crm.demo.api.clear_demo_data
+Authorization: Bearer {{stoken}}

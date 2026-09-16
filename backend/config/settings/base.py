@@ -233,6 +233,11 @@ MAIL_CONNECT_TIMEOUT = env.int("MAIL_CONNECT_TIMEOUT", default=10)
 FIELD_ENCRYPTION_KEY = env("FIELD_ENCRYPTION_KEY", default="")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="crm@example.com")
 
+# Product telemetry (crm_app/api/desk.py:boot_config). Both must be set to switch it on;
+# with either blank the frontend is told telemetry is off and skips the persona wizard.
+POSTHOG_PROJECT_ID = env("POSTHOG_PROJECT_ID", default="")
+POSTHOG_HOST = env("POSTHOG_HOST", default="")
+
 # Celery (phase 5). The queue names mirror upstream's RQ queues: short -> default,
 # long -> long (PHASE_5_ASYNC.md intro).
 CELERY_TASK_DEFAULT_QUEUE = "default"

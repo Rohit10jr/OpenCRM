@@ -821,6 +821,71 @@ class DynamicLink(BaseDocument):
         ]
 
 
+class UserSettings(models.Model):
+    """Per-user, per-doctype UI state - list filters, page length, grid columns.
+
+    Ported from ``frappe/model/utils/user_settings.py``, which reads and writes the
+    ``__UserSettings`` table with raw SQL (``get_user_settings``, ``sync_user_settings``).
+
+    **Deliberately a plain ``models.Model``**, not a :class:`BaseDocument`, and
+    deliberately *not* passed through ``register_doctype``:
+
+    * Upstream's ``__UserSettings`` is **not a DocType**. It has no ``.json``, no
+      controller and no DocField rows - the double underscore is Frappe's marker for a
+      framework-private table. It has no ``owner``/``modified_by``/``docstatus`` either,
+      so there is nothing for ``BaseDocument`` to carry.
+    * Registering it would publish it: hard rule 7 in ``CLAUDE.md`` - every registered
+      doctype gets an ``/api/resource/`` route and every field becomes readable and
+      writable there. That would hand any authenticated user a way to read and rewrite
+      *other people's* saved views and filters, which upstream has no route for at all.
+      The two whitelisted methods in ``crm_app/api/user_settings.py`` are the only way
+      in, and both are scoped to ``frappe.session.user``.
+
+    ``data`` is the JSON string exactly as the client sent it, merged at the top level -
+    the same contract as ``update_user_settings``; nothing here interprets its contents.
+    """
+
+    user = models.ForeignKey(
+        "frappe_platform.User",
+        on_delete=models.CASCADE,
+        db_column="user",
+        related_name="+",
+    )
+    doctype = models.CharField(max_length=140)
+    data = models.TextField(default="{}")
+
+    class Meta:
+        # Upstream's key: one row per (user, doctype), which is what makes
+        # ``sync_user_settings``' upsert well-defined.
+        unique_together = [("user", "doctype")]
+
+    # -- storage -----------------------------------------------------------------------
+    # The two table operations live here rather than in ``crm_app/api/user_settings.py``
+    # for a reason that is worth stating: an endpoint module may not touch a manager at
+    # all (``test_no_endpoint_bypasses_the_permission_layer``), because a list read that
+    # goes straight to the ORM skips the phase-2 permission hook. The usual way round
+    # that is ``frappe_core.query``, which applies the hook - but it addresses documents
+    # by doctype string, and this is deliberately not a doctype. So the table's own model
+    # owns its two accesses, and both are keyed on the user, which is the entirety of
+    # this table's access rule.
+
+    @classmethod
+    def load(cls, user: str, doctype: str) -> str:
+        """The stored JSON string for one user and doctype, ``"{}"`` when there is none."""
+        row = cls._default_manager.filter(user_id=user, doctype=doctype).only("data").first()
+        return (row.data if row is not None else None) or "{}"
+
+    @classmethod
+    def store(cls, user: str, doctype: str, data: str) -> None:
+        """Upsert on ``(user, doctype)`` - ``sync_user_settings``' ``ON CONFLICT`` clause."""
+        cls._default_manager.update_or_create(
+            user_id=user, doctype=doctype, defaults={"data": data}
+        )
+
+    def __str__(self) -> str:  # pragma: no cover - debugging aid
+        return f"{self.user_id}::{self.doctype}"
+
+
 # Contact's denormalised email_id / mobile_no / phone follow its child rows. Upstream
 # recomputes them on validate; children are written after the parent (they need its PK),
 # so a save-time hook would not see them. Signals on the child tables are the faithful

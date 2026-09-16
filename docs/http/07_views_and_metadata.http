@@ -668,6 +668,158 @@ Content-Type: application/json
 
 {"doctype": "CRM Lead", "filters": {}, "page_length": 1, "view": {"view_type": "list"}}
 
+# ---- doctype metadata and saved user settings -------------------------------------------------------
+#
+# frappe.desk.form.load.getdoctype and frappe.model.utils.user_settings.save - the two
+# calls frontend/src/stores/meta.js is built on. getdoctype answers with `docs` and
+# `user_settings` beside a null `message`, because upstream writes them into
+# frappe.response rather than returning them and frappe-ui hands the caller the whole
+# body whenever `docs` is present.
+#
+# Numbered 9 although it runs before section 8: the teardown keeps its number and stays
+# last. Nothing below needs tearing down - a __UserSettings row is per user, invisible to
+# everybody else, and upstream has no endpoint that deletes one either.
+
+### 9.1 getdoctype for CRM Deal: the deal's meta, then one per child table, in field order -> 200
+# @expect $.message == null
+# @expect $.docs count 5
+# @expect $.docs[0].name == CRM Deal
+# @expect $.docs[1].name == CRM Contacts
+# @expect $.docs[0].fields[0].fieldname exists
+# @expect $.docs[0].fields[0].idx == 1
+# @expect $.user_settings exists
+POST {{host}}/api/method/frappe.desk.form.load.getdoctype
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Deal", "with_parent": 1, "cached_timestamp": null}
+
+### 9.2 a child table with with_parent: the parent's bundle, parent_dt naming it -> 200
+# @expect $.parent_dt == CRM Deal
+# @expect $.docs[0].name == CRM Deal
+# @expect $.docs[1].name == CRM Contacts
+# @expect $.docs[1].istable == 1
+# @expect $.docs[1].editable_grid == 1
+POST {{host}}/api/method/frappe.desk.form.load.getdoctype
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Contacts", "with_parent": 1, "cached_timestamp": null}
+
+### 9.3 the same child table without with_parent answers for itself -> 200
+# @expect $.parent_dt absent
+# @expect $.docs count 1
+# @expect $.docs[0].name == CRM Contacts
+POST {{host}}/api/method/frappe.desk.form.load.getdoctype
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Contacts", "cached_timestamp": null}
+
+### 9.4 a field descriptor carries what the form controls read -> 200
+# @expect $.docs[0].fields[0].fieldtype == Link
+# @expect $.docs[0].fields[0].options == CRM Organization
+# @expect $.docs[0].fields[0].label == Organization
+# @expect $.docs[0].sort_field == modified
+# @expect $.docs[0].is_submittable == 0
+POST {{host}}/api/method/frappe.desk.form.load.getdoctype
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Deal", "with_parent": 1, "cached_timestamp": null}
+
+### 9.5 a platform doctype has no DocType JSON, so its fields come from the model -> 200
+# @expect $.docs count 1
+# @expect $.docs[0].name == Contact
+# @expect $.docs[0].fields[0].fieldname exists
+POST {{host}}/api/method/frappe.desk.form.load.getdoctype
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "Contact", "with_parent": 1, "cached_timestamp": null}
+
+### 9.6 an unknown doctype -> 404 DoesNotExistError
+# @expect $.exc_type == DoesNotExistError
+# @expect $.message == DocType No Such Doctype not found
+POST {{host}}/api/method/frappe.desk.form.load.getdoctype
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "No Such Doctype", "with_parent": 1, "cached_timestamp": null}
+
+### 9.7 save the grid columns for a child table; save returns what it was sent -> 200
+# @expect $.message.GridView exists
+POST {{host}}/api/method/frappe.model.utils.user_settings.save
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Deal", "user_settings": "{\"GridView\": {\"CRM Contacts\": [\"email\", \"mobile_no\"]}}"}
+
+### 9.8 getdoctype hands the saved string back, for the parent doctype it was saved under -> 200
+# @expect $.user_settings contains GridView
+# @expect $.user_settings contains mobile_no
+POST {{host}}/api/method/frappe.desk.form.load.getdoctype
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Contacts", "with_parent": 1, "cached_timestamp": null}
+
+### 9.9 a second save merges at the top level - update_user_settings, not a replace -> 200
+# @expect $.message.List exists
+POST {{host}}/api/method/frappe.model.utils.user_settings.save
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Deal", "user_settings": "{\"List\": {\"page_length\": 40}}"}
+
+### 9.10 both keys are there: the second save did not drop the first -> 200
+# @expect $.user_settings contains GridView
+# @expect $.user_settings contains page_length
+POST {{host}}/api/method/frappe.desk.form.load.getdoctype
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Deal", "with_parent": 1, "cached_timestamp": null}
+
+### 9.11 user_settings.get returns the same string -> 200
+# @expect $.message contains GridView
+POST {{host}}/api/method/frappe.model.utils.user_settings.get
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Deal"}
+
+### 9.12 settings are per doctype: the deal's GridView is not visible anywhere else -> 200
+# @expect $.user_settings excludes GridView
+POST {{host}}/api/method/frappe.desk.form.load.getdoctype
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Holiday List", "with_parent": 1, "cached_timestamp": null}
+
+### 9.13 Administrator saves settings on a doctype no UI writes grid state for -> 200
+POST {{host}}/api/method/frappe.model.utils.user_settings.save
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Holiday List", "user_settings": "{\"List\": {\"page_length\": 40}}"}
+
+### 9.14 the Sales User sees their own row, which is empty - one row per (user, doctype) -> 200
+# @expect $.user_settings == {}
+POST {{host}}/api/method/frappe.desk.form.load.getdoctype
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Holiday List", "with_parent": 1, "cached_timestamp": null}
+
+### 9.15 metadata needs a session, and nothing more - upstream checks no permission -> 200
+# @expect $.docs[0].name == CRM Deal
+POST {{host}}/api/method/frappe.desk.form.load.getdoctype
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"doctype": "CRM Deal", "with_parent": 1, "cached_timestamp": null}
+
 # ---- teardown -------------------------------------------------------------------------------------------
 
 ### 8.1 delete the views -> 200

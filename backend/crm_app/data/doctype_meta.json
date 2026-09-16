@@ -1,11 +1,14 @@
 {
  "CRM Call Log": {
+  "allow_rename": 1,
   "autoname": "field:id",
+  "editable_grid": 1,
   "fields": [
    {
     "fieldname": "id",
     "fieldtype": "Data",
-    "label": "ID"
+    "label": "ID",
+    "unique": 1
    },
    {
     "fieldname": "from",
@@ -77,12 +80,14 @@
     "options": "FCRM Note"
    },
    {
+    "depends_on": "eval:doc.type == 'Incoming'",
     "fieldname": "receiver",
     "fieldtype": "Link",
     "label": "Call Received By",
     "options": "User"
    },
    {
+    "depends_on": "eval:doc.type == 'Outgoing'",
     "fieldname": "caller",
     "fieldtype": "Link",
     "label": "Caller",
@@ -127,9 +132,13 @@
   ],
   "issingle": 0,
   "istable": 0,
+  "naming_rule": "By fieldname",
+  "sort_field": "modified",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Communication Status": {
+  "allow_rename": 1,
   "autoname": "field:status",
   "fields": [
    {
@@ -137,15 +146,22 @@
     "fieldtype": "Data",
     "in_list_view": 1,
     "label": "Status",
-    "reqd": 1
+    "reqd": 1,
+    "unique": 1
    }
   ],
   "issingle": 0,
   "istable": 0,
+  "naming_rule": "By fieldname",
+  "quick_entry": 1,
+  "sort_field": "modified",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Contacts": {
+  "allow_rename": 1,
   "autoname": null,
+  "editable_grid": 1,
   "fields": [
    {
     "fieldname": "contact",
@@ -155,6 +171,7 @@
     "options": "Contact"
    },
    {
+    "fetch_from": "contact.full_name",
     "fieldname": "full_name",
     "fieldtype": "Data",
     "in_list_view": 1,
@@ -162,6 +179,7 @@
     "read_only": 1
    },
    {
+    "fetch_from": "contact.email_id",
     "fieldname": "email",
     "fieldtype": "Data",
     "in_list_view": 1,
@@ -173,6 +191,7 @@
     "fieldtype": "Column Break"
    },
    {
+    "fetch_from": "contact.mobile_no",
     "fieldname": "mobile_no",
     "fieldtype": "Data",
     "in_list_view": 1,
@@ -181,6 +200,7 @@
     "read_only": 1
    },
    {
+    "fetch_from": "contact.phone",
     "fieldname": "phone",
     "fieldtype": "Data",
     "label": "Phone",
@@ -188,6 +208,7 @@
     "read_only": 1
    },
    {
+    "fetch_from": "contact.gender",
     "fieldname": "gender",
     "fieldtype": "Link",
     "label": "Gender",
@@ -204,9 +225,12 @@
   ],
   "issingle": 0,
   "istable": 1,
+  "sort_field": "modified",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Dashboard": {
+  "allow_rename": 1,
   "autoname": "field:title",
   "fields": [
    {
@@ -227,12 +251,15 @@
    {
     "fieldname": "title",
     "fieldtype": "Data",
-    "label": "Name"
+    "label": "Name",
+    "unique": 1
    },
    {
+    "depends_on": "private",
     "fieldname": "user",
     "fieldtype": "Link",
     "label": "User",
+    "mandatory_depends_on": "private",
     "options": "User"
    },
    {
@@ -242,11 +269,16 @@
     "label": "Private"
    }
   ],
+  "grid_page_length": 50,
   "issingle": 0,
   "istable": 0,
+  "naming_rule": "By fieldname",
+  "sort_field": "creation",
+  "sort_order": "DESC",
   "title_field": "title"
  },
  "CRM Deal": {
+  "allow_rename": 1,
   "autoname": "naming_series:",
   "fields": [
    {
@@ -262,12 +294,14 @@
     "label": "Probability"
    },
    {
+    "fetch_from": ".annual_revenue",
     "fieldname": "annual_revenue",
     "fieldtype": "Currency",
     "label": "Annual Revenue",
     "options": "currency"
    },
    {
+    "fetch_from": ".website",
     "fieldname": "website",
     "fieldtype": "Data",
     "label": "Website"
@@ -321,7 +355,8 @@
     "in_standard_filter": 1,
     "label": "Status",
     "options": "CRM Deal Status",
-    "reqd": 1
+    "reqd": 1,
+    "search_index": 1
    },
    {
     "fieldname": "contacts",
@@ -398,6 +433,7 @@
     "options": "CRM Communication Status"
    },
    {
+    "fetch_from": ".territory",
     "fieldname": "territory",
     "fieldtype": "Link",
     "label": "Territory",
@@ -546,6 +582,7 @@
     "read_only": 1
    },
    {
+    "description": "Total after discount",
     "fieldname": "net_total",
     "fieldtype": "Currency",
     "label": "Net Total",
@@ -575,10 +612,12 @@
    {
     "fieldname": "lost_notes",
     "fieldtype": "Text",
-    "label": "Lost Notes"
+    "label": "Lost Notes",
+    "mandatory_depends_on": "eval: doc.lost_reason == \"Other\""
    },
    {
     "default": "1",
+    "description": "The rate used to convert the deal\u2019s currency to your crm's base currency (set in CRM Settings). It is set once when the currency is first added and doesn't change automatically.",
     "fieldname": "exchange_rate",
     "fieldtype": "Float",
     "label": "Exchange Rate"
@@ -635,11 +674,17 @@
     "label": "Lost Details"
    }
   ],
+  "grid_page_length": 50,
   "issingle": 0,
   "istable": 0,
-  "title_field": "organization"
+  "naming_rule": "By \"Naming Series\" field",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "title_field": "organization",
+  "track_changes": 1
  },
  "CRM Deal Status": {
+  "allow_rename": 1,
   "autoname": "field:deal_status",
   "fields": [
    {
@@ -655,7 +700,8 @@
     "fieldtype": "Data",
     "in_list_view": 1,
     "label": "Status",
-    "reqd": 1
+    "reqd": 1,
+    "unique": 1
    },
    {
     "fieldname": "position",
@@ -682,31 +728,41 @@
     "fieldtype": "Column Break"
    }
   ],
+  "grid_page_length": 50,
   "issingle": 0,
   "istable": 0,
-  "title_field": null
+  "naming_rule": "By fieldname",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "title_field": null,
+  "translated_doctype": 1
  },
  "CRM Dropdown Item": {
+  "allow_rename": 1,
   "autoname": null,
   "fields": [
    {
     "fieldname": "label",
     "fieldtype": "Data",
     "in_list_view": 1,
-    "label": "Label"
+    "label": "Label",
+    "mandatory_depends_on": "eval:doc.type == 'Route'"
    },
    {
     "fieldname": "type",
     "fieldtype": "Select",
     "in_list_view": 1,
     "label": "Type",
-    "options": "Route\nSeparator"
+    "options": "Route\nSeparator",
+    "read_only_depends_on": "eval:doc.is_standard"
    },
    {
+    "depends_on": "eval:doc.type == 'Route'",
     "fieldname": "route",
     "fieldtype": "Data",
     "in_list_view": 1,
-    "label": "Route"
+    "label": "Route",
+    "mandatory_depends_on": "eval:doc.type == 'Route'"
    },
    {
     "default": "0",
@@ -727,28 +783,35 @@
     "fieldtype": "Column Break"
    },
    {
+    "description": "Add svg code or use feather icons e.g 'settings'",
     "fieldname": "icon",
     "fieldtype": "Code",
     "label": "Icon"
    },
    {
     "default": "1",
+    "depends_on": "eval:doc.type == 'Route'",
     "fieldname": "open_in_new_window",
     "fieldtype": "Check",
     "label": "Open in new window"
    },
    {
+    "depends_on": "eval:doc.is_standard",
     "fieldname": "name1",
     "fieldtype": "Data",
     "label": "Name",
-    "read_only": 1
+    "read_only": 1,
+    "unique": 1
    }
   ],
   "issingle": 0,
   "istable": 1,
+  "sort_field": "creation",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Exotel Settings": {
+  "allow_rename": 1,
   "autoname": null,
   "fields": [
    {
@@ -762,11 +825,14 @@
     "fieldtype": "Section Break"
    },
    {
+    "depends_on": "enabled",
     "fieldname": "account_sid",
     "fieldtype": "Data",
-    "label": "Account SID"
+    "label": "Account SID",
+    "mandatory_depends_on": "enabled"
    },
    {
+    "depends_on": "enabled",
     "fieldname": "section_break_iuct",
     "fieldtype": "Section Break"
    },
@@ -775,23 +841,28 @@
     "fieldtype": "Column Break"
    },
    {
+    "depends_on": "enabled",
     "fieldname": "api_key",
     "fieldtype": "Data",
     "in_list_view": 1,
-    "label": "API Key"
+    "label": "API Key",
+    "mandatory_depends_on": "enabled"
    },
    {
     "fieldname": "column_break_uxtz",
     "fieldtype": "Column Break"
    },
    {
+    "depends_on": "enabled",
     "fieldname": "api_token",
     "fieldtype": "Password",
     "in_list_view": 1,
-    "label": "API Token"
+    "label": "API Token",
+    "mandatory_depends_on": "enabled"
    },
    {
     "default": "0",
+    "depends_on": "enabled",
     "fieldname": "record_call",
     "fieldtype": "Check",
     "label": "Record Outgoing Calls"
@@ -801,21 +872,28 @@
     "fieldtype": "Column Break"
    },
    {
+    "depends_on": "enabled",
     "fieldname": "webhook_verify_token",
     "fieldtype": "Data",
-    "label": "Webhook Verify Token"
+    "label": "Webhook Verify Token",
+    "mandatory_depends_on": "enabled"
    },
    {
+    "depends_on": "enabled",
     "fieldname": "subdomain",
     "fieldtype": "Data",
-    "label": "Subdomain"
+    "label": "Subdomain",
+    "mandatory_depends_on": "enabled"
    }
   ],
   "issingle": 1,
   "istable": 0,
+  "sort_field": "creation",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Fields Layout": {
+  "allow_rename": 1,
   "autoname": "format:{dt}-{type}",
   "fields": [
    {
@@ -851,9 +929,13 @@
   ],
   "issingle": 0,
   "istable": 0,
+  "naming_rule": "Expression (old style)",
+  "sort_field": "creation",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Form Script": {
+  "allow_rename": 1,
   "autoname": "prompt",
   "fields": [
    {
@@ -892,17 +974,22 @@
     "fieldtype": "Select",
     "in_list_view": 1,
     "label": "Apply To",
-    "options": "Form\nList"
+    "options": "Form\nList",
+    "set_only_once": 1
    },
    {
     "default": "0",
     "fieldname": "is_standard",
     "fieldtype": "Check",
-    "label": "Is Standard"
+    "label": "Is Standard",
+    "no_copy": 1
    }
   ],
   "issingle": 0,
   "istable": 0,
+  "naming_rule": "Set by user",
+  "sort_field": "modified",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Global Settings": {
@@ -939,12 +1026,18 @@
     "label": "JSON"
    }
   ],
+  "grid_page_length": 50,
   "issingle": 0,
   "istable": 0,
+  "naming_rule": "Random",
+  "sort_field": "creation",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Holiday": {
+  "allow_rename": 1,
   "autoname": null,
+  "editable_grid": 1,
   "fields": [
    {
     "fieldname": "date",
@@ -977,9 +1070,12 @@
   ],
   "issingle": 0,
   "istable": 1,
+  "sort_field": "modified",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Holiday List": {
+  "allow_rename": 1,
   "autoname": "field:holiday_list_name",
   "fields": [
    {
@@ -987,7 +1083,8 @@
     "fieldtype": "Data",
     "in_list_view": 1,
     "label": "Holiday List Name",
-    "reqd": 1
+    "reqd": 1,
+    "unique": 1
    },
    {
     "fieldname": "from_date",
@@ -1049,22 +1146,34 @@
   ],
   "issingle": 0,
   "istable": 0,
+  "naming_rule": "By fieldname",
+  "sort_field": "modified",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Industry": {
+  "allow_rename": 1,
   "autoname": "field:industry",
+  "editable_grid": 1,
   "fields": [
    {
     "fieldname": "industry",
     "fieldtype": "Data",
-    "label": "Industry"
+    "label": "Industry",
+    "unique": 1
    }
   ],
   "issingle": 0,
   "istable": 0,
-  "title_field": null
+  "naming_rule": "By fieldname",
+  "quick_entry": 1,
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "title_field": null,
+  "translated_doctype": 1
  },
  "CRM Invitation": {
+  "allow_rename": 1,
   "autoname": null,
   "fields": [
    {
@@ -1118,10 +1227,14 @@
   ],
   "issingle": 0,
   "istable": 0,
+  "sort_field": "creation",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Lead": {
+  "allow_rename": 1,
   "autoname": "naming_series:",
+  "editable_grid": 1,
   "fields": [
    {
     "default": "CRM-LEAD-.YYYY.-",
@@ -1165,14 +1278,16 @@
     "in_standard_filter": 1,
     "label": "Status",
     "options": "CRM Lead Status",
-    "reqd": 1
+    "reqd": 1,
+    "search_index": 1
    },
    {
     "fieldname": "email",
     "fieldtype": "Data",
     "in_standard_filter": 1,
     "label": "Email",
-    "options": "Email"
+    "options": "Email",
+    "search_index": 1
    },
    {
     "fieldname": "website",
@@ -1232,13 +1347,15 @@
     "fieldname": "image",
     "fieldtype": "Attach Image",
     "hidden": 1,
-    "label": "Image"
+    "label": "Image",
+    "print_hide": 1
    },
    {
     "fieldname": "lead_name",
     "fieldtype": "Data",
     "in_standard_filter": 1,
-    "label": "Full Name"
+    "label": "Full Name",
+    "search_index": 1
    },
    {
     "fieldname": "job_title",
@@ -1383,6 +1500,7 @@
     "fieldtype": "Column Break"
    },
    {
+    "description": "Total after discount",
     "fieldname": "net_total",
     "fieldtype": "Currency",
     "label": "Net Total",
@@ -1397,7 +1515,8 @@
    {
     "fieldname": "facebook_lead_id",
     "fieldtype": "Data",
-    "label": "Facebook Lead ID"
+    "label": "Facebook Lead ID",
+    "unique": 1
    },
    {
     "fieldname": "column_break_ixmu",
@@ -1457,26 +1576,35 @@
    {
     "fieldname": "lost_notes",
     "fieldtype": "Text",
-    "label": "Lost Notes"
+    "label": "Lost Notes",
+    "mandatory_depends_on": "eval: doc.lost_reason == \"Other\""
    },
    {
     "fieldname": "column_break_opsm",
     "fieldtype": "Column Break"
    }
   ],
+  "grid_page_length": 50,
   "issingle": 0,
   "istable": 0,
-  "title_field": "lead_name"
+  "naming_rule": "By \"Naming Series\" field",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "title_field": "lead_name",
+  "track_changes": 1
  },
  "CRM Lead Source": {
+  "allow_rename": 1,
   "autoname": "field:source_name",
+  "editable_grid": 1,
   "fields": [
    {
     "fieldname": "source_name",
     "fieldtype": "Data",
     "in_list_view": 1,
     "label": "Source Name",
-    "reqd": 1
+    "reqd": 1,
+    "unique": 1
    },
    {
     "fieldname": "details",
@@ -1484,11 +1612,18 @@
     "label": "Details"
    }
   ],
+  "grid_page_length": 50,
   "issingle": 0,
   "istable": 0,
-  "title_field": null
+  "naming_rule": "By fieldname",
+  "quick_entry": 1,
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "title_field": null,
+  "translated_doctype": 1
  },
  "CRM Lead Status": {
+  "allow_rename": 1,
   "autoname": "field:lead_status",
   "fields": [
    {
@@ -1504,7 +1639,8 @@
     "fieldtype": "Data",
     "in_list_view": 1,
     "label": "Status",
-    "reqd": 1
+    "reqd": 1,
+    "unique": 1
    },
    {
     "default": "1",
@@ -1528,9 +1664,14 @@
   ],
   "issingle": 0,
   "istable": 0,
-  "title_field": null
+  "naming_rule": "By fieldname",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "title_field": null,
+  "translated_doctype": 1
  },
  "CRM Lost Reason": {
+  "allow_rename": 1,
   "autoname": "field:lost_reason",
   "fields": [
    {
@@ -1538,7 +1679,8 @@
     "fieldtype": "Data",
     "in_list_view": 1,
     "label": "Lost Reason",
-    "reqd": 1
+    "reqd": 1,
+    "unique": 1
    },
    {
     "fieldname": "description",
@@ -1546,11 +1688,18 @@
     "label": "Description"
    }
   ],
+  "grid_page_length": 50,
   "issingle": 0,
   "istable": 0,
-  "title_field": null
+  "naming_rule": "By fieldname",
+  "quick_entry": 1,
+  "sort_field": "creation",
+  "sort_order": "DESC",
+  "title_field": null,
+  "translated_doctype": 1
  },
  "CRM Notification": {
+  "allow_rename": 1,
   "autoname": null,
   "fields": [
    {
@@ -1646,16 +1795,20 @@
   ],
   "issingle": 0,
   "istable": 0,
+  "sort_field": "modified",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Organization": {
+  "allow_rename": 1,
   "autoname": "field:organization_name",
   "fields": [
    {
     "fieldname": "organization_name",
     "fieldtype": "Data",
     "in_standard_filter": 1,
-    "label": "Organization Name"
+    "label": "Organization Name",
+    "unique": 1
    },
    {
     "fieldname": "website",
@@ -1711,6 +1864,7 @@
     "options": "Address"
    },
    {
+    "description": "The rate used to convert the organization\u2019s currency to your crm's base currency (set in CRM Settings). It is set once when the currency is first added and doesn't change automatically.",
     "fieldname": "exchange_rate",
     "fieldtype": "Float",
     "label": "Exchange Rate"
@@ -1718,9 +1872,13 @@
   ],
   "issingle": 0,
   "istable": 0,
+  "naming_rule": "By fieldname",
+  "sort_field": "modified",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Product": {
+  "allow_rename": 1,
   "autoname": "field:product_code",
   "fields": [
    {
@@ -1734,7 +1892,8 @@
     "fieldtype": "Data",
     "in_list_view": 1,
     "label": "Product Code",
-    "reqd": 1
+    "reqd": 1,
+    "unique": 1
    },
    {
     "fieldname": "product_name",
@@ -1771,12 +1930,20 @@
     "label": "Standard Selling Rate"
    }
   ],
+  "grid_page_length": 50,
   "issingle": 0,
   "istable": 0,
-  "title_field": "product_name"
+  "naming_rule": "By fieldname",
+  "quick_entry": 1,
+  "sort_field": "creation",
+  "sort_order": "DESC",
+  "title_field": "product_name",
+  "track_changes": 1,
+  "translated_doctype": 1
  },
  "CRM Product Sync Issue": {
   "autoname": "autoincrement",
+  "editable_grid": 1,
   "fields": [
    {
     "fieldname": "product",
@@ -1816,10 +1983,15 @@
   ],
   "issingle": 0,
   "istable": 1,
+  "naming_rule": "Autoincrement",
+  "sort_field": "modified",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Products": {
+  "allow_rename": 1,
   "autoname": null,
+  "editable_grid": 1,
   "fields": [
    {
     "fieldname": "column_break_gvbc",
@@ -1840,6 +2012,7 @@
     "fieldtype": "Section Break"
    },
    {
+    "bold": 1,
     "fieldname": "discount_percentage",
     "fieldtype": "Percent",
     "label": "Discount %"
@@ -1860,6 +2033,7 @@
     "fieldtype": "Column Break"
    },
    {
+    "bold": 1,
     "fieldname": "rate",
     "fieldtype": "Currency",
     "in_list_view": 1,
@@ -1868,6 +2042,7 @@
     "reqd": 1
    },
    {
+    "bold": 1,
     "fieldname": "amount",
     "fieldtype": "Currency",
     "label": "Amount",
@@ -1875,6 +2050,9 @@
     "read_only": 1
    },
    {
+    "bold": 1,
+    "depends_on": "discount_percentage",
+    "description": "Amount after discount",
     "fieldname": "net_amount",
     "fieldtype": "Currency",
     "label": "Net Amount",
@@ -1882,6 +2060,8 @@
     "read_only": 1
    },
    {
+    "bold": 1,
+    "columns": 5,
     "fieldname": "product_code",
     "fieldtype": "Link",
     "in_list_view": 1,
@@ -1889,6 +2069,7 @@
     "options": "CRM Product"
    },
    {
+    "bold": 1,
     "default": "1",
     "fieldname": "qty",
     "fieldtype": "Float",
@@ -1907,12 +2088,17 @@
     "fieldtype": "Column Break"
    }
   ],
+  "grid_page_length": 50,
   "issingle": 0,
   "istable": 1,
+  "sort_field": "creation",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Rolling Response Time": {
+  "allow_rename": 1,
   "autoname": null,
+  "editable_grid": 1,
   "fields": [
    {
     "fieldname": "response_time",
@@ -1937,14 +2123,18 @@
     "read_only": 1
    }
   ],
+  "grid_page_length": 50,
   "issingle": 0,
   "istable": 1,
+  "sort_field": "creation",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Sales Hierarchy": {
   "autoname": "hash",
   "fields": [
    {
+    "fetch_from": "user.full_name",
     "fieldname": "full_name",
     "fieldtype": "Data",
     "in_list_view": 1,
@@ -1961,7 +2151,8 @@
     "in_list_view": 1,
     "label": "User",
     "options": "User",
-    "reqd": 1
+    "reqd": 1,
+    "unique": 1
    },
    {
     "fieldname": "section_break_1",
@@ -1977,6 +2168,7 @@
    {
     "fieldname": "reports_to",
     "fieldtype": "Link",
+    "ignore_user_permissions": 1,
     "label": "Reports To",
     "options": "CRM Sales Hierarchy"
    },
@@ -1989,6 +2181,7 @@
     "fieldtype": "Int",
     "hidden": 1,
     "label": "Left",
+    "no_copy": 1,
     "read_only": 1
    },
    {
@@ -1996,6 +2189,7 @@
     "fieldtype": "Int",
     "hidden": 1,
     "label": "Right",
+    "no_copy": 1,
     "read_only": 1
    },
    {
@@ -2007,10 +2201,16 @@
   ],
   "issingle": 0,
   "istable": 0,
-  "title_field": "full_name"
+  "naming_rule": "Random",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "title_field": "full_name",
+  "translated_doctype": 1
  },
  "CRM Service Day": {
+  "allow_rename": 1,
   "autoname": null,
+  "editable_grid": 1,
   "fields": [
    {
     "fieldname": "workday",
@@ -2045,9 +2245,12 @@
   ],
   "issingle": 0,
   "istable": 1,
+  "sort_field": "modified",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Service Level Agreement": {
+  "allow_rename": 1,
   "autoname": "field:sla_name",
   "fields": [
    {
@@ -2056,7 +2259,8 @@
     "in_list_view": 1,
     "in_standard_filter": 1,
     "label": "SLA Name",
-    "reqd": 1
+    "reqd": 1,
+    "unique": 1
    },
    {
     "default": "0",
@@ -2075,6 +2279,8 @@
     "fieldtype": "Column Break"
    },
    {
+    "depends_on": "eval: !doc.condition_json",
+    "description": "Simple Python Expression, Example: doc.status == 'Open' and doc.lead_source == 'Ads'",
     "fieldname": "condition",
     "fieldtype": "Code",
     "label": "Condition",
@@ -2138,11 +2344,14 @@
    },
    {
     "default": "0",
+    "description": "Restart the SLA each time the customer replies (status changes to Open) and fulfill it when marked as Replied",
     "fieldname": "rolling_responses",
     "fieldtype": "Check",
     "label": "Rolling Responses"
    },
    {
+    "depends_on": "eval: doc.condition_json",
+    "description": "Auto-generated from the portal view \u2014 do not edit directly unless you know what you're doing! ",
     "fieldname": "condition_json",
     "fieldtype": "Code",
     "label": "Condition"
@@ -2150,10 +2359,15 @@
   ],
   "issingle": 0,
   "istable": 0,
+  "naming_rule": "By fieldname",
+  "sort_field": "modified",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Service Level Priority": {
+  "allow_rename": 1,
   "autoname": null,
+  "editable_grid": 1,
   "fields": [
    {
     "default": "0",
@@ -2192,10 +2406,14 @@
   ],
   "issingle": 0,
   "istable": 1,
+  "sort_field": "modified",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Status Change Log": {
+  "allow_rename": 1,
   "autoname": null,
+  "editable_grid": 1,
   "fields": [
    {
     "fieldname": "from",
@@ -2258,10 +2476,13 @@
   ],
   "issingle": 0,
   "istable": 1,
+  "sort_field": "modified",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Task": {
   "autoname": "autoincrement",
+  "editable_grid": 1,
   "fields": [
    {
     "fieldname": "title",
@@ -2332,9 +2553,13 @@
   ],
   "issingle": 0,
   "istable": 0,
+  "naming_rule": "Autoincrement",
+  "sort_field": "modified",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Telephony Agent": {
+  "allow_rename": 1,
   "autoname": "field:user",
   "fields": [
    {
@@ -2344,7 +2569,8 @@
     "in_standard_filter": 1,
     "label": "User",
     "options": "User",
-    "reqd": 1
+    "reqd": 1,
+    "unique": 1
    },
    {
     "fieldname": "column_break_hdec",
@@ -2359,6 +2585,7 @@
     "read_only": 1
    },
    {
+    "fetch_from": "user.full_name",
     "fieldname": "user_name",
     "fieldtype": "Data",
     "in_list_view": 1,
@@ -2409,10 +2636,15 @@
   ],
   "issingle": 0,
   "istable": 0,
+  "naming_rule": "By fieldname",
+  "sort_field": "creation",
+  "sort_order": "DESC",
   "title_field": "user_name"
  },
  "CRM Telephony Phone": {
+  "allow_rename": 1,
   "autoname": null,
+  "editable_grid": 1,
   "fields": [
    {
     "fieldname": "number",
@@ -2431,9 +2663,12 @@
   ],
   "issingle": 0,
   "istable": 1,
+  "sort_field": "creation",
+  "sort_order": "DESC",
   "title_field": null
  },
  "CRM Territory": {
+  "allow_rename": 1,
   "autoname": "field:territory_name",
   "fields": [
    {
@@ -2441,7 +2676,8 @@
     "fieldtype": "Data",
     "in_list_view": 1,
     "label": "Territory Name",
-    "reqd": 1
+    "reqd": 1,
+    "unique": 1
    },
    {
     "fieldname": "column_break_pypy",
@@ -2458,6 +2694,7 @@
     "fieldtype": "Int",
     "hidden": 1,
     "label": "Left",
+    "no_copy": 1,
     "read_only": 1
    },
    {
@@ -2465,6 +2702,7 @@
     "fieldtype": "Int",
     "hidden": 1,
     "label": "Right",
+    "no_copy": 1,
     "read_only": 1
    },
    {
@@ -2482,6 +2720,7 @@
    {
     "fieldname": "parent_crm_territory",
     "fieldtype": "Link",
+    "ignore_user_permissions": 1,
     "label": "Parent CRM Territory",
     "options": "CRM Territory"
    },
@@ -2496,18 +2735,27 @@
   ],
   "issingle": 0,
   "istable": 0,
-  "title_field": null
+  "naming_rule": "By fieldname",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "title_field": null,
+  "translated_doctype": 1
  },
  "CRM Twilio Settings": {
+  "allow_rename": 1,
   "autoname": null,
+  "editable_grid": 1,
   "fields": [
    {
+    "depends_on": "enabled",
     "fieldname": "account_sid",
     "fieldtype": "Data",
     "in_list_view": 1,
-    "label": "Account SID"
+    "label": "Account SID",
+    "mandatory_depends_on": "eval: doc.enabled"
    },
    {
+    "depends_on": "enabled",
     "fieldname": "api_key",
     "fieldtype": "Data",
     "label": "API Key",
@@ -2515,6 +2763,7 @@
     "read_only": 1
    },
    {
+    "depends_on": "enabled",
     "fieldname": "api_secret",
     "fieldtype": "Password",
     "label": "API Secret",
@@ -2526,12 +2775,15 @@
     "fieldtype": "Column Break"
    },
    {
+    "depends_on": "enabled",
     "fieldname": "auth_token",
     "fieldtype": "Password",
     "in_list_view": 1,
-    "label": "Auth Token"
+    "label": "Auth Token",
+    "mandatory_depends_on": "eval: doc.enabled"
    },
    {
+    "depends_on": "enabled",
     "fieldname": "twiml_sid",
     "fieldtype": "Data",
     "label": "TwiML SID",
@@ -2543,6 +2795,7 @@
    },
    {
     "default": "0",
+    "depends_on": "enabled",
     "fieldname": "record_calls",
     "fieldtype": "Check",
     "label": "Record Calls"
@@ -2587,7 +2840,10 @@
   ],
   "issingle": 1,
   "istable": 0,
-  "title_field": null
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "title_field": null,
+  "track_changes": 1
  },
  "CRM View Settings": {
   "autoname": "autoincrement",
@@ -2745,22 +3001,32 @@
   ],
   "issingle": 0,
   "istable": 0,
-  "title_field": "label"
+  "naming_rule": "Autoincrement",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "title_field": "label",
+  "track_changes": 1
  },
  "ERPNext CRM Settings": {
+  "allow_rename": 1,
   "autoname": null,
   "fields": [
    {
+    "depends_on": "eval:doc.enabled && doc.is_erpnext_in_different_site",
     "fieldname": "api_key",
     "fieldtype": "Data",
-    "label": "API Key"
+    "label": "API Key",
+    "mandatory_depends_on": "is_erpnext_in_different_site"
    },
    {
+    "depends_on": "eval:doc.enabled && doc.is_erpnext_in_different_site",
     "fieldname": "api_secret",
     "fieldtype": "Password",
-    "label": "API Secret"
+    "label": "API Secret",
+    "mandatory_depends_on": "is_erpnext_in_different_site"
    },
    {
+    "depends_on": "enabled",
     "fieldname": "section_break_oubd",
     "fieldtype": "Section Break",
     "label": "ERPNext Site API's"
@@ -2770,14 +3036,18 @@
     "fieldtype": "Column Break"
    },
    {
+    "depends_on": "eval:doc.enabled && doc.is_erpnext_in_different_site",
     "fieldname": "erpnext_site_url",
     "fieldtype": "Data",
-    "label": "ERPNext Site URL"
+    "label": "ERPNext Site URL",
+    "mandatory_depends_on": "is_erpnext_in_different_site"
    },
    {
+    "depends_on": "enabled",
     "fieldname": "erpnext_company",
     "fieldtype": "Data",
-    "label": "Company in ERPNext site"
+    "label": "Company in ERPNext site",
+    "mandatory_depends_on": "enabled"
    },
    {
     "fieldname": "column_break_vfru",
@@ -2798,12 +3068,14 @@
    },
    {
     "default": "0",
+    "depends_on": "enabled",
     "fieldname": "is_erpnext_in_different_site",
     "fieldtype": "Check",
     "label": "Is ERPNext installed on a different site?"
    },
    {
     "default": "1",
+    "depends_on": "eval:doc.enabled && !doc.is_erpnext_in_different_site",
     "fieldname": "sync_products",
     "fieldtype": "Check",
     "label": "Bidirectional Product Sync"
@@ -2814,6 +3086,7 @@
    },
    {
     "default": "0",
+    "depends_on": "enabled",
     "fieldname": "create_customer_on_status_change",
     "fieldtype": "Check",
     "label": "Create customer on status change"
@@ -2823,18 +3096,24 @@
     "fieldtype": "Column Break"
    },
    {
+    "depends_on": "eval:doc.enabled && doc.create_customer_on_status_change",
     "fieldname": "deal_status",
     "fieldtype": "Link",
     "label": "Deal Status",
+    "mandatory_depends_on": "create_customer_on_status_change",
     "options": "CRM Deal Status"
    }
   ],
   "issingle": 1,
   "istable": 0,
+  "sort_field": "creation",
+  "sort_order": "DESC",
   "title_field": null
  },
  "FCRM Note": {
+  "allow_rename": 1,
   "autoname": null,
+  "editable_grid": 1,
   "fields": [
    {
     "fieldname": "title",
@@ -2867,9 +3146,13 @@
   ],
   "issingle": 0,
   "istable": 0,
-  "title_field": "title"
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "title_field": "title",
+  "track_changes": 1
  },
  "FCRM Settings": {
+  "allow_rename": 1,
   "autoname": null,
   "fields": [
    {
@@ -2893,6 +3176,7 @@
     "label": "Branding"
    },
    {
+    "description": "An image with 1:1 & 2:1 ratio is preferred",
     "fieldname": "brand_logo",
     "fieldtype": "Attach",
     "label": "Logo"
@@ -2908,18 +3192,21 @@
     "label": "Name"
    },
    {
+    "description": "An icon file with .ico extension. Should be 16 x 16 px. Generated using a favicon generator. [favicon-generator.org]",
     "fieldname": "favicon",
     "fieldtype": "Attach",
     "label": "Favicon"
    },
    {
     "default": "0",
+    "description": "It will make deal's \"Expected Closure Date\" & \"Expected Deal Value\" mandatory to get accurate forecasting insights",
     "fieldname": "enable_forecasting",
     "fieldtype": "Check",
     "label": "Enable Forecasting"
    },
    {
     "default": "0",
+    "description": "Restrict Lead and Deal visibility based on the Sales Hierarchy tree. Managers can see all records owned by or assigned to their reports.",
     "fieldname": "enable_sales_hierarchy",
     "fieldtype": "Check",
     "label": "Enable Sales Hierarchy Permissions"
@@ -2949,9 +3236,11 @@
     "options": "frankfurter.app\nfawazahmed-exchange-api\nexchangerate.host\nexchangerate-api"
    },
    {
+    "depends_on": "eval:doc.service_provider == 'exchangerate.host';",
     "fieldname": "access_key",
     "fieldtype": "Data",
-    "label": "Access Key"
+    "label": "Access Key",
+    "mandatory_depends_on": "eval:doc.service_provider == 'exchangerate.host';"
    },
    {
     "fieldname": "column_break_vqck",
@@ -2959,24 +3248,28 @@
    },
    {
     "default": "1",
+    "description": "Automatically update \"Expected Deal Value\" based on the total value of associated products in a deal",
     "fieldname": "auto_update_expected_deal_value",
     "fieldtype": "Check",
     "label": "Auto update Expected Deal Value"
    },
    {
     "default": "1",
+    "description": "Update the modified timestamp on new email communication & comment for leads & deals",
     "fieldname": "update_timestamp_on_new_communication",
     "fieldtype": "Check",
     "label": "Update timestamp on new communication"
    },
    {
     "default": "0",
+    "description": "Automatically sets Communication Status to \u201cReplied\u201d for the lead or deal when a response is received. Applies only when SLA is enabled",
     "fieldname": "auto_mark_replied_on_response",
     "fieldtype": "Check",
     "label": "Mark lead/deal as replied on response"
    },
    {
     "default": "0",
+    "description": "Automatically sets Communication Status to \u201cOpen\u201d for the lead or deal when a new communication is created. Applies only when SLA is enabled",
     "fieldname": "auto_reopen_on_new_communication",
     "fieldtype": "Check",
     "label": "Reopen lead/deal on new communication"
@@ -2993,6 +3286,7 @@
    },
    {
     "default": "Relative",
+    "description": "How timestamps are shown in the activity timeline for all users",
     "fieldname": "crm_timeline_timestamp_format",
     "fieldtype": "Select",
     "label": "Timeline Timestamp Format",
@@ -3000,6 +3294,7 @@
    },
    {
     "default": "Oldest First",
+    "description": "Order of activities, emails, comments and calls in the timeline for all users",
     "fieldname": "crm_timeline_sort_order",
     "fieldtype": "Select",
     "label": "Timeline Sort Order",
@@ -3007,6 +3302,7 @@
    },
    {
     "default": "0",
+    "description": "Set once the first admin completes the onboarding persona questionnaire",
     "fieldname": "persona_captured",
     "fieldtype": "Check",
     "hidden": 1,
@@ -3015,6 +3311,8 @@
   ],
   "issingle": 1,
   "istable": 0,
+  "sort_field": "creation",
+  "sort_order": "DESC",
   "title_field": null
  }
 }

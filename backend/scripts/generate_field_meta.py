@@ -29,7 +29,15 @@ CRM_DOCTYPE_DIR = pathlib.Path(
 )
 OUTPUT = pathlib.Path(__file__).resolve().parent.parent / "crm_app" / "data" / "doctype_meta.json"
 
-#: Kept verbatim per field - everything the metadata layer or a layout needs.
+#: Kept verbatim per field - everything the metadata layer, a layout, or a form control
+#: needs. The second block was added when ``frappe.desk.form.load.getdoctype`` was
+#: ported: upstream sends the whole DocField row to the browser, and the shipped frontend
+#: reads a good deal more of it than the metadata layer alone ever did -
+#: ``FieldLayout/Field.vue`` and ``SidePanelLayout.vue`` between them use ``depends_on``,
+#: ``mandatory_depends_on``, ``read_only_depends_on``, ``description`` and ``fetch_from``.
+#: The rest of the block is the remainder of the DocField properties that say something
+#: about a *value* (its length, sign, uniqueness, copy and print behaviour); they cost a
+#: few kilobytes in the generated file and mean a later reader never has to regenerate.
 FIELD_KEYS = (
     "fieldname",
     "fieldtype",
@@ -43,6 +51,47 @@ FIELD_KEYS = (
     "in_standard_filter",
     "in_list_view",
     "precision",
+    # -- form behaviour and value properties, for getdoctype ------------------------
+    "depends_on",
+    "mandatory_depends_on",
+    "read_only_depends_on",
+    "description",
+    "length",
+    "non_negative",
+    "fetch_from",
+    "fetch_if_empty",
+    "unique",
+    "set_only_once",
+    "no_copy",
+    "ignore_user_permissions",
+    "in_preview",
+    "in_global_search",
+    "bold",
+    "translatable",
+    "allow_in_quick_entry",
+    "columns",
+    "print_hide",
+    "report_hide",
+    "search_index",
+)
+
+#: Doctype-level properties kept when the JSON declares them, beyond the four that are
+#: always emitted below. A Frappe ``Meta`` carries every DocType property; these are the
+#: ones something in this port or in the frontend reaches for - ``editable_grid`` and
+#: ``grid_page_length`` drive ``Controls/Grid.vue``, ``translated_doctype`` drives
+#: ``stores/meta.js:isTranslatable``, ``sort_field``/``sort_order`` are the list default,
+#: and the rest describe the document's own rules.
+DOCTYPE_KEYS = (
+    "editable_grid",
+    "translated_doctype",
+    "sort_field",
+    "sort_order",
+    "naming_rule",
+    "allow_rename",
+    "track_changes",
+    "quick_entry",
+    "grid_page_length",
+    "max_attachments",
 )
 
 
@@ -67,13 +116,19 @@ def build() -> dict:
             entry["fieldtype"] = field.get("fieldtype")
             fields.append(entry)
 
-        meta[doctype] = {
+        entry = {
             "istable": doc.get("istable", 0),
             "issingle": doc.get("issingle", 0),
             "autoname": doc.get("autoname"),
             "title_field": doc.get("title_field"),
-            "fields": fields,
         }
+        # Same rule as the fields: an empty or zero property is "not declared", and the
+        # reader supplies the default. Keeps the file to what the DocType actually says.
+        entry.update(
+            {k: doc.get(k) for k in DOCTYPE_KEYS if doc.get(k) not in (None, "", 0)}
+        )
+        entry["fields"] = fields
+        meta[doctype] = entry
     return meta
 
 

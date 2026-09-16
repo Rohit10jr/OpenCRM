@@ -76,6 +76,22 @@ def get_fields(doctype: str) -> list[dict]:
     return _derive_from_model(doctype)
 
 
+def get_doctype_properties(doctype: str) -> dict:
+    """The doctype-level keys the generator kept - everything in the entry but ``fields``.
+
+    ``istable``, ``issingle``, ``autoname``, ``title_field`` and whichever of
+    ``editable_grid`` / ``sort_field`` / ``sort_order`` / ``naming_rule`` / ... the
+    DocType JSON actually declares. ``{}`` for a doctype with no JSON.
+
+    A fresh dict every call: ``getdoctype`` merges defaults into the result, and the
+    value behind :func:`_raw` is a process-lifetime memo that must not be written to.
+    """
+    meta = _raw().get(doctype)
+    if meta is None:
+        return {}
+    return {key: value for key, value in meta.items() if key != "fields"}
+
+
 def get_value_fields(doctype: str) -> list[dict]:
     """``get_fields`` minus the layout and table types — what upstream calls a value field."""
     return [f for f in get_fields(doctype) if f.get("fieldtype") not in NO_VALUE_FIELDTYPES]
