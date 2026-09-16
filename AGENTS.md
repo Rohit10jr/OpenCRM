@@ -11,7 +11,7 @@ lives in `specs/README.md` — read it there rather than trusting anything dated
 | File | What it is |
 |---|---|
 | **`specs/AS_BUILT.md`** | **What already exists. Read this first.** Where it and a phase spec disagree, it wins — the specs were written before the code. Its security section lists the mechanisms a doctype can use |
-| `PORT_PLAN.md` | Source inventory, frontend contract, settled architecture decisions |
+| `docs/PORT_PLAN.md` | Source inventory, frontend contract, settled architecture decisions |
 | `specs/SECURITY_MODEL.md` | Per-doctype comparison with upstream, and the 11 places we deliberately differ |
 | `specs/README.md` | Index of the phase specs, and the current status of each |
 | `specs/PHASE_<N>_*.md` | The spec for the phase you were asked about |

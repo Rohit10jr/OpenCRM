@@ -29,7 +29,7 @@ Three commits. On 14 August this was the entire process.
 | File | Written by | When | For |
 |---|---|---|---|
 | `readme.md` | Attended | 13 Aug | One line, until the *Getting in* section was added |
-| `PORT_PLAN.md` | Attended | 14 Aug | Source inventory, the frontend wire contract, settled architecture decisions |
+| `docs/PORT_PLAN.md` | Attended | 14 Aug | Source inventory, the frontend wire contract, settled architecture decisions |
 | `CLAUDE.md` | Attended | 14 Aug | Standing rules for Claude. **Auto-loaded** |
 | `AGENTS.md` | Attended | 14 Aug | Standing rules for Codex. **Auto-loaded**, written as a reviewer brief |
 | `specs/README.md` | Attended | 14 Aug | Index of the phase specs and their status |
@@ -84,8 +84,8 @@ Each exists because a review found something. Nobody sat down to write any of th
 | `specs/SECURITY_MODEL.md` | Unattended | 19 Aug | Per-doctype protection, and the 11 places we deliberately differ from upstream |
 | `specs/KNOWN_ISSUES.md` | Unattended | 20 Aug | Problems that outlive a phase — flaky tests, half-built features, accepted trades |
 | `specs/VERSION_HISTORY.md` | Unattended | 20 Aug | What change history is recorded and pruned. **Read before touching `clear_old_versions`** — its name invites a change that deletes the timeline |
-| `UPSTREAM_BUGS_PHASE_0-2.md` | Unattended | written from 14 Aug, **tracked 23 Aug** | Defects found in **upstream Frappe** while porting, with our stance on each |
-| `UPSTREAM_BUGS_PHASE_3-6.md` | Unattended | written from 16 Aug, **tracked 23 Aug** | The same, continuing. **38 entries across both files**, one sequence |
+| `docs/UPSTREAM_BUGS_PHASE_0-2.md` | Unattended | written from 14 Aug, **tracked 23 Aug** | Defects found in **upstream Frappe** while porting, with our stance on each |
+| `docs/UPSTREAM_BUGS_PHASE_3-6.md` | Unattended | written from 16 Aug, **tracked 23 Aug** | The same, continuing. **38 entries across both files**, one sequence |
 
 > **Two things this group got wrong, both now fixed, both worth knowing.** The registers were
 > **gitignored for six phases** — so an agent under a standing obligation to record every
@@ -101,11 +101,12 @@ Read in this order, and stop when you have what you need:
 
 1. **`specs/AS_BUILT.md`** — what exists. The largest available time-waster is rebuilding it
 2. **`CLAUDE.md`** — the rules, and the reviewer policy
-3. **`PORT_PLAN.md`** — the contract and the settled decisions
+3. **`docs/PORT_PLAN.md`** — the contract and the settled decisions
 4. **Your phase's spec**, then **`specs/KNOWN_ISSUES.md`**
 
 And if you are handing work to an agent rather than doing it yourself, read
 **`docs/WORKFLOW.md`** — it is the shape all of the above turned out to have.
 
 *(The `PROGRESS_*`, `TASK` and `RUNBOOK` files began at the repository root and were moved
-here later; `git log --follow` crosses the move.)*
+here later; so did `PORT_PLAN.md` and the two `UPSTREAM_BUGS` files, into `docs/`.
+`git log --follow` crosses both moves.)*

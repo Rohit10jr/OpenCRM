@@ -2,7 +2,7 @@
 
 Source analysis and architecture brief for agents working on this port.
 
-> **Start at [`specs/AS_BUILT.md`](specs/AS_BUILT.md)** — what phases 0-2 actually built.
+> **Start at [`specs/AS_BUILT.md`](../specs/AS_BUILT.md)** — what phases 0-2 actually built.
 > Then this document for context and settled decisions, then your phase spec.
 
 ## Where this stands

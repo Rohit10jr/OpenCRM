@@ -8,7 +8,7 @@ existing Vue frontend.
 | File | What it is |
 |---|---|
 | **`specs/AS_BUILT.md`** | **What already exists. Read this first** |
-| `PORT_PLAN.md` | Source inventory, frontend contract, settled architecture decisions |
+| `docs/PORT_PLAN.md` | Source inventory, frontend contract, settled architecture decisions |
 | `specs/README.md` | Index of per-phase specs and their status |
 | `specs/PHASE_<N>_*.md` | Your phase's spec |
 | **`specs/SECURITY_MODEL.md`** | **Required before touching any permission rule or field-visibility declaration.** Per-doctype comparison with upstream, the four field tools and when each applies |
@@ -37,7 +37,7 @@ or flag the ambiguity in your report. If something looks impossible, suspect a m
 framework mechanism before suspecting your own code.
 
 **When upstream is wrong** — and it sometimes is; **39 cases** are recorded across the
-`UPSTREAM_BUGS_PHASE_*.md` files (1–9 and 36–38 in the `0-2` file, 10–35 and 39 in the
+`docs/UPSTREAM_BUGS_PHASE_*.md` files (1–9 and 36–38 in the `0-2` file, 10–35 and 39 in the
 `3-6` file, which despite its name now spans phases 3–8 and the follow-up) — diverge
 only on bugs nothing can observe, and reproduce user-visible ones. Check whether anything
 actually reads the field before deciding, and record the choice.
