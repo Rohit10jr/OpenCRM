@@ -290,6 +290,89 @@ def assign_to_add(doctype: str, name: str, assign_to=None, description: str = ""
     return assignment.get_assigned_users(doctype, name)
 
 
+@whitelist("frappe.desk.form.assign_to.add_multiple", methods=("POST",))
+def assign_to_add_multiple(doctype: str, name=None, assign_to=None, description: str = "", **extra):
+    """``frappe/desk/form/assign_to.py:148-156`` - ``add_multiple``.
+
+    Upstream is ``json.loads(args["name"])`` and then :func:`add` per document, so this
+    runs exactly what :func:`assign_to_add` runs for each name, write check included.
+    ``name`` is the *list*, not a document - that odd shape is upstream's and the
+    frontend sends it (``AssignmentModal.vue:160``, ``name: JSON.stringify(list)``).
+
+    **Returns ``None``.** Upstream's ``add_multiple`` has no ``return`` statement; only
+    the single-document ``add`` returns the assignee list. ``AssignmentModal.vue`` ignores
+    the body and reloads the list, so the empty answer is what the frontend expects.
+
+    ``bulk_assign`` / ``re_assign`` arrive from that same call and are **swallowed by
+    ``**extra``**: upstream ignores them too - ``add`` reads neither out of ``args``, and
+    nothing downstream of it does either. They are frontend-side analytics flags that
+    happen to be sent along with the payload.
+
+    **Divergence: the whole batch is one transaction.** Upstream loops with no
+    transaction around it, so a document that refuses half way through leaves the earlier
+    ones assigned and reports an error - the caller cannot tell which half applied. The
+    port's other bulk paths (``crm.api.doc.delete_bulk_docs``) refuse the whole batch
+    instead, and this follows them: a 403 on the third document unassigns the first two.
+    """
+    from frappe_core import assignment
+
+    names = parse_json_param(name, []) or []
+    if not isinstance(names, list):
+        names = [names]
+
+    users = parse_json_param(assign_to, []) or []
+    if isinstance(users, str):
+        users = [users]
+
+    with transaction.atomic():
+        for docname in names:
+            # Same check `add` makes, per document: assigning grants the assignee read
+            # access, so it takes write permission on the document being given away.
+            _get_checked(doctype, docname, "write")
+            for user in users:
+                assignment.assign_to_user(doctype, docname, user, description=description)
+
+
+@whitelist("frappe.desk.form.assign_to.remove_multiple", methods=("POST",))
+def assign_to_remove_multiple(doctype: str, names=None, **extra):
+    """``frappe/desk/form/assign_to.py:191-201`` - ``remove_multiple``.
+
+    Upstream loops ``get()`` (the open assignments - status not in Cancelled/Closed) and
+    calls ``remove()`` on each, which is ``set_status(..., status="Cancelled")``. Here
+    that is :func:`assignment.get_assigned_users` (the same status filter - it is the
+    display filter, ``INACTIVE_FOR_DISPLAY``) followed by
+    :func:`assignment.cancel_assignment`, which cancels rather than deletes and fires the
+    ToDo signal, so the assignee is notified exactly as upstream's ``notify_assignment``
+    does.
+
+    **``ignore_permissions`` is swallowed.** ``ListBulkActions.vue:154`` sends it, but
+    upstream's ``remove_multiple`` takes only ``doctype`` and ``names`` - the framework
+    drops the surplus argument before the function sees it, so it has no effect there
+    either. This is *not* the ``crm.api.doc.remove_assignments`` case, where upstream
+    really does accept the flag and honour it (see that function's note).
+
+    Write permission per document, and the same one-transaction divergence
+    :func:`assign_to_add_multiple` documents. Returns ``None``, as upstream does.
+
+    One more divergence, deliberate: upstream's ``get()`` carries ``limit=5`` - it feeds
+    the form sidebar, which shows five - so ``remove_multiple`` on a document with six
+    assignees cancels five and leaves one. The button says "clear assignment"; here every
+    open assignment goes.
+    """
+    from frappe_core import assignment
+
+    parsed = parse_json_param(names, []) or []
+    if not isinstance(parsed, list):
+        parsed = [parsed]
+
+    with transaction.atomic():
+        for docname in parsed:
+            _get_checked(doctype, docname, "write")
+            assigned = assignment.get_assigned_users(doctype, docname)
+            if assigned:
+                assignment.cancel_assignment(doctype, docname, assigned)
+
+
 @whitelist("frappe.desk.like.toggle_like", methods=("POST",))
 def toggle_like(doctype: str, name: str, add: str = "No"):
     """``frappe/desk/like.py:toggle_like``.

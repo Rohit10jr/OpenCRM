@@ -28,6 +28,11 @@ daphne==4.1.2
 phonenumbers==8.13.52
 requests==2.32.3
 
+# Email Template rendering. Frappe renders every template through a jinja2
+# SandboxedEnvironment (frappe/utils/jinja.py:get_jenv), and the sandbox is the point:
+# template text is user-authored and rendered server-side against a real document.
+Jinja2==3.1.6
+
 # Testing
 pytest==8.3.4
 pytest-django==4.9.0

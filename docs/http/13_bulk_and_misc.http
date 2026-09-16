@@ -632,3 +632,183 @@ Authorization: Bearer {{token}}
 # @expect $.message == This action is only allowed for <strong>Sales Manager</strong>, <strong>System Manager</strong>
 POST {{host}}/api/method/crm.demo.api.clear_demo_data
 Authorization: Bearer {{stoken}}
+
+# ---- the list view's bulk actions, and the composer's template renderer --------------------------
+#
+# frappe/desk/form/assign_to.py:148-156 and :191-201 (assign and clear assignment over a
+# selection - AssignmentModal.vue:157-170 and ListBulkActions.vue:145-156),
+# frappe/desk/doctype/bulk_update/bulk_update.py:54-124 (the bulk edit dialog,
+# EditValueModal.vue:109-125) and
+# frappe/email/doctype/email_template/email_template.py:52-58 (EmailEditor.vue:297-313).
+#
+# Two bands of submit_cancel_or_update_docs are not exercised here and are covered by
+# backend/tests/test_bulk_actions.py instead: the >500 refusal, which needs a generated
+# list of 501 names that no static file should carry, and the 20-500 enqueue band, which
+# hands the batch to Celery and there is no worker in this setup.
+#
+# Section 3's Email Template is renamed to "ZZ Welcome 2" and deleted by the section 6
+# teardown, so this section makes one of its own and deletes it at the end, with the two
+# leads.
+#
+# The leads are named "ZZ Bulk Batch ..." so the leftover sweep in section 0 reclaims them
+# if a run stops half way.
+
+### 10.1 a leftover template from an interrupted run -> 200|404
+DELETE {{host}}/api/resource/Email%20Template/ZZ%20Render
+Authorization: Bearer {{token}}
+
+### 10.2 a lead to act on -> 201
+# @name b1
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Bulk Batch A", "lead_owner": "{{admin}}"}
+
+###
+@b1n = {{b1.response.body.$.data.name}}
+
+### 10.3 and a second -> 201
+# @name b2
+POST {{lead}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"first_name": "ZZ Bulk Batch B", "lead_owner": "{{admin}}"}
+
+###
+@b2n = {{b2.response.body.$.data.name}}
+
+### 10.4 assign both to ada in one call -> 200, and a null body: upstream's add_multiple returns nothing
+# @expect $.message == null
+# `name` is the JSON-encoded *list*, which is the odd shape AssignmentModal.vue sends;
+# bulk_assign and re_assign ride along with it and upstream's `add` reads neither.
+POST {{host}}/api/method/frappe.desk.form.assign_to.add_multiple
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "name": "[\"{{b1n}}\", \"{{b2n}}\"]", "assign_to": ["{{sales}}"], "bulk_assign": true, "re_assign": true}
+
+### 10.5 the assignment landed on the first of them -> 200
+# @expect $.message contains {{sales}}
+GET {{host}}/api/method/crm.api.doc.get_assigned_users?doctype=CRM%20Lead&name={{b1n}}
+Authorization: Bearer {{token}}
+
+### 10.6 ...and on the second -> 200
+# @expect $.message contains {{sales}}
+GET {{host}}/api/method/crm.api.doc.get_assigned_users?doctype=CRM%20Lead&name={{b2n}}
+Authorization: Bearer {{token}}
+
+### 10.7 clear the assignment on both -> 200, null again
+# @expect $.message == null
+# `ignore_permissions` is what ListBulkActions.vue sends and buys nothing: upstream's
+# remove_multiple does not accept the argument, so the framework drops it there too.
+POST {{host}}/api/method/frappe.desk.form.assign_to.remove_multiple
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "names": "[\"{{b1n}}\", \"{{b2n}}\"]", "ignore_permissions": true}
+
+### 10.8 every open assignment is gone, the owner's own included -> 200, empty
+# @expect $.message count 0
+GET {{host}}/api/method/crm.api.doc.get_assigned_users?doctype=CRM%20Lead&name={{b1n}}
+Authorization: Bearer {{token}}
+
+### 10.9 bulk edit a field on both -> 200 and an empty `failed` list
+# @expect $.message count 0
+# Under 20 names runs in the request and answers with the names that did not go through.
+# `next_step` is a Deal field, so the lead equivalent (`job_title`) is what is set here.
+POST {{host}}/api/method/frappe.desk.doctype.bulk_update.bulk_update.submit_cancel_or_update_docs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "docnames": ["{{b1n}}", "{{b2n}}"], "action": "update", "data": {"job_title": "ZZ Batch Edited"}}
+
+### 10.10 -> the field changed on the first
+# @expect $.data.job_title == ZZ Batch Edited
+GET {{lead}}/{{b1n}}
+Authorization: Bearer {{token}}
+
+### 10.11 -> and on the second
+# @expect $.data.job_title == ZZ Batch Edited
+GET {{lead}}/{{b2n}}
+Authorization: Bearer {{token}}
+
+### 10.12 "submit" fails every document -> 200, both names come back
+# @expect $.message count 2
+# Nothing in this port is submittable: there is no docstatus, so there is no document
+# submit or cancel can apply to. Upstream reaches the same answer by raising inside
+# doc.submit() and catching it per document.
+POST {{host}}/api/method/frappe.desk.doctype.bulk_update.bulk_update.submit_cancel_or_update_docs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"doctype": "CRM Lead", "docnames": ["{{b1n}}", "{{b2n}}"], "action": "submit"}
+
+###
+# A literal `{`. The runner substitutes every {{name}} it finds and errors on one it does
+# not know, so a Jinja placeholder in a template body has to be assembled rather than typed.
+@lb = {
+
+### 10.13 a template of this section's own -> 201
+POST {{host}}/api/resource/Email%20Template
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "ZZ Render", "subject": "Welcome aboard, {{lb}}{{lb}} first_name }}", "response": "<p>Hello {{lb}}{{lb}} first_name }} of {{lb}}{{lb}} organization }}.</p>", "reference_doctype": "CRM Lead"}
+
+### 10.14 the document's fields are the template's variables -> 200
+# @expect $.message.subject == Welcome aboard, ZZ Bulk Batch A
+# @expect $.message.message contains Hello ZZ Bulk Batch A
+# The composer sends the whole lead as `doc`, and upstream renders against that dict
+# directly - so a template says {{lb}}{{lb}} first_name }}, not {{lb}}{{lb}} doc.first_name }}.
+POST {{host}}/api/method/frappe.email.doctype.email_template.email_template.get_email_template
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"template_name": "ZZ Render", "doc": {"first_name": "{{b1.response.body.$.data.first_name}}"}}
+
+### 10.15 a name the document does not carry comes back as its own placeholder -> 200
+# @expect $.message.message contains {{lb}}{{lb}} organization }}
+# get_jenv sets undefined=DebugUndefined (frappe/utils/jinja.py:35): the gap is shown to
+# the user to fill in, rather than raising or silently rendering as nothing.
+POST {{host}}/api/method/frappe.email.doctype.email_template.email_template.get_email_template
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"template_name": "ZZ Render", "doc": {"first_name": "Ada"}}
+
+### 10.16 a template that does not exist -> 404
+# @expect $.exc_type == DoesNotExistError
+POST {{host}}/api/method/frappe.email.doctype.email_template.email_template.get_email_template
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"template_name": "ZZ No Such Template", "doc": {"first_name": "Ada"}}
+
+### 10.17 a Sales User may render one too: no row rule guards Email Template -> 200
+# @expect $.message.subject == Welcome aboard, Ada
+POST {{host}}/api/method/frappe.email.doctype.email_template.email_template.get_email_template
+Authorization: Bearer {{stoken}}
+Content-Type: application/json
+
+{"template_name": "ZZ Render", "doc": {"first_name": "Ada"}}
+
+# ---- section 10 teardown ------------------------------------------------------------------------
+
+### 10.18 delete the template -> 200
+DELETE {{host}}/api/resource/Email%20Template/ZZ%20Render
+Authorization: Bearer {{token}}
+
+### 10.19 delete the first lead -> 200
+DELETE {{lead}}/{{b1n}}
+Authorization: Bearer {{token}}
+
+### 10.20 delete the second -> 200
+DELETE {{lead}}/{{b2n}}
+Authorization: Bearer {{token}}
+
+### 10.21 nothing left behind -> 200, empty
+# @expect $.data count 0
+GET {{lead}}?fields=["name"]&filters=[["first_name","like","ZZ Bulk Batch%25"]]
+Authorization: Bearer {{token}}
