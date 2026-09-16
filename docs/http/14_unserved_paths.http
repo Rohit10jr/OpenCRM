@@ -1,17 +1,19 @@
-# 14 - the twelve dotted paths the frontend calls that nothing serves. Each answers 404
+# 14 - the five dotted paths the frontend calls that nothing serves. Each answers 404
 # today. (Twenty at first; the eight CRM-level ones - create_deal, convert_to_deal, the
 # deal contacts panel and its buttons, get_call_log, create_lead_from_call_log - were
-# ported on 15 Sep 2026 and their blocks now live in 03, 04 and 06.) This file exists so the gap is visible in the suite: when one of these is
-# ported, its block goes red here, and its expectation should move to the real answer in
-# the file that owns the feature.
+# ported on 15 Sep 2026 and their blocks now live in 03, 04 and 06; the seven Desk
+# plumbing calls the pages make on load - get_apps, get_timezones, getdoctype,
+# user_settings.save, current_site_info, boot_config, clear_demo_data - were ported on
+# 16 Sep 2026 and their blocks now live in 07 and 13.) This file exists so the gap is
+# visible in the suite: when one of these is ported, its block goes red here, and its
+# expectation should move to the real answer in the file that owns the feature.
 #
 # Found by scanning frontend/src for call('...') sites (docs/TESTING_GUIDE.md, "Gaps you
 # will hit"). The guard in tests/test_phase3_endpoints.py matches only `url:` and
 # `method:` keys, so these were invisible to it.
 #
-# The first five break real buttons; all five are framework code (Frappe's desk and
-# email modules). The last seven are Desk plumbing the Vue app is written to tolerate
-# failing.
+# All five break real buttons, and all five are framework code (Frappe's desk and email
+# modules).
 
 @host = http://localhost:8000
 @admin = Administrator
@@ -68,46 +70,3 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"template_name": "x", "doc": "{}"}
-
-# ---- Desk plumbing the app tolerates failing ---------------------------------------------------------
-
-### 2.1 the apps switcher (UserDropdown.vue) -> 404
-# @expect $.exc_type == DoesNotExistError
-GET {{host}}/api/method/frappe.apps.get_apps
-Authorization: Bearer {{token}}
-
-### 2.2 timezone list for the preferences page -> 404
-# @expect $.exc_type == DoesNotExistError
-GET {{host}}/api/method/frappe.core.doctype.user.user.get_timezones
-Authorization: Bearer {{token}}
-
-### 2.3 doctype meta for stores/meta.js -> 404 (watch this one if a form ever renders without fields)
-# @expect $.exc_type == DoesNotExistError
-POST {{host}}/api/method/frappe.desk.form.load.getdoctype
-Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{"doctype": "CRM Lead"}
-
-### 2.4 user settings save for stores/meta.js -> 404
-# @expect $.exc_type == DoesNotExistError
-POST {{host}}/api/method/frappe.model.utils.user_settings.save
-Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{"doctype": "CRM Lead", "user_settings": "{}"}
-
-### 2.5 Frappe Cloud billing info -> 404
-# @expect $.exc_type == DoesNotExistError
-GET {{host}}/api/method/frappe.integrations.frappe_providers.frappecloud_billing.current_site_info
-Authorization: Bearer {{token}}
-
-### 2.6 telemetry boot config (router.js, wrapped in try/catch and fails open) -> 404
-# @expect $.exc_type == DoesNotExistError
-GET {{host}}/api/method/frappe.utils.telemetry.pulse.client.boot_config
-Authorization: Bearer {{token}}
-
-### 2.7 clear demo data (composables/demoData.js) -> 404
-# @expect $.exc_type == DoesNotExistError
-POST {{host}}/api/method/crm.demo.api.clear_demo_data
-Authorization: Bearer {{token}}
