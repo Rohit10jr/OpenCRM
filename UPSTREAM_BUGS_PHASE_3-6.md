@@ -761,6 +761,41 @@ caller to use it.
 
 ---
 
+## 39. One missing name aborts a whole bulk update, and loses its report
+
+**Where:** `frappe/desk/doctype/bulk_update/bulk_update.py:82-124` (`_bulk_action`),
+found on 16 Sep 2026 while porting `submit_cancel_or_update_docs` for the list view's
+bulk edit.
+
+```python
+for idx, docname in enumerate(docnames, 1):
+    doc = frappe.get_doc(doctype, docname)
+    try:
+        ...
+        frappe.db.commit()
+    except Exception:
+        frappe.log_error("Bulk action failed")
+        failed.append(docname)
+        frappe.db.rollback()
+return failed
+```
+
+The `get_doc` sits *outside* the `try`. A name that no longer exists - a row someone
+deleted between the list loading and the click, which is exactly the situation a bulk
+action on a shared list runs into - raises `DoesNotExistError` straight out of the loop.
+Every document before it is already committed, every document after it is untouched,
+and the caller gets an error instead of the `failed` list, so it cannot tell which. The
+`except Exception` two lines down was written for precisely this class of failure and
+never sees it.
+
+**Us:** *Diverge - fix.* `crm_app/bulk_update.py:bulk_action` looks the name up inside
+the per-document guard, so a missing document joins `failed` like a refused or invalid
+one, and the rest of the batch is reported. User-visible upstream (a spinner, then an
+error dialog, for a batch that half-applied), so reproduced as the outcome upstream's
+own handler intended rather than the one it delivers.
+
+---
+
 ## The pattern worth remembering
 
 Entries 10, 11, 12 and 14 are the same defect wearing four hats:

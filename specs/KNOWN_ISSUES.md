@@ -504,3 +504,48 @@ then use the access token issued before it, and require a 401.
 * **Do not describe logout as revocation** in any UI copy. "Signed out everywhere" is
   true; "your other sessions have been terminated" is not, for another five minutes.
 
+## 7. Sending email from a lead or deal: the edges of what was ported
+
+**Status: open, recorded 16 Sep 2026** with `frappe.core.doctype.communication.email.make`
+(`crm_app/api/communication.py`, `crm_app/communication.py`). None of these breaks the
+send button; each is a case the port answers differently from upstream, or not at all,
+and the next person to touch mail should meet them here.
+
+### A subject with a line break is a 500 on the inline path
+
+Django refuses a header containing CR or LF (`BadHeaderError`, a `ValueError`) when the
+message is built, which is the right security answer - it is header injection - but the
+inline send (`now: 1`) catches only `SMTPException` / `OSError`, so the caller gets a
+500 rather than a 417. Queued, the task fails without retry, since the exception is not
+on its retry list, and the row stays claimed (see below). Upstream does not validate
+the subject either. Left as is because choosing a sentence would be inventing copy
+upstream does not have; if it is picked up, catch `BadHeaderError` in
+`crm_app/api/communication.py:_send` and `throw` a 417, and clear the claim in the task.
+
+### A worker killed between the claim and the send leaves the mail unsent
+
+`send_communication` stamps `communication_date` under a row lock *before* the message
+goes out, so two deliveries cannot both send, and clears it when the send raises. A
+process killed in between leaves the row stamped and the mail unsent, and nothing
+retries it. That is the same state as an upstream `Email Queue` row stuck in "Sending":
+both designs err toward no duplicate. Upstream has a Desk screen to resend from; this
+port has no screen and no `delivery_status`, so the only sign is a timeline entry whose
+mail never arrived. If it matters, the fix is a `delivery_status` column set to
+"Sending" at the claim and "Sent" after, plus a periodic task that re-queues rows stuck
+in "Sending" older than a few minutes.
+
+### Nothing sends without a Celery worker
+
+Real clicks queue on `crm.send_communication_email`. A development machine with no
+worker running logs the Communication and sends nothing; the http blocks and hand
+testing pass `now: 1` to send inside the request. Not a defect, but the first thing to
+check when "the email never arrived".
+
+### Two smaller divergences, both stated in the code
+
+* `frappe.desk.form.assign_to.remove_multiple` clears every open assignment; upstream's
+  `get()` carries `limit=5`, so on a document with six assignees upstream leaves one.
+* `submit_cancel_or_update_docs` cannot show upstream's "Bulk operation is enqueued in
+  background." alert on the 20-to-500 path: a success response here carries no message
+  channel. The frontend reloads the list either way.
+

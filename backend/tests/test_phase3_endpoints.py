@@ -50,13 +50,15 @@ def call(client, path: str, payload: dict | None = None):
 #: Empty since 16 Sep 2026. The controller methods (create_deal, get_deal_contacts,
 #: get_call_log, the fields-layout pair) and the Desk plumbing calls (get_apps,
 #: get_timezones, getdoctype, user_settings.save, current_site_info, clear_demo_data)
-#: that used to be listed here are all served now - docs/http/14_unserved_paths.http
-#: tracks what still is not, and the `call('...')` sites it lists are invisible to
-#: `_PATH_RE` anyway. The set stays so a future exclusion has a place, and
-#: `test_out_of_scope_list_is_not_hiding_a_regression` keeps it honest.
+#: that used to be listed here are all served now. The set stays so a future exclusion
+#: has a place, and `test_out_of_scope_list_is_not_hiding_a_regression` keeps it honest.
 OUT_OF_SCOPE: set[str] = set()
 
-_PATH_RE = re.compile(r"(?:url|method):\s*'([a-z_]+(?:\.[a-z_]+)+)'")
+#: A dotted path at a `url:` / `method:` key, or as the first argument of `call(...)`.
+#: The second form was missed until 16 Sep 2026, which is how twenty paths the Vue app
+#: calls stayed unserved through eight phases (docs/TESTING_GUIDE.md, "Gaps you will
+#: hit"); every one of them was a `call('...')` site.
+_PATH_RE = re.compile(r"(?:(?:url|method):\s*|\bcall\(\s*)'([a-z_]+(?:\.[a-z_]+)+)'")
 
 
 def frontend_called_paths() -> set[str]:
