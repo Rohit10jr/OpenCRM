@@ -442,6 +442,17 @@ Content-Type: application/json
 
 {"organization_name": "ZZ <script>"}
 
+### 10.10b POST a name that already exists -> 409 DuplicateEntryError, upstream's sentence (base_document.py:598-606)
+# 1.1 created ZZ Grammar Alpha; a second create of the same name collides on the primary
+# key. Answered 409 with psycopg's own wording until 20 Sep 2026: FINDINGS.md 25.
+# @expect $.exc_type == DuplicateEntryError
+# @expect $.message == CRM Organization <strong>ZZ Grammar Alpha</strong> already exists
+POST {{org}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organization_name": "ZZ Grammar Alpha"}
+
 ### 10.11 deleting a row another row links to -> 417 LinkExistsError (delete_doc.py:452)
 # @expect $.exc_type == LinkExistsError
 # @expect $.message == Cannot delete or cancel because CRM Industry ZZ Grammar Industry is linked with CRM Organization ZZ Grammar Alpha

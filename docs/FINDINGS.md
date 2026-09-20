@@ -34,6 +34,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 22 | 13 / 4.8 | low | A **private** File attached to nothing is readable by every user; upstream lets only its owner read it | **fixed** 15 Sep 2026 |
 | 23 | 05 / 8.2, by hand | medium | Deleting a contact re-validates the rows it is removing: a contact whose rows have two primaries answers **417** and cannot be deleted at all | **fixed** 15 Sep 2026 |
 | 24 | 06 / 0.3–0.5, by hand | medium | A name that is not a number, on a doctype whose names are numbers (CRM Task, CRM View Settings), answers **500** on every lookup; upstream answers 404 | **fixed** 16 Sep 2026 |
+| 25 | 12 / 2.2 run twice, by hand; 02 / 10.10b | low | Creating a document whose name already exists answers 409 with **Django's internal wording** ("duplicate key value violates unique constraint …"); upstream says "<DocType> **name** already exists", titled "Duplicate Name" | **fixed** 20 Sep 2026 |
 
 ---
 
@@ -696,3 +697,32 @@ existing "None means not found" branch gives the 404. The resource view, the two
 `_require_readable` helpers, `frappe.client.*`, `remove_assignments`,
 `delete_attachment`, the deal-contact buttons and the view-settings endpoints all go
 through it.
+
+## 25. A duplicate name answers with Django's internal wording
+
+**Block:** `12_settings_singletons.http` 2.2, run a second time by hand while its row
+still existed: CRM Twilio Settings is a singleton, always named `Settings`, so the
+second create collides. Reproduced from a clean run by `02_resource_grammar.http`
+10.10b, which posts an organization under a name 1.1 already created.
+
+**Expected:** 409 `DuplicateEntryError` with the message "CRM Organization
+<strong>ZZ Grammar Alpha</strong> already exists", titled "Duplicate Name".
+`frappe/model/base_document.py:598-606` catches the database's unique-key error on
+insert, `msgprint`s exactly that, and raises `DuplicateEntryError`.
+
+**Actual:** 409 `DuplicateEntryError`, the right class and status, but the message is
+psycopg's: *"duplicate key value violates unique constraint
+"crm_app_crmtwiliosettings_pkey" DETAIL: Key (name)=(Settings) already exists."* The
+handler maps every `IntegrityError` to 409 with `str(exc)` as the sentence, which is
+the same shape findings 3 and 7 had for their own cases and were fixed for; a genuine
+duplicate was the one left.
+
+**Where:** `frappe_core/serializers.py:create` - the one place every create goes
+through (`/api/resource/`, `frappe.client.insert`, the deal and lead endpoints).
+
+**Fixed 20 Sep 2026.** `create` catches the `IntegrityError` outside its savepoint,
+works out the name the insert attempted (the naming field's value for `field:`
+doctypes, the client's `name` for `prompt` ones, `Settings` for a singleton), and when
+a row of that name exists raises `DuplicateEntryError` with upstream's sentence and
+title. Any other integrity error keeps its raw text, as before, because it is not a
+duplicate name.
