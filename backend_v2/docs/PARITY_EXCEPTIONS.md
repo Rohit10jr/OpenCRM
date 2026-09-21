@@ -16,8 +16,14 @@ testing that has no entry here is a bug in `backend_v2`, not an exception.
 - **A default that differs between library versions** (Django 5.1 → 5.2, P10) where
   matching the old output would mean fighting the framework.
 
-Not an entry: a value that legitimately differs between two servers (generated names,
-timestamps, tokens). The body diff normalises those, and `API_CONTRACT.md` lists them.
+Not an entry:
+
+- **A value that legitimately differs between two servers** (generated names, timestamps,
+  tokens). The body diff normalises those, and `API_CONTRACT.md` lists them.
+- **The new URL, HTTP method and reshaped inputs of a route.** Those change by design
+  (REBUILD_PLAN S6, S7) and are recorded in the route map in `PORT_MAP.md`. An entry here
+  is for a difference in what comes back — status, body, behaviour — not in how it is
+  asked for.
 
 ## How an entry is written
 

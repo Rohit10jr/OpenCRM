@@ -6,9 +6,12 @@ Paths are from the repository root.
 
 ## 1. Scope
 
-The rest of app `documents`, after FOUNDATION built the doctype map, `/api/resource/` and
-the basic `frappe.client.*` calls. These operations act on **any** mapped doctype, so they
-come once most doctypes exist. The `PORT_MAP.md` rows under **DOCUMENTS**:
+The generic operations every resource offers, after FOUNDATION built the base ViewSet's
+CRUD. In the old backend each of these took a doctype as data; in `backend_v2` they become
+per-resource routes (`/api/v1/leads/bulk-delete/`, `/api/v1/leads/search/`, …), and
+**whether they are mixins every ViewSet inherits or endpoints in this app that look the
+resource up is REBUILD_PLAN O7**, settled with the route map. They act on most doctypes,
+so they come once most doctypes exist. The `PORT_MAP.md` rows under **DOCUMENTS**:
 
 - **Method paths (6):** `crm.api.doc.delete_bulk_docs`,
   `crm.api.doc.get_linked_docs_of_document`, `crm.api.doc.remove_linked_doc_reference`,

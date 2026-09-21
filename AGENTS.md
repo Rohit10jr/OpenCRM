@@ -12,8 +12,8 @@ standing rules only. Which unit is in progress, and what is done, lives in
 | Folder | What it is | Its role in a review |
 |---|---|---|
 | `backend/` | A port of Frappe CRM to Django that re-implements Frappe's request layer. It works, and still receives fixes as testing finds them | **The reference.** The behaviour and the JSON `backend_v2` must reproduce. Compare against the copy in the checkout you are reviewing |
-| `backend_v2/` | The same API with the same JSON, rebuilt as a conventional Django project: one app per domain, explicit URLs, DRF ViewSets and serializers | **What you review** |
-| `frontend/` | The Vue app, unchanged | Why the wire format cannot change |
+| `backend_v2/` | The same CRM as a conventional Django **REST API under `/api/v1/`**: one app per domain, DRF ViewSets on routers, serializers. Each route answers with the same JSON as the old path it replaces | **What you review** |
+| `frontend/` | The Vue app, unchanged in this rebuild. Later it moves to `backend_v2` by changing only which URL and HTTP method each call uses | Why the responses and the inputs cannot change, though the URLs do |
 
 A rebuild goes wrong in two ways: **losing something the old backend did**, and
 **changing something it did**. Both are silent — the author's tests test the new code,
@@ -24,7 +24,7 @@ not the old.
 | File | What it tells you |
 |---|---|
 | **`backend_v2/docs/API_CONTRACT.md`** | **What must be identical on the wire**, with the old code that decides each rule |
-| **`backend_v2/docs/PORT_MAP.md`** | Every method path and doctype: its unit, its old source file and line, and the protections it carries |
+| **`backend_v2/docs/PORT_MAP.md`** | Every old path and doctype: its unit, its old source file and line, the protections it carries — and, once written, the route map from each old path to its new route |
 | `backend_v2/docs/REBUILD_PLAN.md` | The decisions — Settled, Proposed and Open |
 | `backend_v2/docs/PARITY_EXCEPTIONS.md` | The only differences from `backend/` that are allowed |
 | `backend_v2/docs/AS_BUILT.md` | What exists in `backend_v2`, and the conventions it set |
@@ -37,8 +37,9 @@ one is wrong, say so in your report rather than working around it.
 
 ## Source of truth
 
-1. **`backend/`** decides behaviour and JSON. For a method path, `PORT_MAP.md`'s **Old
-   source** column names the file and line.
+1. **`backend/`** decides behaviour and JSON. The route map says which old path a new
+   route replaces, and `PORT_MAP.md`'s **Old source** column names that path's file and
+   line.
 2. **The Frappe source**, only where the old backend leaves a question open:
 
    ```
@@ -58,27 +59,35 @@ misreading.
 
 For the rebuild:
 
-1. **Same status, same body.** A deliberate difference from `backend/` needs an
-   **approved** entry in `PARITY_EXCEPTIONS.md`.
-2. **Nothing publishes an API by side effect.** Every route is written in an app's
-   `urls.py`; the doctype map is literal code; no decorator, registry or import hook adds
-   a route.
-3. **Allowlists are explicit** — serializer fields, filterable, orderable and searchable
+1. **New URL, same status, same body.** Every route is REST, under `/api/v1/`, and answers
+   exactly like the old path it replaces. A deliberate difference in what comes back needs
+   an **approved** entry in `PARITY_EXCEPTIONS.md`. No RPC-style dotted path and no
+   generic `/api/resource/` route is served.
+2. **Inputs keep their names and formats.** Only the resource and the document name move
+   into the URL, and the HTTP method says what happens. Any other reshaped input must be
+   listed in the route map.
+3. **Nothing publishes an API by side effect.** Every route is written in an app's
+   `urls.py` and listed in the route map; no decorator, registry or import hook adds one,
+   and nothing is routed by doctype name.
+4. **Allowlists are explicit** — serializer fields, filterable, orderable and searchable
    fields. Not "every field except".
-4. **Every door to a doctype shares one queryset and one field policy**:
-   `/api/resource/`, `frappe.client.*`, `get_data`, `search_link`, the bulk actions.
-5. **The user is passed explicitly**, never read from a context variable or thread-local.
-6. **`backend_v2/` never imports from `backend/`.**
+5. **Every door to a doctype shares one queryset and one field policy**: its list,
+   document and action routes, its list view, its link search, the bulk actions, and any
+   other route that reads it.
+6. **The user is passed explicitly**, never read from a context variable or thread-local.
+7. **`backend_v2/` never imports from `backend/`.**
 
 Carried from the port, and still true because they are now the contract:
 
-7. **The frontend wire protocol is fixed.** JWT auth and the WebSocket transport are the
-   only two sanctioned deviations from Frappe's.
-8. **`frappe.throw` text is preserved verbatim** — it is user-facing copy.
-9. **Names follow the six `autoname` strategies**; three doctypes are genuinely
-   autoincrement. `User`'s name is the lowercased email.
-10. **`_assign` is a cache of `ToDo` records.** Never use it for access control.
-11. **Frappe's `like` is case-insensitive**, because upstream runs MariaDB; on PostgreSQL
+8. **Every response keeps Frappe's shape** — the `{"message": …}` / `{"data": …}`
+   envelopes and the Frappe error body — until a later, separate step changes them with
+   the frontend. JWT auth and the WebSocket transport were already deviations from
+   Frappe's protocol, and stay.
+9. **`frappe.throw` text is preserved verbatim** — it is user-facing copy.
+10. **Names follow the six `autoname` strategies**; three doctypes are genuinely
+    autoincrement. `User`'s name is the lowercased email.
+11. **`_assign` is a cache of `ToDo` records.** Never use it for access control.
+12. **Frappe's `like` is case-insensitive**, because upstream runs MariaDB; on PostgreSQL
     it must map to a case-insensitive lookup.
 
 ## Stack
@@ -91,19 +100,21 @@ django-treebeard. Python 3.13. `backend_v2` proposes Django 5.2 LTS (REBUILD_PLA
 Check, in this order. Be specific — cite file and line. Say plainly when something is
 right; do not manufacture findings.
 
-1. **Parity.** For every endpoint touched: the status code, every key, every value type,
-   and every message, verbatim, against `backend/`. Known traps: a decimal is a string in
-   a document read and a number in a list row; an `exc_type` or status drifting to DRF's
-   default (400 instead of 417); a 403 that should be a 404, or the reverse. Unknown,
-   child-table and withheld doctypes all answer the same 404.
+1. **Parity.** For every route touched, find the old path it replaces in the route map,
+   and compare against `backend/`: the status code, every key, every value type, and every
+   message, verbatim. Where a route replaces several old paths, the reference is the one
+   the frontend calls. Known traps: a decimal is a string in a document read and a number
+   in a list row; an `exc_type` or status drifting to DRF's default (400 instead of 417,
+   201 instead of 200 on create); a 403 that should be a 404, or the reverse; an input
+   renamed or reshaped without a route-map entry.
 2. **Protections carried over.** For every doctype touched, each item in its
    `PORT_MAP.md` row: the list rule *and* the object rule; each sensitive, restricted,
    read-only and encrypted field, enforced in the response and in `fields`, `filters`,
    `or_filters`, `order_by` and `group_by`; the create check against the payload; the
    destination re-check on update for rows that point at another document.
-3. **Every door** (hard rule 4). A protection enforced on one door and not another is the
+3. **Every door** (hard rule 5). A protection enforced on one door and not another is the
    failure this project has found most often.
-4. **Nothing published by side effect** (hard rules 2 and 3).
+4. **Nothing published by side effect** (hard rules 3 and 4).
 5. **Conventional Django.** The user passed explicitly; logic in models and services
    rather than views; migrations that apply from empty; tests that would fail without the
    code they cover.
@@ -176,6 +187,8 @@ Where you are unsure, say so and name what would settle it. End with a one-line 
 ### Do not report
 
 - Differences with an **approved** entry in `PARITY_EXCEPTIONS.md`.
+- A route's new URL, HTTP method or reshaped input, when the route map records it. Those
+  change by design.
 - Values that legitimately differ between two servers: generated names, timestamps,
   tokens.
 - Style preferences with no bearing on the checks above.

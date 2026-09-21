@@ -15,7 +15,7 @@ needs. **Paths are from the repository root.**
 ## 1. What exists
 
 *Nothing yet.* FOUNDATION writes the first entries: the project skeleton, the `core` app,
-authentication, the doctype map and the resource route.
+authentication, and the base ViewSet every resource inherits.
 
 ## 2. Recipes
 
@@ -23,16 +23,23 @@ These are the sections FOUNDATION must write, because every later unit follows t
 Until then they are headings only; do not guess their contents from
 `backend_v2/docs/REBUILD_PLAN.md`, which describes intent, not the result.
 
-### Adding a doctype
+### Adding a resource
 
-*Not written yet — FOUNDATION.* Model, serializer, ViewSet with its allowlists, the entry
-in `documents.doctypes.DOCTYPES`, the recorded access decision, and the tests the guard
-tests will demand.
+*Not written yet — FOUNDATION.* Model, serializer, ViewSet with its allowlists, its
+registration on the app's router under `/api/v1/`, the recorded access decision, and the
+tests the guard tests will demand.
 
-### Adding a method endpoint
+### Adding an action or an endpoint
 
-*Not written yet — FOUNDATION.* The view base class, the `method_path` line in the app's
-`urls.py`, guest access, verbs, and returning a value.
+*Not written yet — FOUNDATION.* An `@action` on a resource's ViewSet, or a view on
+`core`'s base view for an endpoint that is not a resource; its route in the app's
+`urls.py`; guest access; the envelope of the old path it replaces; and its row in the
+route map.
+
+### Carrying a document name with slashes in a route
+
+*Not written yet — FOUNDATION.* Names like `R/GA` are legal; how the lookup allows them
+without swallowing an action segment.
 
 ### Declaring field access
 

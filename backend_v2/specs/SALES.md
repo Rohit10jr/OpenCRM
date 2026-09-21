@@ -67,7 +67,7 @@ engine), CONTACTS (organizations and contacts).
 
 - pytest for each item in section 4. **The org-hierarchy rules get a matrix:** each role,
   on its own record, a subordinate's, a peer's, and an assigned one — through
-  `/api/resource/`, `frappe.client.*` and `get_data`.
+  the lead and deal list, document and action routes, and the list view.
 - `docs/http/03_leads.http`, `04_deals.http`, and `02_resource_grammar.http` in full; the
   blocks of each that wait on ACTIVITIES or DOCUMENTS are named in the progress report.
 - The body diff over the same blocks — including a decimal in a document read and in a

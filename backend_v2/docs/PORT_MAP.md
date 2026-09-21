@@ -7,6 +7,13 @@ a row moves, edit the row. Do not regenerate it; that would erase the Status col
 This file is the **one home of per-row status**. Unit status lives in
 `backend_v2/specs/README.md` and nowhere else.
 
+**The rows are the old paths.** `backend_v2` serves REST routes under `/api/v1/` instead
+(REBUILD_PLAN S6), each answering like the old path it replaces. **The route map** — a
+**New route** column giving each row its method, REST path and any reshaped input
+(REBUILD_PLAN S7, S8) — is added after all the planning documents are reviewed
+(REBUILD_PLAN O6). Until then the **New app** and **Unit** columns say where a row's code
+will live, and the route it will have is still to be designed.
+
 **Paths are from the repository root.** The **Old source** column is the exception: it
 is relative to `backend/`, exactly as `docs/ROUTES.md` prints it.
 
@@ -29,8 +36,8 @@ is relative to `backend/`, exactly as `docs/ROUTES.md` prints it.
 
 | Route | New app | Unit | Status |
 |---|---|---|---|
-| `/api/resource/<DocType>` — list, create | documents | FOUNDATION | — |
-| `/api/resource/<DocType>/<name>` — read, update, delete | documents | FOUNDATION | — |
+| `/api/resource/<DocType>` — list, create. Not served by `backend_v2`: replaced by each resource's collection route | each resource's app | each resource's unit | — |
+| `/api/resource/<DocType>/<name>` — read, update, delete. Not served by `backend_v2`: replaced by each resource's document route | each resource's app | each resource's unit | — |
 | `ws/realtime?token=<access>` — WebSocket | notifications | NOTIFICATIONS | — |
 | `/admin/` — Django admin, not part of the contract | config | FOUNDATION | — |
 
@@ -46,10 +53,11 @@ is relative to `backend/`, exactly as `docs/ROUTES.md` prints it.
 
 ## Which unit turns each `.http` file green
 
-A file can only pass in full once every unit it touches is built. Touched units are
-found by scanning each file for method paths, resource doctypes and `doctype`
-parameters, so treat this as a guide: a block can depend on seed data from a unit the
-scan cannot see.
+The `.http` files use the old paths, so against `backend_v2` each request is sent through
+the route map (REBUILD_PLAN section 6). A file can only pass in full once every unit it
+touches is built. Touched units are found by scanning each file for method paths,
+resource doctypes and `doctype` parameters, so treat this as a guide: a block can depend
+on seed data from a unit the scan cannot see.
 
 | File | Units it touches | Green once this unit is built |
 |---|---|---|
@@ -81,6 +89,11 @@ scan cannot see.
 | Version | withheld | `Hash(10)` | withheld — `specs/UNROUTED_DOCTYPES.md` |  | `frappe_core.Version` | core | — |
 
 ### Method paths (11)
+
+The seven `frappe.client.*` rows are the generic document calls. In `backend_v2` they
+become the base ViewSet's CRUD, which every resource inherits, so their new routes are
+each resource's own collection and document routes. FOUNDATION builds the base; each unit
+proves it on its own resources.
 
 | Dotted path | Verbs | Access | Old source | New app | Status |
 |---|---|---|---|---|---|

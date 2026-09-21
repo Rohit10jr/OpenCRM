@@ -52,7 +52,8 @@ edit the same file.
 | 6 | DOCUMENTS, TELEPHONY | Bulk actions, rename and linked documents need every doctype they act on; calls log notes and tasks |
 | 7 | INTEGRATIONS | Off by default, and last for that reason |
 
-**When a `.http` file turns green** is tabled in `PORT_MAP.md`: a file passes in full
+The `.http` files use the old paths; against `backend_v2` they are sent through the route
+map (REBUILD_PLAN section 6). **When a file turns green** is tabled in `PORT_MAP.md`: a file passes in full
 only once every unit it touches is done. A unit's gate names the blocks it owns; blocks
 waiting on a later unit are listed in its progress report, not hidden.
 

@@ -1,9 +1,10 @@
 # Runbook — FOUNDATION
 
-**Status: not ready to run.** It waits on two things: the owner's review of
-`backend_v2/specs/FOUNDATION.md`, and a decision on REBUILD_PLAN O2 (where the baseline
-data comes from). When both are settled, update this header, the spec's status and the
-row in `backend_v2/specs/README.md`, in one commit.
+**Status: not ready to run.** It waits on the owner's review of
+`backend_v2/specs/FOUNDATION.md`, and on the open questions that spec lists in section 7 —
+REBUILD_PLAN O2 (baseline data), O5 (filter and sort design), O6 (the route map) and O7
+(where the generic operations live). When they are settled, update this header, the spec's
+status and the row in `backend_v2/specs/README.md`, in one commit.
 
 This file is the handoff for one run. **What** to build is the spec; **how to run it**
 is here, and nothing here changes the spec's scope. **Paths are from the repository
@@ -55,20 +56,21 @@ Then write `backend_v2/docs/runs/ORIENTATION_FOUNDATION.md` and commit it on its
 
 ## The gate
 
-Spec section 5, all seven items. Run in this order, and record each result with the
+Spec section 5, all six items. Run in this order, and record each result with the
 command that produced it:
 
 1. `manage.py check`; migrations from an empty `opencrm_v2`.
 2. pytest in `backend_v2/`.
-3. The `backend_v2` server on port 8001; the FOUNDATION blocks of
-   `docs/http/01_auth.http` through `backend/scripts/run_http.py --host
-   http://127.0.0.1:8001` — **never `--mark`**.
-4. `backend_v2/scripts/parity_diff.py` over the same blocks, against `backend/` on
-   port 8000.
-5. Each guard test broken on purpose, seen to fail, restored.
-6. Independent review, tier 1 first (root `CLAUDE.md`), with the root `AGENTS.md` as the
-   reviewer's brief. State the tier that worked. Report findings to the owner, including where you disagree; do not
-   apply them unasked.
+3. `backend/` on port 8000 and `backend_v2` on port 8001; `backend_v2/scripts/parity_diff.py`
+   over the FOUNDATION blocks of `docs/http/01_auth.http` — the originals to `backend/`,
+   the translations through the route map to `backend_v2`.
+4. Each guard test broken on purpose, seen to fail, restored.
+5. Independent review, tier 1 first (root `CLAUDE.md`), with the root `AGENTS.md` as the
+   reviewer's brief. State the tier that worked. Report findings to the owner, including
+   where you disagree; do not apply them unasked.
+
+**Never pass `--mark` to `backend/scripts/run_http.py`** if you use it against
+`backend/`: it writes into `docs/ROUTES.md`.
 
 Before step 3, check the ports: `netstat -ano | findstr :8000` and `:8001`. A stale server
 from an earlier attempt answers with old code.
