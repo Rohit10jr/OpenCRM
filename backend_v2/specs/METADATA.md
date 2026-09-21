@@ -42,7 +42,7 @@ convention this unit sets and records in `AS_BUILT.md`.
 
 - **`get_data`'s response shape**, and every key in it even when its value is empty.
 - **It reads through the doctype's own queryset and field policy.** It is one of the
-  doors in `backend_v2/CLAUDE.md` hard rule 5.
+  doors in the root `CLAUDE.md`, rebuild hard rule 6.
 - **Kanban counts do not leak** rows the caller cannot read.
 - **A public view is readable by everyone and deletable only by its owner.** The list
   rule and the object rule differ here on purpose.

@@ -98,7 +98,6 @@ backend_v2/
 │   ├── ...                 one package per app below
 │   └── integrations/
 ├── scripts/                parity tooling
-├── CLAUDE.md               rules for Claude here; Codex's brief is the root AGENTS.md
 ├── docs/                   this plan, the contract, the map, as-built, exceptions, runs/
 └── specs/                  one spec per unit, and the index
 ```
@@ -254,4 +253,4 @@ how and records it in `AS_BUILT.md`.
 | **Traps in the rendering** — decimals are strings in a document and numbers in a list | Written into `API_CONTRACT.md` section 6, and caught by the body diff |
 | **Improving while porting** | Any behaviour change needs a `PARITY_EXCEPTIONS.md` entry first |
 | **`get_data` is the keystone** — six screens render from it, and it is where filters, `@me`, saved views and columns meet | METADATA is its own unit, built early, against models written for its tests |
-| **Two servers stepping on each other** — shared Redis, shared test database, a stale `runserver` still holding a port on Windows | Section 7, and the operational notes in `backend_v2/CLAUDE.md` |
+| **Two servers stepping on each other** — shared Redis, shared test database, a stale `runserver` still holding a port on Windows | Section 7, and "Traps on this machine" in the root `CLAUDE.md` |

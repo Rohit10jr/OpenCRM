@@ -54,7 +54,7 @@ files and assignments a rename must repoint.
 - **`search_link` goes through the doctype's queryset and field policy**, and **accepts
   `ignore_user_permissions` and ignores it**: honouring it would let an autocomplete list
   rows the caller cannot see. It answers `[{"value", "description"}]`.
-- **Each of these is one of the doors** in `backend_v2/CLAUDE.md` hard rule 5.
+- **Each of these is one of the doors** in the root `CLAUDE.md`, rebuild hard rule 6.
 
 ## 5. Acceptance
 

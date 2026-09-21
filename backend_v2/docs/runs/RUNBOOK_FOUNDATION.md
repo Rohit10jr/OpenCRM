@@ -22,7 +22,8 @@ one agent writes every file, because this unit sets the conventions everyone cop
 
 ## Step 0 — orientation, before any code
 
-Read, in order: `backend_v2/CLAUDE.md`, `backend_v2/docs/REBUILD_PLAN.md`,
+Read, in order: the root `CLAUDE.md` (its "Every task" section and "Working on
+`backend_v2/`"), `backend_v2/docs/REBUILD_PLAN.md`,
 `backend_v2/docs/API_CONTRACT.md`, `backend_v2/specs/FOUNDATION.md`, then the old files
 the spec's tables name.
 
