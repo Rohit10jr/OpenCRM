@@ -29,7 +29,8 @@ Read it whenever behaviour is unclear. **Never invent semantics.**
 ## Hard rules
 
 1. The frontend wire protocol (`PORT_PLAN.md` §3) is a fixed external contract. JWT
-   auth and the WebSocket transport are the only two sanctioned deviations.
+   auth, the WebSocket transport and the boot-values call (`frontend/JWT_PATCH.md`) are
+   the only three sanctioned deviations.
 2. String primary keys per the six `autoname` strategies in
    `specs/PHASE_0_FOUNDATION.md` §2 — three doctypes are genuinely autoincrement.
 3. `_assign` is a denormalised cache of `ToDo` records. Never use it for access control.

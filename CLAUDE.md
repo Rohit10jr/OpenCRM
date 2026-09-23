@@ -51,7 +51,8 @@ per-doctype detail and the two questions that settle each case.
 ## Hard rules
 
 1. The frontend wire protocol (`PORT_PLAN.md` §3) is a fixed external contract. JWT
-   auth and the WebSocket transport are the only two sanctioned deviations.
+   auth, the WebSocket transport and the boot-values call (`frontend/JWT_PATCH.md`) are
+   the only three sanctioned deviations.
 2. Phases 0 and 2 are single-agent. Everything else fans out by cluster/module.
 3. No two concurrent agents edit the same file.
 4. Preserve `frappe.throw` message text verbatim — it is user-facing copy.

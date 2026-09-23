@@ -1,11 +1,13 @@
-# The frappe-ui patches — JWT (phase 0) and realtime (phase 6)
+# The frappe-ui patches — JWT (phase 0), realtime (phase 6) and boot (follow-up)
 
 **Read this before upgrading `frappe-ui`.** An upgrade that resets `main.js` will
-silently revert the patch and every request will go out unauthenticated.
+silently revert two of the patches: every request will go out unauthenticated, and the
+boot values will be fetched only under `yarn dev`, leaving production without them.
 
-There are exactly **two** sanctioned frontend deviations from upstream. The JWT
+There are exactly **three** sanctioned frontend deviations from upstream. The JWT
 interceptor is the first and is documented immediately below; the WebSocket client is the
-second and has its own section at the end. Nothing else in `frontend/` differs.
+second and the boot-values call the third, each with its own section at the end. Nothing
+else in `frontend/` differs.
 
 ## Why
 
@@ -135,3 +137,53 @@ cannot carry a WebSocket. `/ws/` has to be proxied to it alongside `/api/`; set
 `ENABLE_REALTIME=0` on the backend removes the route entirely. Nothing breaks: the client
 fails to connect, retries with backoff, and the app is exactly as functional as it was
 before phase 6.
+
+---
+
+# The boot patch (phase 8 follow-up, 23 Sep 2026)
+
+`docs/FINDINGS.md` 26. The page needs a few server-side facts before it can draw: the
+date, time, number and currency formats (`window.sysdefaults`), the system and user
+timezone, the translation tables, and three site flags. Upstream calls this set the
+**boot** (`crm/www/crm.py:get_boot`) and delivers it two ways. In production the
+Jinja-rendered `crm/www/crm.html` carries a `<script>` that writes every key onto
+`window`, so the page arrives with them. Under `yarn dev` Vite serves the raw
+`index.html`, no template runs, and `main.js` posts to `crm.www.crm.get_context_for_dev`
+and copies the reply onto `window` before it mounts.
+
+This port serves no HTML, so the endpoint is the only source, in every mode. This is the
+third and last sanctioned deviation.
+
+## What changed - one file
+
+| File | Change |
+|---|---|
+| `src/main.js` | The fetch-then-mount step runs always, not only under `import.meta.env.DEV`; a failed call logs and mounts anyway |
+
+The call, its URL and the keys it copies onto `window` are upstream's own; only the
+condition around it went. Mounting on failure is deliberate: with the values missing the
+list pages throw on their first date cell (`utils/index.js:82` reads
+`window.sysdefaults.date_format` with no guard), but the login page renders and the
+console names the cause, where the alternative was a blank page with no message at all.
+
+## Backend contract
+
+| Endpoint | Returns |
+|---|---|
+| `POST /api/method/crm.www.crm.get_context_for_dev` (guest-allowed) | `{"message": {"sysdefaults": {...seven format keys...}, "timezone": {"system", "user"}, "translated_messages": {}, "translated_doctypes": [], "state_options": {}, "is_demo_site": false, "demo_data_created": false, "is_fc_site": false}}` |
+
+Implemented in `backend/crm_app/api/boot.py`; covered by `backend/tests/test_boot.py`.
+The name is upstream's, "for_dev" included, so the guard test and the route inventory
+match the string the frontend sends. Upstream's developer-mode gate is not reproduced,
+because production is a caller here, and nothing in the answer is secret. The seven format
+values come from `FRAPPE_SYSDEFAULTS` in `config/settings/base.py`, each overridable from
+`.env`, since the port has no System Settings doctype; `currency` ships empty, as on a
+fresh Frappe site, and the frontend shows USD until `FRAPPE_CURRENCY` is set.
+
+## Deployment
+
+The `yarn build` output is served as static files, with `index.html` returned for every
+path under `/crm/`; the app then fetches the boot values itself. Nothing renders a
+template. The `buildConfig.indexHtmlPath` in `vite.config.js` still points at upstream's
+app folder and needs changing before the first production build - a deployment item
+outside this patch.

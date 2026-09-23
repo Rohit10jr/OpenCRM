@@ -62,23 +62,29 @@ app.use(telemetryPlugin, { app_name: 'crm' })
 
 app.config.globalProperties.$dialog = createDialog
 
+// BOOT PATCH (see ../JWT_PATCH.md, the third deviation): upstream makes this call only
+// under `yarn dev`, because its production page arrives with the boot values already
+// written into the HTML by a Jinja template. The Django port serves no HTML, so this
+// endpoint is the only source of `window.sysdefaults`, `window.timezone` and the rest,
+// in production as much as in dev. A failed call logs and mounts anyway: an error on
+// screen beats the blank page of an app that never mounted (docs/FINDINGS.md 26).
 let socket
-if (import.meta.env.DEV) {
-  jwtRequest({ url: '/api/method/crm.www.crm.get_context_for_dev' }).then(
-    (values) => {
-      for (let key in values) {
-        window[key] = values[key]
-      }
-      socket = initSocket()
-      app.config.globalProperties.$socket = socket
-      app.mount('#app')
-    },
-  )
-} else {
+function mount() {
   socket = initSocket()
   app.config.globalProperties.$socket = socket
   app.mount('#app')
 }
+
+jwtRequest({ url: '/api/method/crm.www.crm.get_context_for_dev' })
+  .then((values) => {
+    for (let key in values) {
+      window[key] = values[key]
+    }
+  })
+  .catch((error) => {
+    console.error('Boot values could not be loaded; mounting without them', error)
+  })
+  .then(mount)
 
 if (import.meta.env.DEV) {
   window.$dialog = createDialog
