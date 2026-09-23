@@ -35,6 +35,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 23 | 05 / 8.2, by hand | medium | Deleting a contact re-validates the rows it is removing: a contact whose rows have two primaries answers **417** and cannot be deleted at all | **fixed** 15 Sep 2026 |
 | 24 | 06 / 0.3–0.5, by hand | medium | A name that is not a number, on a doctype whose names are numbers (CRM Task, CRM View Settings), answers **500** on every lookup; upstream answers 404 | **fixed** 16 Sep 2026 |
 | 25 | 12 / 2.2 run twice, by hand; 02 / 10.10b | low | Creating a document whose name already exists answers 409 with **Django's internal wording** ("duplicate key value violates unique constraint …"); upstream says "<DocType> **name** already exists", titled "Duplicate Name" | **fixed** 20 Sep 2026 |
+| 26 | frontend: `yarn dev`, then `/crm` in a browser | high | The page is **blank**. The dev build waits for `crm.www.crm.get_context_for_dev` (the "boot values": date, number and currency formats, timezone, translations, site flags) before it mounts, and nothing serves it: 404, so the app never mounts. Upstream answers it in dev and writes the same values into the HTML in production; the port has neither | **fixed** 23 Sep 2026 |
 
 ---
 
@@ -726,3 +727,68 @@ doctypes, the client's `name` for `prompt` ones, `Settings` for a singleton), an
 a row of that name exists raises `DuplicateEntryError` with upstream's sentence and
 title. Any other integrity error keeps its raw text, as before, because it is not a
 duplicate name.
+
+## 26. The frontend's boot values have no source: a blank page under `yarn dev`
+
+**Block:** none in the http suite. `yarn dev` in `frontend/`, then
+`http://localhost:8080/crm` in a browser: the page stays blank. The console shows a 404
+for `POST /api/method/crm.www.crm.get_context_for_dev` and an uncaught promise
+rejection. Found 23 Sep 2026, the first time the frontend was started against the port.
+
+**What the boot values are.** Before the CRM page draws its first screen it needs a
+few facts about the site that live on the server: how to write dates, times, numbers
+and money (`sysdefaults`: `date_format`, `time_format`, `number_format`,
+`float_precision`, `currency_precision`, `rounding_method`, `currency`), the system
+and user timezone, the translation table, and three flags that decide which banners
+and menu items to show (`is_demo_site`, `demo_data_created`, `is_fc_site`). Upstream
+calls this set the **boot** (`crm/www/crm.py:get_boot`). It is sent once, ahead of
+everything else, so the first list renders with the right formats instead of drawing
+wrong and redrawing after a second request. The frontend reads it from `window`:
+`window.sysdefaults.date_format` in `utils/index.js:82` has no guard, so a missing
+`sysdefaults` is a TypeError on every date cell, not a fallback.
+
+**Expected:** upstream delivers the boot in two ways, depending on who served the page.
+
+- *Production.* The browser asks Frappe for `/crm`. Frappe runs
+  `crm/www/crm.py:get_context` (CRM-role check, then `get_boot()`) and renders
+  `crm/www/crm.html`, the file `yarn build` writes from `frontend/index.html` (upstream
+  git-ignores it). The frappe-ui vite plugin (`jinjaBootData`) has added a `<script>`
+  to that file that writes `window["sysdefaults"] = ...` for every boot key, so the
+  values arrive in the same response as the page and `main.js` mounts at once.
+- *Development.* Vite serves `frontend/index.html` itself, so no template runs and
+  that script is never written. `main.js:65-75` closes the gap: it posts to
+  `crm.www.crm.get_context_for_dev`, copies every key of the reply onto `window`, and
+  only then calls `app.mount`. Upstream declares that method `allow_guest=True` (the
+  first visit has no session yet), POST-only, and refuses with "This method is only
+  meant for developer mode" unless `developer_mode` is set, so a live site never
+  answers it.
+
+**Actual:** the port serves neither. The dotted path is not registered, so the dev call
+answers 404 `DoesNotExistError`, the `.then` never runs and the app never mounts.
+`config/urls.py` serves no `/crm` page at all, so production would mount the app with
+every boot value undefined and crash on the first date.
+
+The guard test `test_every_frontend_dotted_path_resolves` did not catch it because
+this call is written with the prefix (`url: '/api/method/crm.www.crm.get_context_for_dev'`)
+and `_PATH_RE` only matches bare dotted paths.
+
+**Where:** `crm_app/api/boot.py`, one endpoint, and the fetch-then-mount step in
+`frontend/src/main.js`.
+
+**Fixed 23 Sep 2026**, the second of the two designs weighed that day: the frontend asks
+for the boot values over JSON in every mode, and no HTML is ever rendered for them.
+`crm.www.crm.get_context_for_dev` is registered under upstream's name, guest-allowed and
+POST only, without upstream's developer-mode gate, because production calls it too and
+nothing in the answer is secret. It returns the keys this frontend reads and nothing
+else: `sysdefaults` from a new `FRAPPE_SYSDEFAULTS` dict in `config/settings/base.py`
+(Frappe's own fallbacks for an unset default, each overridable from `.env`), since the
+port has no System Settings doctype (upstream's `sysdefaults` is System Settings
+republished through `frappe.db.set_default`, `system_settings.py:213-218`); `timezone`
+from `TIME_ZONE` and the caller's `time_zone` column; empty `translated_messages`,
+`translated_doctypes` and `state_options`; the three site flags false. `csrf_token`,
+`site_name`, `socketio_port`, `frappe_version`, `default_route`, `setup_complete` and
+`read_only_mode` are read by nothing in `frontend/src` and are left out. `main.js` now
+makes the call in production as well as dev, and mounts even when it fails so that an
+error is visible instead of a blank page; `frontend/JWT_PATCH.md` records it as the
+third frontend deviation. `_PATH_RE` accepts the `/api/method/` prefix. Serving the built
+`index.html` for `/crm/*` in production is a deployment item, not part of this finding.

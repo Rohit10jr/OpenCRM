@@ -54,11 +54,15 @@ def call(client, path: str, payload: dict | None = None):
 #: has a place, and `test_out_of_scope_list_is_not_hiding_a_regression` keeps it honest.
 OUT_OF_SCOPE: set[str] = set()
 
-#: A dotted path at a `url:` / `method:` key, or as the first argument of `call(...)`.
-#: The second form was missed until 16 Sep 2026, which is how twenty paths the Vue app
-#: calls stayed unserved through eight phases (docs/TESTING_GUIDE.md, "Gaps you will
-#: hit"); every one of them was a `call('...')` site.
-_PATH_RE = re.compile(r"(?:(?:url|method):\s*|\bcall\(\s*)'([a-z_]+(?:\.[a-z_]+)+)'")
+#: A dotted path at a `url:` / `method:` key, or as the first argument of `call(...)`,
+#: with or without the `/api/method/` prefix. The `call(...)` form was missed until
+#: 16 Sep 2026, which is how twenty paths the Vue app calls stayed unserved through
+#: eight phases (docs/TESTING_GUIDE.md, "Gaps you will hit"); the prefixed form was
+#: missed until 23 Sep 2026, which is how the one call `main.js` makes before it mounts
+#: stayed unserved and the page stayed blank (docs/FINDINGS.md 26).
+_PATH_RE = re.compile(
+    r"(?:(?:url|method):\s*|\bcall\(\s*)'(?:/api/method/)?([a-z_]+(?:\.[a-z_]+)+)'"
+)
 
 
 def frontend_called_paths() -> set[str]:

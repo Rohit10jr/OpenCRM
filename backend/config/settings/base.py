@@ -238,6 +238,25 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="crm@example.com")
 POSTHOG_PROJECT_ID = env("POSTHOG_PROJECT_ID", default="")
 POSTHOG_HOST = env("POSTHOG_HOST", default="")
 
+# The format defaults the CRM page reads before it draws anything
+# (crm_app/api/boot.py, docs/FINDINGS.md 26). Upstream takes them from System Settings,
+# republished as `sysdefaults`; this port has no System Settings doctype, so they live
+# here. Strings, as Frappe stores them, and the values are Frappe's own fallbacks for an
+# unset default: frappe/utils/data.py get_user_date_format / get_user_time_format /
+# fmt_money, and System Settings' field defaults for the rest. `float_precision` empty
+# would mean 3 to the frontend as well; `currency_precision` empty means "use the
+# currency's own"; `currency` empty is a fresh site before its setup wizard picked one,
+# and the frontend (stores/meta.js:58, FieldLayout/Field.vue:358) shows USD for it.
+FRAPPE_SYSDEFAULTS = {
+    "date_format": env("FRAPPE_DATE_FORMAT", default="yyyy-mm-dd"),
+    "time_format": env("FRAPPE_TIME_FORMAT", default="HH:mm:ss"),
+    "number_format": env("FRAPPE_NUMBER_FORMAT", default="#,###.##"),
+    "float_precision": env("FRAPPE_FLOAT_PRECISION", default="3"),
+    "currency_precision": env("FRAPPE_CURRENCY_PRECISION", default=""),
+    "currency": env("FRAPPE_CURRENCY", default=""),
+    "rounding_method": env("FRAPPE_ROUNDING_METHOD", default="Banker's Rounding (legacy)"),
+}
+
 # Celery (phase 5). The queue names mirror upstream's RQ queues: short -> default,
 # long -> long (PHASE_5_ASYNC.md intro).
 CELERY_TASK_DEFAULT_QUEUE = "default"
