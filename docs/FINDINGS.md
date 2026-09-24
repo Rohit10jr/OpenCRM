@@ -36,6 +36,11 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 24 | 06 / 0.3–0.5, by hand | medium | A name that is not a number, on a doctype whose names are numbers (CRM Task, CRM View Settings), answers **500** on every lookup; upstream answers 404 | **fixed** 16 Sep 2026 |
 | 25 | 12 / 2.2 run twice, by hand; 02 / 10.10b | low | Creating a document whose name already exists answers 409 with **Django's internal wording** ("duplicate key value violates unique constraint …"); upstream says "<DocType> **name** already exists", titled "Duplicate Name" | **fixed** 20 Sep 2026 |
 | 26 | frontend: `yarn dev`, then `/crm` in a browser | high | The page is **blank**. The dev build waits for `crm.www.crm.get_context_for_dev` (the "boot values": date, number and currency formats, timezone, translations, site flags) before it mounts, and nothing serves it: 404, so the app never mounts. Upstream answers it in dev and writes the same values into the HTML in production; the port has neither | **fixed** 23 Sep 2026 |
+| 27 | frontend: `yarn dev`, then `/crm` in a browser | high | Still **blank**, now before `main.js` runs: *"The requested module '/node_modules/debug/src/browser.js' does not provide an export named 'default'"*. frappe-ui has to be served raw, so its socket.io chain reaches the CommonJS `debug` package unconverted | **fixed** 23 Sep 2026 |
+| 28 | frontend: `/crm` while logged out | high | The router sends a logged-out visitor to the phase 8 Login page, but `App.vue` has no branch that renders a public route: the page mounts and shows **nothing**. Upstream never needed one, its login lives outside the SPA | **fixed** 23 Sep 2026 |
+| 29 | frontend: first load after `yarn dev` | high | A cold load fetched **3,234 modules** and took minutes on this machine: frappe-ui cannot be pre-bundled, its barrel is not rewritten for an installed copy, and every package it imports is served raw (reka-ui 564 files, echarts 556) | **fixed** 23 Sep 2026 |
+| 30 | frontend: any screen using `call()` | high | frappe-ui's `call()`, imported directly in 32 files and by the router guard, and its two upload helpers build their own requests: **no bearer header**, so each one answered 401. The JWT patch covered `createResource` only | **fixed** 23 Sep 2026 |
+| 31 | frontend: every page load | low | `app.use(FrappeUI)` starts upstream's socket.io client against port 9000, which nothing serves here, and it retries forever: three refused connections per minute in the console beside the port's own WebSocket | **fixed** 23 Sep 2026 |
 
 ---
 
@@ -792,3 +797,167 @@ makes the call in production as well as dev, and mounts even when it fails so th
 error is visible instead of a blank page; `frontend/JWT_PATCH.md` records it as the
 third frontend deviation. `_PATH_RE` accepts the `/api/method/` prefix. Serving the built
 `index.html` for `/crm/*` in production is a deployment item, not part of this finding.
+
+## 27. frappe-ui's socket.io chain reaches a CommonJS package raw: still blank
+
+**Block:** none in the http suite. `yarn dev`, then `http://localhost:8080/crm`, after
+finding 26 was fixed: still blank, and this time the console error comes before
+`main.js` runs at all:
+
+```
+Uncaught SyntaxError: The requested module '/node_modules/debug/src/browser.js'
+does not provide an export named 'default' (at index.js:4:8)
+```
+
+A module error anywhere in the import graph aborts the whole bundle, so nothing mounts.
+
+**Expected:** Vite pre-bundles dependencies with esbuild, which turns CommonJS packages
+into ES modules the browser can import. Upstream's `vite.config.js` relies on that for
+everything under `node_modules`, frappe-ui included.
+
+**Actual:** two facts of this environment combine. First, frappe-ui `1.0.0-beta.29`
+ships as source and its `TextEditor/commands.js` imports `~icons/lucide/*`, virtual
+modules that only frappe-ui's own Vite plugin resolves; esbuild's pre-bundler cannot,
+and fails with 31 unresolved imports. So the working copy had `optimizeDeps.exclude:
+['frappe-ui']` added by hand, which is right: the package must be served raw. Second,
+Vite's resolver never pre-bundles a bare import made from inside `node_modules`
+(`skipOptimization` in `vite/dist/node/chunks`), so every package frappe-ui imports is
+served raw as well. Its `utils/socketio.ts` imports `socket.io-client`, whose manager
+imports `socket.io-parser`, whose export map carries a `development` condition
+(`socket.io-parser/package.json:22`) that Vite's dev server honours, picking the
+`esm-debug` build, whose line 4 is `import debugModule from "debug"`. `debug` is
+CommonJS, so served raw it has no default export. The chain was proven by walking the
+dev module graph through Vite's own transform pipeline: the one importer of
+`/node_modules/debug/src/browser.js` was `socket.io-parser/build/esm-debug/index.js`.
+
+The port's own `src/socket.js` no longer uses socket.io at all (phase 6), but
+frappe-ui's barrel still imports it, and `main.js` imports the barrel.
+
+**Where:** `frontend/vite.config.js`, `optimizeDeps.include`.
+
+**Fixed 23 Sep 2026.** `socket.io-client` is listed in `optimizeDeps.include`. Vite
+resolves an import of a listed package to its pre-bundled copy even when the importer
+is inside `node_modules`, so frappe-ui's import now lands on an esbuild bundle that
+carries socket.io-parser and a converted `debug` inside it. The same walk of the module
+graph with that one line added finds no raw importer of `debug`. This is exactly the
+rule Vite's documentation gives for excluded packages with CommonJS dependencies, and
+the mechanism frappe-ui's own plugin already uses for `interactjs` and
+`highlight.js/lib/core`. Both the `exclude` line and this `include` entry now carry a
+comment saying why, so neither gets tidied away.
+
+## 28. App.vue has no branch for the auth pages: a logged-out visitor sees nothing
+
+**Block:** none in the http suite. Any visit to `/crm` without a token, once findings 26
+and 27 were out of the way. The router guard (`router.js:264-272`) sends the visitor to
+`Login`; the app mounts; the screen stays empty, with no console error.
+
+**Expected:** the phase 8 login page. `PHASE_8_AUTH_AND_DESK.md` moved the four auth
+screens inside the SPA (`pages/auth/Login.vue`, `ForgotPassword.vue`,
+`UpdatePassword.vue`, `AcceptInvitation.vue`), each behind a route flagged
+`meta.isPublic`, because upstream's redirect to the desk's `/login` page pointed at a URL
+nothing in this port serves.
+
+**Actual:** `App.vue`'s template has three branches: `NotPermitted` for that route, a
+bare `router-view` for Onboarding, and the app `Layout` around a `router-view` when
+`session.isLoggedIn`. A public route matches none of them, so the `router-view` that
+would show `Login.vue` is never rendered. Upstream's template is the same three branches
+and never needed a fourth: a logged-out visitor leaves the SPA before it mounts. Phase 8
+added the pages and the guard, and its review ran the backend tests and an end-to-end
+walk over HTTP, neither of which renders a template, so the missing branch was never
+seen (the same blind spot `stores/session.js:acceptTokens` records).
+
+**Where:** `frontend/src/App.vue`, the template.
+
+**Fixed 23 Sep 2026.** A fourth branch, `<router-view v-else-if="$route.meta?.isPublic" />`,
+placed before the `Layout` branch so the auth pages render outside the app shell, which
+assumes a session. Ordering matters for the one public page a signed-in user may still
+reach: `Accept Invitation` renders on its own rather than inside the sidebar.
+
+## 29. A cold `yarn dev` load fetches 3,234 modules and takes minutes
+
+**Block:** none in the http suite. Start `yarn dev`, open `/crm`, and wait. Measured by
+walking the module graph through Vite's own transform pipeline and by loading the page
+in headless Chrome over the DevTools protocol: on this machine a cold server served
+about 12 modules a second, and the page needed 3,234 of them before `main.js` could
+run. The blank screen in findings 26 to 28 was, part of the time, simply this.
+
+**Expected:** Vite's dev server sends the app's own files raw and every dependency as
+one pre-bundled file each, so a page needs a few hundred requests. Upstream's config
+relies on that.
+
+**Actual:** three things stack. frappe-ui cannot be pre-bundled (finding 27), so its
+930 source files are served raw. Its `barrelImports` plugin, which rewrites
+`import { X } from 'frappe-ui'` to a deep import so that one component does not drag
+in the whole library, skips installed copies on purpose (`linkedOnly`, its default:
+"an installed package is served as one optimized chunk", which is exactly what does not
+happen here), so the barrel and everything behind it load: TipTap, CodeMirror, echarts.
+And every package frappe-ui imports is served raw too, because Vite never pre-bundles a
+bare import made from inside `node_modules`: reka-ui was 564 files, echarts and zrender
+556, at about 40 ms each. The per-plugin split of a full walk put nine tenths of the
+time in Vite's own TypeScript transpile and Vue compile; the frappe-ui plugins cost
+nothing measurable.
+
+**Where:** `frontend/vite.config.js`: the frappeui plugin's `barrelImports` option and
+`optimizeDeps.include`.
+
+**Fixed 23 Sep 2026.** `barrelImports: { linkedOnly: false }` turns the rewrite on,
+which the plugin's own comment recommends for a package that cannot be pre-bundled.
+And every package frappe-ui's source imports, by the exact specifier it uses
+(`grep "from '" node_modules/frappe-ui/src`, 55 entries: reka-ui, echarts, the
+tiptap and prosemirror family, dayjs/esm and its plugins, the codemirror and
+floating-ui pairs, and a few small ones), is listed in `optimizeDeps.include`, so each
+becomes one file. The graph is now the app's 364 source files, frappe-ui's 930, and
+about 190 pre-bundled dependency chunks. A cold load still transpiles some 1,300
+files and takes a minute or two here; a warm reload is quick. Two habits keep it that
+way: start `yarn dev` once and leave it running, since every restart is cold, and
+never run a second Vite server against the same tree at the same time.
+
+## 30. frappe-ui's `call()` and upload helpers send no bearer header
+
+**Block:** none in the http suite. Seen in the logged-in probe: the router guard's very
+first request, `frappe.utils.telemetry.pulse.client.boot_config`, answered 401. It is
+made with frappe-ui's `call()`.
+
+**Expected:** every request the frontend makes carries the session. Upstream gets that
+for free: the `sid` cookie rides on every request from the same origin, whoever builds
+it.
+
+**Actual:** the phase 0 JWT patch is `setConfig('resourceFetcher', jwtRequest)`, which
+frappe-ui consults for `createResource`, `createListResource` and
+`createDocumentResource`, the 225 call sites `JWT_PATCH.md` counts. frappe-ui's `call()`
+(`utils/call.ts`) builds its own `fetch` and reads no config at all, and its two upload
+helpers (`useFileUpload.ts`, `fileUploadHandler.ts`) build their own `XMLHttpRequest`.
+Thirty-two files under `frontend/src` import `call` directly, the router guard among
+them, and every attachment upload goes through the XHR path. All of those went out
+with no `Authorization` header and answered 401 `AuthenticationError`. Nothing caught
+it earlier because no phase ran the frontend in a browser.
+
+**Where:** `frontend/src/auth/interceptor.js`, installed from `main.js`.
+
+**Fixed 23 Sep 2026.** Rather than touch 32 components, the header is attached at the
+two browser primitives: `window.fetch` and `XMLHttpRequest.prototype.open/send`, for
+same-origin `/api/` URLs only, only when the caller has not set one (`jwtRequest` sets
+its own), and never for the login and refresh endpoints, where a stale access token in
+the header would be authenticated before the refresh ran. Refresh-on-401 stays in
+`jwtRequest`: a bare `call()` that meets an expired token fails, as it did upstream
+with an expired session. `JWT_PATCH.md` records it as the second half of the first
+deviation.
+
+## 31. Upstream's socket.io client still starts, against a port nothing serves
+
+**Block:** none in the http suite. Seen in the logged-in probe: three
+`net::ERR_CONNECTION_REFUSED` for `http://localhost:9000/socket.io/...` per minute.
+
+**Expected:** phase 6 replaced socket.io with a raw WebSocket client (`src/socket.js`)
+and `JWT_PATCH.md` says no component changed. The port has no socket.io server.
+
+**Actual:** `app.use(FrappeUI)` in `main.js` takes the plugin's defaults, and
+`socketio: true` is one of them (`frappe-ui/src/utils/plugin.ts`): the plugin calls its
+own `initSocket()`, which dials `localhost:9000` and, being socket.io, retries with
+backoff forever. `main.js` overwrites `$socket` with the port's client after the boot
+call, so nothing reads the dead one, but it keeps knocking.
+
+**Where:** `frontend/src/main.js`, the `app.use(FrappeUI, ...)` line.
+
+**Fixed 23 Sep 2026.** `app.use(FrappeUI, { socketio: false })`. `$socket` is set once,
+in `mount()`, to the port's client.

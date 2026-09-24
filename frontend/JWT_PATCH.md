@@ -23,7 +23,8 @@ parameter name and response envelope is unchanged.
 |---|---|
 | `src/auth/tokens.js` | **New.** Token storage + `user_id` claim decode |
 | `src/auth/jwtRequest.js` | **New.** Wraps `frappeRequest`: attaches the header, refreshes once on 401 |
-| `src/main.js` | `setConfig('resourceFetcher', frappeRequest)` -> `jwtRequest`; same for the dev boot call |
+| `src/auth/interceptor.js` | **New (23 Sep 2026).** Attaches the header at `fetch` / `XMLHttpRequest` for same-origin `/api/` URLs, for everything that does not go through `resourceFetcher` (see below) |
+| `src/main.js` | `setConfig('resourceFetcher', frappeRequest)` -> `jwtRequest`; `installAuthInterceptor()`; same for the dev boot call |
 | `src/stores/session.js` | `sessionUser()` reads the token instead of the `user_id` cookie; `login` stores the pair; `logout` clears it |
 
 The integration point is one line, because frappe-ui centralises HTTP:
@@ -42,6 +43,23 @@ setConfig('resourceFetcher', jwtRequest)   // was: frappeRequest
 | `GET /api/method/frappe.auth.get_logged_user` | `{"message": "user@example.com"}` |
 
 Implemented in `backend/frappe_core/api/auth.py`; covered by `backend/tests/test_auth.py`.
+
+## The second half: requests that never consult `resourceFetcher`
+
+`docs/FINDINGS.md` 30, found the first time the frontend ran in a browser. frappe-ui's
+`call()` (`utils/call.ts`) builds its own `fetch` and reads no config; its two upload
+helpers (`useFileUpload.ts`, `fileUploadHandler.ts`) build their own `XMLHttpRequest`.
+Thirty-two files under `src/` import `call` directly, the router guard among them, and
+every attachment upload takes the XHR path. Upstream never notices, because the `sid`
+cookie rides on every same-origin request whoever builds it; a bearer header does not.
+
+`src/auth/interceptor.js` closes that at the two browser primitives instead of in 32
+components: `window.fetch` and `XMLHttpRequest.prototype.open/send` add
+`Authorization: Bearer` to same-origin `/api/` URLs when the caller has not set one.
+`/api/method/login` and `/api/method/token/refresh` are excluded, because a stale access
+token on the refresh call would be authenticated before the refresh ran. Refresh-on-401
+stays in `jwtRequest`; a bare `call()` that meets an expired token fails, as it did
+upstream with an expired session.
 
 ## Deliberate omissions
 
@@ -75,6 +93,11 @@ and last sanctioned frontend deviation.
 |---|---|
 | `src/socket.js` | **Rewritten.** A raw `WebSocket` client with socket.io's `on` / `off` / `emit` surface |
 | `src/auth/tokens.js` | `refreshAccessToken` moved here from `jwtRequest.js` - the socket needs it too, and the single-flight guard is only a guarantee if there is one of it |
+
+**`app.use(FrappeUI, { socketio: false })`** (23 Sep 2026, `docs/FINDINGS.md` 31): the
+plugin's default is `socketio: true`, which starts upstream's socket.io client against
+port 9000 and retries forever. `$socket` is set once, in `main.js`'s `mount()`, to the
+client below.
 
 **No component changed.** All seven `$socket` call sites - `Notifications.vue`,
 `MobileNotification.vue`, `Activities.vue`, `ERPNextSettings.vue`, `ExotelCallUI.vue`,

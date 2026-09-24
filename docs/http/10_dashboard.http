@@ -186,7 +186,7 @@ Content-Type: application/json
 
 {"name": "average_deal_value", "type": "number", "from_date": "2026-01-01", "to_date": "2026-12-31"}
 
-### 2.5 average_won_deal_value and average_ongoing_deal_value -> 200
+### 2.5 average_won_deal_value -> 200
 # @expect $.message.value exists
 POST {{host}}/api/method/{{dash}}.get_chart
 Authorization: Bearer {{token}}
@@ -194,7 +194,7 @@ Content-Type: application/json
 
 {"name": "average_won_deal_value", "type": "number", "from_date": "2026-01-01", "to_date": "2026-12-31"}
 
-### 2.6 -> 200
+### 2.6 average_ongoing_deal_value -> 200
 # @expect $.message.value exists
 POST {{host}}/api/method/{{dash}}.get_chart
 Authorization: Bearer {{token}}
