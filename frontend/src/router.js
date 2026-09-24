@@ -201,6 +201,16 @@ router.beforeEach(async (to, from, next) => {
 
   if (isLoggedIn && !users.fetched) {
     try {
+      // Phase 8 follow-up. The store may have been created while logged out: the very
+      // first visit to /crm runs this guard before the redirect to Login, and the store's
+      // auto fetch answers 401. `fetched` stays false and `promise` is that rejected
+      // fetch, so waiting on it again after login only fails again, and isCrmUser() then
+      // says no to everyone, Administrator included (docs/FINDINGS.md 33). Upstream never
+      // meets this: its login is a full page load, so every store starts fresh. When the
+      // last attempt errored, fetch again, now with a token.
+      if (users.error) {
+        users.reload()
+      }
       await users.promise
     } catch (error) {
       console.error('Error loading users', error)

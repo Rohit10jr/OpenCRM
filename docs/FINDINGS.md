@@ -42,6 +42,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 30 | frontend: any screen using `call()` | high | frappe-ui's `call()`, imported directly in 32 files and by the router guard, and its two upload helpers build their own requests: **no bearer header**, so each one answered 401. The JWT patch covered `createResource` only | **fixed** 23 Sep 2026 |
 | 31 | frontend: every page load | low | `app.use(FrappeUI)` starts upstream's socket.io client against port 9000, which nothing serves here, and it retries forever: three refused connections per minute in the console beside the port's own WebSocket | **fixed** 23 Sep 2026 |
 | 32 | frontend: the login form | high | The token pair arrives (visible in the Network tab) but the page stays on Sign in: frappe-ui returns the login body **wrapped** in `message`, and the session store read the pair from the wrapper, storing nothing | **fixed** 24 Sep 2026 |
+| 33 | frontend: right after signing in | high | "Access Denied" for every account, Administrator included. The users store was created on the first, logged-out visit, its fetch got a 401, and after login the guard waited on that same rejected fetch instead of fetching again | **fixed** 24 Sep 2026 |
 
 ---
 
@@ -990,3 +991,30 @@ walked the login over HTTP, where the body shape is exactly what was documented.
 **Fixed 24 Sep 2026.** `acceptTokens(data?.message ?? data)`: the pair is read from
 under `message` when the wrapper is present, and unchanged input still works should
 frappe-ui ever drop the special case.
+
+## 33. "Access Denied" for everyone right after signing in
+
+**Block:** none in the http suite. Sign in as Administrator, or as any user with a CRM
+role, once finding 32 stores the tokens: the next screen is Not Permitted, "You do not
+have enough permissions to access Frappe CRM".
+
+**Expected:** the default view. `isCrmUser()` looks the session user up in the
+`crmUsers` list that `crm.api.session.get_users` returns, and Administrator is in it.
+
+**Actual:** the users store is created the first time the router guard runs for a
+non-public route, and that happens on the very first visit to `/crm`, before the
+redirect to Login, while nobody is signed in. The store's `users` resource fetches on
+creation (`auto: true`), answers 401, and frappe-ui leaves `fetched` false, `error` set
+and `promise` pointing at that rejected fetch. After login the guard's "load users
+first" step sees `fetched` false and awaits `users.promise`, which is the same
+rejected fetch, catches the rejection, and continues with the store's empty initial
+data. `isCrmUser()` finds nobody in an empty list and the guard sends everyone to Not
+Permitted. Upstream never meets this: its login page lives in the desk, so signing in
+is a full page load and every Pinia store is created fresh afterwards.
+
+**Where:** `frontend/src/router.js`, the guard's users-loading step.
+
+**Fixed 24 Sep 2026.** When the last attempt errored, the guard calls `users.reload()`
+before awaiting the promise, so the list is fetched again with the token in place.
+One place, and it also covers a session that expired and was renewed without leaving
+the app.
