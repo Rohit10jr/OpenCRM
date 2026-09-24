@@ -2,6 +2,7 @@
   <FrappeUIProvider>
     <NotPermitted v-if="$route.name === 'Not Permitted'" />
     <router-view v-else-if="$route.name === 'Onboarding'" />
+    <router-view v-else-if="$route.meta?.isPublic" />
     <Layout v-else-if="session.isLoggedIn" class="isolate">
       <router-view :key="$route.fullPath" />
     </Layout>
@@ -11,6 +12,12 @@
 </template>
 
 <script setup>
+// The `$route.meta?.isPublic` branch above is the port's: phase 8's auth screens (Login,
+// Forgot Password, Update Password, Accept Invitation) carry that flag and render outside
+// the app Layout, which assumes a session. Upstream never needed the branch, because it
+// sends a logged-out visitor to the desk's own /login page before the SPA mounts. Without
+// it the guard's redirect to Login landed on a template with no matching branch, and a
+// logged-out visitor saw an empty page (docs/FINDINGS.md 28).
 import NotPermitted from '@/pages/NotPermitted.vue'
 import DoctypeModals from '@/components/Modals/DoctypeModals.vue'
 import { Dialogs } from '@/utils/dialogs'
