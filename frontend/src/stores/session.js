@@ -45,8 +45,16 @@ export const sessionStore = defineStore('crm-session', () => {
       throw new Error(__('Invalid Email or Password'))
     },
     // JWT PATCH: /api/method/login now returns a token pair instead of setting `sid`.
+    //
+    // The pair sits under `message`, and it arrives wrapped: frappe-ui's request layer
+    // returns the *whole* body for the login URL (frappeRequest.ts, `url ===
+    // '/api/method/login'`), because upstream's login answer keeps `home_page` and
+    // `full_name` at the top level. Every other endpoint is unwrapped to `message`
+    // before a resource sees it, which is how UpdatePassword.vue and AcceptInvitation.vue
+    // receive a bare pair. Reading `data` here stored nothing and the guard bounced the
+    // user straight back to Login (docs/FINDINGS.md 32).
     onSuccess(data) {
-      acceptTokens(data)
+      acceptTokens(data?.message ?? data)
       login.reset()
       // Phase 8: return them to whatever they were trying to reach. The guard puts it in
       // `?redirect=` when it bounces an unauthenticated visitor.

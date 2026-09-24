@@ -41,6 +41,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 29 | frontend: first load after `yarn dev` | high | A cold load fetched **3,234 modules** and took minutes on this machine: frappe-ui cannot be pre-bundled, its barrel is not rewritten for an installed copy, and every package it imports is served raw (reka-ui 564 files, echarts 556) | **fixed** 23 Sep 2026 |
 | 30 | frontend: any screen using `call()` | high | frappe-ui's `call()`, imported directly in 32 files and by the router guard, and its two upload helpers build their own requests: **no bearer header**, so each one answered 401. The JWT patch covered `createResource` only | **fixed** 23 Sep 2026 |
 | 31 | frontend: every page load | low | `app.use(FrappeUI)` starts upstream's socket.io client against port 9000, which nothing serves here, and it retries forever: three refused connections per minute in the console beside the port's own WebSocket | **fixed** 23 Sep 2026 |
+| 32 | frontend: the login form | high | The token pair arrives (visible in the Network tab) but the page stays on Sign in: frappe-ui returns the login body **wrapped** in `message`, and the session store read the pair from the wrapper, storing nothing | **fixed** 24 Sep 2026 |
 
 ---
 
@@ -961,3 +962,31 @@ call, so nothing reads the dead one, but it keeps knocking.
 
 **Fixed 23 Sep 2026.** `app.use(FrappeUI, { socketio: false })`. `$socket` is set once,
 in `mount()`, to the port's client.
+
+## 32. The login form receives the token pair and stores nothing
+
+**Block:** none in the http suite. The first sign-in through the browser, 24 Sep 2026:
+credentials accepted, `POST /api/method/login` answers 200 with `access` and `refresh`
+under `message`, and the page stays on Sign in. Same for Administrator and for a user
+created from the Django shell.
+
+**Expected:** the tokens are stored, `isLoggedIn` flips, and the router takes the user
+to the default view.
+
+**Actual:** `stores/session.js`'s `login` resource passes the response to
+`acceptTokens`, which destructures `{access, refresh}`. But frappe-ui's request layer
+special-cases the login URL: `frappeRequest.ts` returns the **whole body** when
+`url === '/api/method/login'`, because upstream's login answer keeps `home_page` and
+`full_name` at the top level rather than under `message`. So the resource received
+`{message: {access, refresh, ...}}`, read `access` off the wrapper, got `undefined`,
+and stored nothing. `router.replace('/')` then ran with `isLoggedIn` still false and
+the guard bounced back to Login. The other two pages that receive tokens,
+`UpdatePassword.vue` and `AcceptInvitation.vue`, call ordinary endpoints, which the
+same layer unwraps to `message`, so they were never affected, and the phase 8 review
+walked the login over HTTP, where the body shape is exactly what was documented.
+
+**Where:** `frontend/src/stores/session.js`, the `login` resource's `onSuccess`.
+
+**Fixed 24 Sep 2026.** `acceptTokens(data?.message ?? data)`: the pair is read from
+under `message` when the wrapper is present, and unchanged input still works should
+frappe-ui ever drop the special case.
