@@ -23,6 +23,7 @@ import {
 } from 'frappe-ui'
 
 import { jwtRequest } from '@/auth/jwtRequest'
+import { installAuthInterceptor } from '@/auth/interceptor'
 import { telemetryPlugin } from 'frappe-ui/frappe'
 // injects the lucide SVG sprite into the DOM so the IconPicker and lucide Icons
 // (used for view icons) can render from it
@@ -50,7 +51,15 @@ let app = createApp(App)
 // attaches the header and refreshes on 401. This one line is the whole integration -
 // none of the 225 createResource call sites change.
 setConfig('resourceFetcher', jwtRequest)
-app.use(FrappeUI)
+// ...and the second half: frappe-ui's `call()` and its upload helpers never consult
+// resourceFetcher, so the header is attached at fetch / XMLHttpRequest for same-origin
+// /api/ URLs (src/auth/interceptor.js, docs/FINDINGS.md 30).
+installAuthInterceptor()
+// `socketio: false`: the plugin would otherwise start upstream's socket.io client
+// against port 9000, which nothing here listens on, and retry forever. The port's
+// realtime client is ./socket.js, installed on $socket in mount() below (JWT_PATCH.md,
+// the realtime patch; docs/FINDINGS.md 31).
+app.use(FrappeUI, { socketio: false })
 app.use(spritePlugin)
 app.use(pinia)
 app.use(router)
