@@ -65,9 +65,13 @@ upstream with an expired session.
 
 - **No CSRF token handling.** It protected cookie auth; there are no cookies now.
 - **`logout` does not revoke the access token.** With stateless JWTs it stays valid
-  until it expires (60 min by default, `JWT_ACCESS_TOKEN_LIFETIME_MINUTES`). Add
-  `rest_framework_simplejwt.token_blacklist` if that window is unacceptable - the
-  backend already calls `.blacklist()` when the app is installed.
+  until it expires (5 min by default, `JWT_ACCESS_TOKEN_LIFETIME_MINUTES`; the local
+  `.env` raises it for hand testing and must not ship that way). Closing that window
+  would mean a blacklist lookup on every request, which discards most of the reason
+  for stateless tokens, so it is documented instead. The **refresh** token *is*
+  revoked: `token_blacklist` is installed, and since 25 Sep 2026 the `logout` resource
+  sends the refresh token so the backend can blacklist it (`docs/FINDINGS.md` 35);
+  before that the call went out empty and revoked nothing.
 
 ## Not done in phase 0
 

@@ -44,6 +44,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 32 | frontend: the login form | high | The token pair arrives (visible in the Network tab) but the page stays on Sign in: frappe-ui returns the login body **wrapped** in `message`, and the session store read the pair from the wrapper, storing nothing | **fixed** 24 Sep 2026 |
 | 33 | frontend: right after signing in | high | "Access Denied" for every account, Administrator included. The users store was created on the first, logged-out visit, its fetch got a 401, and after login the guard waited on that same rejected fetch instead of fetching again | **fixed** 24 Sep 2026 |
 | 34 | frontend: sign out, then sign in as someone else | medium | Sign-out was an in-app route change, so every store outlived it: the next person to sign in on the same tab inherited the previous user's users list, views and caches, each store believing it had already loaded | **fixed** 25 Sep 2026 |
+| 35 | frontend: sign out | high | Sign-out called the backend with an **empty body**, so the refresh token was never blacklisted and a copy of it could mint access tokens for its full seven-day lifetime. Upstream's logout kills the session server-side at once | **fixed** 25 Sep 2026 |
 
 ---
 
@@ -1049,3 +1050,31 @@ Sales User leaves the Sales User looking at the wider user list.
 **Fixed 25 Sep 2026.** `window.location.assign('/crm/login')`: a real page load to the
 port's own login page, which discards everything, the same effect upstream's jump had.
 The `/crm` prefix is the router's base.
+
+## 35. Sign-out never revoked the refresh token
+
+**Block:** none in the http suite. Read from the code while reviewing finding 34: the
+`logout` resource in `stores/session.js` is submitted with no arguments, so
+`POST /api/method/logout` goes out with an empty body.
+
+**Expected:** upstream's logout deletes the server-side session (`frappe/auth.py:364`,
+`delete_session`); the `sid` cookie is dead from that instant and every later request
+with it is a Guest. There is no window.
+
+**Actual:** the port's logout endpoint (`frappe_core/api/auth.py:127-142`) blacklists
+the refresh token *it is given*, and the blacklist app is installed, but the frontend
+never gave it one. So sign-out cleared the browser's copy and revoked nothing: a
+refresh token captured before sign-out kept minting access tokens for its full
+lifetime, seven days by default. The access token is stateless and stays valid until it
+expires regardless: five minutes by default, though the local `.env` sets 180 for hand
+testing and must not ship that way.
+
+**Where:** `frontend/src/stores/session.js`, the `logout` resource.
+
+**Fixed 25 Sep 2026.** The resource gains a `makeParams` that reads the refresh token
+from storage and sends it, so the backend blacklists it; the two call sites keep
+calling `logout.submit()` unchanged. `tests/test_auth.py` pins both halves: a logout
+carrying the token makes a later refresh with it answer 401, and a bare logout revokes
+nothing, which is the contract the frontend now honours. The five-minute access-token
+window is inherent to JWT and documented in `JWT_PATCH.md` rather than closed, since
+closing it means a blacklist lookup on every request.

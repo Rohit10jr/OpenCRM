@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { createResource } from 'frappe-ui'
 import router from '@/router'
 import { ref, computed } from 'vue'
-import { clearTokens, getTokenUser, setTokens } from '@/auth/tokens'
+import { clearTokens, getRefreshToken, getTokenUser, setTokens } from '@/auth/tokens'
 
 export const sessionStore = defineStore('crm-session', () => {
   // JWT PATCH (see ../../JWT_PATCH.md): the port issues bearer tokens instead of the
@@ -71,6 +71,16 @@ export const sessionStore = defineStore('crm-session', () => {
 
   const logout = createResource({
     url: 'logout',
+    // JWT PATCH: hand the backend the refresh token so it can blacklist it. Without it
+    // `logout` had nothing to revoke and the token stayed good for its full lifetime,
+    // seven days by default, so a copy of it could keep minting access tokens after
+    // sign-out (docs/FINDINGS.md 35). Upstream has no such window: its logout deletes
+    // the server-side session and the cookie is dead from that instant. The access
+    // token is stateless and lives until it expires; that window is documented, not
+    // closed. The two call sites keep calling `logout.submit()` with no arguments.
+    makeParams() {
+      return { refresh: getRefreshToken() || '' }
+    },
     onSuccess() {
       // JWT PATCH: nothing to expire server-side, so drop the tokens locally.
       clearTokens()
