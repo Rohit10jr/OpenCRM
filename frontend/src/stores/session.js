@@ -75,11 +75,13 @@ export const sessionStore = defineStore('crm-session', () => {
       // JWT PATCH: nothing to expire server-side, so drop the tokens locally.
       clearTokens()
       user.value = null
-      // Phase 8: the second half of the same bug the router had. This was
-      // `window.location.href = '/login?redirect-to=/crm'`, which took a user who had just
-      // signed out to a URL nothing serves. Caught by the phase-8 review, outside the
-      // files it was asked to look at.
-      router.replace({ name: 'Login' })
+      // Phase 8 replaced upstream's `window.location.href = '/login?redirect-to=/crm'`,
+      // a URL nothing here serves, with an in-app route change. That kept the app, and
+      // every store in it, alive across sign-out: the next person to sign in on the same
+      // tab inherited the previous user's users list, views and caches, because each
+      // store believed it had already loaded (docs/FINDINGS.md 34). A real page load to
+      // the login page discards all of it, which is what upstream's jump did for free.
+      window.location.assign('/crm/login')
     },
   })
 

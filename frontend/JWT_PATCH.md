@@ -74,7 +74,18 @@ upstream with an expired session.
 This SPA has **no login page** - upstream redirects to the Frappe desk's
 (`session.js:35`, `window.location.href = '/login?redirect-to=/crm'`). Something has to
 serve that page and call `login`, and it is not in any phase 0-4 spec. Flagged in
-`docs/internal/PROGRESS.md`.
+`docs/internal/PROGRESS.md`. Phase 8 added the page inside the SPA.
+
+## What an in-app login changes (24-25 Sep 2026)
+
+Upstream signs in and out through full page loads, so every Pinia store and resource
+cache starts from nothing on each side of the boundary. With the login page inside the
+SPA the app keeps running through both, and three things had to become explicit
+(`docs/FINDINGS.md` 32-34): the login response is read from under `message`, because
+frappe-ui returns the login body wrapped; the router guard decides "not logged in" before
+it creates the users store, and re-fetches that store if an early fetch had failed; and
+sign-out is a real page load to `/crm/login`, so the next user does not inherit the
+previous one's stores.
 
 Concurrent 401s collapse into a single refresh (`refreshInFlight`), because a list
 screen can fire a dozen requests at once and each must not spend a refresh token.

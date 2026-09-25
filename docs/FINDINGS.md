@@ -43,6 +43,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 31 | frontend: every page load | low | `app.use(FrappeUI)` starts upstream's socket.io client against port 9000, which nothing serves here, and it retries forever: three refused connections per minute in the console beside the port's own WebSocket | **fixed** 23 Sep 2026 |
 | 32 | frontend: the login form | high | The token pair arrives (visible in the Network tab) but the page stays on Sign in: frappe-ui returns the login body **wrapped** in `message`, and the session store read the pair from the wrapper, storing nothing | **fixed** 24 Sep 2026 |
 | 33 | frontend: right after signing in | high | "Access Denied" for every account, Administrator included. The users store was created on the first, logged-out visit, its fetch got a 401, and after login the guard waited on that same rejected fetch instead of fetching again | **fixed** 24 Sep 2026 |
+| 34 | frontend: sign out, then sign in as someone else | medium | Sign-out was an in-app route change, so every store outlived it: the next person to sign in on the same tab inherited the previous user's users list, views and caches, each store believing it had already loaded | **fixed** 25 Sep 2026 |
 
 ---
 
@@ -1018,3 +1019,33 @@ is a full page load and every Pinia store is created fresh afterwards.
 before awaiting the promise, so the list is fetched again with the token in place.
 One place, and it also covers a session that expired and was renewed without leaving
 the app.
+
+**Reordered 25 Sep 2026.** The guard now decides "not logged in, go to Login" *before*
+it creates the users store, so a logged-out visit to a protected URL fetches nothing at
+all. Upstream's guard (`router.js:157-161, 221-222`) creates the store first and lets
+its fetch fail, which costs nothing there because the page jump that follows discards
+it. The re-fetch stays as the safety net for a store created early by something other
+than the guard.
+
+## 34. Sign-out keeps the previous user's stores alive
+
+**Block:** none in the http suite. Sign in as a System Manager, sign out, sign in as a
+Sales User in the same tab. The second session runs on the first user's users list,
+views and caches.
+
+**Expected:** upstream's sign-out is `window.location.href = '/login?redirect-to=/crm'`
+(`stores/session.js:35`), a real page load: every Pinia store and every frappe-ui
+resource cache is discarded, and the next sign-in starts from nothing.
+
+**Actual:** phase 8 replaced that jump, whose URL nothing here serves, with
+`router.replace({ name: 'Login' })`, an in-app route change. The tokens were cleared,
+but the app and everything in its memory kept running. Each store believed it had
+already loaded, so nothing fetched again for the new user. For two accounts with the
+same role the lists are identical and nothing shows; a System Manager followed by a
+Sales User leaves the Sales User looking at the wider user list.
+
+**Where:** `frontend/src/stores/session.js`, the `logout` resource's `onSuccess`.
+
+**Fixed 25 Sep 2026.** `window.location.assign('/crm/login')`: a real page load to the
+port's own login page, which discards everything, the same effect upstream's jump had.
+The `/crm` prefix is the router's base.

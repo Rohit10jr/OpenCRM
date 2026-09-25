@@ -197,17 +197,32 @@ router.beforeEach(async (to, from, next) => {
     return isLoggedIn && to.name === 'Login' ? next({ path: '/' }) : next()
   }
 
+  // Phase 8. Upstream's version of this branch was `window.location.href =
+  // '/login?redirect-to=/crm'` - a jump out of the SPA to a URL nothing here serves
+  // (`config/urls.py` has only `admin/` and `api/`), so an unauthenticated visitor got a
+  // 404 instead of a login form. That redirect was the bug, not the contract
+  // (`PHASE_8_AUTH_AND_DESK.md`). `redirect` carries where they were headed, so signing
+  // in returns them to it rather than to the default view.
+  //
+  // Decided **before** `usersStore()` exists, deliberately (docs/FINDINGS.md 33). Upstream
+  // creates the store first and lets its fetch fail with a 401, which costs nothing there
+  // because the page jump that follows discards it. Here the app keeps running through
+  // login, so a store created now would carry that failed fetch into the session. Checking
+  // the token first means a logged-out visit fetches nothing at all.
+  if (!isLoggedIn) {
+    return next({ name: 'Login', query: to.fullPath === '/' ? {} : { redirect: to.fullPath } })
+  }
+
   const { users, isCrmUser, isAdmin } = usersStore()
 
   if (isLoggedIn && !users.fetched) {
     try {
-      // Phase 8 follow-up. The store may have been created while logged out: the very
-      // first visit to /crm runs this guard before the redirect to Login, and the store's
-      // auto fetch answers 401. `fetched` stays false and `promise` is that rejected
-      // fetch, so waiting on it again after login only fails again, and isCrmUser() then
-      // says no to everyone, Administrator included (docs/FINDINGS.md 33). Upstream never
-      // meets this: its login is a full page load, so every store starts fresh. When the
-      // last attempt errored, fetch again, now with a token.
+      // Phase 8 follow-up, the safety net behind the logged-out check above. A store
+      // created before login by anything other than this guard would carry a fetch that
+      // answered 401: `fetched` stays false and `promise` is that rejected fetch, so
+      // waiting on it again only fails again, and isCrmUser() then says no to everyone,
+      // Administrator included (docs/FINDINGS.md 33). When the last attempt errored, fetch
+      // again, now with a token.
       if (users.error) {
         users.reload()
       }
@@ -271,15 +286,6 @@ router.beforeEach(async (to, from, next) => {
     } else {
       next({ name: route_name, params: { viewType: type } })
     }
-  } else if (!isLoggedIn) {
-    // Phase 8. This was `window.location.href = '/login?redirect-to=/crm'` — a jump out of
-    // the SPA to a URL nothing serves (`config/urls.py` has only `admin/` and `api/`), so
-    // an unauthenticated visitor got a 404 instead of a login form. That redirect was the
-    // bug, not the contract (`PHASE_8_AUTH_AND_DESK.md`).
-    //
-    // `redirect` carries where they were headed, so signing in returns them to it rather
-    // than to the default view.
-    next({ name: 'Login', query: to.fullPath === '/' ? {} : { redirect: to.fullPath } })
   } else if (to.matched.length === 0) {
     next({ name: 'Invalid Page' })
   } else if (['Deal', 'Lead'].includes(to.name) && !to.hash) {
