@@ -49,6 +49,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 37 | frontend: every settings screen; the sidebar on first load | high | The frontend asks for the `FCRM Settings` document **by its doctype's name**, as upstream names every single. The port named each singleton row `Settings`, so the request answered 404 | **fixed** 28 Sep 2026 |
 | 38 | frontend: the app layout after signing in | high | Blank page: frappe-ui's own "who is signed in" helper reads Frappe's `user_id` **cookie**, which this port never set, so `useOnboarding()` in the sidebar returned nothing and the layout crashed | **fixed** 28 Sep 2026 |
 | 39 | every screen with the onboarding panel | medium | frappe-ui's `useOnboarding` calls `frappe.onboarding.get_onboarding_status` and `update_user_onboarding_status` **from inside the package**, so the guard that scans `frontend/src` never saw them; both answered 404 on every screen | **fixed** 28 Sep 2026 |
+| 40 | frontend: the leads and deals lists | high | Endless spinner although the data arrived: `_assign` came over as a decoded **list**, upstream sends a JSON **string**, and the page's `JSON.parse(lead._assign)` threw inside the row computation. The five lists without an `_assign` column rendered fine | **fixed** 28 Sep 2026 |
 
 ---
 
@@ -1217,3 +1218,38 @@ status reads as `{}` on the write path too, which upstream gets wrong
 two source trees, with the three Data Import paths as its only exclusions, so a
 library-side call can no longer go unserved unnoticed. `tests/test_onboarding_status.py`
 covers the pair.
+
+## 40. The JSON caches crossed the wire as lists; the frontend parses strings
+
+**Block:** none in the http suite, which accepted either shape. Seen 28 Sep 2026: the
+leads and deals lists showed a spinner forever while notes, tasks, call logs, contacts
+and organizations rendered. The backend log had `crm.api.doc.get_data 200` for the
+leads request. Fetching that response by hand showed
+`"_assign": ["ada@example.com", "Administrator"]`, a real list.
+
+**Expected:** `"_assign": "[\"ada@example.com\", \"Administrator\"]"`, a JSON string.
+Upstream keeps `_assign`, `_liked_by` and `_comments` in Text columns holding JSON
+(`base_document.py:520-523` lists them among the text fields) and hands them over
+untouched, so the frontend parses them: `JSON.parse(lead._assign || '[]')` in
+`Leads.vue:490` and `Deals.vue:456`, inside the computed that builds the rows, and
+`JSON.parse(item)` in every list view's `isLiked`.
+
+**Actual:** the port stores the three as `JSONField` (`frappe_core/models.py:151-153`),
+the better column, and both output paths, `fetch_rows`'s `values()` and the DRF
+serializer, produced the decoded list. `JSON.parse` of a list coerces it to a string
+first, `"ada@example.com,Administrator"`, which is not JSON, so the row computation
+threw, Vue abandoned the render, and the `v-else` spinner stayed. The five lists that
+rendered have no `_assign` column in their default view. The http suite never noticed
+because its `contains` and `count` checks pass on either shape.
+
+**Where:** `frappe_core/query.py`, the new `wire_json_text`, applied in `fetch_rows`
+and in `DocumentSerializer.to_representation`.
+
+**Fixed 28 Sep 2026.** The three caches are encoded as JSON strings on every path that
+hands a document or a row to the client; the columns, the assignment and like code,
+and the `_assign like %user%` filter (`filters.py`, which already casts the column to
+text) are unchanged. An empty cache goes out as `"[]"`, which both the guarded and the
+unguarded parses accept. `tests/test_wire_shapes.py` pins the string on the resource
+route, `frappe.client.get_list`, the list route and the empty case, and that the text
+filter still matches; `test_task_assignment.py` and `test_hardening.py` decode before
+comparing; blocks 02/10.7, 03/4.5, 03/4.7, 06/2.4 and 06/2.7 expect the string.

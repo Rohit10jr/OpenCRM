@@ -12,6 +12,8 @@ the value.
 
 from urllib.parse import quote
 
+import json
+
 import pytest
 
 pytestmark = pytest.mark.django_db
@@ -111,7 +113,8 @@ def test_assign_cannot_be_spoofed_on_update(auth_api):
 
     auth_api.put(detail, {"label": "x", "_assign": ["victim@example.com"]}, format="json")
 
-    assert auth_api.get(detail).json()["data"]["_assign"] != ["victim@example.com"]
+    # A JSON string on the wire (FINDINGS.md 40); decode before comparing.
+    assert json.loads(auth_api.get(detail).json()["data"]["_assign"]) != ["victim@example.com"]
 
 
 def test_audit_fields_are_still_read_only(auth_api):

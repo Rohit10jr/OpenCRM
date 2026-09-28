@@ -18,6 +18,7 @@ from frappe_core import children, registry
 from frappe_core import naming as naming_strategies
 from frappe_core.exceptions import DuplicateEntryError
 from frappe_core.field_security import hidden_from, readonly_fields, restricted_fields, sensitive_fields
+from frappe_core.query import wire_json_text
 
 #: Standard fields the client may never set directly; the model stamps them.
 #: Audit columns the server stamps, plus the four underscore caches.
@@ -81,6 +82,9 @@ class DocumentSerializer(serializers.ModelSerializer):
         if restricted_fields(self.Meta.model):
             for fieldname in hidden_from(self.Meta.model):
                 data.pop(fieldname, None)
+        # `_assign`, `_liked_by`, `_comments` go out as JSON *strings*, as upstream's
+        # Text columns do and as the frontend parses them (FINDINGS.md 40).
+        wire_json_text(data)
         for fieldname, spec in (self.child_table_spec or {}).items():
             child_serializer = registry.get_entry(spec["doctype"]).get_serializer_class()
             data[fieldname] = child_serializer(

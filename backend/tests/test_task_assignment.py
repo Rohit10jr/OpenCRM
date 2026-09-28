@@ -8,6 +8,8 @@ assignee chip reads ``_assign`` and the assignee's own task list is built from T
 
 from urllib.parse import quote
 
+import json
+
 import pytest
 
 from crm_app.models import CRMTask
@@ -74,8 +76,9 @@ def test_the_document_route_assigns_too(auth_api, alice, bob):
     )
     assert response.status_code == 201, response.content[:300]
     name = response.json()["data"]["name"]
-    assert auth_api.get(f"{TASKS}/{name}").json()["data"]["_assign"] == [bob.name]
+    # `_assign` is a JSON string on the wire, as upstream sends it (FINDINGS.md 40).
+    assert json.loads(auth_api.get(f"{TASKS}/{name}").json()["data"]["_assign"]) == [bob.name]
 
     response = auth_api.put(f"{TASKS}/{name}", {"assigned_to": alice.name}, format="json")
     assert response.status_code == 200, response.content[:300]
-    assert auth_api.get(f"{TASKS}/{name}").json()["data"]["_assign"] == [alice.name]
+    assert json.loads(auth_api.get(f"{TASKS}/{name}").json()["data"]["_assign"]) == [alice.name]

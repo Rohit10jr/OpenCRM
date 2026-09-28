@@ -153,9 +153,8 @@ Content-Type: application/json
 
 {"assigned_to": "{{manager}}"}
 
-### 2.4 -> _assign is exactly [grace]
-# @expect $.data._assign count 1
-# @expect $.data._assign[0] == grace@example.com
+### 2.4 -> _assign is exactly [grace], as a JSON string the way upstream sends it
+# @expect $.data._assign == ["grace@example.com"]
 GET {{task}}/{{task1}}
 Authorization: Bearer {{token}}
 
@@ -176,7 +175,7 @@ Content-Type: application/json
 
 ### 2.7 a second task with no assignee and no reference -> 201, both allowed
 # @name task2_req
-# @expect $.data._assign count 0
+# @expect $.data._assign == []
 # @expect $.data.reference_docname ==
 POST {{task}}
 Authorization: Bearer {{token}}

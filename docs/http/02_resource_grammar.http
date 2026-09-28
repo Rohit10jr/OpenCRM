@@ -408,8 +408,8 @@ Content-Type: application/json
 
 {"no_such_field": "whatever"}
 
-### 10.7 PUT cannot write the underscore caches -> 200, _assign unchanged
-# @expect $.data._assign count 0
+### 10.7 PUT cannot write the underscore caches -> 200, _assign unchanged (a JSON string, as upstream sends it)
+# @expect $.data._assign == []
 PUT {{org}}/ZZ%20Grammar%20Alpha
 Authorization: Bearer {{token}}
 Content-Type: application/json

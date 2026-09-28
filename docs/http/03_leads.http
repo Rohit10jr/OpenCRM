@@ -345,9 +345,8 @@ Content-Type: application/json
 
 {"doctype": "CRM Lead", "name": "{{lead3}}", "assignees": ["Administrator"]}
 
-### 4.5 ...and _assign no longer lists them -> 200
-# @expect $.data._assign count 1
-# @expect $.data._assign[0] == ada@example.com
+### 4.5 ...and _assign no longer lists them -> 200 (a JSON string, as upstream sends it)
+# @expect $.data._assign == ["ada@example.com"]
 GET {{lead}}/{{lead3}}?fields=["name","_assign"]&filters=[["name","=","{{lead3}}"]]
 Authorization: Bearer {{token}}
 
@@ -360,7 +359,7 @@ Content-Type: application/json
 
 ### 4.7 a lead created with no lead_owner gets no assignment -> 201, _assign empty
 # @name lead6_req
-# @expect $.data._assign count 0
+# @expect $.data._assign == []
 POST {{lead}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
