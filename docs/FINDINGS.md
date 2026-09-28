@@ -51,6 +51,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 39 | every screen with the onboarding panel | medium | frappe-ui's `useOnboarding` calls `frappe.onboarding.get_onboarding_status` and `update_user_onboarding_status` **from inside the package**, so the guard that scans `frontend/src` never saw them; both answered 404 on every screen | **fixed** 28 Sep 2026 |
 | 40 | frontend: the leads and deals lists | high | Endless spinner although the data arrived: `_assign` came over as a decoded **list**, upstream sends a JSON **string**, and the page's `JSON.parse(lead._assign)` threw inside the row computation. The five lists without an `_assign` column rendered fine | **fixed** 28 Sep 2026 |
 | 41 | frontend: the dashboard | high | Blank dashboard with every number in place: the port's default tile list was an older shape (`type` number/donut/bar and a `width`, no `layout`), and the grid needs a `layout` object and one of the four `*_chart` types the page knows. Upstream's seventeen tiles, verbatim; migration 0009 repairs the saved row | **fixed** 28 Sep 2026 |
+| 42 | frontend: the user menu at the top of the sidebar | high | The menu (Apps, Settings, About, Log out) was **empty**: it is built from FCRM Settings' dropdown-item rows, which upstream seeds at install and the port never did, so Settings, About and Log out were unreachable from inside the app. Seeded on first load and by migration 0010 | **fixed** 28 Sep 2026 |
 
 ---
 
@@ -1288,3 +1289,37 @@ it as upstream stores it. Migration 0009 rewrites a saved row whose tiles all la
 the grid keys, the string against the upstream file when it is present, the seventeen
 filled tiles through the endpoint and the migration's three cases; `10_dashboard.http`
 1.4 to 1.12 and 3.2 expect the new tiles. Run `python manage.py migrate` after pulling.
+
+## 42. The user menu was empty: the standard dropdown items were never seeded
+
+**Block:** none in the http suite; `12_settings_singletons.http` reads the settings row
+and never looked at `dropdown_items`. Seen 28 Sep 2026 while preparing the browser
+tests: `frappe.client.get` of FCRM Settings answered `"dropdown_items": []`, and the
+database held no CRM Dropdown Item row at all.
+
+**Expected:** six items. `UserDropdown.vue` builds the menu at the top of the sidebar
+from `settings.dropdown_items` and dispatches on each row's `name1`: `app_selector`,
+`settings`, `login_to_fc`, `about`, a separator and `logout`. Upstream writes those six
+(`crm/hooks.py:314`, `standard_dropdown_items`) into the settings row at install
+(`crm/install.py:530`) and re-syncs them after every migrate
+(`fcrm_settings.py:after_migrate`). Without them there is no way to open Settings or
+About, or to sign out, from inside the app.
+
+**Actual:** the port has the CRM Dropdown Item child table and the settings serializer
+sends it, but nothing ever wrote a row: `install.py` was never ported (`PORT_PLAN.md`
+§2 covers the demo data only), and the FCRM Settings row on this database was created
+bare on 24 Aug. The frontend's only fallback is an empty list.
+
+**Where:** `crm_app/models/metadata.py`, beside the child model; migration
+`crm_app/0010`.
+
+**Fixed 28 Sep 2026.** `STANDARD_DROPDOWN_ITEMS` carries the hook's six entries
+verbatim and `add_standard_dropdown_items` writes them, unless the row already has
+items, which is upstream's install rule. `FCRMSettings.load` seeds a row it creates, so
+a fresh database gets them on first use; migration 0010 seeds the rows that already
+existed. `tests/test_dropdown_items.py` covers the list, the first load, idempotence,
+the migration and the shape the frontend receives. Not ported: upstream's `validate`
+refusal to delete a standard item ("Cannot delete standard items ...") and its
+post-migrate re-sync; both belong with a settings-screen pass. Worth knowing beside it:
+a single that has never been saved answers 404 here, where upstream's always exists.
+This database had the row; `FCRMSettings.load()` is the path that creates one.

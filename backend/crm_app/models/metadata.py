@@ -366,6 +366,15 @@ class FCRMSettings(SingletonMixin, BaseDocument):
     #: screen needs.
     RESTRICTED_FIELDS = ("access_key",)
 
+    @classmethod
+    def load(cls):
+        """The single row, created with its standard user-menu items on first use, which
+        is how upstream's install leaves it (FINDINGS.md 42)."""
+        obj, created = cls._default_manager.get_or_create(pk=cls.singleton_name())
+        if created:
+            add_standard_dropdown_items(obj)
+        return obj
+
     class Meta:
         verbose_name = "FCRM Settings"
 
@@ -393,6 +402,57 @@ class CRMDropdownItem(BaseDocument):
     class Meta:
         ordering = ["idx"]
         name_strategy = Hash()
+
+
+#: ``crm/hooks.py:314-357`` ``standard_dropdown_items``, verbatim. The user menu at the
+#: top of the sidebar (``UserDropdown.vue``) is built from FCRM Settings' dropdown_items
+#: rows and shows nothing without them: no Settings, no About, no Log out. Upstream
+#: writes these at install (``crm/install.py:530 add_standard_dropdown_items``) and
+#: re-syncs them after every migrate; the port never seeded them (FINDINGS.md 42).
+STANDARD_DROPDOWN_ITEMS = (
+    {"name1": "app_selector", "label": "Apps", "type": "Route", "route": "#", "is_standard": True},
+    {
+        "name1": "settings",
+        "label": "Settings",
+        "type": "Route",
+        "icon": "settings",
+        "route": "#",
+        "is_standard": True,
+    },
+    {
+        "name1": "login_to_fc",
+        "label": "Login to Frappe Cloud",
+        "type": "Route",
+        "route": "#",
+        "is_standard": True,
+    },
+    {"name1": "about", "label": "About", "type": "Route", "icon": "info", "route": "#", "is_standard": True},
+    {"name1": "separator", "label": "", "type": "Separator", "is_standard": True},
+    {
+        "name1": "logout",
+        "label": "Log out",
+        "type": "Route",
+        "icon": "log-out",
+        "route": "#",
+        "is_standard": True,
+    },
+)
+
+
+def add_standard_dropdown_items(settings: FCRMSettings) -> int:
+    """``crm/install.py:530-542``: seed the standard items, unless the row has any.
+
+    Returns the number of rows written. Upstream appends them through the document, so
+    each child row is inserted with the session user as its owner and ``idx`` in hook
+    order; the same here, through ``BaseDocument.save``. ``FCRMSettings.load`` calls
+    this for a row it creates; migration ``crm_app/0010`` covered the rows that existed
+    before it.
+    """
+    if settings.dropdown_items.exists():
+        return 0
+    for idx, item in enumerate(STANDARD_DROPDOWN_ITEMS, start=1):
+        CRMDropdownItem(parent_settings=settings, idx=idx, **item).save()
+    return len(STANDARD_DROPDOWN_ITEMS)
 
 
 __all__ = [
