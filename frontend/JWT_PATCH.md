@@ -21,7 +21,7 @@ parameter name and response envelope is unchanged.
 
 | File | Change |
 |---|---|
-| `src/auth/tokens.js` | **New.** Token storage + `user_id` claim decode |
+| `src/auth/tokens.js` | **New.** Token storage + `user_id` claim decode. Since 28 Sep 2026 it also writes and clears the `user_id` cookie that frappe-ui's own `frappe/session.js` reads (`docs/FINDINGS.md` 38); the backend ignores cookies, so it carries no authority |
 | `src/auth/jwtRequest.js` | **New.** Wraps `frappeRequest`: attaches the header, refreshes once on 401 |
 | `src/auth/interceptor.js` | **New (23 Sep 2026).** Attaches the header at `fetch` / `XMLHttpRequest` for same-origin `/api/` URLs, for everything that does not go through `resourceFetcher` (see below) |
 | `src/main.js` | `setConfig('resourceFetcher', frappeRequest)` -> `jwtRequest`; `installAuthInterceptor()`; same for the dev boot call |

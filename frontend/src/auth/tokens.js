@@ -17,6 +17,26 @@ const ACCESS_KEY = 'crm:access_token'
 const REFRESH_KEY = 'crm:refresh_token'
 const REFRESH_URL = '/api/method/token/refresh'
 
+/**
+ * Frappe sets a `user_id` cookie at login, and frappe-ui has its own copy of the
+ * "who is signed in" helper that reads it (`frappe-ui/frappe/session.js`). Phase 0
+ * patched this app's session store to read the token instead, but the library's copy
+ * was missed: `useOnboarding()` in the sidebar asked it, got nobody, returned nothing,
+ * and the whole layout failed to render (docs/FINDINGS.md 38).
+ *
+ * So the cookie is written here, beside the tokens, and removed with them. It carries
+ * only the user id, which is public within the app anyway, and the backend ignores
+ * cookies entirely, so it grants nothing. `encodeURIComponent` because the library
+ * parses `document.cookie` with `URLSearchParams`, which decodes it.
+ */
+const USER_COOKIE = 'user_id'
+
+function writeUserCookie(user) {
+  document.cookie = user
+    ? `${USER_COOKIE}=${encodeURIComponent(user)}; path=/; SameSite=Lax`
+    : `${USER_COOKIE}=; path=/; Max-Age=0; SameSite=Lax`
+}
+
 export function getAccessToken() {
   return localStorage.getItem(ACCESS_KEY)
 }
@@ -28,11 +48,13 @@ export function getRefreshToken() {
 export function setTokens({ access, refresh }) {
   if (access) localStorage.setItem(ACCESS_KEY, access)
   if (refresh) localStorage.setItem(REFRESH_KEY, refresh)
+  writeUserCookie(getTokenUser())
 }
 
 export function clearTokens() {
   localStorage.removeItem(ACCESS_KEY)
   localStorage.removeItem(REFRESH_KEY)
+  writeUserCookie(null)
 }
 
 let refreshInFlight = null
