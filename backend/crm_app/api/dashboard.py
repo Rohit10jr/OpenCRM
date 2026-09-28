@@ -22,6 +22,7 @@ direction and is recorded as a deliberate divergence.
 from __future__ import annotations
 
 import datetime
+import json
 
 from dateutil import parser as date_parser
 from dateutil.parser import ParserError
@@ -38,20 +39,51 @@ from frappe_core.whitelist import whitelist
 
 MANAGER_DASHBOARD = "Manager Dashboard"
 
-#: ``crm/fcrm/doctype/crm_dashboard/crm_dashboard.py:create_default_manager_dashboard``.
-#: Each entry's ``name`` is what ``get_dashboard`` turns into ``get_<name>``.
-DEFAULT_DASHBOARD_LAYOUT = [
-    {"name": "total_leads", "type": "number", "width": 1},
-    {"name": "ongoing_deals", "type": "number", "width": 1},
-    {"name": "won_deals", "type": "number", "width": 1},
-    {"name": "average_deal_value", "type": "number", "width": 1},
-    {"name": "deals_by_stage_donut", "type": "donut", "width": 2},
-    {"name": "leads_by_source", "type": "donut", "width": 2},
-    {"name": "deals_by_source", "type": "donut", "width": 2},
-    {"name": "deals_by_territory", "type": "bar", "width": 2},
-    {"name": "deals_by_salesperson", "type": "bar", "width": 2},
-    {"name": "lost_deal_reasons", "type": "bar", "width": 2},
-]
+#: ``crm/fcrm/doctype/crm_dashboard/crm_dashboard.py:default_manager_dashboard_layout``,
+#: verbatim, and stored in the CRM Dashboard row as upstream stores it. The frontend's
+#: grid places each tile by its ``layout`` (x, y, w, h, i) and ``DashboardItem.vue``
+#: draws only the types ``number_chart``, ``axis_chart``, ``donut_chart`` and
+#: ``spacer``; a tile of any other shape draws nothing (FINDINGS.md 41). ``name`` is
+#: what ``get_dashboard`` looks up in :data:`CHART_BUILDERS`; the spacer has none.
+#: Migration ``crm_app/0009`` carries its own copy for the rows written before it.
+DEFAULT_DASHBOARD_LAYOUT_JSON = (
+    '[{"name":"total_leads","type":"number_chart","tooltip":"Total number of leads",'
+    '"layout":{"x":0,"y":0,"w":4,"h":3,"i":"total_leads"}},'
+    '{"name":"ongoing_deals","type":"number_chart","tooltip":"Total number of ongoing deals",'
+    '"layout":{"x":8,"y":0,"w":4,"h":3,"i":"ongoing_deals"}},'
+    '{"name":"won_deals","type":"number_chart","tooltip":"Total number of won deals",'
+    '"layout":{"x":12,"y":0,"w":4,"h":3,"i":"won_deals"}},'
+    '{"name":"average_won_deal_value","type":"number_chart","tooltip":"Average value of won deals",'
+    '"layout":{"x":16,"y":0,"w":4,"h":3,"i":"average_won_deal_value"}},'
+    '{"name":"average_deal_value","type":"number_chart",'
+    '"tooltip":"Average deal value of ongoing and won deals",'
+    '"layout":{"x":0,"y":2,"w":4,"h":3,"i":"average_deal_value"}},'
+    '{"name":"average_time_to_close_a_lead","type":"number_chart",'
+    '"tooltip":"Average time taken to close a lead",'
+    '"layout":{"x":4,"y":0,"w":4,"h":3,"i":"average_time_to_close_a_lead"}},'
+    '{"name":"average_time_to_close_a_deal","type":"number_chart",'
+    '"layout":{"x":4,"y":2,"w":4,"h":3,"i":"average_time_to_close_a_deal"}},'
+    '{"name":"spacer","type":"spacer","layout":{"x":8,"y":2,"w":12,"h":3,"i":"spacer"}},'
+    '{"name":"sales_trend","type":"axis_chart","layout":{"x":0,"y":4,"w":10,"h":9,"i":"sales_trend"}},'
+    '{"name":"forecasted_revenue","type":"axis_chart",'
+    '"layout":{"x":10,"y":4,"w":10,"h":9,"i":"forecasted_revenue"}},'
+    '{"name":"funnel_conversion","type":"axis_chart",'
+    '"layout":{"x":0,"y":11,"w":10,"h":9,"i":"funnel_conversion"}},'
+    '{"name":"deals_by_stage_donut","type":"donut_chart",'
+    '"layout":{"x":10,"y":11,"w":10,"h":9,"i":"deals_by_stage_donut"}},'
+    '{"name":"lost_deal_reasons","type":"axis_chart",'
+    '"layout":{"x":0,"y":32,"w":20,"h":9,"i":"lost_deal_reasons"}},'
+    '{"name":"leads_by_source","type":"donut_chart",'
+    '"layout":{"x":0,"y":18,"w":10,"h":9,"i":"leads_by_source"}},'
+    '{"name":"deals_by_source","type":"donut_chart",'
+    '"layout":{"x":10,"y":18,"w":10,"h":9,"i":"deals_by_source"}},'
+    '{"name":"deals_by_territory","type":"axis_chart",'
+    '"layout":{"x":0,"y":25,"w":10,"h":9,"i":"deals_by_territory"}},'
+    '{"name":"deals_by_salesperson","type":"axis_chart",'
+    '"layout":{"x":10,"y":25,"w":10,"h":9,"i":"deals_by_salesperson"}}]'
+)
+#: The same, parsed, for anything that wants to read it; never handed out mutable.
+DEFAULT_DASHBOARD_LAYOUT = json.loads(DEFAULT_DASHBOARD_LAYOUT_JSON)
 
 
 def _roles(user: str) -> set[str]:
@@ -701,15 +733,13 @@ def reset_to_default():
     """``dashboard.py:19-23``. System Manager only, as upstream."""
     from crm_app.models import CRMDashboard
 
-    import json as _json
-
     if "System Manager" not in _roles(get_current_user()):
         raise FrappePermissionError("Not permitted")
 
     dashboard, _created = CRMDashboard._default_manager.get_or_create(
         pk=MANAGER_DASHBOARD, defaults={"title": MANAGER_DASHBOARD}
     )
-    dashboard.layout = _json.dumps(DEFAULT_DASHBOARD_LAYOUT)
+    dashboard.layout = DEFAULT_DASHBOARD_LAYOUT_JSON
     dashboard.save()
     return dashboard.layout
 
@@ -717,8 +747,6 @@ def reset_to_default():
 @whitelist("crm.api.dashboard.get_dashboard")
 def get_dashboard(from_date: str | None = None, to_date: str | None = None, user: str | None = None):
     """``dashboard.py:25-61``. Returns the layout with a ``data`` key per tile."""
-    import json as _json
-
     from crm_app.models import CRMDashboard
 
     sales_user_only()
@@ -727,12 +755,12 @@ def get_dashboard(from_date: str | None = None, to_date: str | None = None, user
 
     dashboard = CRMDashboard._default_manager.filter(pk=MANAGER_DASHBOARD).first()
     if dashboard is None:
-        layout = [dict(tile) for tile in DEFAULT_DASHBOARD_LAYOUT]
+        layout = json.loads(DEFAULT_DASHBOARD_LAYOUT_JSON)
         CRMDashboard._default_manager.create(
-            name=MANAGER_DASHBOARD, title=MANAGER_DASHBOARD, layout=_json.dumps(layout)
+            name=MANAGER_DASHBOARD, title=MANAGER_DASHBOARD, layout=DEFAULT_DASHBOARD_LAYOUT_JSON
         )
     else:
-        layout = _json.loads(dashboard.layout or "[]")
+        layout = json.loads(dashboard.layout or "[]")
 
     for tile in layout:
         builder = CHART_BUILDERS.get(tile.get("name"))

@@ -50,6 +50,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 38 | frontend: the app layout after signing in | high | Blank page: frappe-ui's own "who is signed in" helper reads Frappe's `user_id` **cookie**, which this port never set, so `useOnboarding()` in the sidebar returned nothing and the layout crashed | **fixed** 28 Sep 2026 |
 | 39 | every screen with the onboarding panel | medium | frappe-ui's `useOnboarding` calls `frappe.onboarding.get_onboarding_status` and `update_user_onboarding_status` **from inside the package**, so the guard that scans `frontend/src` never saw them; both answered 404 on every screen | **fixed** 28 Sep 2026 |
 | 40 | frontend: the leads and deals lists | high | Endless spinner although the data arrived: `_assign` came over as a decoded **list**, upstream sends a JSON **string**, and the page's `JSON.parse(lead._assign)` threw inside the row computation. The five lists without an `_assign` column rendered fine | **fixed** 28 Sep 2026 |
+| 41 | frontend: the dashboard | high | Blank dashboard with every number in place: the port's default tile list was an older shape (`type` number/donut/bar and a `width`, no `layout`), and the grid needs a `layout` object and one of the four `*_chart` types the page knows. Upstream's seventeen tiles, verbatim; migration 0009 repairs the saved row | **fixed** 28 Sep 2026 |
 
 ---
 
@@ -1253,3 +1254,37 @@ unguarded parses accept. `tests/test_wire_shapes.py` pins the string on the reso
 route, `frappe.client.get_list`, the list route and the empty case, and that the text
 filter still matches; `test_task_assignment.py` and `test_hardening.py` decode before
 comparing; blocks 02/10.7, 03/4.5, 03/4.7, 06/2.4 and 06/2.7 expect the string.
+
+## 41. The dashboard's default tiles were in a shape the frontend cannot draw
+
+**Block:** none in the http suite, which was written against the port's shape and
+passed. Seen 28 Sep 2026: the dashboard page showed nothing for any period, after a
+short wait, while `crm.api.dashboard.get_dashboard` answered 200 with three leads, five
+ongoing deals and one won deal.
+
+**Expected:** upstream's seventeen tiles. `DashboardGrid.vue` hands the grid each
+tile's `layout` object (`x`, `y`, `w`, `h`, `i`), and `DashboardItem.vue` draws a tile
+by its type and knows four: `number_chart`, `axis_chart`, `donut_chart` and `spacer`.
+Upstream's `default_manager_dashboard_layout` (`crm_dashboard.py`) builds every tile
+that way.
+
+**Actual:** the port's `DEFAULT_DASHBOARD_LAYOUT` (`crm_app/api/dashboard.py`) was an
+older shape: ten tiles of `{name, type, width}` with the types `number`, `donut` and
+`bar`, and no `layout` at all. The grid received ten undefined positions and every tile
+fell through all four type checks, so the page drew nothing; the wait was the data
+arriving. `get_dashboard` had written that default into the "Manager Dashboard" row on
+its first run (7 Sep), so the row read it back on every visit, and Reset to Default
+would have written it again. The six charts the old list left out
+(`average_won_deal_value`, the two time-to-close numbers, `sales_trend`,
+`forecasted_revenue`, `funnel_conversion`) have had builders since finding 20; nothing
+asked for them.
+
+**Where:** `crm_app/api/dashboard.py`, the default; migration `crm_app/0009`.
+
+**Fixed 28 Sep 2026.** The default is upstream's string, verbatim, and the row stores
+it as upstream stores it. Migration 0009 rewrites a saved row whose tiles all lack
+`layout`, which only the old default produces, and leaves an arranged layout alone.
+`tests/test_dashboard_layout.py` pins the shape against the frontend's four types and
+the grid keys, the string against the upstream file when it is present, the seventeen
+filled tiles through the endpoint and the migration's three cases; `10_dashboard.http`
+1.4 to 1.12 and 3.2 expect the new tiles. Run `python manage.py migrate` after pulling.
