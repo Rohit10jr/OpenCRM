@@ -38,7 +38,7 @@ def hierarchy_on(administrator, bob):
     """A tree with bob in it, the feature enabled, and alice outside."""
     with session_user(administrator.name):
         FCRMSettings.objects.update_or_create(
-            pk="Settings", defaults={"enable_sales_hierarchy": True}
+            pk="FCRM Settings", defaults={"enable_sales_hierarchy": True}
         )
         return CRMSalesHierarchy.objects.create(user=bob, full_name="Bob")
 

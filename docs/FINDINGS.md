@@ -45,6 +45,9 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 33 | frontend: right after signing in | high | "Access Denied" for every account, Administrator included. The users store was created on the first, logged-out visit, its fetch got a 401, and after login the guard waited on that same rejected fetch instead of fetching again | **fixed** 24 Sep 2026 |
 | 34 | frontend: sign out, then sign in as someone else | medium | Sign-out was an in-app route change, so every store outlived it: the next person to sign in on the same tab inherited the previous user's users list, views and caches, each store believing it had already loaded | **fixed** 25 Sep 2026 |
 | 35 | frontend: sign out | high | Sign-out called the backend with an **empty body**, so the refresh token was never blacklisted and a copy of it could mint access tokens for its full seven-day lifetime. Upstream's logout kills the session server-side at once | **fixed** 25 Sep 2026 |
+| 36 | frontend: the login form's label | low | The field says "Email or username", but login matches `User.name` only, exactly as upstream: the port has no `username`, and Administrator's `email` is refused because its `name` is the word "Administrator". Frappe Cloud's own sign-in labels the field "Email" | open, decision pending |
+| 37 | frontend: every settings screen; the sidebar on first load | high | The frontend asks for the `FCRM Settings` document **by its doctype's name**, as upstream names every single. The port named each singleton row `Settings`, so the request answered 404 | **fixed** 28 Sep 2026 |
+| 38 | frontend: the app layout after signing in | high | Blank page: frappe-ui's own "who is signed in" helper reads Frappe's `user_id` **cookie**, which this port never set, so `useOnboarding()` in the sidebar returned nothing and the layout crashed | **fixed** 28 Sep 2026 |
 
 ---
 
@@ -711,8 +714,8 @@ through it.
 ## 25. A duplicate name answers with Django's internal wording
 
 **Block:** `12_settings_singletons.http` 2.2, run a second time by hand while its row
-still existed: CRM Twilio Settings is a singleton, always named `Settings`, so the
-second create collides. Reproduced from a clean run by `02_resource_grammar.http`
+still existed: CRM Twilio Settings is a singleton with one fixed name (`Settings` at
+the time; its doctype's own name since finding 37), so the second create collides. Reproduced from a clean run by `02_resource_grammar.http`
 10.10b, which posts an organization under a name 1.1 already created.
 
 **Expected:** 409 `DuplicateEntryError` with the message "CRM Organization
@@ -1078,3 +1081,106 @@ carrying the token makes a later refresh with it answer 401, and a bare logout r
 nothing, which is the contract the frontend now honours. The five-minute access-token
 window is inherent to JWT and documented in `JWT_PATCH.md` rather than closed, since
 closing it means a blacklist lookup on every request.
+
+## 36. The login label promises "Email or username"; only the user's key is matched
+
+**Block:** none in the http suite. Observed by hand, 25 Sep 2026: every demo user signs
+in with their email, Administrator signs in only as "Administrator", and
+`admin@example.com`, the address on its row, is refused.
+
+**Expected:** what the label says. Frappe Cloud's sign-in page labels the same field
+"Email" and nothing else.
+
+**Actual:** both sides match the typed value against `User.name`, the document's
+primary key, and nothing else. The port: `frappe_core/api/auth.py:75-83`, exact
+spelling then case-insensitive. Upstream: `User.find_by_credentials`
+(`user.py:743-749`) filters on `name`, and consults `mobile_no` or `username` only when
+a System Settings switch is on, which the port does not model. Neither reads the
+`email` column. It works for everyone because a User's key *is* the email: upstream's
+`autoname` (`user.py:150-156`) sets `name = email.strip().lower()` for every user that
+is not Administrator or Guest, whose key is their first name instead; the port does
+the same in `User.save` (`frappe_platform/models.py`) and in `accept_invitation`
+(`crm_app/api/auth_pages.py:418`), which creates the row with `name=address,
+email=address`. So for every registered account "Email" is exactly right, and the one
+account where the two differ is the built-in Administrator, which is refused by its
+email on a Frappe site too. Only the phase 8 label is wrong: the port has no
+`username` field, and the word invites exactly the attempt that fails.
+
+**Where:** `frontend/src/pages/auth/Login.vue:20`, the field label.
+
+**Decision pending.** Either the label becomes "Email", matching Frappe Cloud, with
+the Administrator convention left as upstream has it; or the login lookup also
+accepts the `email` column, a deliberate divergence that makes `admin@example.com`
+work. The first is a one-word change and true to upstream; the second is friendlier
+for the one built-in account.
+
+## 37. Singletons were named `Settings`; upstream names them after their doctype
+
+**Block:** none in the http suite, which was written against the port and asked for
+`/api/resource/FCRM Settings/Settings`. Seen the first time the app ran signed in,
+28 Sep 2026: `GET /api/method/frappe.client.get?doctype=FCRM+Settings&name=FCRM+Settings`
+answered 404 `DoesNotExistError`.
+
+**Expected:** 200. A single-row doctype's document is named after the doctype:
+`frappe.get_single("FCRM Settings")` loads the document named `FCRM Settings`, and the
+frontend hardcodes that name in five places (`stores/settings.js`, `router.js`,
+`PersonaForm.vue`, `Settings/Hierarchy/Hierarchy.vue`, `Settings/HomeActions.vue`).
+Every settings screen, and the sidebar on first load, makes this request.
+
+**Actual:** `SingletonMixin` (`crm_app/models/telephony.py`) pinned every singleton row
+to the name `Settings`: FCRM Settings, CRM Twilio Settings, CRM Exotel Settings and
+ERPNext CRM Settings. Phase 1 chose it because the PKs are strings and a fixed name
+keeps the row reachable through the generic route; upstream's convention was not
+checked, and `naming.validate_name` even carries the exception that allows a single's
+name to equal its doctype. The http suite followed the port's name and passed; the
+frontend could not.
+
+A second defect surfaced while fixing it: `register_doctype(..., is_single=True)`
+recorded the flag on the registry entry only, never on the model's own `_doc_meta`, so
+`model.is_single()` answered False for all four singletons. The old fixed name never
+tripped `validate_name`; the doctype name did ("Name of ERPNext CRM Settings cannot be
+ERPNext CRM Settings"). The registry now copies `is_single`, `is_child_table` and
+`routable` from the entry into the model's metadata.
+
+**Where:** `SingletonMixin.singleton_name`, `frappe_core/registry.py`'s metadata
+assignment, `frappe_core/serializers.py`'s duplicate message, migration `crm_app/0008`,
+and the tests and http blocks that used the old name.
+
+**Fixed 28 Sep 2026.** The row is named after its doctype: `load()` and
+`_assign_name()` use `singleton_name()`, which is `get_doctype()`. Migration 0008
+renames the four existing rows through `frappe_core.rename.rename_document`, which also
+repoints the CRM Dropdown Item rows that hold a foreign key to the FCRM Settings row.
+The duplicate-name message reads "FCRM Settings **FCRM Settings** already exists", as
+upstream's does; finding 25's reproduction used the old name. `tests/test_singleton_names.py`
+pins the name on load, on create, through `frappe.client.get`, the resource route and
+the duplicate refusal; `12_settings_singletons.http`, `04_deals.http` and
+`11_permissions_matrix.http` address the rows by the new name. Run
+`python manage.py migrate` after pulling.
+
+## 38. frappe-ui reads Frappe's `user_id` cookie, and the port never set one
+
+**Block:** none in the http suite. Seen right after finding 33 let a sign-in through,
+28 Sep 2026: the leads list route loaded, the console showed
+`TypeError: Cannot destructure property 'isOnboardingStepsCompleted' of
+'useOnboarding(...)' as it is undefined` at `AppSidebar.vue:422`, and Vue abandoned the
+whole layout.
+
+**Expected:** the sidebar. Frappe sets a `user_id` cookie at login beside the session
+cookie, and frappe-ui's `frappe/session.js` reads it to answer "who is signed in".
+`useOnboarding()` (`frappe-ui/frappe/Onboarding/onboarding.js:12-14`) asks it and
+returns nothing for a guest.
+
+**Actual:** phase 0's JWT patch replaced the cookie read in the app's own session store
+with a token read, but frappe-ui carries a second copy of the same helper inside the
+package, and it was missed. With no cookie it answered nobody, `useOnboarding` returned
+`undefined`, and the sidebar's destructuring threw during setup. The library exports
+neither the helper nor a way to configure it.
+
+**Where:** `frontend/src/auth/tokens.js`, beside the token storage.
+
+**Fixed 28 Sep 2026.** `setTokens` also writes a `user_id` cookie with the id from the
+access token, and `clearTokens` removes it. The value is URL-encoded because the
+library parses `document.cookie` with `URLSearchParams`, which decodes it. The cookie
+carries only the user id, which is public within the app, and the backend ignores
+cookies entirely, so it grants nothing. `tests/unit/tokens.test.js` reads it back the
+way the library does.

@@ -70,7 +70,7 @@ def app_settings(administrator):
 
 @pytest.mark.parametrize("doctype", ["CRM Twilio Settings", "CRM Exotel Settings"])
 def test_an_ordinary_user_cannot_read_telephony_settings(alice, twilio, exotel, api_as, doctype):
-    assert api_as(alice).get(f"/api/resource/{doctype}/Settings").status_code == 403
+    assert api_as(alice).get(f"/api/resource/{doctype}/{doctype}").status_code == 403
 
 
 @pytest.mark.parametrize("doctype", ["CRM Twilio Settings", "CRM Exotel Settings"])
@@ -85,7 +85,7 @@ def test_an_ordinary_user_cannot_rewrite_the_telephony_credentials(alice, twilio
     """**The finding.** Rewriting these points the integration at an account the caller
     controls - it does not require reading the existing values."""
     response = api_as(alice).put(
-        "/api/resource/CRM Twilio Settings/Settings",
+        "/api/resource/CRM Twilio Settings/CRM Twilio Settings",
         {"account_sid": "attacker-account"},
         format="json",
     )
@@ -100,7 +100,7 @@ def test_the_method_endpoint_is_covered_by_the_same_rule(alice, twilio, api_as):
         "/api/method/frappe.client.set_value",
         {
             "doctype": "CRM Twilio Settings",
-            "name": "Settings",
+            "name": "CRM Twilio Settings",
             "fieldname": {"account_sid": "attacker-account"},
         },
         format="json",
@@ -112,12 +112,12 @@ def test_the_method_endpoint_is_covered_by_the_same_rule(alice, twilio, api_as):
 
 
 def test_a_manager_can_read_and_write_them(manager, twilio, api_as):
-    body = api_as(manager).get("/api/resource/CRM Twilio Settings/Settings")
+    body = api_as(manager).get("/api/resource/CRM Twilio Settings/CRM Twilio Settings")
     assert body.status_code == 200
     assert body.json()["data"]["account_sid"] == "ACxxxx"
 
     assert api_as(manager).put(
-        "/api/resource/CRM Twilio Settings/Settings",
+        "/api/resource/CRM Twilio Settings/CRM Twilio Settings",
         {"record_calls": True},
         format="json",
     ).status_code == 200
@@ -129,13 +129,13 @@ def test_a_manager_can_read_and_write_them(manager, twilio, api_as):
 def test_everyone_can_read_the_app_settings(alice, app_settings, api_as):
     """`stores/settings.js` loads this on every screen; the activity timeline reads its
     timestamp format. Closing it would break the product for non-managers."""
-    body = api_as(alice).get("/api/resource/FCRM Settings/Settings").json()["data"]
+    body = api_as(alice).get("/api/resource/FCRM Settings/FCRM Settings").json()["data"]
     assert body["crm_timeline_timestamp_format"] == "Relative"
 
 
 def test_an_ordinary_user_cannot_write_the_app_settings(alice, app_settings, api_as):
     response = api_as(alice).put(
-        "/api/resource/FCRM Settings/Settings", {"brand_name": "Pwned"}, format="json"
+        "/api/resource/FCRM Settings/FCRM Settings", {"brand_name": "Pwned"}, format="json"
     )
     assert response.status_code == 403
 
@@ -145,7 +145,7 @@ def test_an_ordinary_user_cannot_write_the_app_settings(alice, app_settings, api
 
 def test_a_manager_can_write_the_app_settings(manager, app_settings, api_as):
     assert api_as(manager).put(
-        "/api/resource/FCRM Settings/Settings", {"brand_name": "Acme Corp"}, format="json"
+        "/api/resource/FCRM Settings/FCRM Settings", {"brand_name": "Acme Corp"}, format="json"
     ).status_code == 200
 
 
@@ -156,14 +156,14 @@ def test_the_exchange_rate_key_is_hidden_from_an_ordinary_user(alice, app_settin
     on it with no `permlevel` - even though the same authors used `permlevel: 1` on
     Twilio's `api_key` for exactly this. Upstream bug #20.
     """
-    body = api_as(alice).get("/api/resource/FCRM Settings/Settings").json()["data"]
+    body = api_as(alice).get("/api/resource/FCRM Settings/FCRM Settings").json()["data"]
     assert "access_key" not in body
 
 
 def test_a_manager_still_sees_the_exchange_rate_key(manager, app_settings, api_as):
     """The settings screen reads it back, which is why hiding it outright was the wrong
     fix and phase 1 was right to decline it."""
-    body = api_as(manager).get("/api/resource/FCRM Settings/Settings").json()["data"]
+    body = api_as(manager).get("/api/resource/FCRM Settings/FCRM Settings").json()["data"]
     assert body["access_key"] == "fx-provider-key"
 
 
@@ -234,5 +234,5 @@ def test_the_webhook_token_is_never_served(manager, exotel, api_as):
 
     Visible to a manager, who configures it - the restriction is against everyone else,
     and the row rule already denies them the record entirely. Belt and braces."""
-    body = api_as(manager).get("/api/resource/CRM Exotel Settings/Settings").json()["data"]
+    body = api_as(manager).get("/api/resource/CRM Exotel Settings/CRM Exotel Settings").json()["data"]
     assert body["webhook_verify_token"] == "the-webhook-secret"

@@ -15,7 +15,7 @@
 @sales = ada@example.com
 @deal = {{host}}/api/resource/CRM%20Deal
 @contact = {{host}}/api/resource/Contact
-@settings = {{host}}/api/resource/FCRM%20Settings/Settings
+@settings = {{host}}/api/resource/FCRM%20Settings/FCRM%20Settings
 
 ### 0.1 login -> 200
 # @name login

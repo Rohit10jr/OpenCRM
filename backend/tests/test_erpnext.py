@@ -539,7 +539,7 @@ def test_the_secret_is_encrypted_and_not_selectable(erpnext_on):
     assert "api_secret" in sensitive_fields(ERPNextCRMSettings)
     assert "api_key" in restricted_fields(ERPNextCRMSettings)
 
-    stored = ERPNextCRMSettings.objects.get(pk="Settings")
+    stored = ERPNextCRMSettings.objects.get(pk="ERPNext CRM Settings")
     assert stored.api_secret != "erp-secret"
     assert stored.get_password("api_secret") == "erp-secret"
 

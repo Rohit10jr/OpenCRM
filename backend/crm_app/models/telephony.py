@@ -51,20 +51,33 @@ class SingletonMixin(models.Model):
     reachable through the same generic endpoint as everything else.
     """
 
-    SINGLETON_NAME = "Settings"
-
     class Meta:
         abstract = True
 
     @classmethod
+    def singleton_name(cls) -> str:
+        """The one row's name: the doctype's own, as upstream names every single.
+
+        ``frappe.get_single("FCRM Settings")`` loads the document named
+        ``FCRM Settings`` (``frappe/model/document.py``: a single's ``name`` is its
+        ``doctype``), and the frontend hardcodes that name in five places
+        (``stores/settings.js``, ``router.js``, ``PersonaForm.vue``, ``Hierarchy.vue``,
+        ``HomeActions.vue``). Phase 1 named the row ``Settings`` instead, which the http
+        suite followed and the frontend could not (FINDINGS.md 37); migration 0008
+        renamed the existing rows. ``naming.validate_name`` already allows a single's
+        name to equal its doctype.
+        """
+        return cls.get_doctype()
+
+    @classmethod
     def load(cls):
-        obj, _created = cls._default_manager.get_or_create(pk=cls.SINGLETON_NAME)
+        obj, _created = cls._default_manager.get_or_create(pk=cls.singleton_name())
         return obj
 
     def _assign_name(self) -> bool:
         if self.pk:
             return False
-        self.pk = self.SINGLETON_NAME
+        self.pk = self.singleton_name()
         return True
 
 

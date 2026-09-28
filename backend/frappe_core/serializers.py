@@ -156,13 +156,14 @@ def _duplicate_name_error(model, validated_data) -> DuplicateEntryError | None:
 
     The insert raised before returning an instance, so the name is worked out the way
     the strategy would have: the naming field's value for a ``field:`` doctype, the
-    client's ``name`` for a ``prompt`` one, ``Settings`` for a singleton. Hash and
+    client's ``name`` for a ``prompt`` one, the doctype's own name for a singleton
+    (``SingletonMixin.singleton_name``, FINDINGS.md 37). Hash and
     series names cannot realistically collide, so for those - and whenever no row of
     the attempted name exists - this returns ``None`` and the caller re-raises the
     original error with its own text.
     """
     if model.is_single():
-        value = "Settings"
+        value = model.get_doctype()
     else:
         strategy = model.get_name_strategy()
         if isinstance(strategy, naming_strategies.FieldValue):

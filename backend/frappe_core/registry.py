@@ -182,8 +182,19 @@ def register_doctype(
             serializer_class=serializer_class,
         )
         _REGISTRY[doctype] = entry
-        # Let the model answer get_doctype() without a registry round-trip.
-        model_cls._doc_meta = {**doc_meta, "doctype": doctype}
+        # Let the model answer get_doctype(), is_single() and is_child_table() without a
+        # registry round-trip. The three flags are copied from the entry, not from
+        # `doc_meta`: a flag passed to the decorator used to reach the entry only, so
+        # `model.is_single()` answered False for every singleton declared that way - all
+        # four of them - and `validate_name` refused a single named after its doctype
+        # (FINDINGS.md 37).
+        model_cls._doc_meta = {
+            **doc_meta,
+            "doctype": doctype,
+            "is_child_table": entry.is_child_table,
+            "is_single": entry.is_single,
+            "routable": entry.routable,
+        }
         if not hasattr(model_cls, "get_doctype"):
             # `BaseDocument` provides this, but a registered model need not be one -
             # `User` derives from `AbstractBaseUser` because Django requires it of
