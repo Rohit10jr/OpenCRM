@@ -1,5 +1,20 @@
 recreate the frappe CRM into django CRM
 
+## Setting up the database
+
+```bash
+cd backend
+python manage.py migrate
+python manage.py seed_defaults
+```
+
+`seed_defaults` is Frappe CRM's install step (`crm/install.py:after_install`), which
+`bench install-app` runs once on a site and this port has to run by hand: the lead, deal
+and communication statuses, the field layouts every create dialog and side panel reads,
+industries, lead sources, lost reasons, quick filters, the user menu, the standard form
+scripts and the manager dashboard (`crm_app/setup.py`). It keeps rows that already exist,
+so running it again is safe; `--force` rewrites the field layouts and the dashboard.
+
 ## Getting in
 
 **There is no default password.** Frappe ships `Administrator` with one set at install

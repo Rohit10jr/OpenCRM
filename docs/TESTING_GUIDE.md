@@ -98,6 +98,13 @@ tree. The three lines it prints at startup (no local frappe-ui plugin, no
 `common_site_config.json`, no build output directory) are bench assumptions and mean
 nothing here.
 
+**Reference data.** Run `python manage.py seed_defaults` once after `migrate`. It writes
+what Frappe CRM's install step writes (statuses, the Quick Entry and side-panel layouts,
+industries, lead sources, lost reasons, quick filters, the user menu, the standard form
+scripts, the dashboard) and keeps rows that exist (FINDINGS.md 42 and 43). Without it
+the create dialogs show every field, the lead and deal pages have no status dropdown,
+and the user menu at the top of the sidebar is empty.
+
 **Credentials.** The local database already holds `Administrator` (System Manager) and
 eight Sales Users named `ada`, `grace`, `alan`, `edsger`, `barbara`, `donald`,
 `margaret`, `katherine`, all `@example.com`. Their passwords are not in the repo. Set the

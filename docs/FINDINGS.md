@@ -52,6 +52,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 40 | frontend: the leads and deals lists | high | Endless spinner although the data arrived: `_assign` came over as a decoded **list**, upstream sends a JSON **string**, and the page's `JSON.parse(lead._assign)` threw inside the row computation. The five lists without an `_assign` column rendered fine | **fixed** 28 Sep 2026 |
 | 41 | frontend: the dashboard | high | Blank dashboard with every number in place: the port's default tile list was an older shape (`type` number/donut/bar and a `width`, no `layout`), and the grid needs a `layout` object and one of the four `*_chart` types the page knows. Upstream's seventeen tiles, verbatim; migration 0009 repairs the saved row | **fixed** 28 Sep 2026 |
 | 42 | frontend: the user menu at the top of the sidebar | high | The menu (Apps, Settings, About, Log out) was **empty**: it is built from FCRM Settings' dropdown-item rows, which upstream seeds at install and the port never did, so Settings, About and Log out were unreachable from inside the app. Seeded on first load and by migration 0010 | **fixed** 28 Sep 2026 |
+| 43 | frontend: every create dialog; the lead and deal page header; the Source and Industry pickers | high | Upstream's install step was never ported, so the reference rows it writes did not exist: no Quick Entry layouts (every dialog showed every field in unlabeled tabs), no form scripts (the status dropdown never rendered on a lead or deal, and probability did not follow status), no industries, lead sources, communication statuses or quick-filter selections. Ported as `crm_app/setup.py` and `manage.py seed_defaults` | **fixed** 28 Sep 2026 |
 
 ---
 
@@ -1323,3 +1324,50 @@ refusal to delete a standard item ("Cannot delete standard items ...") and its
 post-migrate re-sync; both belong with a settings-screen pass. Worth knowing beside it:
 a single that has never been saved answers 404 here, where upstream's always exists.
 This database had the row; `FCRMSettings.load()` is the path that creates one.
+
+## 43. Install-time reference data was never seeded: layouts, scripts, sources, industries, quick filters
+
+**Block:** none in the http suite. Seen 28 Sep 2026 while mapping the pages for the
+browser tests: the database held no Quick Entry or Data Fields layout, no CRM Form
+Script, no CRM Industry, CRM Lead Source or CRM Communication Status row, one lost
+reason, and no quick-filter selection.
+
+**Expected:** what `crm/install.py:after_install` writes when the app is installed on a
+site: seven lead and seven deal statuses, two communication statuses, fourteen field
+layouts (eight Quick Entry, four Side Panel, two Data Fields), fifty-one industries,
+fourteen lead sources, nine lost reasons, six quick-filter selections, the six user-menu
+items, three standard form scripts and the manager dashboard. The frontend assumes them:
+every create dialog reads its fields from the doctype's Quick Entry layout; the lead and
+deal pages show the status dropdown in their header only after a form script has run
+(`data/script.js:184` sets `document.statuses`, and `Lead.vue:21` renders on it); the
+Source and Industry pickers list the rows; a deal's probability follows its status
+through the forecasting script; the product table totals through the product scripts.
+
+**Actual:** the port has every model but no install step: `install.py` was never
+ported, and `PORT_PLAN.md` §2 mentions only the demo data. On this database the statuses
+came with the demo data (six of the seven lead statuses; "Converted" was missing), the
+four Side Panel layouts and one lost reason had been written by hand, and nothing else
+existed. So every create dialog showed every field of the doctype in unlabeled tabs,
+the status dropdown never appeared on a lead or deal page, Source and Industry offered
+nothing, and a deal's probability stayed put when its status changed.
+
+**Where:** `crm_app/setup.py`, new; `crm_app/management/commands/seed_defaults.py`;
+`crm_app/api/dashboard.py`'s `create_default_manager_dashboard`, which the two dashboard
+endpoints now share with it.
+
+**Fixed 28 Sep 2026.** `crm_app/setup.py` is `after_install`, function for function,
+with upstream's data verbatim, and `python manage.py seed_defaults` runs it as
+Administrator. Every function keeps a row that exists, so a re-run never overwrites an
+administrator's changes; `--force` rewrites the field layouts and the dashboard, as
+upstream's `restore_defaults` does; the two product scripts are brought back in line
+with the code when they differ, as upstream does on every migrate. Not ported, because
+the port has no such mechanism: the property setters and custom fields upstream adds to
+Email Template, Email Account, Web Form and Assignment Rule; the columns they add are
+part of the models here. `tests/test_seed_defaults.py` covers each group, the two
+endpoints that serve the layouts and the quick filters, idempotence, `--force`, the
+script re-sync and the command. Run `python manage.py seed_defaults` once after
+`migrate` on an existing database; this one has been seeded. One thing the product
+scripts reach for is still missing: `crm_products.get_product_rate_details`, which the
+script calls when a product is picked in a deal's products table, is not served, so that
+pick logs a 404 and leaves the rate at 0. The totals themselves are computed server-side
+(`test_phase3_endpoints.py`, C4). That belongs to a products pass.

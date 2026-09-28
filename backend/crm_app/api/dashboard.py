@@ -728,39 +728,42 @@ CHART_BUILDERS = {
 }
 
 
+def create_default_manager_dashboard(force: bool = False) -> tuple[str, bool]:
+    """``crm_dashboard.py:19-33``: the Manager Dashboard row, created with the default
+    layout when missing and reset to it when ``force``. Returns the layout it holds and
+    whether the row was written. Shared by the two endpoints below and by
+    ``crm_app.setup`` (``manage.py seed_defaults``)."""
+    from crm_app.models import CRMDashboard
+
+    dashboard, created = CRMDashboard._default_manager.get_or_create(
+        pk=MANAGER_DASHBOARD,
+        defaults={"title": MANAGER_DASHBOARD, "layout": DEFAULT_DASHBOARD_LAYOUT_JSON},
+    )
+    if force and not created:
+        dashboard.layout = DEFAULT_DASHBOARD_LAYOUT_JSON
+        dashboard.save()
+    return dashboard.layout, created or force
+
+
 @whitelist("crm.api.dashboard.reset_to_default", methods=("POST",))
 def reset_to_default():
     """``dashboard.py:19-23``. System Manager only, as upstream."""
-    from crm_app.models import CRMDashboard
-
     if "System Manager" not in _roles(get_current_user()):
         raise FrappePermissionError("Not permitted")
 
-    dashboard, _created = CRMDashboard._default_manager.get_or_create(
-        pk=MANAGER_DASHBOARD, defaults={"title": MANAGER_DASHBOARD}
-    )
-    dashboard.layout = DEFAULT_DASHBOARD_LAYOUT_JSON
-    dashboard.save()
-    return dashboard.layout
+    layout, _written = create_default_manager_dashboard(force=True)
+    return layout
 
 
 @whitelist("crm.api.dashboard.get_dashboard")
 def get_dashboard(from_date: str | None = None, to_date: str | None = None, user: str | None = None):
     """``dashboard.py:25-61``. Returns the layout with a ``data`` key per tile."""
-    from crm_app.models import CRMDashboard
-
     sales_user_only()
     resolved_from, resolved_to = resolve_range(from_date, to_date)
     scope = resolve_scope(user)
 
-    dashboard = CRMDashboard._default_manager.filter(pk=MANAGER_DASHBOARD).first()
-    if dashboard is None:
-        layout = json.loads(DEFAULT_DASHBOARD_LAYOUT_JSON)
-        CRMDashboard._default_manager.create(
-            name=MANAGER_DASHBOARD, title=MANAGER_DASHBOARD, layout=DEFAULT_DASHBOARD_LAYOUT_JSON
-        )
-    else:
-        layout = json.loads(dashboard.layout or "[]")
+    layout_json, _written = create_default_manager_dashboard()
+    layout = json.loads(layout_json or "[]")
 
     for tile in layout:
         builder = CHART_BUILDERS.get(tile.get("name"))
