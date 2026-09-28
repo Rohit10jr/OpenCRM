@@ -76,6 +76,62 @@ def frontend_called_paths() -> set[str]:
     return found
 
 
+#: frappe-ui makes a handful of calls of its own, from inside the installed package,
+#: which no scan of `frontend/src` can see: `useOnboarding` (FINDINGS.md 39), the Link
+#: search, the form-load bundle, the Frappe Cloud bridge and the Data Import page.
+#: Scanned separately over the package's two source trees. The library writes some
+#: calls with double quotes, so its regex accepts either quote; and it ships file-picker
+#: components for Frappe Drive whose `drive.api.*` calls belong to that app, which this
+#: frontend never mounts, so only the framework's and the CRM's namespaces count.
+LIBRARY_SRC = FRONTEND_SRC.parent / "node_modules" / "frappe-ui"
+LIBRARY_DIRS = ("frappe", "src")
+LIBRARY_NAMESPACES = ("frappe.", "crm.")
+_LIBRARY_PATH_RE = re.compile(
+    r"(?:(?:url|method):\s*|\bcall\(\s*)['\"](?:/api/method/)?([a-z_]+(?:\.[a-z_]+)+)['\"]"
+)
+
+#: Data Import is a framework feature the port has not built: no doctype, no endpoints,
+#: and the three `/crm/data-import` pages are reachable only by typing the URL.
+#: `specs/KNOWN_ISSUES.md` 8 records it; these three stay here until it is built.
+LIBRARY_OUT_OF_SCOPE = {
+    "frappe.core.doctype.data_import.data_import.form_start_import",
+    "frappe.core.doctype.data_import.data_import.get_import_logs",
+    "frappe.core.doctype.data_import.data_import.get_preview_from_template",
+}
+
+
+def library_called_paths() -> set[str]:
+    if not LIBRARY_SRC.exists():
+        pytest.skip("frappe-ui package not installed")
+    found: set[str] = set()
+    for sub in LIBRARY_DIRS:
+        for path in (LIBRARY_SRC / sub).rglob("*"):
+            if path.suffix not in (".js", ".ts", ".vue"):
+                continue
+            found.update(
+                _LIBRARY_PATH_RE.findall(path.read_text(encoding="utf-8", errors="ignore"))
+            )
+    return {p for p in found if p.startswith(LIBRARY_NAMESPACES)}
+
+
+def test_every_library_dotted_path_resolves():
+    """The same contract for the calls frappe-ui makes on the app's behalf.
+
+    `useOnboarding` runs on every screen with the onboarding panel and its two calls
+    answered 404 for eight phases (FINDINGS.md 39), because the guard above reads the
+    app's source and these live in the package.
+    """
+    registered = set(all_methods())
+    missing = sorted(library_called_paths() - registered - LIBRARY_OUT_OF_SCOPE)
+    assert not missing, f"frappe-ui calls these but nothing serves them: {missing}"
+
+
+def test_library_out_of_scope_list_is_not_hiding_a_regression():
+    called = library_called_paths()
+    stale = sorted(p for p in LIBRARY_OUT_OF_SCOPE if p not in called)
+    assert not stale, f"LIBRARY_OUT_OF_SCOPE lists paths frappe-ui no longer calls: {stale}"
+
+
 def test_every_frontend_dotted_path_resolves():
     """The frontend contract, checked against the frontend rather than a hand list.
 

@@ -123,6 +123,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     time_zone = models.CharField(max_length=100, blank=True, default="")
     mobile_no = models.CharField(max_length=140, blank=True, default="")
     phone = models.CharField(max_length=140, blank=True, default="")
+    #: Upstream's ``User.onboarding_status`` (``frappe/onboarding.py``): a JSON object
+    #: keyed ``<app>_onboarding_status`` holding the steps a user has completed or
+    #: skipped in each app's onboarding panel. frappe-ui's ``useOnboarding`` reads and
+    #: writes it through ``frappe.onboarding.*`` (``crm_app/api/onboarding.py``,
+    #: FINDINGS.md 39). Empty means "no status yet".
+    onboarding_status = models.TextField(blank=True, default="")
     #: Phase 3: read by ``crm.api.session.get_users`` (``crm/api/session.py:29``) and
     #: ``crm.api.get_translations`` (``crm/api/__init__.py:14``).
     language = models.CharField(max_length=20, blank=True, default="")

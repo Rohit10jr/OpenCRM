@@ -48,6 +48,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 36 | frontend: the login form's label | low | The field says "Email or username", but login matches `User.name` only, exactly as upstream: the port has no `username`, and Administrator's `email` is refused because its `name` is the word "Administrator". Frappe Cloud's own sign-in labels the field "Email" | open, decision pending |
 | 37 | frontend: every settings screen; the sidebar on first load | high | The frontend asks for the `FCRM Settings` document **by its doctype's name**, as upstream names every single. The port named each singleton row `Settings`, so the request answered 404 | **fixed** 28 Sep 2026 |
 | 38 | frontend: the app layout after signing in | high | Blank page: frappe-ui's own "who is signed in" helper reads Frappe's `user_id` **cookie**, which this port never set, so `useOnboarding()` in the sidebar returned nothing and the layout crashed | **fixed** 28 Sep 2026 |
+| 39 | every screen with the onboarding panel | medium | frappe-ui's `useOnboarding` calls `frappe.onboarding.get_onboarding_status` and `update_user_onboarding_status` **from inside the package**, so the guard that scans `frontend/src` never saw them; both answered 404 on every screen | **fixed** 28 Sep 2026 |
 
 ---
 
@@ -1184,3 +1185,35 @@ library parses `document.cookie` with `URLSearchParams`, which decodes it. The c
 carries only the user id, which is public within the app, and the backend ignores
 cookies entirely, so it grants nothing. `tests/unit/tokens.test.js` reads it back the
 way the library does.
+
+## 39. frappe-ui's own calls were invisible to the guard: the onboarding pair
+
+**Block:** none in the http suite. The backend log after the first sign-in, 28 Sep
+2026: `POST /api/method/frappe.onboarding.get_onboarding_status 404`, repeated on every
+screen, because each page that shows the onboarding panel asks again.
+
+**Expected:** 200 with the user's onboarding status, a JSON object keyed
+`<app>_onboarding_status` that lives on the User row (`frappe/onboarding.py`), and a
+sibling `update_user_onboarding_status(steps, appName)` that stores one app's steps.
+
+**Actual:** neither path was served. The guard test scans `frontend/src` for the dotted
+paths the app calls, and these two are called by `useOnboarding` inside the installed
+frappe-ui package (`frappe/Onboarding/onboarding.js`), which no scan of the app's own
+source reaches. The same blind spot hides six more library-side calls: the Link search,
+the form-load bundle and the Frappe Cloud bridge, all three already served, and the
+three Data Import calls, which are not (`KNOWN_ISSUES.md` 8). The frontend fires the
+update without awaiting it, so the failure was a console error and a step that never
+stayed ticked; the read returned 404 on every navigation.
+
+**Where:** `crm_app/api/onboarding.py`, beside the CRM's own onboarding calls, and
+`tests/test_phase3_endpoints.py`.
+
+**Fixed 28 Sep 2026.** `User.onboarding_status` (migration `frappe_platform/0009`) and
+the two endpoints: the read answers the parsed object or `{}`; the write stores the
+steps under the app's key and keeps other apps' keys, through a queryset update so the
+row's timestamps stay put, as upstream's `update_modified=False` intends. An unset
+status reads as `{}` on the write path too, which upstream gets wrong
+(`UPSTREAM_BUGS_PHASE_3-6.md` 40). The guard gained a second scan over the package's
+two source trees, with the three Data Import paths as its only exclusions, so a
+library-side call can no longer go unserved unnoticed. `tests/test_onboarding_status.py`
+covers the pair.

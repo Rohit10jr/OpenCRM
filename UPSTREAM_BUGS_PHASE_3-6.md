@@ -796,6 +796,33 @@ own handler intended rather than the one it delivers.
 
 ---
 
+## 40. The first onboarding update for a user with no status is a 500
+
+**Where:** `frappe/onboarding.py:13-25` (`update_user_onboarding_status`), found on
+28 Sep 2026 while porting the pair frappe-ui's `useOnboarding` calls (FINDINGS.md 39).
+
+```python
+onboarding_status = frappe.db.get_value("User", frappe.session.user, "onboarding_status")
+onboarding_status = frappe.parse_json(onboarding_status)
+onboarding_status[appName + "_onboarding_status"] = steps
+```
+
+`frappe.parse_json` returns its argument unchanged when it is not a string, so for a
+user whose column is still `NULL` the second line yields `None` and the third subscripts
+it: `TypeError`, 500. The sibling `get_onboarding_status` guards the same value with
+`if onboarding_status else {}`; the writer does not. Every user starts with a `NULL`
+column, so the very first "skip" or "done" click in the onboarding panel fails for
+everyone, and works from the second click on only if something else wrote the column
+first. The frontend fires the call without awaiting it, so the failure is a console
+error and a step that does not stay ticked.
+
+**Us:** *Diverge - fix.* An unset status reads as `{}` on both endpoints
+(`crm_app/api/onboarding.py:_status_of_current_user`), so the first update stores the
+key like any later one. User-visible upstream, so reproduced as the outcome the
+sibling endpoint already intends.
+
+---
+
 ## The pattern worth remembering
 
 Entries 10, 11, 12 and 14 are the same defect wearing four hats:
