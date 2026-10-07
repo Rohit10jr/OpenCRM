@@ -84,3 +84,59 @@ def test_a_missing_lead_is_not_found(auth_api):
     response = auth_api.post(PATH, {"lead": "CRM-LEAD-2099-00001"}, format="json")
     assert response.status_code == 404
     assert response.json()["exc_type"] == "DoesNotExistError"
+
+
+# --- what the modal really sends (docs/FINDINGS.md 73) ------------------------------------
+
+
+def test_the_modals_untouched_deal_form_converts(auth_api, lead):
+    """``data/document.js``: a new document is ``{__newDocument: true, doctype}``, and
+    ``ConvertToDealModal.vue`` sends ``deal.doc`` whole. Neither key is a deal field;
+    handed to the model they answered 500 on every conversion from a lead's page."""
+    response = auth_api.post(
+        PATH,
+        {
+            "lead": lead.name,
+            "deal": {"__newDocument": True, "doctype": "CRM Deal"},
+            "existing_contact": "",
+            "existing_organization": "",
+        },
+        format="json",
+    )
+    assert response.status_code == 200, response.content[:300]
+    deal = CRMDeal.objects.get(pk=response.json()["message"])
+    assert deal.lead_id == lead.name
+    assert deal.organization_id == "ZZ Analytical"
+
+
+def test_the_modals_filled_deal_form_keeps_its_fields_and_takes_a_link_by_name(auth_api, lead):
+    response = auth_api.post(
+        PATH,
+        {
+            "lead": lead.name,
+            "deal": {
+                "__newDocument": True,
+                "doctype": "CRM Deal",
+                "next_step": "ZZ call",
+                "status": "Qualification",
+                "not_a_deal_field": "dropped",
+            },
+        },
+        format="json",
+    )
+    assert response.status_code == 200, response.content[:300]
+    deal = CRMDeal.objects.get(pk=response.json()["message"])
+    assert deal.next_step == "ZZ call"
+    assert deal.status_id == "Qualification"
+
+
+def test_a_field_the_client_may_not_write_is_not_taken_from_the_modal(auth_api, lead, bob):
+    """The serializer's read-only rules apply here as on ``frappe.client.insert``:
+    ``owner`` is stamped by the server, whatever the form says."""
+    response = auth_api.post(
+        PATH,
+        {"lead": lead.name, "deal": {"doctype": "CRM Deal", "owner": bob.name}},
+        format="json",
+    )
+    assert response.status_code == 200, response.content[:300]
+    assert CRMDeal.objects.get(pk=response.json()["message"]).owner_id != bob.name
