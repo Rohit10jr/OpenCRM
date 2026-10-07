@@ -40,12 +40,14 @@ led nowhere. That flow is now walked end to end by
 
 **Read before extending anything:**
 
-* `../docs/history/PROGRESS_PHASE_8.md` — its **Concerns** are the honest list of what this
-  phase did not check. The screens have no component tests and nobody has clicked them in a
-  browser.
-* `../docs/history/PROGRESS_PHASE_7.md` — `get_recording_url` is deliberately unported and
-  is the most security-sensitive single function in that phase. Port it *with* upstream's
-  IP pinning and per-hop redirect validation, or not at all.
+* Phase 8's own report said its screens had no component tests and nobody had clicked
+  them in a browser. Since then every screen has been clicked through and the results are
+  in `../docs/BROWSER_TESTING.md`; the Playwright suite under `frontend/tests/e2e` covers
+  the sign-in flows. (The report itself was removed with the other run records on 7 Oct
+  2026 and is in git history.)
+* `get_recording_url` is deliberately unported and is the most security-sensitive single
+  function in phase 7. Port it *with* upstream's IP pinning and per-hop redirect
+  validation, or not at all.
 * `SECURITY_MODEL.md` — per-doctype, and the recurring finding that appeared in five
   separate phases: **a doctype's endpoints are not its attack surface.**
 * `../UPSTREAM_BUGS_PHASE_0-2.md` and `../UPSTREAM_BUGS_PHASE_3-6.md` — 38 defects found in

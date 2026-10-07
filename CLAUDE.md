@@ -117,8 +117,9 @@ tier you used.
 | **2** | Codex via PowerShell 5.1 | Same reviewer, fallback shell |
 | **3** | Claude subagent | **Degraded** — same model and same spec, so correlated blind spots |
 
-Full procedure: `docs/history/RUNBOOK_PHASE_7.md` §3. (`RUNBOOK.md` covered the
-phases 3-6 run and is now a record of it.)
+This section is the whole of the procedure. The long form lived in the phase-7 runbook
+(`docs/history/RUNBOOK_PHASE_7.md` §3), removed with the other run records on 7 Oct 2026
+and still in git history.
 
 ## Tier 1 — Codex (default)
 
