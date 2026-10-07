@@ -496,6 +496,9 @@ class ContactEmail(BaseDocument):
 @register_doctype("Contact Phone", is_child_table=True)
 class ContactPhone(BaseDocument):
     """Child of Contact.
+    #: ``frappe.client.set_value`` and ``delete`` may reach this row through its contact:
+    #: the contact page edits and removes one address that way (FINDINGS.md 67).
+    CLIENT_EDITABLE = True
 
     ``crm/api/contact.py:77`` appends ``{phone, is_primary_mobile_no}``;
     ``test_crm_deal.py:451-454`` shows both primary flags in use.
@@ -518,6 +521,8 @@ class ContactPhone(BaseDocument):
 # Unrouted deliberately. `org_hierarchy` grants access to a record when a ToDo row says
 # you are assigned to it, so a writable /api/resource/ToDo let any user create that row
 # for any document and read it - the permission check then *passes*, on data the caller
+    #: As on ``ContactEmail``: editable and removable through the contact (FINDINGS.md 67).
+    CLIENT_EDITABLE = True
 # supplied. Nothing calls this route: the frontend assigns through
 # `frappe.desk.form.assign_to.add`, which checks write permission on the document first.
 # Full reasoning, the upstream comparison and the permission-rule alternative:

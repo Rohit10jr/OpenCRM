@@ -303,6 +303,9 @@ def client_set_value(doctype: str, name: str, fieldname, value=None):
     validation, ``fetch_from`` and the read-only rules on underscore fields all apply;
     a bare ``update()`` here would bypass every one of them.
     """
+    if registry.has_doctype(doctype) and registry.get_entry(doctype).is_child_table:
+        return _set_child_value(doctype, name, fieldname, value)
+
     entry, instance = _get_checked(doctype, name, "write")
 
     parsed = parse_json_param(fieldname, fieldname)
@@ -355,20 +358,17 @@ def client_insert(doc=None, **extra):
 
 @whitelist("frappe.client.delete", methods=("DELETE", "POST"))
 def client_delete(doctype: str, name: str):
-    """``frappe/client.py:delete``."""
+    """``frappe/client.py:delete``. A child-table row goes through its parent
+    (``client.py:551-572``), see :func:`_child_row_and_parent`."""
+    if registry.has_doctype(doctype) and registry.get_entry(doctype).is_child_table:
+        return _delete_child_row(doctype, name)
+
     _entry, instance = _get_checked(doctype, name, "delete")
     with transaction.atomic():
         instance.delete()
     return None
 
 
-@whitelist("frappe.client.rename_doc", methods=("POST",))
-def client_rename_doc(doctype: str, old_name: str, new_name: str, merge: bool = False):
-    """``frappe/model/rename_doc.py:rename_doc``.
-
-    Renames in place - every Link, Dynamic Link, child ``parent`` and version that named
-    the document is repointed (:mod:`frappe_core.rename`); the frontend uses it on
-    organizations, email templates, email accounts, assignment rules and SLA policies.
 #: Fields ``set_value`` never edits: ``frappe.model.default_fields`` and
 #: ``child_table_fields`` (``client.py:202``).
 _STANDARD_FIELDS = frozenset(
@@ -457,6 +457,13 @@ def _delete_child_row(doctype: str, name: str):
     return None
 
 
+@whitelist("frappe.client.rename_doc", methods=("POST",))
+def client_rename_doc(doctype: str, old_name: str, new_name: str, merge: bool = False):
+    """``frappe/model/rename_doc.py:rename_doc``.
+
+    Renames in place - every Link, Dynamic Link, child ``parent`` and version that named
+    the document is repointed (:mod:`frappe_core.rename`); the frontend uses it on
+    organizations, email templates, email accounts, assignment rules and SLA policies.
     The refusals are ``validate_rename``'s, in its order and with its wording, and all
     of them are a plain ``frappe.throw`` - 417, the permission one included.
 
@@ -659,23 +666,16 @@ def search_link(
     ``ignore_user_permissions`` is accepted and **ignored** - honouring it would let the
     autocomplete enumerate rows the caller cannot see, which is precisely the leak the
     phase-2 layer exists to prevent. Logged as a deliberate divergence.
-    """
-    entry = _entry_or_404(doctype)
-
-    parsed_filters = parse_json_param(filters, None)
-    or_filters = None
-    if txt:
-        or_filters = {"name": ["like", f"%{txt}%"]}
 
     A search on ``DocType`` - the Reference Document Type field of a note, task or call
     log - is answered from the registry (FINDINGS.md 54); see ``_search_doctypes``.
-        title_field = getattr(entry.model, "SEARCH_FIELD", None)
+    """
     if doctype == "DocType":
         return _search_doctypes(txt, parse_json_param(filters, None), int(page_length or 10))
 
-        if title_field:
-            or_filters[title_field] = ["like", f"%{txt}%"]
+    entry = _entry_or_404(doctype)
 
+    parsed_filters = parse_json_param(filters, None)
     # Two keys the frontend sends inside `filters` that are not fields: upstream's
     # search_widget pops `include_disabled` (search.py:204-208) and User's standard
     # query pops `ignore_user_type` (user.py:user_query); the port read both as fields
@@ -693,6 +693,13 @@ def search_link(
         if not include_disabled and isinstance(parsed_filters, (dict, type(None))):
             parsed_filters = _without_disabled(entry.model, parsed_filters)
 
+    or_filters = None
+    if txt:
+        or_filters = {"name": ["like", f"%{txt}%"]}
+        title_field = getattr(entry.model, "SEARCH_FIELD", None)
+        if title_field:
+            or_filters[title_field] = ["like", f"%{txt}%"]
+
     fields = ["name"]
     title_field = getattr(entry.model, "SEARCH_FIELD", None)
     if title_field:
@@ -706,6 +713,18 @@ def search_link(
         order_by="modified desc",
         limit_page_length=int(page_length or 10),
     )
+    if title_field and getattr(entry.model, "SHOW_TITLE_FIELD_IN_LINK", False):
+        # ``search.py:build_for_autosuggest`` for a doctype with
+        # ``show_title_field_in_link``: the title is the label and the name moves to the
+        # description, so a Language reads "English" with "en" beneath it.
+        return [
+            {
+                "value": row["name"],
+                "label": str(row.get(title_field) or row["name"]),
+                "description": str(row["name"]),
+            }
+            for row in rows
+        ]
     return [
         {
             "value": row["name"],
