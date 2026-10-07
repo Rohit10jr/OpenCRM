@@ -146,6 +146,107 @@ def client_get_list(
     )
 
 
+def _truthy(value) -> bool:
+    return str(value).strip().lower() not in ("", "0", "false", "none", "null")
+
+
+def _name_conditions(filters) -> list[tuple[str, object]]:
+    """The conditions on ``name`` in a Link's filters, as ``(operator, value)`` pairs.
+    Either spelling: ``{"name": ["in", [...]]}`` / ``{"name": "CRM Lead"}`` or
+    ``[["DocType", "name", "in", [...]]]`` / ``[["name", "=", "CRM Lead"]]``."""
+    conditions: list[tuple[str, object]] = []
+    if isinstance(filters, dict):
+        value = filters.get("name")
+        if isinstance(value, (list, tuple)) and len(value) == 2:
+            conditions.append((str(value[0]).lower(), value[1]))
+        elif value not in (None, ""):
+            conditions.append(("=", value))
+    elif isinstance(filters, (list, tuple)):
+        for condition in filters:
+            if not isinstance(condition, (list, tuple)):
+                continue
+            parts = list(condition[-3:]) if len(condition) >= 3 else []
+            if len(parts) == 3 and parts[0] == "name":
+                conditions.append((str(parts[1]).lower(), parts[2]))
+    return conditions
+
+
+def _name_matches(name: str, operator: str, value) -> bool:
+    if operator in ("=", "=="):
+        return name == value
+    if operator == "!=":
+        return name != value
+    if operator == "in":
+        return name in (value or [])
+    if operator == "not in":
+        return name not in (value or [])
+    if operator == "like":
+        return str(value).replace("%", "").lower() in name.lower()
+    if operator == "not like":
+        return str(value).replace("%", "").lower() not in name.lower()
+    return True
+
+
+def _search_doctypes(txt: str, filters, page_length: int) -> list[dict]:
+    """``search.py:279-294`` for ``doctype == "DocType"``.
+
+    The Reference Document Type of a note, task or call log is a Link to ``DocType``.
+    Upstream lists DocType rows for it with ``ignore_permissions=True`` (search.py:294),
+    the one search that bypasses the permission check, because every role picks a
+    reference. The port has no DocType table: the registry is the list, so this answers
+    from it - every registered doctype, ``txt`` matched anywhere in the name with the
+    names that start with it first (upstream's ``_relevance`` order), a condition on
+    ``name`` in the Link's filters honoured, ``page_length`` at a time. Before this the
+    field answered 404 and the dropdown was empty (FINDINGS.md 54).
+    """
+    names = registry.all_doctypes()
+    for operator, value in _name_conditions(filters):
+        names = [n for n in names if _name_matches(n, operator, value)]
+    needle = (txt or "").strip().lower()
+    if needle:
+        names = [n for n in names if needle in n.lower()]
+        names.sort(key=lambda n: (n.lower().find(needle), n.lower()))
+    return [{"value": name, "description": ""} for name in names[:page_length]]
+
+
+@whitelist("frappe.client.get_value")
+def client_get_value(doctype: str, fieldname="name", filters=None, as_dict=True, parent=None, **extra):
+    """``frappe/client.py:get_value`` - one row's fields, by name or by filters.
+
+    The seeded forecasting script calls it when a deal's status changes
+    (``call("frappe.client.get_value", {doctype: "CRM Deal Status", fieldname:
+    "probability", filters: {name: status}})``), and the port never served it, so the
+    probability stayed put (FINDINGS.md 47). ``fieldname`` is a field, a JSON list of
+    fields, or the dict form upstream also takes; a string ``filters`` is a name. The
+    rows come through ``fetch_rows``, so the phase-2 row rules and the restricted-field
+    checks apply as they do to ``get_list``. ``parent`` is accepted for signature
+    fidelity: child tables are not served here, as ``_entry_or_404`` says.
+
+    ``as_dict`` true answers the row as a dict, or ``{}``; false answers the one value,
+    or the list of values for several fields, or ``None`` - upstream's shapes.
+    """
+    _entry_or_404(doctype)
+    fields = parse_json_param(fieldname, None)
+    if fields is None or isinstance(fields, str):
+        fields = [fields or "name"]
+    elif isinstance(fields, dict):
+        fields = list(fields)
+    fields = [str(f) for f in fields]
+
+    parsed_filters = parse_json_param(filters, None)
+    if isinstance(parsed_filters, str):
+        parsed_filters = {"name": parsed_filters}
+    if not parsed_filters:
+        parsed_filters = None
+
+    rows = fetch_rows(doctype, fields=fields, filters=parsed_filters, limit_page_length=1)
+    if _truthy(as_dict):
+        return rows[0] if rows else {}
+    if not rows:
+        return None
+    return [rows[0].get(f) for f in fields] if len(fields) > 1 else rows[0].get(fields[0])
+
+
 @whitelist("frappe.client.get_single_value")
 def client_get_single_value(doctype: str, field: str):
     """``frappe/client.py:get_single_value`` - one field off a singleton.
@@ -268,6 +369,94 @@ def client_rename_doc(doctype: str, old_name: str, new_name: str, merge: bool = 
     Renames in place - every Link, Dynamic Link, child ``parent`` and version that named
     the document is repointed (:mod:`frappe_core.rename`); the frontend uses it on
     organizations, email templates, email accounts, assignment rules and SLA policies.
+#: Fields ``set_value`` never edits: ``frappe.model.default_fields`` and
+#: ``child_table_fields`` (``client.py:202``).
+_STANDARD_FIELDS = frozenset(
+    {
+        "name",
+        "owner",
+        "creation",
+        "modified",
+        "modified_by",
+        "docstatus",
+        "idx",
+        "parent",
+        "parentfield",
+        "parenttype",
+        "doctype",
+    }
+)
+
+
+def _child_row_and_parent(doctype: str, name: str):
+    """A child-table row a client method may reach, and the document it belongs to.
+
+    Upstream's ``set_value`` and ``delete`` accept a child doctype and work through the
+    parent (``client.py:213-223``, ``551-572``). That is how the contact page edits and
+    removes one email or one number (``useContactFields.ts``); before this both answered
+    404 here (FINDINGS.md 67).
+
+    Child tables are opted in one at a time, with ``CLIENT_EDITABLE`` on the model,
+    rather than all at once as upstream has them. A row edit goes around the parent's
+    serializer, and some child tables are records the parent's own rules keep read-only
+    (the status change log, for one). ``specs/SECURITY_MODEL.md`` records the choice.
+    """
+    entry = registry.get_entry(doctype)
+    if not getattr(entry.model, "CLIENT_EDITABLE", False):
+        raise DoesNotExistError(f"DocType {doctype} not found")
+    row = by_name(entry.model, name).first()
+    if row is None:
+        raise DoesNotExistError(f"{doctype} {name} not found")
+    parentfield = getattr(row, "parentfield", "")
+    for field in entry.model._meta.concrete_fields:
+        if field.is_relation and field.remote_field.related_name == parentfield:
+            parent = getattr(row, field.name, None)
+            if parent is not None:
+                return row, parent
+    raise DoesNotExistError(f"{doctype} {name} not found")
+
+
+def _set_child_value(doctype: str, name: str, fieldname, value=None):
+    """``client.py:213-223``: update the row, save the parent, answer the parent."""
+    row, parent = _child_row_and_parent(doctype, name)
+    if not permissions.check_object_permission(parent, "write", get_current_user()):
+        raise FrappePermissionError(
+            f"Not permitted to write {type(parent).get_doctype()}", title="Not Permitted"
+        )
+
+    parsed = parse_json_param(fieldname, fieldname)
+    values = parsed if isinstance(parsed, dict) else {str(parsed): value}
+    editable = {key: val for key, val in values.items() if key not in _STANDARD_FIELDS}
+    if values and not editable:
+        throw("Cannot edit standard fields")
+
+    columns = {f.name for f in type(row)._meta.concrete_fields if not f.is_relation}
+    with transaction.atomic():
+        for key, val in editable.items():
+            if key in columns:
+                setattr(row, key, val)
+        row.save()
+        # The row's own signal has re-derived the parent's mirror columns; the save is
+        # upstream's ``doc.save()``, which re-validates the whole table.
+        parent.refresh_from_db()
+        parent.save()
+    parent_entry = registry.get_entry(type(parent).get_doctype())
+    return parent_entry.get_serializer_class()(parent).data
+
+
+def _delete_child_row(doctype: str, name: str):
+    """``client.py:551-572``: remove the row and save the parent. A caller who may not
+    write the parent is told the row does not exist, as upstream tells them."""
+    row, parent = _child_row_and_parent(doctype, name)
+    if not permissions.check_object_permission(parent, "write", get_current_user()):
+        raise DoesNotExistError(f"DocType {doctype} not found")
+    with transaction.atomic():
+        row.delete()
+        parent.refresh_from_db()
+        parent.save()
+    return None
+
+
     The refusals are ``validate_rename``'s, in its order and with its wording, and all
     of them are a plain ``frappe.throw`` - 417, the permission one included.
 
@@ -477,7 +666,13 @@ def search_link(
     or_filters = None
     if txt:
         or_filters = {"name": ["like", f"%{txt}%"]}
+
+    A search on ``DocType`` - the Reference Document Type field of a note, task or call
+    log - is answered from the registry (FINDINGS.md 54); see ``_search_doctypes``.
         title_field = getattr(entry.model, "SEARCH_FIELD", None)
+    if doctype == "DocType":
+        return _search_doctypes(txt, parse_json_param(filters, None), int(page_length or 10))
+
         if title_field:
             or_filters[title_field] = ["like", f"%{txt}%"]
 
