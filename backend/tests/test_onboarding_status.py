@@ -53,7 +53,7 @@ def test_an_update_keeps_other_apps_keys(auth_api, alice):
 
 
 def test_the_first_update_works_for_a_user_with_no_status(auth_api):
-    """Upstream 500s here (``UPSTREAM_BUGS_PHASE_3-6.md`` 40): ``frappe.parse_json`` of an
+    """Upstream 500s here (``UPSTREAM_BUGS.md`` 40): ``frappe.parse_json`` of an
     unset column is ``None``, which it then subscripts."""
     response = auth_api.post(
         UPDATE, {"steps": json.dumps(STEPS), "appName": "frappecrm"}, format="json"

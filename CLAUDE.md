@@ -36,10 +36,9 @@ Read them whenever behaviour is unclear. **Never invent semantics** — match th
 or flag the ambiguity in your report. If something looks impossible, suspect a missing
 framework mechanism before suspecting your own code.
 
-**When upstream is wrong** — and it sometimes is; **40 cases** are recorded across the
-`UPSTREAM_BUGS_PHASE_*.md` files (1–9 and 36–38 in the `0-2` file, 10–35, 39 and 40 in the
-`3-6` file, which despite its name now spans phases 3–8 and the follow-up) — diverge
-only on bugs nothing can observe, and reproduce user-visible ones. Check whether anything
+**When upstream is wrong** — and it sometimes is; **48 cases** are recorded in
+`UPSTREAM_BUGS.md` — diverge only on bugs nothing can observe, and reproduce user-visible
+ones. Check whether anything
 actually reads the field before deciding, and record the choice.
 
 **Security is the standing exception to that rule.** Upstream protects most doctypes with

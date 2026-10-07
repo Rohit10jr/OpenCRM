@@ -1,29 +1,37 @@
-# Upstream bugs — found during phases 3 to 6
+# Upstream bugs — Frappe CRM / Frappe framework
 
-Defects found in **upstream** while porting. Not our bugs.
+Defects found in **upstream** while porting. Not our bugs. One sequence, **1 to 48**, in
+the order they were found: 1–9 in phases 0–2, 10–35 in phases 3–8, 36–38 appended during
+the phase-4 review, 39–48 in the browser testing of the follow-up. (Until 7 Oct 2026 this
+was two files, `UPSTREAM_BUGS_PHASE_0-2.md` and `UPSTREAM_BUGS_PHASE_3-6.md`; `git log
+--follow` crosses the merge.)
 
-Companion to `UPSTREAM_BUGS_PHASE_0-2.md`, which holds bugs **1–9** from the earlier
-phases, and **36–38** appended after this file had filled 10–35. Numbering is one
-sequence across both files.
-
-**This file now holds 10–35, which span phases 3–8**, not 3–6 as the name says. The name
-is stale and is left alone deliberately: renaming a tracked file that eight documents
-cite by name costs more than the confusion saves.
-
-Two reasons this file exists:
+Two reasons it exists:
 
 1. **It records where our port deliberately differs from upstream.** Every entry marked
    *Diverge* is a place our behaviour will not match a real Frappe instance — which
    matters when diffing against a live install, and when deciding whether a difference is
-   a port bug or a fix.
-2. **It is the shortlist if you ever upstream anything.**
+   a port bug or a fix. *Reproduce* means the port behaves as upstream does, on purpose,
+   because the bug is user-visible and a faithful port shows it.
+2. **It is the shortlist if you ever upstream anything.** Entries 42 to 48 are the
+   candidates for the first upstream pull request.
 
 Source refs: `crm/` = `D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm`
-(branch `main`), `frappe/` = `D:\02_Personal\01_OpenSource\02_FrameWorks\frappe`
-(branch `version-15`).
+(branch `main`, pinned at `6583bfcdc`; `specs/KNOWN_ISSUES.md` 11 has what moved since),
+`frappe/` = `D:\02_Personal\01_OpenSource\02_FrameWorks\frappe` (branch `version-15` —
+the pairing CRM's own CI uses).
 
 | # | Bug | Our stance |
 |---|---|---|
+| 1 | Hidden column skips the next column | **Diverge** — fixed |
+| 2 | Kanban blanks the whole board for operator filters | **Diverge** — fixed |
+| 3 | `@me` resolution is internally inconsistent | **Diverge** — normalised |
+| 4 | `frappe._dict(filters)` raises on the tuple form | **Diverge** — accept both |
+| 5 | Notification permission rules disagree on blank `to_user` | **Diverge** — we deny |
+| 6 | SLA policy Desk link is unencoded | Frontend — unfixed |
+| 7 | Holiday list Desk link is unencoded | Frontend — unfixed |
+| 8 | Lead status types resolved against the **deal** status table | **Diverge** — fixed |
+| 9 | Three `fetch_from` values on CRM Deal have an empty link field | **Reproduce** — inert |
 | 10 | `remove_assignments` lets any caller skip the permission check | **Diverge** — flag ignored |
 | 11 | `get_assigned_users` leaks assignee emails for invisible records | **Diverge** — guarded |
 | 12 | `get_linked_docs_of_document` never checks read on the source | **Diverge** — guarded |
@@ -50,6 +58,186 @@ Source refs: `crm/` = `D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm`
 | 33 | Meta access tokens travel in the query string | **Diverge** — header |
 | 34 | **A password-reset link never expires by default** | **Diverge** — zero means one hour |
 | 35 | Forgot-password is rate-limited per caller, not per target | **Diverge** — stricter |
+| 36 | `crm_products` money fields are computed client-side only | **Diverge** — computed on save |
+| 37 | `create_email_account` has no permission check | **Diverge** — restricted to managers |
+| 38 | Metadata doctypes have no row-level protection | **Diverge** — rules added |
+| 39 | One missing name aborts a whole bulk update, and loses its report | **Diverge** — fixed |
+| 40 | The first onboarding update for a user with no status is a 500 | **Diverge** — fixed |
+| 41 | frappe-ui's Vite proxy plugin never returns on Windows | **Diverge** — worked around |
+| 42 | "Unlink" in the delete dialog does nothing for a document linked through a Link field | **Reproduce** — for the upstream PR |
+| 43 | A notification with no lead or deal behind it breaks the notifications panel | **Reproduce** — for the upstream PR |
+| 44 | The contacts list's "Phone" quick filter searches a column the contact screens never fill | **Reproduce** — for the upstream PR |
+| 45 | The Create Deal dialog keeps the last deal's form, and the Convert dialog reads the same one | **Reproduce** — reload is the workaround |
+| 46 | Clicking a currency cell in a list files the formatted amount as the filter | **Diverge** — the amount is parsed |
+| 47 | Home Actions lets a standard entry be turned into a separator, and Settings is gone | **Reproduce** — `seed_defaults --force` restores |
+| 48 | A wrong URL with more than one segment draws a blank page | **Diverge** — router patched |
+
+## 1. A hidden column causes the *next* column to be skipped
+
+**Where:** `crm/api/doc.py:350-352`
+
+`get_data` iterates `columns` and calls `columns.remove(column)` inside the loop.
+Mutating a list while iterating it shifts every later index down by one, so the column
+immediately after a hidden one is silently dropped from the list view.
+
+**Us:** *Diverge.* We iterate a copy. Reproducing the bug would drop visible columns at
+random. Locked by `test_removing_a_hidden_column_does_not_skip_the_next_one`.
+
+---
+
+## 2. Kanban blanks every column when the filter uses the operator form
+
+**Where:** `crm/api/doc.py`, kanban branch
+
+Upstream compares `filters.get(column_field) != kc.name`. For the operator form the left
+side is a **list** (`["!=", "Closed"]`) and the right a string, so the comparison is
+always unequal and *every* column is blanked — a blank board.
+
+**Us:** *Diverge.* An `=` condition may pre-select or blank a column, exactly as
+upstream; any other operator is preserved and AND-ed with the column's own constraint.
+Upstream's equality path is reproduced exactly.
+
+---
+
+## 3. `@me` resolution is internally inconsistent
+
+**Where:** `crm/api/doc.py:283-293`
+
+Three inconsistencies in one block:
+- `@me` replaces only the **first** occurrence (`list.index()`), while `%@me%` replaces
+  **every** occurrence (a loop).
+- The two checks are joined by `elif`, so a value holding both tokens resolves only one.
+- Only the top level is scanned; nested values are missed.
+
+**Us:** *Diverge.* Both tokens replaced everywhere, at any depth. Identical to upstream
+for every filter the product actually sends, and resolves the inconsistency in the
+direction upstream already took for `%@me%`.
+
+---
+
+## 4. `frappe._dict(filters)` raises on the documented tuple form
+
+**Where:** `crm/api/doc.py:get_data`
+
+`get_data` casts `filters` through `frappe._dict`, which raises on a list of 3-tuples —
+one of the filter shapes Frappe itself accepts elsewhere (`make_filter_tuple`).
+
+Worth noting our port had the *same* area wrong in a worse way: it coerced the tuple form
+to `{}` and returned an **unfiltered** list rather than an error. Upstream at least fails
+loudly.
+
+**Us:** *Diverge.* Both shapes pass through to the shared translator; a genuinely
+unusable type raises.
+
+---
+
+## 5. Frappe CRM contradicts itself on a blank notification recipient
+
+**Where:** `crm/fcrm/doctype/crm_notification/crm_notification.py`
+
+The two halves of the same permission rule disagree:
+
+```python
+# get_permission_query_conditions (:43) — the LIST rule
+return f"`tabCRM Notification`.`to_user` = {frappe.db.escape(user)}"
+#   a blank to_user matches nobody  →  row hidden from every list
+
+# has_permission (:55-56) — the OBJECT rule
+if not doc.to_user:
+    return True
+#   a blank to_user is readable by ANYONE
+```
+
+So a notification with no recipient is **invisible in every list yet readable directly
+by any authenticated user**. Frappe's own two access paths reach opposite verdicts on
+the same row.
+
+**How reachable is it upstream?** More than it looks. `to_user` is `reqd: 1`, but in
+Frappe `reqd` is **document-level validation, not a column constraint** — the column is
+nullable, so `frappe.db.set_value`, a direct SQL insert, or a patch can produce a blank
+that never passes through `validate`. Upstream's branch is therefore not dead code.
+
+**Us:** *Diverge — we deny.* Our `to_user` is a `ForeignKey` with no `null=True`, so it
+is NOT NULL at the database level and no saved row can reach the branch at all; our
+schema is stricter than upstream's. The branch *is* reachable on an unsaved instance,
+where returning `True` granted a read. We return `False`, so the list rule and the object
+rule agree.
+
+Nothing observable changes against upstream, and the failure direction is deny rather
+than grant. Was gate blocker A1; resolved.
+
+---
+
+## 6. SLA policy Desk link is built unencoded
+
+**Where:** `frontend/src/components/Settings/Sla/SlaPolicyView.vue:292`
+
+Interpolates `step.value.data?.name` straight into a Desk URL.
+`CRM Service Level Agreement` is `field:sla_name`, and Frappe permits `/`, `#`, `?` and
+`&` in names (`frappe/model/naming.py:498` forbids only `<>`), so an SLA named
+`"Gold / Priority"` produces a broken link.
+
+**Us:** unfixed — it is in the frontend we copied, so it will manifest for us too.
+Fix is `encodeURIComponent`. Upstream does this correctly elsewhere
+(`ERPNextSettings.vue:724`).
+
+---
+
+## 7. Holiday list Desk link is built unencoded
+
+**Where:** `frontend/src/components/Settings/Sla/SlaHolidays.vue:282`
+
+Same defect: `/app/crm-holiday-list/${holidayList.name}` with no encoding.
+`CRM Holiday List` is `field:holiday_list_name`.
+
+**Us:** unfixed, same reasoning as #6.
+
+---
+
+## 8. A lead's status type is looked up in the deal status table
+
+**Where:** `crm/fcrm/doctype/crm_status_change_log/crm_status_change_log.py:46,51`
+
+```python
+to_status_type = frappe.db.get_value("CRM Deal Status", doc.status, "type") if doc.status else None
+```
+
+Hardcoded to `"CRM Deal Status"` — but `crm_lead.py:92` calls this same function for
+leads, whose statuses live in `CRM Lead Status` (a different doctype, `field:lead_status`).
+A lead status like `"Contacted"` simply does not exist in the deal table, so the lookup
+returns `None`.
+
+**Consequence:** every status-change row written for a lead has an empty `from_type` and
+`to_type` upstream. The columns exist, and for leads they are always blank.
+
+**Us:** *Diverge — fixed.* We resolve against the correct table per doctype. Safe and
+invisible: nothing reads `from_type`/`to_type` today — not the frontend, not the backend
+— so no behaviour changes, and the data becomes usable if anything ever does read it.
+
+---
+
+## 9. Three `fetch_from` declarations on CRM Deal are malformed
+
+**Where:** `crm/fcrm/doctype/crm_deal/crm_deal.json`
+
+```
+annual_revenue  <- .annual_revenue
+website         <- .website
+territory       <- .territory
+```
+
+Frappe's `fetch_from` is `<link_fieldname>.<source_fieldname>`, and these have an **empty
+link fieldname**. `set_fetch_from_value` splits on `.`, takes an empty first element,
+finds no such link field, and skips — so all three are silently inert. They were almost
+certainly meant to read `organization.annual_revenue` and so on.
+
+**Consequence:** a deal converted from a lead does not inherit the organization's revenue,
+website or territory the way the schema claims it should.
+
+**Us:** *Reproduce.* We simply do not declare them. Implementing what they *meant* would
+populate three fields upstream leaves empty, which is user-visible. The other seven
+`fetch_from` declarations in the app (5 on `CRM Contacts`, 1 each on
+`CRM Telephony Agent` and `CRM Sales Hierarchy`) are well-formed and **are** implemented.
 
 ---
 
@@ -761,6 +949,54 @@ caller to use it.
 
 ---
 
+## 36. `crm_products` money fields are computed client-side only
+
+`crm/fcrm/doctype/crm_products/crm_products.py:112-195` builds a **JavaScript** form
+script; `amount`, `net_amount`, `discount_amount`, `total` and `net_total` are all
+computed in the browser and posted up. Nothing server-side recomputes or validates them,
+so a hand-rolled request can set a deal's `total` to anything.
+
+**Diverged: computed on save.** For an honest client the values are identical, so nothing
+user-visible changes. Port: `backend/crm_app/models/taxonomy.py:recalculate_parent_totals`.
+
+Note the `net_total` rule is subtle and was ported exactly: `net_total = sum(net_amount)
+or total`, **unless** a discount was applied, in which case a zero sum stands. Dropping
+the second branch makes a 100%-discounted deal report its full gross value.
+
+## 37. `crm.api.settings.create_email_account` has no permission check
+
+`crm/api/settings.py:5-53` is `@frappe.whitelist()` with no `frappe.only_for`. Upstream
+relies on the Email Account doctype's own role permissions, which this port does not
+model — so ported verbatim it would let any authenticated user create a
+credential-bearing mail account and mark it `default_outgoing`, redirecting the system's
+outbound mail.
+
+**Diverged: restricted to System Manager / Sales Manager.**
+Port: `backend/crm_app/api/settings.py`.
+
+## 38. Metadata doctypes have no row-level protection
+
+`CRM View Settings`, `CRM Form Script` and `CRM Fields Layout` are ordinary doctypes
+upstream, protected by the DocType's `permissions` table (System Manager for write). This
+port does not model DocType role permissions, and its generic `/api/resource/` route
+treats "no permission hook" as "allowed" — so all three were world-readable and
+world-writable to any authenticated user.
+
+Two consequences:
+
+* **private saved views leaked** — `CRM View Settings` is per-user, and `get_views`
+  scoped correctly, but the generic route bypassed it;
+* **`CRM Form Script` was an XSS vector** — `get_data` serves the script to every client,
+  which executes it, so any Sales User could have run code in every colleague's browser.
+
+**Diverged: row-level rules registered for all three** (`crm_app/permissions/metadata_docs.py`).
+Read follows the list rule; write is admin-only. This makes six doctypes with row rules
+where upstream registers three, and `test_exactly_the_intended_doctypes_have_row_rules`
+pins that set down.
+
+Worth noting the general shape: *any* doctype this port registers is a public read/write
+surface unless a hook says otherwise. Upstream's default is the opposite.
+
 ## 39. One missing name aborts a whole bulk update, and loses its report
 
 **Where:** `frappe/desk/doctype/bulk_update/bulk_update.py:82-124` (`_bulk_action`),
@@ -822,6 +1058,261 @@ key like any later one. User-visible upstream, so reproduced as the outcome the
 sibling endpoint already intends.
 
 ---
+
+## 41. frappe-ui's Vite proxy plugin never returns on Windows
+
+**Where:** `frappe-ui` 1.0.0-beta.29, `vite/utils.js:findBenchPath` (lines 25-36) and
+`findAppName` (48-64), reached from `vite/frappeProxy.js:7` at every dev-server start.
+Found 29 Sep 2026 when `yarn dev` stopped after its first line (FINDINGS.md 48). A
+library defect rather than a CRM or framework one, kept here because it is the same
+kind of record.
+
+```js
+let currentDir = path.resolve('.')
+while (currentDir !== '/') {
+  if (fs.existsSync(path.join(currentDir, 'sites')) && fs.existsSync(path.join(currentDir, 'apps'))) {
+    return currentDir
+  }
+  currentDir = path.resolve(currentDir, '..')
+}
+```
+
+A Windows path's root is `D:\`, never `/`, and `path.resolve('D:\\', '..')` is `D:\`
+again, so outside a bench the loop has no exit. The fix upstream is
+`while (currentDir !== path.dirname(currentDir))`, which stops at the root on both
+platforms.
+
+**Us:** *Diverge - work around.* `frappeProxy: false` in `vite.config.js`, with the
+proxy and port the plugin would have set written out by hand. `siteBanner` and
+`buildConfig` reach the sibling loop only when given a `frontendRoute`, which the
+config does not pass.
+
+## 42. "Unlink" in the delete dialog does nothing for a document linked through a Link field
+
+**Where:** `crm/api/doc.py:721-749` (`remove_doc_link`), reached from
+`remove_linked_doc_reference` (769-792) and the delete dialog's "Unlink all"
+(`DeleteLinkedDocModal.vue:203`). Found 30 Sep 2026 in the Organizations pass of the
+browser testing (FINDINGS.md 56).
+
+```python
+linked_doc_data.update({"reference_doctype": "", "reference_docname": ""})
+linked_doc_data.save(ignore_permissions=True)
+```
+
+`get_linked_docs_of_document` lists two kinds of document: those that name the record in
+a Link field (`frappe.model.delete_doc.get_linked_docs`: a deal's `organization`) and
+those that name it in the generic reference pair (`get_dynamic_linked_docs`: a task, a
+note, a call log, a notification). `remove_doc_link` blanks only the pair. On a CRM Deal
+those two keys are not fields, so `update` sets two attributes the save ignores: the deal
+keeps its `organization`, the dialog reloads with the deal still listed, and deleting the
+organization is then refused by the framework's link check ("Cannot delete or cancel
+because CRM Organization ... is linked with CRM Deal ..."). Unlink works for what it was
+written for, a lead's or deal's tasks, notes and calls, and is a no-op for an
+organization's deals. The only way through the dialog is "Delete", which removes the deal.
+
+**Us:** *Reproduce, pending the owner's decision.* `_clear_reference` blanks the same pair
+and nothing else, so the port behaves identically, and
+`tests/test_unlink_linked_docs.py` pins both halves. It is user-visible, so by the rule it
+is reproduced and recorded; diverging would mean clearing the Link field that actually
+holds the reference (FINDINGS.md 56). Owner's decision, 30 Sep 2026: keep it as upstream
+for now and open a pull request for the fix once the browser testing is finished.
+
+## 43. A notification with no lead or deal behind it breaks the notifications panel
+
+**Where:** `frontend/src/components/Notifications.vue` (`getRoute`, and the `RouterLink`
+it feeds), with the data from `crm/api/todo.py:126-131` (`get_redirect_to_doc`) and
+`crm/fcrm/doctype/crm_notification/crm_notification.py:61-84` (`notify_user`). Found
+30 Sep 2026 in the browser testing (FINDINGS.md 62).
+
+```js
+function getRoute(notification) {
+  let params = { leadId: notification.reference_name }
+  ...
+  return { name: notification.route_name, params: params, hash: notification.hash }
+}
+```
+
+When a task is assigned, the notification's reference is the task's own
+`reference_doctype` / `reference_docname`, which are empty for a task made on the Tasks
+page and not tied to a lead or deal. `get_notifications` still answers
+`route_name: "Lead"` for it (its ternary has only two outcomes) with an empty
+`reference_name`. The panel renders every row as a `RouterLink` to that route, and
+vue-router throws `Missing required param "leadId"` for an empty id, inside the render.
+One such row and the panel never appears for that user: clicking the bell does nothing.
+
+**Us:** *Reproduce, pending the owner's decision.* The port stores and serves the same
+rows, and the Vue file is upstream's unchanged. The fix belongs in the frontend: render a
+row that has no reference as plain text, or send it to the Tasks page. A candidate for
+the same pull request as 42.
+
+## 44. The contacts list's "Phone" quick filter searches a column the contact screens never fill
+
+**Where:** `crm/install.py:514` (`"Contact": ["status", "email_id", "phone"]`),
+`crm/overrides/contact.py:24,45` (the list's column is `mobile_no`),
+`crm/api/contact.py:77-78`, `ContactModal.vue:153` and `useContactFields.ts:131,167`
+(every number added or picked on a contact is flagged `is_primary_mobile_no`). Found
+1 Oct 2026 in the Contacts pass (FINDINGS.md 67).
+
+A contact has two mirror columns, `phone` and `mobile_no`, each copied from the row
+flagged for it (framework `contact.py:199-222`). Everything the contact screens do flags
+a number as the primary *mobile*: the New Contact dialog, `create_new` for both of its
+field names, and the dropdown's pick, which always sends `mobile_no`. The one place that
+sets `is_primary_phone` is a lead's conversion, for a lead that has a `phone`
+(`crm_lead.py:236`). So for any contact made or edited in the Contacts screens,
+`Contact.phone` is empty. The list shows the number in a column that reads `mobile_no`,
+while the quick filter labelled Phone filters on `phone`. Typing a number that is plainly
+on screen into that quick filter finds nothing.
+
+**Us:** *Reproduce.* The port installs the same three quick filters and fills the same
+columns the same way. The Mobile No field in the full Filter menu works, since it reads
+the column that is filled. The fix upstream is one word in `install.py`: `mobile_no`.
+
+---
+
+## 45. The Create Deal dialog keeps the last deal's form, and the Convert dialog reads the same one
+
+**Where:** `data/document.js:110-111` (`useDocument(doctype)` with no name hands out one
+`documentsCache[doctype]['']` object for the whole page session), `DealModal.vue:99,179,
+214-218` (binds the form to it, nulls `contact` but not `organization` when a switch is
+off, and on success only navigates), `ConvertToDealModal.vue:129` (the same
+`useDocument('CRM Deal')`), `crm_deal.py:460-468` (`doc.get("organization") or
+create_organization(doc)`). Found 6 Oct 2026 in the Deals pass (FINDINGS.md 74) and
+confirmed the same day on the upstream demo.
+
+Three things follow from the one shared object.
+
+1. After a deal is created the form is never cleared, so the next Create Deal starts
+   from the last deal's values. Visible, and easy to type over.
+2. Once "Choose Existing Organization" has been used, its pick stays in
+   `deal.doc.organization` when the switch is turned off; the field is hidden with the
+   section. `createDeal()` nulls `contact` for the equivalent case
+   (`DealModal.vue:179`) and does nothing for `organization`. `create_deal` then prefers
+   `doc.organization` to the organization details typed, so the new deal lands on the
+   old organization and the typed organization is never created. Invisible until the
+   deal opens.
+3. The Convert to Deal dialog's deal form is the same object, so whatever the last
+   Create Deal left in it (`website`, `territory`, `annual_revenue`, `industry`,
+   `no_of_employees`, `status`, `deal_owner`, and `organization` from case 2) is sent as
+   the override `new_deal.update(deal)` applies last, over the lead's own values.
+
+A page reload clears all three; the cache is in memory. Restarting the server changes
+nothing.
+
+**Us:** *Reproduce.* The frontend is upstream's, byte for byte (both files diff clean
+against the upstream checkout), and the port's `create_deal` prefers `organization` the
+same way. The fix upstream is in the frontend: reset `documentsCache[doctype]['']` when
+the dialog closes or the create succeeds, and null `organization` beside `contact`.
+Candidate for the PR with 42, 43 and 44.
+
+---
+
+## 46. Clicking a currency cell in a list files the formatted amount as the filter
+
+**Where:** `pages/Deals.vue:406`, `pages/Leads.vue:437`, `pages/Organizations.vue:116`
+(`_rows[row] = getFormattedCurrency(row, deal)`: the list's row object carries the
+display string, "$ 500,000.00"), `ViewControls.vue:1321-1337` (`applyFilter` takes
+`item.name ?? item.label ?? item` from the clicked cell and writes it into
+`filters[column.key]`), then `create_or_update_standard_view` persists the standard
+view's filters per user. Found 6 Oct 2026 in the Deals pass (FINDINGS.md 77).
+
+Click the Annual Revenue cell of a deal and the list is filtered on
+`annual_revenue = "$ 500,000.00"`. Upstream's `frappe.get_list` hands that string to
+MariaDB, which casts it to a number for the comparison, gets 0, and so the filter
+matches nothing (or every deal with no revenue). No error, just an empty list that
+does not say why, and the chip shows the amount the user clicked. The filter is saved
+with the standard view, so it is back on the next visit until the user removes it.
+
+**Us:** *Diverge.* The port's filter builder refused the string ("value must be a
+decimal number", 417), and because the standard view replays it on every load the
+Deals page would not open at all; a 417 was never an option. Reproducing MariaDB's
+cast-to-zero would keep the empty list and hide the amount the user plainly clicked.
+The port reads the number out of the formatted string instead, so the click filters on
+the amount shown. A string with no number in it falls back to 0, MariaDB's answer. The
+fix upstream is in the frontend: file the raw value, not the display string.
+
+---
+
+## 47. Home Actions lets a standard entry be turned into a separator, and Settings is gone
+
+**Where:** `crm_dropdown_item.json` (`type` has `read_only_depends_on:
+eval:doc.is_standard`), `components/Controls/Grid.vue` and `GridRowModal.vue` (neither
+reads `read_only_depends_on`), `UserDropdown.vue:91-104` (a Separator row draws a
+divider, nothing else), `composables/settings.js` (Settings is a modal opened from that
+dropdown; no route reaches it). Found 6 Oct 2026 in the Settings pass (FINDINGS.md 78),
+on the upstream demo first.
+
+The six standard rows (Apps, Settings, Log out and so on) are meant to be fixed in
+Type: the doctype says so. The Home Actions grid does not apply that rule, so the
+Settings row's Type can be switched to Separator and saved. The dropdown then shows a
+divider where Settings was, and because Settings opens only from that dropdown there is
+no way back inside the app: the grid that would fix it lives in Settings.
+
+Nor is there one in Desk, checked on the demo the same day. `/app/fcrm-settings` shows
+the row, but Desk *does* honour the rules the CRM's grid skipped: Type is read-only
+because the row is standard, and `is_standard` is `read_only: 1` by definition
+(`crm_dropdown_item.json`), so neither can be changed back. Deleting the row is refused
+by `FCRMSettings.validate` ("Cannot delete standard items settings",
+`fcrm_settings.py:59-70`), and a re-added row could not be made standard. The Restore
+Defaults button runs `after_install`, whose `add_standard_dropdown_items`
+(`install.py:530-542`) returns early while any row exists; `bench migrate` runs
+`sync_table` (`fcrm_settings.py:196-215`), which adds missing standard rows and removes
+stale ones but never repairs a changed one. What is left is the database:
+
+```
+bench --site <site> console
+>>> frappe.db.set_value("CRM Dropdown Item", {"parent": "FCRM Settings", "name1": "settings"},
+...     {"type": "Route", "label": "Settings", "route": "#", "icon": "settings"})
+>>> frappe.db.commit(); frappe.clear_cache()
+```
+
+or the same UPDATE on `tabCRM Dropdown Item` followed by `bench --site <site> clear-cache`.
+
+**Us:** *Reproduce* in the frontend, which is upstream's. The port has no Desk, so
+`seed_defaults --force` restores the standard rows by their Name, keeping custom ones.
+To raise upstream (an issue or a PR, to be decided with 42 to 46): the grid should honour
+`read_only_depends_on`, or the server should refuse a Type change on a standard row, and
+`sync_table` could repair a standard row's Type the way it already repairs the set.
+
+---
+
+## 48. A wrong URL with more than one segment draws a blank page
+
+**Where:** `frontend/src/router.js:133` upstream (`:164` here): the catch-all route is
+`path: '/:invalidpath'`, which in Vue Router matches **one** segment. Found 7 Oct 2026 in
+the Sign in and out pass (FINDINGS.md 83), on the hosted demo and locally alike.
+
+`/crm/leaderssf` reaches the route and shows `InvalidPage.vue` ("Invalid page or not
+permitted to access"); `/crm/leadsdss/CRM-LEAD-2026-00003` has a second segment, matches
+no route at all, and the router view renders nothing: a blank page with the sidebar,
+and no message. A mistyped list name in a record URL, the likeliest typo, is exactly the
+case that gets nothing.
+
+**Us:** *Diverge*, by the tester's decision on 7 Oct 2026: the one-line patch
+`path: '/:invalidpath(.*)*'`, Vue Router's own catch-all form, so every unknown path
+lands on the invalid page. Recorded in `frontend/JWT_PATCH.md` with the port's other
+frontend patches. The same line is the fix upstream.
+
+---
+
+## Faithful behaviours we chose to keep (not bugs — decisions)
+
+Recorded here so they are not later mistaken for defects:
+
+- **SLA breaches are only detected on write.** A lead that breaches while untouched keeps
+  showing `First Response Due` until something saves it. There is no scheduler entry
+  (`crm/hooks.py` has none). Adding a sweep would make our lists disagree with upstream's.
+- **403 and 404 are distinguishable**, so a user can tell whether a record they cannot see
+  exists. Upstream behaves identically.
+- **Polymorphic child tables have no referential integrity** — `parent` is a plain string.
+  Frappe shares this, but Frappe also has an `on_trash` cascade we have not ported yet.
+- **`FCRM Settings.access_key` is readable by any authenticated user** — the JSON declares
+  it `Data`, unhidden, and the settings screen reads it back. Restricting it is a product
+  decision that diverges from upstream and needs a UI change too.
+
+> **`remove_assignments` was recorded here too, as a second #10.** Same defect, same
+> endpoint, written twice — once from each phase's notes. The fuller account, with the
+> framework line that makes the mechanism clear and the note that it was verified
+> independently, is **`UPSTREAM_BUGS_PHASE_3-6.md` #10**. That is the entry to cite.
 
 ## The pattern worth remembering
 

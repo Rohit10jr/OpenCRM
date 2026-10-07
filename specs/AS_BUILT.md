@@ -504,10 +504,9 @@ Available fixtures in `tests/conftest.py`: `alice`, `bob`, `administrator`, `mak
 
 ## 6. The rule that governed every divergence
 
-Upstream has bugs. **21** are catalogued across `UPSTREAM_BUGS_PHASE_0-2.md` and
-`UPSTREAM_BUGS_PHASE_3-6.md` — both gitignored as local working notes (`.gitignore:59`),
-so a divergence recorded only there is invisible to a reviewer. Summarise the ones that
-matter in the phase's progress file too.
+Upstream has bugs. **48** are catalogued in `UPSTREAM_BUGS.md`, each with the port's
+stance. A divergence recorded only there is easy to miss in review, so name the ones that
+matter in the finding or the spec that made them too.
 
 > **Diverge on bugs nothing can observe. Reproduce bugs that are user-visible.**
 

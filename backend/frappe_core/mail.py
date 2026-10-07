@@ -34,7 +34,7 @@ That is a **deliberate divergence** and it has a cost worth stating: a genuinely
 working mail server - a loaded corporate relay, or one reached over a poor link - could
 exceed 10 seconds and be reported as broken when it is merely slow. If that happens, the
 fix is to raise ``MAIL_CONNECT_TIMEOUT``, not to remove it. Recorded in
-``UPSTREAM_BUGS_PHASE_3-6.md``.
+``UPSTREAM_BUGS.md``.
 """
 
 from __future__ import annotations

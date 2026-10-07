@@ -68,7 +68,7 @@ def update_user_onboarding_status(steps: str = "", appName: str = "", **extra):
 
     Divergence, deliberate: upstream reads the column with ``frappe.parse_json``, which
     returns ``None`` for an unset column, then subscripts it - so the very first update
-    for a user with no status answers 500 (``UPSTREAM_BUGS_PHASE_3-6.md`` 40). Here an
+    for a user with no status answers 500 (``UPSTREAM_BUGS.md`` 40). Here an
     unset status is ``{}``. ``update_modified=False`` upstream; a queryset ``update``
     likewise leaves the row's timestamps alone.
     """

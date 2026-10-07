@@ -1217,7 +1217,7 @@ the two endpoints: the read answers the parsed object or `{}`; the write stores 
 steps under the app's key and keeps other apps' keys, through a queryset update so the
 row's timestamps stay put, as upstream's `update_modified=False` intends. An unset
 status reads as `{}` on the write path too, which upstream gets wrong
-(`UPSTREAM_BUGS_PHASE_3-6.md` 40). The guard gained a second scan over the package's
+(`UPSTREAM_BUGS.md` 40). The guard gained a second scan over the package's
 two source trees, with the three Data Import paths as its only exclusions, so a
 library-side call can no longer go unserved unnoticed. `tests/test_onboarding_status.py`
 covers the pair.
