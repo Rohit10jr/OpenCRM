@@ -40,10 +40,10 @@ led nowhere. That flow is now walked end to end by
 
 **Read before extending anything:**
 
-* `../docs/internal/PROGRESS_PHASE_8.md` — its **Concerns** are the honest list of what this
+* `../docs/history/PROGRESS_PHASE_8.md` — its **Concerns** are the honest list of what this
   phase did not check. The screens have no component tests and nobody has clicked them in a
   browser.
-* `../docs/internal/PROGRESS_PHASE_7.md` — `get_recording_url` is deliberately unported and
+* `../docs/history/PROGRESS_PHASE_7.md` — `get_recording_url` is deliberately unported and
   is the most security-sensitive single function in that phase. Port it *with* upstream's
   IP pinning and per-hop redirect validation, or not at all.
 * `SECURITY_MODEL.md` — per-doctype, and the recurring finding that appeared in five

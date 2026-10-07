@@ -117,7 +117,7 @@ tier you used.
 | **2** | Codex via PowerShell 5.1 | Same reviewer, fallback shell |
 | **3** | Claude subagent | **Degraded** — same model and same spec, so correlated blind spots |
 
-Full procedure: `docs/internal/RUNBOOK_PHASE_7.md` §3. (`RUNBOOK.md` covered the
+Full procedure: `docs/history/RUNBOOK_PHASE_7.md` §3. (`RUNBOOK.md` covered the
 phases 3-6 run and is now a record of it.)
 
 ## Tier 1 — Codex (default)
