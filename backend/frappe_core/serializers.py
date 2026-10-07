@@ -77,6 +77,31 @@ class DocumentSerializer(serializers.ModelSerializer):
         # built, because the class is built once per model and cached on the registry
         # entry - it cannot know who is asking. `hidden_from` re-checks the sensitive set
         # too, which is redundant (those are already excluded from Meta) and costs a set
+    def to_internal_value(self, data):
+        # Upstream clears a Data field by writing None to it (`doc.set(field, None)`),
+        # and the frontend does exactly that: "Remove Image" on an organization sends
+        # `organization_logo: null` (FINDINGS.md 68). The port's text columns are
+        # `blank=True, null=False`, so DRF answered "This field may not be null." and
+        # the logo stayed. None on a text field means "empty" here, as it does there.
+        if isinstance(data, dict):
+            blank_for_none = {
+                name
+                for name, field in self.fields.items()
+                if isinstance(field, (serializers.CharField, serializers.ChoiceField))
+                and not field.allow_null
+                and not field.read_only
+            }
+            if any(data.get(name, "") is None for name in blank_for_none):
+                data = {k: ("" if v is None and k in blank_for_none else v) for k, v in data.items()}
+            # Upstream's permlevel-1 fields: a caller without the role has their value
+            # reset to the stored one, silently, and the rest of the save goes through
+            # (`field_security.privileged_write_fields`). Dropping the key here is the
+            # same outcome for a partial write.
+            dropped = unwritable_by(self.Meta.model) & set(data)
+            if dropped:
+                data = {k: v for k, v in data.items() if k not in dropped}
+        return super().to_internal_value(data)
+
         # union; keeping it means one function answers "may this user see this field?"
         # instead of two that can drift.
         if restricted_fields(self.Meta.model):
