@@ -218,6 +218,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     #: System User versus Website User - so it is locked here as cheap precaution before
     #: phase 8 gives it meaning, not because it is currently exploitable.
     READONLY_FIELDS = ("enabled", "user_type")
+    #: ``user_emails`` sits at permlevel 1 upstream (``user.json``): everybody sees their
+    #: outgoing accounts on the Profile screen, System Manager alone may change the list.
+    #: A Sales User's "Add Email" is dropped on save, as upstream resets it
+    #: (``frappe_core.field_security.privileged_write_fields``, FINDINGS.md 57). The
+    #: rows a Sales User does get come from the account itself: an Email Account links
+    #: itself to the user whose address it is (:func:`_link_email_account_to_its_user`).
+    PRIVILEGED_WRITE_FIELDS = ("user_emails",)
+    PRIVILEGED_WRITE_ROLES = ("System Manager",)
 
     class Meta:
         db_table = "tabUser"
@@ -303,9 +311,13 @@ class Contact(BaseDocument):
     the email address.
     """
 
-    first_name = models.CharField(max_length=140, blank=True, default="")
-    middle_name = models.CharField(max_length=140, blank=True, default="")
-    last_name = models.CharField(max_length=140, blank=True, default="")
+    # The first argument of each field is ``contact.json``'s label. Contact has no entry
+    # in doctype_meta.json, so every form, filter and quick filter reads its labels off
+    # the model; without these the screens showed "email id" and "mobile no"
+    # (FINDINGS.md 44).
+    first_name = models.CharField("First Name", max_length=140, blank=True, default="")
+    middle_name = models.CharField("Middle Name", max_length=140, blank=True, default="")
+    last_name = models.CharField("Last Name", max_length=140, blank=True, default="")
     EMAIL_FIELDS = ("email_id",)
 
     full_name = models.CharField("Full Name", max_length=420, blank=True, default="")
@@ -484,6 +496,9 @@ class ContactEmail(BaseDocument):
     parenttype = models.CharField(max_length=140, default="Contact")
     parentfield = models.CharField(max_length=140, default="email_ids")
     EMAIL_FIELDS = ("email_id",)
+    #: ``frappe.client.set_value`` and ``delete`` may reach this row through its contact:
+    #: the contact page edits and removes one address that way (FINDINGS.md 67).
+    CLIENT_EDITABLE = True
 
     email_id = models.CharField(max_length=140)
     is_primary = models.BooleanField(default=False)
@@ -496,9 +511,6 @@ class ContactEmail(BaseDocument):
 @register_doctype("Contact Phone", is_child_table=True)
 class ContactPhone(BaseDocument):
     """Child of Contact.
-    #: ``frappe.client.set_value`` and ``delete`` may reach this row through its contact:
-    #: the contact page edits and removes one address that way (FINDINGS.md 67).
-    CLIENT_EDITABLE = True
 
     ``crm/api/contact.py:77`` appends ``{phone, is_primary_mobile_no}``;
     ``test_crm_deal.py:451-454`` shows both primary flags in use.
@@ -509,6 +521,8 @@ class ContactPhone(BaseDocument):
     )
     parenttype = models.CharField(max_length=140, default="Contact")
     parentfield = models.CharField(max_length=140, default="phone_nos")
+    #: As on ``ContactEmail``: editable and removable through the contact (FINDINGS.md 67).
+    CLIENT_EDITABLE = True
     phone = models.CharField(max_length=140)
     is_primary_phone = models.BooleanField(default=False)
     is_primary_mobile_no = models.BooleanField(default=False)
@@ -521,8 +535,6 @@ class ContactPhone(BaseDocument):
 # Unrouted deliberately. `org_hierarchy` grants access to a record when a ToDo row says
 # you are assigned to it, so a writable /api/resource/ToDo let any user create that row
 # for any document and read it - the permission check then *passes*, on data the caller
-    #: As on ``ContactEmail``: editable and removable through the contact (FINDINGS.md 67).
-    CLIENT_EDITABLE = True
 # supplied. Nothing calls this route: the frontend assigns through
 # `frappe.desk.form.assign_to.add`, which checks write permission on the document first.
 # Full reasoning, the upstream comparison and the permission-rule alternative:
@@ -709,15 +721,36 @@ class EmailTemplate(BaseDocument):
         }
 
 
+#: ``file.py:189``: what may not appear in ``attached_to_field``.
+_SPECIAL_CHAR_PATTERN = re.compile(r"[\W]", flags=re.UNICODE)
+
+
 @register_doctype("File")
 class File(BaseDocument):
-    """Attachments.
+    """Attachments - and, since the frontend stage, the bytes behind them.
 
     ``crm/api/comment.py:118`` attaches files with ``attached_to_doctype`` /
     ``attached_to_name``; ``crm/api/activities.py:128`` reads them back per reference.
+    ``upload_file`` (``crm_app/api/upload.py``) creates rows *with* content, and the
+    ``/files/`` and ``/private/files/`` routes (``frappe_core/file_views.py``) serve it.
 
-    Note ``file_url`` is a URL string, not a Django ``FileField`` - PHASE_1_MODELS.md
-    section 2 maps ``Attach`` that way.
+    ``file_url`` is a URL string, not a Django ``FileField`` - PHASE_1_MODELS.md section 2
+    maps ``Attach`` that way - and :mod:`frappe_platform.files` maps it to a path under
+    ``MEDIA_ROOT``.
+
+    The insert pipeline is ``file.py:103-138`` (``before_insert``) and ``858-940``
+    (``save_file``): the content is hashed, deduplicated against a row with the same hash
+    and privacy, named without collisions and written. A public/private flip on an
+    existing row moves the bytes (``313-394``); deleting the last row that names a file
+    deletes the file (``680-694``).
+
+    **One check is deliberately not ported.** Upstream refuses a row whose local
+    ``file_url`` names nothing on disk (``validate_file_on_disk``, 462-470). Rows carrying
+    a URL and no content are how ``add_comment`` and ``email.add_attachments`` copy an
+    attachment onto a comment or an email, the shape every attachment test builds, and
+    the shape this port had for eight phases before it could store bytes at all. Such a
+    row is metadata; when its file *is* on disk the hash and size are filled from it, as
+    upstream's ``get_content`` would.
     """
 
     file_name = models.CharField(max_length=280, blank=True, default="")
@@ -730,11 +763,11 @@ class File(BaseDocument):
     file_size = models.BigIntegerField(default=0)
     content_hash = models.CharField(max_length=140, blank=True, default="")
 
+    #: The bytes to store, set by the uploader before ``save()``. Never a column:
+    #: upstream's ``content`` is the same transient attribute (``file.py:78-84``).
+    _content: bytes | None = None
+
     class Meta:
-#: ``file.py:189``: what may not appear in ``attached_to_field``.
-_SPECIAL_CHAR_PATTERN = re.compile(r"[\W]", flags=re.UNICODE)
-
-
         ordering = ["-creation"]
         name_strategy = Hash()
         indexes = [
@@ -744,49 +777,6 @@ _SPECIAL_CHAR_PATTERN = re.compile(r"[\W]", flags=re.UNICODE)
             ),
         ]
 
-
-@register_doctype("Tag")
-class Tag(BaseDocument):
-    """Feeds the ``_user_tags`` cache. The PK is the tag text itself."""
-
-    class Meta:
-        ordering = ["name"]
-        name_strategy = Prompt()
-
-
-@register_doctype("Email Account")
-class EmailAccount(EncryptedFieldsMixin, BaseDocument):
-    """Outbound/inbound email config.
-
-    Fields verbatim from ``crm/api/settings.py:14-29``, which is the only place the CRM
-    creates one.
-
-    Naming: ``field:email_account_name`` - Frappe's Email Account is titled by that
-    field and the CRM passes it explicitly on create.
-    """
-
-    #: ``email_id`` is ``options: Email`` in email_account.json.
-    EMAIL_FIELDS = ("email_id",)
-
-    email_account_name = models.CharField(max_length=140)
-    email_id = models.CharField(max_length=140, blank=True, default="")
-    service = models.CharField(max_length=140, blank=True, default="")
-    enable_incoming = models.BooleanField(default=False)
-    enable_outgoing = models.BooleanField(default=False)
-    default_incoming = models.BooleanField(default=False)
-    default_outgoing = models.BooleanField(default=False)
-    email_sync_option = models.CharField(max_length=50, blank=True, default="ALL")
-    initial_sync_count = models.IntegerField(default=100)
-    create_contact = models.BooleanField(default=True)
-    track_email_status = models.BooleanField(default=True)
-    use_tls = models.BooleanField(default=True)
-    use_imap = models.BooleanField(default=True)
-    smtp_server = models.CharField(max_length=140, blank=True, default="")
-    smtp_port = models.IntegerField(null=True, blank=True)
-    email_server = models.CharField(max_length=140, blank=True, default="")
-    # Frappe stores this encrypted; phase 7 owns real credential handling.
-    password = models.CharField(max_length=280, blank=True, default="")
-    no_smtp_authentication = models.BooleanField(default=False)
     # ------------------------------------------------------------------ lifecycle
 
     @property
@@ -1096,6 +1086,49 @@ def _file_deleting(sender, instance, **kwargs):
 
 pre_delete.connect(_file_deleting, sender=File, dispatch_uid="file.deleting")
 
+
+@register_doctype("Tag")
+class Tag(BaseDocument):
+    """Feeds the ``_user_tags`` cache. The PK is the tag text itself."""
+
+    class Meta:
+        ordering = ["name"]
+        name_strategy = Prompt()
+
+
+@register_doctype("Email Account")
+class EmailAccount(EncryptedFieldsMixin, BaseDocument):
+    """Outbound/inbound email config.
+
+    Fields verbatim from ``crm/api/settings.py:14-29``, which is the only place the CRM
+    creates one.
+
+    Naming: ``field:email_account_name`` - Frappe's Email Account is titled by that
+    field and the CRM passes it explicitly on create.
+    """
+
+    #: ``email_id`` is ``options: Email`` in email_account.json.
+    EMAIL_FIELDS = ("email_id",)
+
+    email_account_name = models.CharField(max_length=140)
+    email_id = models.CharField(max_length=140, blank=True, default="")
+    service = models.CharField(max_length=140, blank=True, default="")
+    enable_incoming = models.BooleanField(default=False)
+    enable_outgoing = models.BooleanField(default=False)
+    default_incoming = models.BooleanField(default=False)
+    default_outgoing = models.BooleanField(default=False)
+    email_sync_option = models.CharField(max_length=50, blank=True, default="ALL")
+    initial_sync_count = models.IntegerField(default=100)
+    create_contact = models.BooleanField(default=True)
+    track_email_status = models.BooleanField(default=True)
+    use_tls = models.BooleanField(default=True)
+    use_imap = models.BooleanField(default=True)
+    smtp_server = models.CharField(max_length=140, blank=True, default="")
+    smtp_port = models.IntegerField(null=True, blank=True)
+    email_server = models.CharField(max_length=140, blank=True, default="")
+    # Frappe stores this encrypted; phase 7 owns real credential handling.
+    password = models.CharField(max_length=280, blank=True, default="")
+    no_smtp_authentication = models.BooleanField(default=False)
     #: Phase 3: the fallback source for ``crm.api.get_user_signature``
     #: (``crm/api/__init__.py:32-36``).
     add_signature = models.BooleanField(default=False)
@@ -1163,6 +1196,76 @@ pre_delete.connect(_file_deleting, sender=File, dispatch_uid="file.deleting")
 register_todo_model(ToDo)
 
 
+@register_doctype("User Email", is_child_table=True)
+class UserEmail(BaseDocument):
+    """Child of User: the outgoing accounts a user sends from (``user_email.json``).
+
+    Fields verbatim: ``email_account``, with ``email_id``, ``awaiting_password`` and
+    ``enable_outgoing`` fetched from it, and ``used_oauth``, which stays off because
+    the port has no OAuth mail. Profile → Email Settings lists and edits the rows
+    (``UserEmailSettings.vue``), and the email composer's From dropdown is built from
+    them (``EmailEditor.vue:266``). Rows go with their account (``remove_user_email_inbox``
+    upstream; CASCADE here). FINDINGS.md 57.
+    """
+
+    parent_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="user_emails")
+    parenttype = models.CharField(max_length=140, default="User")
+    parentfield = models.CharField(max_length=140, default="user_emails")
+    FETCH_FROM = {
+        "email_id": ("email_account", "email_id"),
+        "awaiting_password": ("email_account", "awaiting_password"),
+        "enable_outgoing": ("email_account", "enable_outgoing"),
+    }
+
+    email_account = models.ForeignKey(EmailAccount, on_delete=models.CASCADE, related_name="+")
+    email_id = models.CharField(max_length=140, blank=True, default="")
+    awaiting_password = models.BooleanField(default=False)
+    enable_outgoing = models.BooleanField(default=False)
+    used_oauth = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["idx"]
+        name_strategy = Hash()
+
+
+def _link_email_account_to_its_user(sender, instance, **kwargs):
+    """``email_account.py:1072-1115``, ``setup_user_email_inbox``, run from the account's
+    ``on_update``: the account links itself to the user whose address it is - a row on
+    that user's ``user_emails`` - and keeps the row's flags current afterwards. Upstream
+    matches ``User.email``; here the user's name is the address too, so either matches.
+    That is how a Sales User gets an account on the Profile screen without being able
+    to add one (``User.PRIVILEGED_WRITE_FIELDS``)."""
+    address = (instance.email_id or "").strip()
+    if not address:
+        return
+    flags = {
+        "email_id": address,
+        "awaiting_password": instance.awaiting_password,
+        "enable_outgoing": instance.enable_outgoing,
+    }
+    users = User._default_manager.filter(
+        models.Q(email__iexact=address) | models.Q(pk__iexact=address)
+    )
+    for user in users:
+        existing = UserEmail._default_manager.filter(parent_user=user, email_account=instance)
+        if existing.exists():
+            existing.update(**flags)
+            continue
+        UserEmail._default_manager.create(
+            parent_user=user,
+            email_account=instance,
+            idx=UserEmail._default_manager.filter(parent_user=user).count() + 1,
+            **flags,
+        )
+
+
+post_save.connect(
+    _link_email_account_to_its_user,
+    sender=EmailAccount,
+    dispatch_uid="frappe_platform.user_email.link_account",
+)
+
+
 @register_doctype("Dynamic Link", is_child_table=True)
 class DynamicLink(BaseDocument):
     """Frappe's generic "this document points at that one" child table.
@@ -1200,118 +1303,6 @@ class DynamicLink(BaseDocument):
         ]
 
 
-class UserSettings(models.Model):
-    """Per-user, per-doctype UI state - list filters, page length, grid columns.
-
-    Ported from ``frappe/model/utils/user_settings.py``, which reads and writes the
-    ``__UserSettings`` table with raw SQL (``get_user_settings``, ``sync_user_settings``).
-
-    **Deliberately a plain ``models.Model``**, not a :class:`BaseDocument`, and
-    deliberately *not* passed through ``register_doctype``:
-
-    * Upstream's ``__UserSettings`` is **not a DocType**. It has no ``.json``, no
-      controller and no DocField rows - the double underscore is Frappe's marker for a
-      framework-private table. It has no ``owner``/``modified_by``/``docstatus`` either,
-      so there is nothing for ``BaseDocument`` to carry.
-    * Registering it would publish it: hard rule 7 in ``CLAUDE.md`` - every registered
-      doctype gets an ``/api/resource/`` route and every field becomes readable and
-      writable there. That would hand any authenticated user a way to read and rewrite
-      *other people's* saved views and filters, which upstream has no route for at all.
-      The two whitelisted methods in ``crm_app/api/user_settings.py`` are the only way
-      in, and both are scoped to ``frappe.session.user``.
-
-    ``data`` is the JSON string exactly as the client sent it, merged at the top level -
-    the same contract as ``update_user_settings``; nothing here interprets its contents.
-    """
-
-    user = models.ForeignKey(
-        "frappe_platform.User",
-        on_delete=models.CASCADE,
-        db_column="user",
-        related_name="+",
-    )
-    doctype = models.CharField(max_length=140)
-    data = models.TextField(default="{}")
-
-    class Meta:
-        # Upstream's key: one row per (user, doctype), which is what makes
-        # ``sync_user_settings``' upsert well-defined.
-        unique_together = [("user", "doctype")]
-
-    # -- storage -----------------------------------------------------------------------
-    # The two table operations live here rather than in ``crm_app/api/user_settings.py``
-    # for a reason that is worth stating: an endpoint module may not touch a manager at
-    # all (``test_no_endpoint_bypasses_the_permission_layer``), because a list read that
-    # goes straight to the ORM skips the phase-2 permission hook. The usual way round
-    # that is ``frappe_core.query``, which applies the hook - but it addresses documents
-    # by doctype string, and this is deliberately not a doctype. So the table's own model
-    # owns its two accesses, and both are keyed on the user, which is the entirety of
-    # this table's access rule.
-
-    @classmethod
-    def load(cls, user: str, doctype: str) -> str:
-        """The stored JSON string for one user and doctype, ``"{}"`` when there is none."""
-        row = cls._default_manager.filter(user_id=user, doctype=doctype).only("data").first()
-        return (row.data if row is not None else None) or "{}"
-
-    @classmethod
-    def store(cls, user: str, doctype: str, data: str) -> None:
-        """Upsert on ``(user, doctype)`` - ``sync_user_settings``' ``ON CONFLICT`` clause."""
-        cls._default_manager.update_or_create(
-            user_id=user, doctype=doctype, defaults={"data": data}
-        )
-
-    def __str__(self) -> str:  # pragma: no cover - debugging aid
-        return f"{self.user_id}::{self.doctype}"
-
-
-# Contact's denormalised email_id / mobile_no / phone follow its child rows. Upstream
-# recomputes them on validate; children are written after the parent (they need its PK),
-# so a save-time hook would not see them. Signals on the child tables are the faithful
-# equivalent.
-#: Greater than zero while a Contact is being deleted. The cascade removes its rows one
-#: by one, and re-deriving the primaries after each would run the save-time rules on a
-#: document that is going away - a contact whose rows had two primaries could not be
-#: deleted at all (FINDINGS.md 23). Upstream's ``delete_doc`` removes the child rows
-#: without validating anything (``delete_doc.py:207-227``).
-_DELETING = contextvars.ContextVar("frappe_platform.contact.deleting", default=0)
-
-
-def _contact_deleting(sender, instance, **kwargs):
-    _DELETING.set(_DELETING.get() + 1)
-
-
-def _contact_deleted(sender, instance, **kwargs):
-    _DELETING.set(max(_DELETING.get() - 1, 0))
-
-
-def _resync_contact(sender, instance, **kwargs):
-    from frappe_core import children
-
-    # A document write replaces the rows as one unit and the contact's own save then
-    # applies the rules over all of them; re-deriving after each row would promote the
-    # first email row before the second exists (contact.py:183 needs the whole table).
-    if children.replacing_children() or _DELETING.get():
-        return
-    contact = instance.parent_contact
-    if contact is None:
-        return
-    contact.sync_primary_values()
-    type(contact)._default_manager.filter(pk=contact.pk).update(
-        email_id=contact.email_id, mobile_no=contact.mobile_no, phone=contact.phone
-    )
-
-
-for _child in (ContactEmail, ContactPhone):
-    post_save.connect(_resync_contact, sender=_child, dispatch_uid=f"contact.sync.{_child.__name__}")
-    post_delete.connect(
-        _resync_contact, sender=_child, dispatch_uid=f"contact.unsync.{_child.__name__}"
-    )
-
-# Django sends pre_delete for the contact before its rows are removed and post_delete
-# after, for a model delete and a queryset delete alike; the counter brackets the cascade.
-pre_delete.connect(_contact_deleting, sender=Contact, dispatch_uid="contact.deleting")
-post_delete.connect(_contact_deleted, sender=Contact, dispatch_uid="contact.deleted")
 def _document_title(doctype: str, name: str) -> str:
     """``Document.get_title``: the ``title_field`` value when the doctype declares one,
     else the name. What a Dynamic Link row's ``link_title`` shows."""
@@ -1583,3 +1574,115 @@ class Address(BaseDocument):
         return self.link_rows().filter(link_doctype=doctype, link_name=name).exists()
 
 
+class UserSettings(models.Model):
+    """Per-user, per-doctype UI state - list filters, page length, grid columns.
+
+    Ported from ``frappe/model/utils/user_settings.py``, which reads and writes the
+    ``__UserSettings`` table with raw SQL (``get_user_settings``, ``sync_user_settings``).
+
+    **Deliberately a plain ``models.Model``**, not a :class:`BaseDocument`, and
+    deliberately *not* passed through ``register_doctype``:
+
+    * Upstream's ``__UserSettings`` is **not a DocType**. It has no ``.json``, no
+      controller and no DocField rows - the double underscore is Frappe's marker for a
+      framework-private table. It has no ``owner``/``modified_by``/``docstatus`` either,
+      so there is nothing for ``BaseDocument`` to carry.
+    * Registering it would publish it: hard rule 7 in ``CLAUDE.md`` - every registered
+      doctype gets an ``/api/resource/`` route and every field becomes readable and
+      writable there. That would hand any authenticated user a way to read and rewrite
+      *other people's* saved views and filters, which upstream has no route for at all.
+      The two whitelisted methods in ``crm_app/api/user_settings.py`` are the only way
+      in, and both are scoped to ``frappe.session.user``.
+
+    ``data`` is the JSON string exactly as the client sent it, merged at the top level -
+    the same contract as ``update_user_settings``; nothing here interprets its contents.
+    """
+
+    user = models.ForeignKey(
+        "frappe_platform.User",
+        on_delete=models.CASCADE,
+        db_column="user",
+        related_name="+",
+    )
+    doctype = models.CharField(max_length=140)
+    data = models.TextField(default="{}")
+
+    class Meta:
+        # Upstream's key: one row per (user, doctype), which is what makes
+        # ``sync_user_settings``' upsert well-defined.
+        unique_together = [("user", "doctype")]
+
+    # -- storage -----------------------------------------------------------------------
+    # The two table operations live here rather than in ``crm_app/api/user_settings.py``
+    # for a reason that is worth stating: an endpoint module may not touch a manager at
+    # all (``test_no_endpoint_bypasses_the_permission_layer``), because a list read that
+    # goes straight to the ORM skips the phase-2 permission hook. The usual way round
+    # that is ``frappe_core.query``, which applies the hook - but it addresses documents
+    # by doctype string, and this is deliberately not a doctype. So the table's own model
+    # owns its two accesses, and both are keyed on the user, which is the entirety of
+    # this table's access rule.
+
+    @classmethod
+    def load(cls, user: str, doctype: str) -> str:
+        """The stored JSON string for one user and doctype, ``"{}"`` when there is none."""
+        row = cls._default_manager.filter(user_id=user, doctype=doctype).only("data").first()
+        return (row.data if row is not None else None) or "{}"
+
+    @classmethod
+    def store(cls, user: str, doctype: str, data: str) -> None:
+        """Upsert on ``(user, doctype)`` - ``sync_user_settings``' ``ON CONFLICT`` clause."""
+        cls._default_manager.update_or_create(
+            user_id=user, doctype=doctype, defaults={"data": data}
+        )
+
+    def __str__(self) -> str:  # pragma: no cover - debugging aid
+        return f"{self.user_id}::{self.doctype}"
+
+
+# Contact's denormalised email_id / mobile_no / phone follow its child rows. Upstream
+# recomputes them on validate; children are written after the parent (they need its PK),
+# so a save-time hook would not see them. Signals on the child tables are the faithful
+# equivalent.
+#: Greater than zero while a Contact is being deleted. The cascade removes its rows one
+#: by one, and re-deriving the primaries after each would run the save-time rules on a
+#: document that is going away - a contact whose rows had two primaries could not be
+#: deleted at all (FINDINGS.md 23). Upstream's ``delete_doc`` removes the child rows
+#: without validating anything (``delete_doc.py:207-227``).
+_DELETING = contextvars.ContextVar("frappe_platform.contact.deleting", default=0)
+
+
+def _contact_deleting(sender, instance, **kwargs):
+    _DELETING.set(_DELETING.get() + 1)
+
+
+def _contact_deleted(sender, instance, **kwargs):
+    _DELETING.set(max(_DELETING.get() - 1, 0))
+
+
+def _resync_contact(sender, instance, **kwargs):
+    from frappe_core import children
+
+    # A document write replaces the rows as one unit and the contact's own save then
+    # applies the rules over all of them; re-deriving after each row would promote the
+    # first email row before the second exists (contact.py:183 needs the whole table).
+    if children.replacing_children() or _DELETING.get():
+        return
+    contact = instance.parent_contact
+    if contact is None:
+        return
+    contact.sync_primary_values()
+    type(contact)._default_manager.filter(pk=contact.pk).update(
+        email_id=contact.email_id, mobile_no=contact.mobile_no, phone=contact.phone
+    )
+
+
+for _child in (ContactEmail, ContactPhone):
+    post_save.connect(_resync_contact, sender=_child, dispatch_uid=f"contact.sync.{_child.__name__}")
+    post_delete.connect(
+        _resync_contact, sender=_child, dispatch_uid=f"contact.unsync.{_child.__name__}"
+    )
+
+# Django sends pre_delete for the contact before its rows are removed and post_delete
+# after, for a model delete and a queryset delete alike; the counter brackets the cascade.
+pre_delete.connect(_contact_deleting, sender=Contact, dispatch_uid="contact.deleting")
+post_delete.connect(_contact_deleted, sender=Contact, dispatch_uid="contact.deleted")

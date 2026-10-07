@@ -135,6 +135,46 @@ def is_hidden(model, fieldname: str, user: str | None = None) -> bool:
     return fieldname in hidden_from(model, user)
 
 
+def privileged_write_fields(model) -> set[str]:
+    """Fieldnames everybody reads and only a privileged role writes: upstream's
+    permlevel-1 fields.
+
+    The fourth tool, between :func:`readonly_fields` (nobody writes) and plain writable.
+    ``User.user_emails`` forced it: the Profile screen shows every user their outgoing
+    accounts and lets them add one, but upstream keeps the table at permlevel 1
+    (``user.json``), where System Manager alone may write it, so a Sales User cannot
+    attach an outgoing account to themselves. Anyone else's value is **dropped before
+    validation**, which is what upstream does: ``document.py:_validate_perm_levels``
+    resets a field the caller may not write to its stored value, silently, and the save
+    goes through. Declared per model::
+
+        class User(...):
+            PRIVILEGED_WRITE_FIELDS = ("user_emails",)
+            PRIVILEGED_WRITE_ROLES = ("System Manager",)
+
+    ``PRIVILEGED_WRITE_ROLES`` defaults to :func:`privileged_roles`.
+    """
+    return set(getattr(model, "PRIVILEGED_WRITE_FIELDS", ()) or ())
+
+
+def privileged_write_roles(model) -> set[str]:
+    return set(getattr(model, "PRIVILEGED_WRITE_ROLES", None) or privileged_roles(model))
+
+
+def unwritable_by(model, user: str | None = None) -> set[str]:
+    """The privileged-write fields ``user`` may not write; empty for a privileged caller.
+    ``user`` defaults to the session user, for the same reason :func:`hidden_from` does."""
+    fields = privileged_write_fields(model)
+    if not fields:
+        return set()
+    from frappe_core.session import get_current_user
+
+    user = user or get_current_user()
+    if user == "Administrator" or _roles_of(user) & privileged_write_roles(model):
+        return set()
+    return fields
+
+
 def _roles_of(user: str) -> set[str]:
     """Memoised per request, the way ``crm_app.permissions.platform_docs._roles`` is.
 

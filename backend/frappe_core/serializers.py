@@ -17,7 +17,13 @@ from rest_framework import serializers
 from frappe_core import children, registry
 from frappe_core import naming as naming_strategies
 from frappe_core.exceptions import DuplicateEntryError
-from frappe_core.field_security import hidden_from, readonly_fields, restricted_fields, sensitive_fields
+from frappe_core.field_security import (
+    hidden_from,
+    readonly_fields,
+    restricted_fields,
+    sensitive_fields,
+    unwritable_by,
+)
 from frappe_core.query import wire_json_text
 
 #: Standard fields the client may never set directly; the model stamps them.
