@@ -58,6 +58,11 @@ docs/test_recordings.md
 # vite-plugin-pwa writes its dev service worker here on every `yarn dev` start.
 frontend/dev-dist/
 
+# Playwright: the signed-in browser state the setup project writes, and run output.
+frontend/tests/e2e/.auth/
+frontend/test-results/
+frontend/playwright-report/
+
 # UPSTREAM_BUGS*.md was ignored here as "local working notes". It is tracked now.
 #
 # It had grown into 33 defects found in Frappe and Frappe CRM while porting them, each
