@@ -9,6 +9,7 @@ Responses are wrapped in ``{"message": ...}``.
 
 from __future__ import annotations
 
+from django.http import HttpResponseBase
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -60,6 +61,10 @@ class MethodView(FrappeAPIView):
         if getattr(func, "__frappe_wants_request__", False):
             payload["_request"] = request
         result = func(**bind_arguments(func, payload))
+        if isinstance(result, HttpResponseBase):
+            # A file, not JSON: upstream's ``frappe.response.type = "binary"``
+            # (``export_query``). The handler built the whole response; nothing to wrap.
+            return result
         if isinstance(result, WithResponseKeys):
             # ``frappe.response[...]`` siblings of ``message``, e.g. getdoctype's ``docs``.
             return Response(
