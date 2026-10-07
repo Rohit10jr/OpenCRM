@@ -24,6 +24,9 @@ here. The data below is upstream's, verbatim, with the ``install.py`` line of ea
 
 from __future__ import annotations
 
+import json
+import pathlib
+
 from crm_app.api.dashboard import create_default_manager_dashboard
 from crm_app.models import (
     CRMCommunicationStatus,
@@ -38,6 +41,24 @@ from crm_app.models import (
     FCRMSettings,
 )
 from crm_app.models.metadata import add_standard_dropdown_items as _seed_dropdown_items
+from frappe_platform.models import Country, Language
+
+# The two lookup lists live with the framework doctypes they fill; a migration writes
+# them and this install step puts back any that were deleted (FINDINGS.md 66).
+from frappe_platform.reference_data import (  # noqa: F401 - re-exported for callers
+    GENDERS,
+    SALUTATIONS,
+    add_genders,
+    add_salutations,
+)
+
+# --- countries (frappe/geo/doctype/country/country.py:import_country_and_currency) ---------
+# The framework seeds these when a site is set up, before any app installs, from
+# ``frappe/geo/country_info.json``; a copy of that file sits in ``crm_app/data``. They are
+# the Link target of ``Address.country`` (FINDINGS.md 45). The Currency rows the same
+# import writes are not ported: nothing in the CRM reads them.
+
+COUNTRY_INFO = pathlib.Path(__file__).resolve().parent / "data" / "country_info.json"
 
 # --- statuses (install.py:38-158) ----------------------------------------------------------
 
@@ -348,6 +369,50 @@ def _exists(model, name: str) -> bool:
     return model._default_manager.filter(pk=name).exists()
 
 
+def add_countries() -> int:
+    """``country.py:53-75``: one Country per entry of ``country_info.json``, named after
+    the country, with the framework's fallbacks for the two formats."""
+    data = json.loads(COUNTRY_INFO.read_text(encoding="utf-8"))
+    existing = set(Country._default_manager.values_list("pk", flat=True))
+    written = 0
+    for name, info in data.items():
+        if name in existing:
+            continue
+        Country(
+            country_name=name,
+            code=info.get("code") or "",
+            date_format=info.get("date_format") or "dd-mm-yyyy",
+            time_format=info.get("time_format") or "HH:mm:ss",
+            time_zones="\n".join(info.get("timezones") or []),
+        ).save()
+        written += 1
+    return written
+
+
+LANGUAGES = pathlib.Path(__file__).resolve().parent / "data" / "languages.csv"
+
+
+def add_languages() -> int:
+    """``language.py:sync_languages``: one Language per row of ``languages.csv``, named
+    after its code, enabled as the file says. The Link target of ``User.language``
+    (FINDINGS.md 58)."""
+    import csv
+
+    existing = set(Language._default_manager.values_list("pk", flat=True))
+    written = 0
+    with LANGUAGES.open(encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            if row["language_code"] in existing:
+                continue
+            Language(
+                language_code=row["language_code"],
+                language_name=row["language_name"],
+                enabled=str(row.get("enabled", "0")).strip() == "1",
+            ).save()
+            written += 1
+    return written
+
+
 def add_default_lead_statuses() -> int:
     written = 0
     for status, spec in LEAD_STATUSES.items():
@@ -490,6 +555,10 @@ def after_install(force: bool = False) -> dict[str, int]:
     _layout, dashboard_written = create_default_manager_dashboard(force)
     return {
         "lead_statuses": add_default_lead_statuses(),
+        "countries": add_countries(),
+        "languages": add_languages(),
+        "genders": add_genders(),
+        "salutations": add_salutations(),
         "deal_statuses": add_default_deal_statuses(),
         "communication_statuses": add_default_communication_statuses(),
         "fields_layouts": add_default_fields_layout(force),

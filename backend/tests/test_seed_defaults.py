@@ -45,6 +45,11 @@ def seeded(administrator):
 def test_the_first_run_writes_every_group(seeded):
     assert seeded == {
         "lead_statuses": 7,
+        "countries": 250,
+        "languages": 82,
+        # Written by frappe_platform migration 0014, so the install step finds them.
+        "genders": 0,
+        "salutations": 0,
         "deal_statuses": 7,
         "communication_statuses": 2,
         "fields_layouts": 14,
@@ -59,6 +64,18 @@ def test_the_first_run_writes_every_group(seeded):
 
 
 def test_lead_and_deal_statuses_match_upstream(seeded):
+def test_the_countries_come_from_the_frameworks_list(seeded):
+    """``country.py:import_country_and_currency`` over ``country_info.json``: the Link
+    target of ``Address.country`` (FINDINGS.md 45)."""
+    from frappe_platform.models import Country
+
+    assert Country.objects.count() == 250
+    india = Country.objects.get(pk="India")
+    assert india.code == "in"
+    assert "Asia/Kolkata" in india.time_zones
+    assert india.date_format and india.time_format
+
+
     ordered = CRMLeadStatus.objects.order_by("position").values_list("lead_status", flat=True)
     assert list(ordered) == ["New", "Contacted", "Nurture", "Qualified", "Converted", "Unqualified", "Junk"]
     qualified = CRMLeadStatus.objects.get(pk="Qualified")

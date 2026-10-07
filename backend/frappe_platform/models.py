@@ -20,7 +20,7 @@ from django.db.models.signals import post_delete, post_save, pre_delete
 from django.utils import timezone
 
 from frappe_core.assignment import register_todo_model
-from frappe_core.exceptions import ValidationError
+from frappe_core.exceptions import MandatoryError, ValidationError, throw
 from frappe_core.models import BaseDocument
 from frappe_core.naming import FieldValue, Hash, Prompt, append_number_if_name_exists
 from frappe_core.registry import register_doctype
@@ -302,19 +302,46 @@ class Contact(BaseDocument):
     last_name = models.CharField(max_length=140, blank=True, default="")
     EMAIL_FIELDS = ("email_id",)
 
-    full_name = models.CharField(max_length=420, blank=True, default="")
-    salutation = models.CharField(max_length=140, blank=True, default="")
-    company_name = models.CharField(max_length=140, blank=True, default="")
-    designation = models.CharField(max_length=140, blank=True, default="")
-    gender = models.CharField(max_length=140, blank=True, default="")
-    image = models.CharField(max_length=500, blank=True, default="")
+    full_name = models.CharField("Full Name", max_length=420, blank=True, default="")
+    salutation = models.CharField("Salutation", max_length=140, blank=True, default="")
+    company_name = models.CharField("Company Name", max_length=140, blank=True, default="")
+    designation = models.CharField("Designation", max_length=140, blank=True, default="")
+    gender = models.CharField("Gender", max_length=140, blank=True, default="")
+    image = models.CharField("Image", max_length=500, blank=True, default="")
+    #: ``contact.json``: a Select, default Passive, and a standard filter. It is the
+    #: first of the three quick filters the contacts list is installed with
+    #: (``crm/install.py:514``), which had been silently dropped for want of the column.
+    status = models.CharField(
+        "Status",
+        max_length=20,
+        choices=[(s, s) for s in ("Passive", "Open", "Replied")],
+        blank=True,
+        default="Passive",
+    )
+
+    #: ``contact.json``: ``salutation`` and ``gender`` are Links. The columns stay text,
+    #: as they are on CRM Lead and CRM Deal, and the metadata the forms read says Link,
+    #: so both render as dropdowns over the two lookup doctypes (FINDINGS.md 66).
+    LINK_FIELDS = {"salutation": "Salutation", "gender": "Gender"}
+    #: ``contact.json``'s Link to Address, which the seeded Contact layouts carry and the
+    #: contact page edits through the Address dialog (FINDINGS.md 45). A foreign key,
+    #: unlike the organization's ``address``: Contact has no JSON in doctype_meta.json,
+    #: so its field metadata comes from the model, and only a key reads as a Link.
+    address = models.ForeignKey(
+        "Address",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contacts",
+        verbose_name="Address",
+    )
     user = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True, related_name="contacts"
     )
     # Denormalised from the child tables below.
-    email_id = models.CharField(max_length=140, blank=True, default="")
-    mobile_no = models.CharField(max_length=140, blank=True, default="")
-    phone = models.CharField(max_length=140, blank=True, default="")
+    email_id = models.CharField("Email Address", max_length=140, blank=True, default="")
+    mobile_no = models.CharField("Mobile No", max_length=140, blank=True, default="")
+    phone = models.CharField("Phone", max_length=140, blank=True, default="")
 
     class Meta:
         ordering = ["-modified"]
@@ -956,3 +983,274 @@ for _child in (ContactEmail, ContactPhone):
 # after, for a model delete and a queryset delete alike; the counter brackets the cascade.
 pre_delete.connect(_contact_deleting, sender=Contact, dispatch_uid="contact.deleting")
 post_delete.connect(_contact_deleted, sender=Contact, dispatch_uid="contact.deleted")
+def _document_title(doctype: str, name: str) -> str:
+    """``Document.get_title``: the ``title_field`` value when the doctype declares one,
+    else the name. What a Dynamic Link row's ``link_title`` shows."""
+    from frappe_core import registry
+
+    if not registry.has_doctype(doctype):
+        return name
+    model = registry.get_model(doctype)
+    title_field = (getattr(model, "_doc_meta", None) or {}).get("title_field")
+    if not title_field:
+        return name
+    value = model._default_manager.filter(pk=name).values_list(title_field, flat=True).first()
+    return value or name
+
+
+@register_doctype("Country")
+class Country(BaseDocument):
+    """Frappe ``Country`` (``frappe/geo/doctype/country/country.json``), the Link target
+    of ``Address.country`` (FINDINGS.md 45).
+
+    The framework seeds it when a site is set up, before any app installs
+    (``country.py:import_country_and_currency``, from ``frappe/geo/country_info.json``);
+    here ``manage.py seed_defaults`` does, from a copy of that file in ``crm_app/data``.
+    The Currency rows the same import writes are not ported: nothing in the CRM reads
+    them. ``country.json``: everyone reads, System Manager writes
+    (``crm_app/permissions/platform_docs.py``).
+    """
+
+    country_name = models.CharField("Country Name", max_length=140, unique=True)
+    date_format = models.CharField("Date Format", max_length=140, blank=True, default="")
+    time_format = models.CharField("Time format", max_length=140, blank=True, default="")
+    time_zones = models.TextField("Time Zones", blank=True, default="")
+    code = models.CharField("Code", max_length=140, blank=True, default="")
+
+    class Meta:
+        ordering = ["name"]
+        name_strategy = FieldValue("country_name", label="Country Name")
+
+
+@register_doctype("Language")
+class Language(BaseDocument):
+    """Frappe ``Language`` (``frappe/core/doctype/language/language.json``), the Link
+    target of ``User.language``: the Language picker in Settings -> Preferences
+    (FINDINGS.md 58).
+
+    Named after its code (``autoname: field:language_code``). The picker shows and
+    searches the name (``show_title_field_in_link``, ``search_fields``), and offers only
+    enabled rows. The framework fills the table from ``frappe/geo/languages.csv`` when a
+    site is set up (``language.py:sync_languages``); here ``manage.py seed_defaults``
+    does, from a copy in ``crm_app/data``, and ``enabled`` is that file's own column.
+    ``language.json``: everyone reads, System Manager writes
+    (``crm_app/permissions/platform_docs.py``).
+
+    Choosing a language stores its code on the user and nothing more: this port ships no
+    translation catalogues (``crm.api.get_translations`` answers ``{}``), so the
+    interface stays in English whichever one is picked.
+    """
+
+    language_code = models.CharField("Language Code", max_length=140, unique=True)
+    language_name = models.CharField("Language Name", max_length=140)
+    flag = models.CharField("Flag", max_length=140, blank=True, default="")
+    based_on = models.CharField("Based On", max_length=140, blank=True, default="")
+    enabled = models.BooleanField("Enabled", default=False)
+
+    #: ``search_fields`` and ``title_field``: what ``search_link`` matches besides the
+    #: name, and the label it shows in place of it.
+    SEARCH_FIELD = "language_name"
+    SHOW_TITLE_FIELD_IN_LINK = True
+
+    class Meta:
+        ordering = ["name"]
+        name_strategy = FieldValue("language_code", label="Language Code")
+
+
+@register_doctype("Salutation")
+class Salutation(BaseDocument):
+    """Frappe ``Salutation`` (``frappe/contacts/doctype/salutation/salutation.json``):
+    the Link target of ``salutation`` on a contact, a lead and a deal (FINDINGS.md 66).
+
+    One field, which is also the name (``autoname: field:salutation``). The framework's
+    setup wizard writes nine of them (``install_fixtures.py:update_salutations``); here
+    ``manage.py seed_defaults`` does. ``salutation.json``: everyone reads, System Manager
+    writes (``crm_app/permissions/platform_docs.py``).
+    """
+
+    salutation = models.CharField("Salutation", max_length=140, unique=True)
+
+    class Meta:
+        ordering = ["name"]
+        name_strategy = FieldValue("salutation", label="Salutation")
+
+
+@register_doctype("Gender")
+class Gender(BaseDocument):
+    """Frappe ``Gender`` (``frappe/contacts/doctype/gender/gender.json``): the Link target
+    of ``gender`` on a contact, a lead and a deal (FINDINGS.md 66). Same shape as
+    :class:`Salutation`; seven rows from ``install_fixtures.py:update_genders``."""
+
+    gender = models.CharField("Gender", max_length=140, unique=True)
+
+    class Meta:
+        ordering = ["name"]
+        name_strategy = FieldValue("gender", label="Gender")
+
+
+#: ``address.json`` ``address_type`` options, in order.
+ADDRESS_TYPES = (
+    "Billing",
+    "Shipping",
+    "Office",
+    "Personal",
+    "Plant",
+    "Postal",
+    "Shop",
+    "Subsidiary",
+    "Warehouse",
+    "Current",
+    "Permanent",
+    "Other",
+)
+
+
+@register_doctype("Address")
+class Address(BaseDocument):
+    """Frappe ``Address`` (``frappe/contacts/doctype/address/``), the target of the
+    ``address`` Link on CRM Organization and Contact (FINDINGS.md 45).
+
+    The Vue app creates one through the generic doctype dialog
+    (``Organization.vue:showAddressModal`` -> ``frappe.client.insert``) with the seeded
+    Address Quick Entry layout, then writes the new name onto the organization or
+    contact. The labels on the fields are upstream's, since this doctype has no entry in
+    ``doctype_meta.json`` and the metadata falls back to the model.
+
+    ``links`` is a Table of Dynamic Link (``address.json``), declared here the way
+    CRM Call Log declares its own. Upstream's ``validate`` runs four steps over those
+    rows; here they run in :meth:`save`, after the row has a name and after the
+    serializer has written the rows (it saves the parent a second time once they are
+    in), which reaches the same state.
+
+    Not ported: ``get_address_display`` and the Address Template it renders, which no
+    CRM screen calls, and ``address_title`` falling back to the first link's title in
+    ``autoname``, which needs rows that do not exist yet when the name is assigned here.
+    ``address.json``: every role reads, writes and creates; only System Manager deletes
+    (``crm_app/permissions/platform_docs.py``).
+    """
+
+    address_title = models.CharField("Address Title", max_length=140, blank=True, default="")
+    address_type = models.CharField(
+        "Address Type", max_length=20, choices=[(t, t) for t in ADDRESS_TYPES]
+    )
+    address_line1 = models.CharField("Address Line 1", max_length=240)
+    address_line2 = models.CharField("Address Line 2", max_length=240, blank=True, default="")
+    city = models.CharField("City/Town", max_length=140)
+    county = models.CharField("County", max_length=140, blank=True, default="")
+    state = models.CharField("State/Province", max_length=140, blank=True, default="")
+    country = models.ForeignKey(
+        Country, on_delete=models.PROTECT, related_name="addresses", verbose_name="Country"
+    )
+    pincode = models.CharField("Postal Code", max_length=140, blank=True, default="")
+    email_id = models.CharField("Email Address", max_length=140, blank=True, default="")
+    phone = models.CharField("Phone", max_length=140, blank=True, default="")
+    fax = models.CharField("Fax", max_length=140, blank=True, default="")
+    is_primary_address = models.BooleanField("Preferred Billing Address", default=False)
+    is_shipping_address = models.BooleanField("Preferred Shipping Address", default=False)
+    disabled = models.BooleanField("Disabled", default=False)
+
+    #: ``links``, the Table of Dynamic Link in address.json.
+    POLYMORPHIC_CHILD_TABLES = {"links": "Dynamic Link"}
+    #: ``email_id`` is ``options: Email`` in address.json, so it is validated as one.
+    EMAIL_FIELDS = ("email_id",)
+    #: ``address.py:92``: the two flags only one address per linked document may carry.
+    PREFERRED_FLAGS = ("is_primary_address", "is_shipping_address")
+
+    class Meta:
+        ordering = ["name"]
+
+    def _assign_name(self) -> bool:
+        """``Address.autoname`` (address.py:60-71): ``<title>-<type>``, and on a collision
+        the numbered form ``make_autoname("<title>-<type>-.#")`` produces, which is
+        ``-1``, ``-2`` ... as :func:`append_number_if_name_exists` counts them."""
+        if self.pk:
+            return False
+        title = (self.address_title or "").strip()
+        if not title:
+            raise ValidationError("Address Title is mandatory.")
+        base = f"{title}-{str(self.address_type or '').strip()}"
+        self.pk = append_number_if_name_exists(type(self), base)
+        return True
+
+    def link_rows(self):
+        return DynamicLink._default_manager.filter(
+            parenttype="Address", parent=str(self.pk)
+        ).order_by("idx", "pk")
+
+    def save(self, *args, **kwargs):
+        creating = self._state.adding
+        super().save(*args, **kwargs)
+        # address.py:73-77, `validate`, over the rows now in the table.
+        if creating:
+            self.link_address()
+        self.deduplicate_links()
+        self.set_link_title()
+        self.validate_preferred_address()
+
+    def link_address(self) -> bool:
+        """``address.py:79-89``: an address created without links takes the links of
+        the Contact whose email is the owner's, which is how a portal user's address
+        attaches to their own customer."""
+        if self.link_rows().exists():
+            return False
+        contact = Contact._default_manager.filter(email_id=self.owner_id).first()
+        if contact is None:
+            return False
+        rows = DynamicLink._default_manager.filter(
+            parenttype="Contact", parent=str(contact.pk)
+        ).order_by("idx", "pk")
+        for idx, row in enumerate(rows, start=1):
+            DynamicLink(
+                parenttype="Address",
+                parent=str(self.pk),
+                parentfield="links",
+                idx=idx,
+                link_doctype=row.link_doctype,
+                link_name=row.link_name,
+            ).save()
+        return rows.exists()
+
+    def deduplicate_links(self) -> None:
+        """``dynamic_link.py:deduplicate_dynamic_links``: one row per (doctype, name),
+        the first kept."""
+        seen: set[tuple[str, str]] = set()
+        for row in self.link_rows():
+            key = (row.link_doctype, row.link_name)
+            if key in seen:
+                row.delete()
+            else:
+                seen.add(key)
+
+    def set_link_title(self) -> None:
+        """``address_and_contact.py:set_link_title``: each row's ``link_title`` is the
+        linked document's title, or its name."""
+        for row in self.link_rows():
+            title = _document_title(row.link_doctype, row.link_name)
+            if row.link_title != title:
+                type(row)._default_manager.filter(pk=row.pk).update(link_title=title)
+
+    def validate_preferred_address(self) -> None:
+        """``address.py:91-100``: a preferred flag set here is cleared on every other
+        enabled address linked to the same document."""
+        for flag in self.PREFERRED_FLAGS:
+            if not getattr(self, flag):
+                continue
+            for row in self.link_rows():
+                others = (
+                    DynamicLink._default_manager.filter(
+                        parenttype="Address",
+                        link_doctype=row.link_doctype,
+                        link_name=row.link_name,
+                    )
+                    .exclude(parent=str(self.pk))
+                    .values_list("parent", flat=True)
+                )
+                type(self)._default_manager.filter(
+                    pk__in=list(others), disabled=False, **{flag: True}
+                ).update(**{flag: False})
+
+    def has_link(self, doctype: str, name: str) -> bool:
+        """``address.py:105-108``."""
+        return self.link_rows().filter(link_doctype=doctype, link_name=name).exists()
+
+

@@ -379,3 +379,73 @@ def invitation_has_permission(doc, ptype: str = "read", user: str | None = None)
     if user == "Administrator":
         return True
     return bool(_roles(user) & MAIL_ADMIN_ROLES)
+
+
+# ---------------------------------------------------------------------------
+# Address and Country (FINDINGS.md 45)
+# ---------------------------------------------------------------------------
+#
+# Two framework doctypes the organization and contact screens reach through the
+# `address` Link. Upstream's role tables, reproduced:
+#
+# * `address.json`: Sales User, and `All`, read, write and create; only System Manager
+#   deletes. An address is shared data with no secret on it, and the dialog that
+#   creates one is open to every role.
+# * `country.json`: `All` reads; System Manager writes. Reference data seeded once
+#   from the framework's list.
+
+
+def address_query_conditions(doctype: str, user: str | None = None):
+    """No row restriction, as upstream: every role reads every address."""
+    return None
+
+
+def address_has_permission(doc, ptype: str = "read", user: str | None = None):
+    """Read, write and create for everyone; delete for System Manager only."""
+    user = user or get_current_user()
+    if ptype != "delete":
+        return True
+    return _is_admin(user)
+
+
+def country_query_conditions(doctype: str, user: str | None = None):
+    """Everyone reads the list; it is what the Country picker shows."""
+    return None
+
+
+def country_has_permission(doc, ptype: str = "read", user: str | None = None):
+    """Read for everyone; write, create and delete for System Manager, as
+    ``country.json`` grants."""
+    user = user or get_current_user()
+    if ptype == "read":
+        return True
+    return _is_admin(user)
+
+
+def reference_data_query_conditions(doctype: str, user: str | None = None):
+    """Everyone reads the list. For the small lookup doctypes a picker shows -
+    ``Salutation`` and ``Gender`` (FINDINGS.md 66)."""
+    return None
+
+
+def reference_data_has_permission(doc, ptype: str = "read", user: str | None = None):
+    """Read for everyone; write, create and delete for System Manager, as
+    ``salutation.json`` and ``gender.json`` grant."""
+    user = user or get_current_user()
+    if ptype == "read":
+        return True
+    return _is_admin(user)
+
+
+def language_query_conditions(doctype: str, user: str | None = None):
+    """Everyone reads the list; it is what the Language picker shows."""
+    return None
+
+
+def language_has_permission(doc, ptype: str = "read", user: str | None = None):
+    """Read for everyone; write, create and delete for System Manager, as
+    ``language.json`` grants (FINDINGS.md 58)."""
+    user = user or get_current_user()
+    if ptype == "read":
+        return True
+    return _is_admin(user)
