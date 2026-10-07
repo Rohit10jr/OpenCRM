@@ -342,7 +342,12 @@ class Contact(BaseDocument):
         verbose_name="Address",
     )
     user = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="contacts"
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contacts",
+        verbose_name="User Id",
     )
     # Denormalised from the child tables below.
     email_id = models.CharField("Email Address", max_length=140, blank=True, default="")

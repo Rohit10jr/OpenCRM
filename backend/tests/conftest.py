@@ -63,6 +63,14 @@ def builtin_users(request):
             },
         )
 
+    # The salutations and genders are written by a migration too, and a
+    # ``transaction=True`` test flushes them the same way. A lead or contact that
+    # carries one is refused without the row (frappe_core/links.py), so they are put
+    # back here. One ``exists()`` per table when they are already there.
+    from frappe_platform.reference_data import ensure_reference_rows
+
+    ensure_reference_rows()
+
 
 @pytest.fixture
 def make_user(db):
