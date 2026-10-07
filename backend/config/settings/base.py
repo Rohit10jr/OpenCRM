@@ -297,7 +297,7 @@ CHANNEL_LAYERS = {
     }
 }
 
-# Integration feature flags (specs/PHASE_7_INTEGRATIONS.md) - all off.
+# Integration feature flags (docs/history/PHASE_7_INTEGRATIONS.md) - all off.
 ENABLE_ERPNEXT = env.bool("ENABLE_ERPNEXT", default=False)
 ENABLE_TWILIO = env.bool("ENABLE_TWILIO", default=False)
 ENABLE_EXOTEL = env.bool("ENABLE_EXOTEL", default=False)

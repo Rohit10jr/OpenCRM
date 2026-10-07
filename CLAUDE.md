@@ -9,8 +9,8 @@ existing Vue frontend.
 |---|---|
 | **`specs/AS_BUILT.md`** | **What already exists. Read this first** |
 | `PORT_PLAN.md` | Source inventory, frontend contract, settled architecture decisions |
-| `specs/README.md` | Index of per-phase specs and their status |
-| `specs/PHASE_<N>_*.md` | Your phase's spec |
+| `docs/history/SPECS_README.md` | Index of the per-phase specs, moved to history on 7 Oct 2026 |
+| `docs/history/PHASE_<N>_*.md` | The spec of the phase that built what you are touching; the decisions in them still apply |
 | **`specs/SECURITY_MODEL.md`** | **Required before touching any permission rule or field-visibility declaration.** Per-doctype comparison with upstream, the four field tools and when each applies |
 | `specs/UNROUTED_DOCTYPES.md` | Doctypes withheld from `/api/resource/`, and why |
 | `specs/VERSION_HISTORY.md` | What change history is recorded and pruned. **Read before touching `clear_old_versions`** — its name invites a change that deletes the timeline |

@@ -11,7 +11,7 @@ else in `frontend/` differs.
 
 ## Why
 
-`PORT_PLAN.md` section 10 and `specs/PHASE_0_FOUNDATION.md` section 7: the Django port
+`PORT_PLAN.md` section 10 and `docs/history/PHASE_0_FOUNDATION.md` section 7: the Django port
 authenticates with JWT bearer tokens, not Frappe's `sid` session cookie. This is the
 **only** sanctioned deviation from the Frappe wire protocol - the 225 `createResource` /
 `createListResource` / `createDocumentResource` call sites are untouched, and every URL,
