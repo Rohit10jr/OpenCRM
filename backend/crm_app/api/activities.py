@@ -83,7 +83,7 @@ def get_linked_tasks(name: str) -> list[dict]:
 
 
 def get_linked_calls(name: str) -> dict:
-    """``activities.py:373-459``.
+    """``activities.py:376-467``.
 
     Two sources, both ported now that ``Dynamic Link`` exists (C5):
 
@@ -162,6 +162,14 @@ def get_linked_calls(name: str) -> dict:
         if task_names
         else []
     )
+
+    # `activities.py:465`, the line the first port of this function stopped short of.
+    # `CallArea.vue` reads `call._caller.image` and `call._receiver.label` straight off
+    # each row, so an unparsed call cannot be drawn and the Calls tab stays empty
+    # (FINDINGS.md 69).
+    from crm_app.models.telephony import parse_call_log
+
+    calls = [parse_call_log(call) for call in calls]
 
     return {"calls": calls, "notes": notes, "tasks": tasks}
 
