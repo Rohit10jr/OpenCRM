@@ -503,13 +503,14 @@ def add_default_quick_filters() -> int:
     return written
 
 
-def add_standard_dropdown_items() -> int:
-    """``install.py:530-542``. ``FCRMSettings.load`` seeds a row it creates itself."""
+def add_standard_dropdown_items(force: bool = False) -> int:
+    """``install.py:530-542``. ``FCRMSettings.load`` seeds a row it creates itself.
+    ``force`` restores the standard rows (FINDINGS.md 78); custom rows stay."""
     existed = _exists(FCRMSettings, FCRMSettings.singleton_name())
     settings = FCRMSettings.load()
     if not existed:
         return settings.dropdown_items.count()
-    return _seed_dropdown_items(settings)
+    return _seed_dropdown_items(settings, force=force)
 
 
 def create_product_details_script(doctype: str) -> int:
@@ -554,11 +555,11 @@ def after_install(force: bool = False) -> dict[str, int]:
     """``install.py:17-35``, in upstream's order. Returns the rows written per group."""
     _layout, dashboard_written = create_default_manager_dashboard(force)
     return {
-        "lead_statuses": add_default_lead_statuses(),
         "countries": add_countries(),
         "languages": add_languages(),
         "genders": add_genders(),
         "salutations": add_salutations(),
+        "lead_statuses": add_default_lead_statuses(),
         "deal_statuses": add_default_deal_statuses(),
         "communication_statuses": add_default_communication_statuses(),
         "fields_layouts": add_default_fields_layout(force),
@@ -566,7 +567,7 @@ def after_install(force: bool = False) -> dict[str, int]:
         "lead_sources": add_default_lead_sources(),
         "lost_reasons": add_default_lost_reasons(),
         "quick_filters": add_default_quick_filters(),
-        "dropdown_items": add_standard_dropdown_items(),
+        "dropdown_items": add_standard_dropdown_items(force),
         "form_scripts": add_default_scripts(),
         "dashboard": int(dashboard_written),
     }

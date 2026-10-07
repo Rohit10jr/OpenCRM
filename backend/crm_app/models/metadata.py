@@ -439,7 +439,13 @@ STANDARD_DROPDOWN_ITEMS = (
 )
 
 
-def add_standard_dropdown_items(settings: FCRMSettings) -> int:
+#: What ``force`` puts back on a standard row. ``hidden`` and ``open_in_new_window`` are
+#: left as the administrator set them: hiding "Login to Frappe Cloud" is a choice, not
+#: damage.
+_RESTORED_DROPDOWN_FIELDS = ("label", "type", "route", "icon")
+
+
+def add_standard_dropdown_items(settings: FCRMSettings, force: bool = False) -> int:
     """``crm/install.py:530-542``: seed the standard items, unless the row has any.
 
     Returns the number of rows written. Upstream appends them through the document, so
@@ -447,12 +453,42 @@ def add_standard_dropdown_items(settings: FCRMSettings) -> int:
     order; the same here, through ``BaseDocument.save``. ``FCRMSettings.load`` calls
     this for a row it creates; migration ``crm_app/0010`` covered the rows that existed
     before it.
+
+    ``force`` restores the standard rows by their Name - Label, Type, Route and Icon back
+    to what the app ships, a missing one re-added at the end - and leaves custom rows
+    alone. The Home Actions grid lets a standard row's Type be switched to Separator,
+    and done to Settings that removes the only way into Settings (FINDINGS.md 78,
+    upstream bug 47). Upstream's function returns early while any row exists; its way
+    back is Desk, which this port does not have.
     """
-    if settings.dropdown_items.exists():
+    rows = settings.dropdown_items
+    if not rows.exists():
+        for idx, item in enumerate(STANDARD_DROPDOWN_ITEMS, start=1):
+            CRMDropdownItem(parent_settings=settings, idx=idx, **item).save()
+        return len(STANDARD_DROPDOWN_ITEMS)
+    if not force:
         return 0
-    for idx, item in enumerate(STANDARD_DROPDOWN_ITEMS, start=1):
-        CRMDropdownItem(parent_settings=settings, idx=idx, **item).save()
-    return len(STANDARD_DROPDOWN_ITEMS)
+
+    written = 0
+    next_idx = (rows.aggregate(models.Max("idx"))["idx__max"] or 0) + 1
+    for item in STANDARD_DROPDOWN_ITEMS:
+        shipped = {field: item.get(field, "") for field in _RESTORED_DROPDOWN_FIELDS}
+        row = rows.filter(name1=item["name1"]).first()
+        if row is None:
+            CRMDropdownItem(
+                parent_settings=settings, idx=next_idx, name1=item["name1"], is_standard=True, **shipped
+            ).save()
+            next_idx += 1
+            written += 1
+            continue
+        if all(getattr(row, field) == value for field, value in shipped.items()) and row.is_standard:
+            continue
+        for field, value in shipped.items():
+            setattr(row, field, value)
+        row.is_standard = True
+        row.save()
+        written += 1
+    return written
 
 
 __all__ = [
