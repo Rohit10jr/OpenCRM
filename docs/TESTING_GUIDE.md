@@ -94,9 +94,10 @@ transpiles some 1,300 files before `main.js` can run, a minute or two on this ma
 (FINDINGS.md 29). The screen is blank until then; the browser's Network tab shows the
 modules streaming in. Reloads after that are quick. Start the server once and leave it
 running, since every restart is cold, and never start a second Vite against the same
-tree. The three lines it prints at startup (no local frappe-ui plugin, no
-`common_site_config.json`, no build output directory) are bench assumptions and mean
-nothing here.
+tree. The two lines it prints at startup (no local frappe-ui plugin, no build output
+directory) are bench assumptions and mean nothing here. If it prints the first line and
+nothing else, read FINDINGS.md 48: frappe-ui's proxy plugin loops forever on Windows,
+which is why `vite.config.js` sets the proxy itself.
 
 **Reference data.** Run `python manage.py seed_defaults` once after `migrate`. It writes
 what Frappe CRM's install step writes (statuses, the Quick Entry and side-panel layouts,
