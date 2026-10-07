@@ -180,6 +180,9 @@ def test_only_webhooks_ask_for_the_request(db):
         "crm.integrations.twilio.api.twilio_incoming_call_handler",
         "crm.integrations.twilio.api.update_recording_info",
         "crm.integrations.twilio.api.update_call_status_info",
+        # The one non-webhook: a multipart body, whose file part is not a parameter
+        # (FINDINGS.md 49).
+        "upload_file",
     }
 
 

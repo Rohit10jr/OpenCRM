@@ -37,6 +37,25 @@ function writeUserCookie(user) {
     : `${USER_COOKIE}=; path=/; Max-Age=0; SameSite=Lax`
 }
 
+/**
+ * The one request the interceptor cannot reach: a private file. A note's `<img>` and an
+ * attachment's link are plain browser fetches of `/private/files/<name>`, with no way to
+ * carry a header, so the access token also travels as a cookie scoped to that path alone
+ * (docs/FINDINGS.md 49). The backend reads it only there and only on a GET
+ * (`frappe_core/file_views.py`), so it grants nothing on `/api/`, and `SameSite=Lax`
+ * keeps it off a request another site makes for the URL. It is rewritten on every
+ * refresh, with the token it copies.
+ */
+const FILE_COOKIE = 'access_token'
+const FILE_COOKIE_PATH = '/private/files'
+
+function writeFileCookie(access) {
+  const secure = window.location.protocol === 'https:' ? '; Secure' : ''
+  document.cookie = access
+    ? `${FILE_COOKIE}=${access}; path=${FILE_COOKIE_PATH}; SameSite=Lax${secure}`
+    : `${FILE_COOKIE}=; path=${FILE_COOKIE_PATH}; Max-Age=0; SameSite=Lax`
+}
+
 export function getAccessToken() {
   return localStorage.getItem(ACCESS_KEY)
 }
@@ -49,12 +68,14 @@ export function setTokens({ access, refresh }) {
   if (access) localStorage.setItem(ACCESS_KEY, access)
   if (refresh) localStorage.setItem(REFRESH_KEY, refresh)
   writeUserCookie(getTokenUser())
+  if (access) writeFileCookie(access)
 }
 
 export function clearTokens() {
   localStorage.removeItem(ACCESS_KEY)
   localStorage.removeItem(REFRESH_KEY)
   writeUserCookie(null)
+  writeFileCookie(null)
 }
 
 let refreshInFlight = null

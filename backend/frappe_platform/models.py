@@ -13,7 +13,12 @@ carries a confidence note; the set is flagged in docs/internal/PROGRESS.md for r
 """
 
 import contextvars
+import re
+import shutil
+from html import escape
+from urllib.parse import quote, unquote
 
+from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 from django.db.models.signals import post_delete, post_save, pre_delete
@@ -22,6 +27,7 @@ from django.utils import timezone
 from frappe_core.assignment import register_todo_model
 from frappe_core.exceptions import MandatoryError, ValidationError, throw
 from frappe_core.models import BaseDocument
+from frappe_platform import files as file_store
 from frappe_core.naming import FieldValue, Hash, Prompt, append_number_if_name_exists
 from frappe_core.registry import register_doctype
 from frappe_core.secrets import EncryptedFieldsMixin
@@ -715,6 +721,10 @@ class File(BaseDocument):
     content_hash = models.CharField(max_length=140, blank=True, default="")
 
     class Meta:
+#: ``file.py:189``: what may not appear in ``attached_to_field``.
+_SPECIAL_CHAR_PATTERN = re.compile(r"[\W]", flags=re.UNICODE)
+
+
         ordering = ["-creation"]
         name_strategy = Hash()
         indexes = [
@@ -767,6 +777,315 @@ class EmailAccount(EncryptedFieldsMixin, BaseDocument):
     # Frappe stores this encrypted; phase 7 owns real credential handling.
     password = models.CharField(max_length=280, blank=True, default="")
     no_smtp_authentication = models.BooleanField(default=False)
+    # ------------------------------------------------------------------ lifecycle
+
+    @property
+    def is_remote_file(self) -> bool:
+        """``file.py:87-90``."""
+        if self.file_url:
+            return self.file_url.startswith(file_store.URL_PREFIXES)
+        return not self._content
+
+    def save(self, *args, **kwargs):
+        creating = self._state.adding
+        if creating:
+            self._before_insert()
+        else:
+            self._handle_is_private_changed()
+        self._validate()
+        super().save(*args, **kwargs)
+        if creating:
+            self._create_attachment_record()
+
+    def delete(self, *args, **kwargs):
+        """``file.py:240-248`` (``on_trash``). The bytes go in the ``pre_delete`` receiver
+        below, so a cascade from the referenced document's own deletion
+        (``frappe_core.children``) clears them too; the "Attachment Removed" comment is
+        added only here, on a direct delete, since in the cascade the document that would
+        carry it is itself going."""
+        self._add_comment_in_reference_doc("Attachment Removed", self.file_name)
+        return super().delete(*args, **kwargs)
+
+    def _before_insert(self) -> None:
+        """``file.py:103-138``, minus the folder tree, the extension whitelist and the
+        attachment limit, which are site settings this port does not have."""
+        if self.attached_to_doctype and not self.attached_to_name:
+            self.attached_to_doctype = ""
+            self.attached_to_field = ""
+        self.file_url = unquote(self.file_url) if self.file_url else ""
+        if not self.folder:
+            self.folder = "Home/Attachments" if self.attached_to_doctype else "Home"
+        if not self.is_private and self.file_url:
+            self.is_private = self.file_url.startswith("/private")
+        self._set_file_name()
+        if self.is_remote_file:
+            self._validate_remote_file()
+        else:
+            self._save_file(self._get_content())
+        self._validate_duplicate_entry()
+
+    def _validate(self) -> None:
+        """``file.py:167-182``: the reference and URL checks. ``validate_file_on_disk`` is
+        left out, see the class docstring."""
+        if self.attached_to_doctype and self.attached_to_field:
+            if _SPECIAL_CHAR_PATTERN.search(self.attached_to_field):
+                throw("The fieldname you've specified in Attached To Field is invalid")
+        self._validate_file_path()
+        self._validate_file_url()
+
+    # ------------------------------------------------------------------ naming and URL
+
+    def _set_file_name(self) -> None:
+        """``file.py:524-533``."""
+        if not self.file_name and not self.file_url:
+            throw("Fields `file_name` or `file_url` must be set for File", exc=MandatoryError)
+        elif not self.file_name and self.file_url:
+            self.file_name = self.file_url.split("/")[-1].split("?")[0]
+        else:
+            self.file_name = re.sub(r"/", "", self.file_name)
+
+    def _validate_remote_file(self) -> None:
+        """``file.py:434-438``: a URL on this very site is a local file after all."""
+        site_url = settings.SITE_URL
+        if self.file_url and "/files/" in self.file_url and self.file_url.startswith(site_url):
+            self.file_url = self.file_url.split(site_url, 1)[1]
+
+    def _validate_file_path(self) -> None:
+        """``file.py:291-299``: a local URL must stay inside its folder."""
+        if self.is_remote_file or not file_store.is_local_url(self.file_url):
+            return
+        if file_store.path_for_url(self.file_url) is None:
+            throw("The File URL you've entered is incorrect", title="Invalid File URL")
+
+    def _validate_file_url(self) -> None:
+        """``file.py:302-311``."""
+        if self.is_remote_file or not self.file_url:
+            return
+        if not self.file_url.startswith((file_store.PUBLIC_URL, file_store.PRIVATE_URL)):
+            throw("URL must start with http:// or https://", title="Invalid URL")
+
+    # ------------------------------------------------------------------ the bytes
+
+    def _disk_path(self):
+        return file_store.path_for_url(self.file_url)
+
+    def _exists_on_disk(self) -> bool:
+        """``file.py:764-765``."""
+        path = self._disk_path()
+        return bool(path is not None and path.exists())
+
+    def _get_content(self) -> bytes | None:
+        """``file.py:767-804``, for bytes: the content handed in, else the file the URL
+        names, else nothing (the class docstring says why not an error)."""
+        if self._content:
+            return self._content
+        path = self._disk_path()
+        if path is not None and path.is_file():
+            self._content = path.read_bytes()
+        return self._content
+
+    def _check_max_file_size(self, content: bytes) -> int:
+        """``file.py:942-954``."""
+        limit = file_store.max_file_size()
+        size = len(content)
+        if size > limit:
+            throw(f"File size exceeded the maximum allowed size of {limit / 1048576} MB")
+        return size
+
+    def _save_file(self, content: bytes | None) -> None:
+        """``file.py:858-940``: hash, deduplicate, name and write.
+
+        A row with the same bytes and the same privacy whose file is on disk lends its
+        URL, so the same picture uploaded twice is stored once. Otherwise the name is made
+        collision-free and the bytes are written under it.
+        """
+        if self.is_remote_file or not content:
+            return
+        self.is_private = bool(self.is_private)
+        self.file_size = self._check_max_file_size(content)
+        self.content_hash = file_store.get_content_hash(content)
+
+        duplicates = File._default_manager.filter(
+            content_hash=self.content_hash, is_private=self.is_private
+        )
+        if self.pk:
+            duplicates = duplicates.exclude(pk=self.pk)
+        duplicate = next((row for row in duplicates if row._exists_on_disk()), None)
+        if duplicate is not None:
+            if not self._exists_on_disk() or not self.file_url:
+                self.file_url = duplicate.file_url
+            return
+
+        self.file_name = file_store.generate_file_name(
+            name=self.file_name,
+            suffix=self.content_hash[-6:],
+            is_private=self.is_private,
+            content_hash=self.content_hash,
+        )
+        safe_name = file_store.get_safe_file_name(self.file_name)
+        self.file_url = file_store.file_url(safe_name, self.is_private)
+        self._write_file(content)
+
+    def _write_file(self, content: bytes) -> None:
+        """``file.py:840-856``."""
+        path = self._disk_path()
+        if path is None:
+            throw(f"There is some problem with the file url: {self.file_url}")
+        file_store.write_file(path, content)
+
+    def _generate_content_hash(self) -> None:
+        """``file.py:535-544``, without the "File does not exist" error (class docstring)."""
+        if self.content_hash or not self.file_url or self.is_remote_file:
+            return
+        path = self._disk_path()
+        if path is not None and path.is_file():
+            self.content_hash = file_store.get_content_hash(path.read_bytes())
+
+    def _validate_duplicate_entry(self) -> None:
+        """``file.py:494-522``: the same bytes already attached to the same document
+        keep their URL rather than uploading a duplicate."""
+        if not self.content_hash:
+            self._generate_content_hash()
+        if not self.content_hash:
+            return
+        rows = File._default_manager.filter(
+            content_hash=self.content_hash, is_private=self.is_private
+        )
+        if self.pk:
+            rows = rows.exclude(pk=self.pk)
+        if self.attached_to_doctype and self.attached_to_name:
+            rows = rows.filter(
+                attached_to_doctype=self.attached_to_doctype,
+                attached_to_name=self.attached_to_name,
+            )
+        duplicate = rows.first()
+        if duplicate is not None and duplicate._exists_on_disk():
+            self.file_url = duplicate.file_url
+
+    def _handle_is_private_changed(self) -> None:
+        """``file.py:313-394``: a flipped ``is_private`` moves the bytes between the
+        public and the private folder and rewrites the URL, then repoints the Attach
+        field on the document that carried the old URL. A file other rows still name is
+        copied rather than moved. The "cannot find file" refusal is a 417 here where
+        upstream raises a bare ``FileNotFoundError``."""
+        stored = (
+            File._default_manager.filter(pk=self.pk).values_list("is_private", "file_url").first()
+        )
+        if stored is None:
+            return
+        was_private, old_url = stored
+        if bool(was_private) == bool(self.is_private) or self.is_remote_file:
+            return
+        file_name = self.file_url.split("/")[-1]
+        source = file_store.get_files_path(file_name, is_private=not self.is_private)
+        target = file_store.get_files_path(file_name, is_private=bool(self.is_private))
+        updated_url = file_store.file_url(file_name, bool(self.is_private))
+        if updated_url == old_url:
+            return
+        if not source.exists():
+            throw(f"Cannot find file {source} on disk")
+        if target.exists():
+            target_name = file_store.generate_file_name(name=file_name, is_private=bool(self.is_private))
+            target = file_store.get_files_path(target_name, is_private=bool(self.is_private))
+            updated_url = file_store.file_url(target_name, bool(self.is_private))
+        other_refs_exist = bool(self.content_hash) and (
+            File._default_manager.filter(content_hash=self.content_hash, file_url=self.file_url)
+            .exclude(pk=self.pk)
+            .exists()
+        )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if other_refs_exist:
+            shutil.copy2(source, target)
+        else:
+            shutil.move(source, target)
+        self.file_url = updated_url
+        self._repoint_attach_field(old_url)
+
+    def _repoint_attach_field(self, old_url: str) -> None:
+        """``file.py:378-405``: the Attach field that held the old URL gets the new one."""
+        from frappe_core import registry
+
+        if not (self.attached_to_doctype and self.attached_to_name):
+            return
+        if not registry.has_doctype(self.attached_to_doctype):
+            return
+        model = registry.get_model(self.attached_to_doctype)
+        reference = model._default_manager.filter(pk=self.attached_to_name).first()
+        if reference is None:
+            return
+        field = self.attached_to_field
+        if not field:
+            for concrete in reference._meta.concrete_fields:
+                if not concrete.is_relation and getattr(reference, concrete.attname, None) == old_url:
+                    field = concrete.name
+                    break
+            if not field:
+                return
+            self.attached_to_field = field
+        if not any(f.name == field for f in reference._meta.concrete_fields):
+            return
+        setattr(reference, field, self.file_url)
+        reference.save(update_fields=[field, "modified", "modified_by"])
+
+    def _delete_file_on_disk(self) -> None:
+        """``file.py:680-694``: the bytes go only when no other row names them."""
+        if not self.content_hash:
+            return
+        shared = (
+            File._default_manager.filter(content_hash=self.content_hash, file_url=self.file_url)
+            .exclude(pk=self.pk)
+            .exists()
+        )
+        if not shared:
+            file_store.delete_file(self.file_url)
+
+    # ------------------------------------------------------------------ the timeline
+
+    def _create_attachment_record(self) -> None:
+        """``file.py:978-986``."""
+        icon = ' <i class="fa fa-lock text-warning"></i>' if self.is_private else ""
+        url = quote(self.file_url, safe="/:") if self.file_url else self.file_name
+        name = escape(self.file_name or self.file_url)
+        self._add_comment_in_reference_doc(
+            "Attachment", f"<a href='{url}' target='_blank'>{name}</a>{icon}"
+        )
+
+    def _add_comment_in_reference_doc(self, comment_type: str, text: str) -> None:
+        """``file.py:988-994``: a timeline entry on the document the file hangs off, if it
+        exists; upstream swallows the DoesNotExistError the same way."""
+        from frappe_core import registry
+        from frappe_core.session import get_current_user
+
+        if not (self.attached_to_doctype and self.attached_to_name):
+            return
+        if not registry.has_doctype(self.attached_to_doctype):
+            return
+        model = registry.get_model(self.attached_to_doctype)
+        if not model._default_manager.filter(pk=self.attached_to_name).exists():
+            return
+        user = get_current_user()
+        full_name = (
+            User._default_manager.filter(pk=user).values_list("full_name", flat=True).first() or user
+        )
+        Comment._default_manager.create(
+            comment_type=comment_type,
+            reference_doctype=self.attached_to_doctype,
+            reference_name=str(self.attached_to_name),
+            content=text,
+            comment_email=user,
+            comment_by=full_name,
+        )
+
+
+def _file_deleting(sender, instance, **kwargs):
+    """``file.py:240-248``: a File row on its way out takes its bytes with it, unless
+    another row still names them. A receiver rather than ``delete()`` alone so that
+    ``frappe_core.children``'s cascade, which deletes through the queryset, is covered."""
+    instance._delete_file_on_disk()
+
+
+pre_delete.connect(_file_deleting, sender=File, dispatch_uid="file.deleting")
+
     #: Phase 3: the fallback source for ``crm.api.get_user_signature``
     #: (``crm/api/__init__.py:32-36``).
     add_signature = models.BooleanField(default=False)

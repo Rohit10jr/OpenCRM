@@ -41,6 +41,7 @@ from crm_app.api import (  # noqa: F401
     session,
     settings,
     user,
+    upload,
     user_settings,
     view_settings,
     views,

@@ -302,9 +302,9 @@ def add_attachments(communication_name: str, attachments) -> int:
 
     Only the *File name* form is accepted. Upstream also takes a ``{"fname", "fcontent"}``
     dict from ``frappe.attach_print``; the CRM frontend never sends one
-    (``CommunicationArea.vue:217`` maps uploads to ``x.name``), and writing file content
-    needs a storage layer this port has not built — so it takes upstream's own
-    ``else: continue`` branch.
+    (``CommunicationArea.vue:217`` maps uploads to ``x.name``), and the rendered print it
+    would carry has no producer here — so it takes upstream's own ``else: continue``
+    branch. (Storing bytes is ``File._content`` + ``save()`` since FINDINGS.md 49.)
 
     **A File name that no longer exists is skipped**, where upstream crashes:
     ``frappe.db.get_value`` returns ``None`` and the next line reads ``attach.file_url``

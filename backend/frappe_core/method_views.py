@@ -74,7 +74,12 @@ class MethodView(FrappeAPIView):
         for key, value in request.query_params.items():
             payload[key] = parse_json_param(value, value)
         data = getattr(request, "data", None)
-        if isinstance(data, dict):
+        if hasattr(data, "dict"):
+            # A form or multipart body is a QueryDict, whose ``dict.update`` copies the
+            # raw value *lists*; ``.dict()`` gives one value per key, files included,
+            # which is what ``upload_file`` reads.
+            payload.update(data.dict())
+        elif isinstance(data, dict):
             payload.update(data)
         # `cmd` is Frappe's legacy method selector; it is never a real parameter.
         payload.pop("cmd", None)
