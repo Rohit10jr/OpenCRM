@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from django.db.models import Q
 
+from frappe_core.query import wire_json_text
 from frappe_core.session import get_current_user
 from frappe_core.whitelist import whitelist
 
@@ -30,4 +31,6 @@ def get_views(doctype: str):
     )
     if doctype:
         queryset = queryset.filter(dt=doctype)
-    return list(queryset.values())
+    # The three JSON caches go out as strings, as every other row does (FINDINGS.md 40;
+    # this was the one `.values()` path the fix missed, found by the Codex review).
+    return [wire_json_text(row) for row in queryset.values()]

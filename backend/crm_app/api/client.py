@@ -41,6 +41,58 @@ def _entry_or_404(doctype: str):
     return entry
 
 
+def _user_query_filters(filters, ignore_user_type: bool) -> dict:
+    """``frappe/core/doctype/user/user.py:user_query``, the standard query every User
+    Link goes through: enabled accounts only, and no Website Users unless the caller,
+    a System User, asked with ``ignore_user_type``, which the CRM's Link fields do
+    (FINDINGS.md 46)."""
+    from frappe_platform.models import User
+
+    result = dict(filters or {})
+    result.setdefault("enabled", 1)
+    caller_type = (
+        User._default_manager.filter(pk=get_current_user())
+        .values_list("user_type", flat=True)
+        .first()
+    )
+    if not (ignore_user_type and caller_type == "System User"):
+        result["user_type"] = ["!=", "Website User"]
+    return result
+
+
+def _address_query_filters(filters: dict) -> dict:
+    """``address.py:address_query``, the standard query behind every Address Link:
+    ``link_doctype`` and ``link_name`` select the addresses linked to that document
+    through their Dynamic Link rows; every other key filters as a field."""
+    from frappe_platform.models import DynamicLink
+
+    result = dict(filters)
+    link_doctype = result.pop("link_doctype", None)
+    link_name = result.pop("link_name", None)
+    if link_doctype or link_name:
+        rows = DynamicLink._default_manager.filter(parenttype="Address")
+        if link_doctype:
+            rows = rows.filter(link_doctype=link_doctype)
+        if link_name:
+            rows = rows.filter(link_name=link_name)
+        result["name"] = ["in", list(rows.values_list("parent", flat=True).distinct())]
+    return result
+
+
+def _without_disabled(model, filters) -> dict | None:
+    """``search.py:244-248``: a doctype with an ``enabled`` or ``disabled`` check hides
+    its switched-off rows from the autocomplete unless ``include_disabled`` was sent."""
+    names = {f.name for f in model._meta.get_fields()}
+    if "enabled" not in names and "disabled" not in names:
+        return filters
+    result = dict(filters or {})
+    if "enabled" in names:
+        result.setdefault("enabled", 1)
+    if "disabled" in names:
+        result.setdefault("disabled", ["!=", 1])
+    return result
+
+
 def _get_checked(doctype: str, name: str, ptype: str):
     entry = _entry_or_404(doctype)
     instance = by_name(entry.model, name).first()
@@ -449,3 +501,20 @@ def search_link(
         }
         for row in rows
     ]
+    # Two keys the frontend sends inside `filters` that are not fields: upstream's
+    # search_widget pops `include_disabled` (search.py:204-208) and User's standard
+    # query pops `ignore_user_type` (user.py:user_query); the port read both as fields
+    # and answered 400 to every User Link in the app (FINDINGS.md 46).
+    include_disabled = False
+    ignore_user_type = False
+    if isinstance(parsed_filters, dict):
+        include_disabled = _truthy(parsed_filters.pop("include_disabled", False))
+        ignore_user_type = _truthy(parsed_filters.pop("ignore_user_type", False))
+    if doctype == "User":
+        parsed_filters = _user_query_filters(parsed_filters, ignore_user_type)
+    else:
+        if doctype == "Address" and isinstance(parsed_filters, dict):
+            parsed_filters = _address_query_filters(parsed_filters)
+        if not include_disabled and isinstance(parsed_filters, (dict, type(None))):
+            parsed_filters = _without_disabled(entry.model, parsed_filters)
+

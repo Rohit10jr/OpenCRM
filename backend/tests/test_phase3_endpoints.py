@@ -89,6 +89,8 @@ LIBRARY_NAMESPACES = ("frappe.", "crm.")
 _LIBRARY_PATH_RE = re.compile(
     r"(?:(?:url|method):\s*|\bcall\(\s*)['\"](?:/api/method/)?([a-z_]+(?:\.[a-z_]+)+)['\"]"
 )
+#: `const NAME = 'dotted.path'` - counted only when `call(NAME)` appears in the same file.
+_LIBRARY_CONST_RE = re.compile(r"\b([A-Za-z_]\w*)\s*=\s*['\"]([a-z_]+(?:\.[a-z_]+)+)['\"]")
 
 #: Data Import is a framework feature the port has not built: no doctype, no endpoints,
 #: and the three `/crm/data-import` pages are reachable only by typing the URL.
@@ -108,9 +110,13 @@ def library_called_paths() -> set[str]:
         for path in (LIBRARY_SRC / sub).rglob("*"):
             if path.suffix not in (".js", ".ts", ".vue"):
                 continue
-            found.update(
-                _LIBRARY_PATH_RE.findall(path.read_text(encoding="utf-8", errors="ignore"))
-            )
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            found.update(_LIBRARY_PATH_RE.findall(text))
+            # A path held in a constant and passed to call() by name, which the regex
+            # above cannot see: `const X = 'frappe.a.b'; call(X)` (pulse.ts does this).
+            for constant, dotted in _LIBRARY_CONST_RE.findall(text):
+                if re.search(r"\bcall\(\s*" + re.escape(constant) + r"\b", text):
+                    found.add(dotted)
     return {p for p in found if p.startswith(LIBRARY_NAMESPACES)}
 
 
@@ -1371,6 +1377,30 @@ def test_search_link_is_permission_filtered(auth_api, alice, bob, administrator)
 
     response = call(auth_api, "frappe.desk.search.search_link", {"doctype": "CRM Lead"})
     assert [r["value"] for r in response.json()["message"]] == [mine.name]
+
+
+def test_search_link_user_takes_the_frontends_ignore_user_type_key(auth_api, alice, make_user):
+    """FINDINGS.md 46. Every User Link in the app sends ``filters: {ignore_user_type: 1}``
+    (Field.vue, SidePanelLayout.vue, AssignToBody.vue, Dashboard.vue); upstream's
+    ``user_query`` pops the key and the port read it as a field, answering 400."""
+    make_user("portal@example.com", first_name="Portal", user_type="Website User")
+    make_user("off@example.com", first_name="Off", enabled=False)
+
+    def names(filters):
+        response = call(
+            auth_api, "frappe.desk.search.search_link", {"doctype": "User", "filters": filters}
+        )
+        assert response.status_code == 200, response.content[:300]
+        return [r["value"] for r in response.json()["message"]]
+
+    listed = names({"ignore_user_type": 1})
+    assert alice.name in listed
+    assert "off@example.com" not in listed, "disabled accounts stay out (user_query)"
+    assert "portal@example.com" in listed, "a System User asking with the flag sees Website Users"
+
+    plain = names({})
+    assert alice.name in plain
+    assert "portal@example.com" not in plain, "without the flag, Website Users are hidden"
 
 
 def test_rename_doc_moves_the_row(auth_api, alice):
