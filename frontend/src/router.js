@@ -161,7 +161,10 @@ const routes = [
     component: () => import('@/pages/PersonaForm.vue'),
   },
   {
-    path: '/:invalidpath',
+    // Port patch (docs/FINDINGS.md 83, upstream bug 48): upstream's `/:invalidpath`
+    // matches one segment, so `/crm/leadsdss/CRM-LEAD-...` matched nothing and drew a
+    // blank page. `(.*)*` is Vue Router's catch-all; every unknown path lands here.
+    path: '/:invalidpath(.*)*',
     name: 'Invalid Page',
     component: () => import('@/pages/InvalidPage.vue'),
   },

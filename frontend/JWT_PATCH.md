@@ -225,3 +225,12 @@ path under `/crm/`; the app then fetches the boot values itself. Nothing renders
 template. The `buildConfig.indexHtmlPath` in `vite.config.js` still points at upstream's
 app folder and needs changing before the first production build - a deployment item
 outside this patch.
+
+## Other frontend patches (7 Oct 2026)
+
+Not part of the three sanctioned deviations, listed here so every edit to upstream's
+frontend is in one place.
+
+| File | Change | Why |
+|---|---|---|
+| `src/router.js` | the catch-all route is `/:invalidpath(.*)*` instead of `/:invalidpath` | Upstream's form matches one segment, so a mistyped list name in a record URL (`/crm/leadsdss/CRM-LEAD-…`) matched nothing and drew a blank page. Upstream bug 48, `docs/FINDINGS.md` 83; diverged by decision |
