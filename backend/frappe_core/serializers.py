@@ -77,12 +77,6 @@ class DocumentSerializer(serializers.ModelSerializer):
             fields[fieldname] = _build_child_field(spec)
         return fields
 
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-        # Restricted fields are dropped here rather than excluded when the class is
-        # built, because the class is built once per model and cached on the registry
-        # entry - it cannot know who is asking. `hidden_from` re-checks the sensitive set
-        # too, which is redundant (those are already excluded from Meta) and costs a set
     def to_internal_value(self, data):
         # Upstream clears a Data field by writing None to it (`doc.set(field, None)`),
         # and the frontend does exactly that: "Remove Image" on an organization sends
@@ -108,6 +102,18 @@ class DocumentSerializer(serializers.ModelSerializer):
                 data = {k: v for k, v in data.items() if k not in dropped}
         return super().to_internal_value(data)
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Every document upstream hands out names its own doctype
+        # (`base_document.py:as_dict`, line 704), child rows included, and the frontend
+        # leans on it: the SLA list's Duplicate posts the fetched document straight back
+        # into `frappe.client.insert`, which refused it here with "doctype is required"
+        # (FINDINGS.md 82).
+        data["doctype"] = type(instance).get_doctype()
+        # Restricted fields are dropped here rather than excluded when the class is
+        # built, because the class is built once per model and cached on the registry
+        # entry - it cannot know who is asking. `hidden_from` re-checks the sensitive set
+        # too, which is redundant (those are already excluded from Meta) and costs a set
         # union; keeping it means one function answers "may this user see this field?"
         # instead of two that can drift.
         if restricted_fields(self.Meta.model):
