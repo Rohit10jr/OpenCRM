@@ -35,8 +35,8 @@ Three commits. On 14 August this was the entire process.
 | `specs/README.md` | Attended | 14 Aug | Index of the phase specs and their status |
 | `specs/PHASE_0_FOUNDATION.md` … `PHASE_7_INTEGRATIONS.md` | Attended | 14 Aug | **Eight specs written up front** — what each phase must build |
 | `docs/internal/RUNBOOK.md` | Attended | 14 Aug | The first handoff. Covered phases 3–6; now a record of that run |
-| `docs/internal/TASK.md` | Attended | 14 Aug | The entry point. Names the runbook to follow |
-| `frontend/README.md` | — | 14 Aug | Came with the copied Vue app. Not ours |
+| `docs/internal/TASK.md` | Attended | 14 Aug | Was the entry point, naming the runbook to follow. **Removed 7 Oct 2026**: one-time instructions; the runbooks record the runs |
+| `frontend/README.md` | — | 14 Aug | Came with the copied Vue app. Not ours. **Removed 7 Oct 2026** |
 
 ## B. Written between phases, to set up the next one
 
@@ -48,7 +48,7 @@ Prep work, each its own commit or PR, none of it produced by a running agent.
 | `specs/AS_BUILT.md` | Attended | 15 Aug | **What actually exists**, as against what the specs predicted. Created once the specs began rotting, and it beats them where they disagree |
 | `docs/internal/RUNBOOK_PHASE_7.md` | Attended | 21 Aug | Phase 7's handoff — and where Step 0 and the nine "How to work here" rules were invented |
 | `docs/internal/RUNBOOK_PHASE_8.md` | Attended | 23 Aug | Phase 8's handoff |
-| `docs/WORKFLOW.md` | Attended | 25 Aug | All of the above, generalised into a reusable template for other projects |
+| `docs/WORKFLOW.md` | Attended | 25 Aug | All of the above, generalised into a reusable template for other projects. **Removed 7 Oct 2026**: about the process, not the product; `git log` has it |
 | `docs/BACKEND_LAYOUT.md` | Attended | 9 Sep | What each `backend/` folder is for, and how a request travels through the three generic views. The orientation for someone who expected a normal Django layout |
 | `docs/TESTING_GUIDE.md` | Attended | 10 Sep | The manual API walkthrough: what to test in what order, what each response should look like, and the gaps you will hit |
 | `docs/http/*.http` | Attended | 10 Sep | The API test suite as VS Code REST Client files: click a block to see it, or replay a whole file with `backend/scripts/run_http.py`. `00_walkthrough` is the learning path; the numbered files cover every endpoint |
@@ -65,9 +65,9 @@ Prep work, each its own commit or PR, none of it produced by a running agent.
 | `docs/internal/PROGRESS_PHASE_5.md` | Unattended | 16 Aug | Celery, beat schedule, async signals |
 | `docs/internal/PROGRESS_PHASE_6.md` | Unattended | 16 Aug | Channels realtime |
 | `docs/internal/FINAL_REPORT.md` | Unattended | 16 Aug | **Across** phases 3–6 — the cross-phase view no single progress file can give. Its §4 names the defect class that recurred four times |
-| `docs/internal/ORIENTATION_PHASE_7.md` | Unattended | 21 Aug | **Written before any code.** What I understood, and what I believe is stale. Found four false claims |
+| `docs/internal/ORIENTATION_PHASE_7.md` | Unattended | 21 Aug | **Written before any code.** What I understood, and what I believe is stale. Found four false claims. **Removed 7 Oct 2026**; `PROGRESS_PHASE_7.md` carries what mattered |
 | `docs/internal/PROGRESS_PHASE_7.md` | Unattended | 22 Aug | The five integrations |
-| `docs/internal/ORIENTATION_PHASE_8.md` | Unattended | 24 Aug | Same, for phase 8. Found five |
+| `docs/internal/ORIENTATION_PHASE_8.md` | Unattended | 24 Aug | Same, for phase 8. Found five. **Removed 7 Oct 2026** |
 | `docs/internal/PROGRESS_PHASE_8.md` | Unattended | 24 Aug | The auth screens. **Its Concerns section is the honest list of what phase 8 did not check** |
 
 Every progress file follows one template: built · tests · review tier · decisions taken
@@ -104,8 +104,9 @@ Read in this order, and stop when you have what you need:
 3. **`PORT_PLAN.md`** — the contract and the settled decisions
 4. **Your phase's spec**, then **`specs/KNOWN_ISSUES.md`**
 
-And if you are handing work to an agent rather than doing it yourself, read
-**`docs/WORKFLOW.md`** — it is the shape all of the above turned out to have.
+If you are handing work to an agent rather than doing it yourself, the shape all of the
+above turned out to have was written up in `docs/WORKFLOW.md`, removed on 7 Oct 2026 and
+still in `git log` for that path.
 
 *(The `PROGRESS_*`, `TASK` and `RUNBOOK` files began at the repository root and were moved
 here later; `git log --follow` crosses the move.)*
