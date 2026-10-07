@@ -53,6 +53,47 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 41 | frontend: the dashboard | high | Blank dashboard with every number in place: the port's default tile list was an older shape (`type` number/donut/bar and a `width`, no `layout`), and the grid needs a `layout` object and one of the four `*_chart` types the page knows. Upstream's seventeen tiles, verbatim; migration 0009 repairs the saved row | **fixed** 28 Sep 2026 |
 | 42 | frontend: the user menu at the top of the sidebar | high | The menu (Apps, Settings, About, Log out) was **empty**: it is built from FCRM Settings' dropdown-item rows, which upstream seeds at install and the port never did, so Settings, About and Log out were unreachable from inside the app. Seeded on first load and by migration 0010 | **fixed** 28 Sep 2026 |
 | 43 | frontend: every create dialog; the lead and deal page header; the Source and Industry pickers | high | Upstream's install step was never ported, so the reference rows it writes did not exist: no Quick Entry layouts (every dialog showed every field in unlabeled tabs), no form scripts (the status dropdown never rendered on a lead or deal, and probability did not follow status), no industries, lead sources, communication statuses or quick-filter selections. Ported as `crm_app/setup.py` and `manage.py seed_defaults` | **fixed** 28 Sep 2026 |
+| 44 | frontend: the New Contact dialog and the contact side panel | low | Contact's field labels read "first name", "email id", "mobile no": the doctype is not in `doctype_meta.json`, so its labels come from the Django model's verbose names instead of upstream's JSON ("First Name", "Email Address", "Mobile No"). The model's fields now carry upstream's labels, and the contact's `status` field, missing until now, is back, so the contacts list has its three installed quick filters: Status, Email Address, Phone | **fixed** 1 Oct 2026 |
+| 45 | frontend: the New Contact and New Organization dialogs, the contact and organization side panels | medium | The `address` Link field searches the `Address` doctype, which the port did not model: `search_link` answered 404 and the console logged an error on every open, and no address could be created. Address and Country ported from the framework; countries seeded | **fixed** 29 Sep 2026 |
+| 46 | frontend: every User Link (owner and assignee pickers, the dashboard's Sales User filter) | high | The Link control sends `filters: {ignore_user_type: 1}`, a key upstream's `user_query` pops; the port read it as a field and answered **400** to every User search, so no owner or assignee could be picked | **fixed** 29 Sep 2026 |
+| 47 | frontend: a deal's status change; the seeded forecasting script | medium | `frappe.client.get_value` was never served, so the forecasting script's lookup of the new status's probability 404'd and the probability stayed put. Found by the Codex review of finding 43 | **fixed** 29 Sep 2026 |
+| 48 | frontend: `yarn dev` on Windows | high | The dev server never started: frappe-ui's proxy plugin looks for a Frappe bench by walking up the directory tree until the path equals `/`, which a Windows path never does, so it loops forever before the server binds. The proxy it would have set is now in `vite.config.js` directly | **fixed** 29 Sep 2026 |
+| 49 | frontend: any upload — a picture in a note, a file on a lead, an email's attachment | high | `upload_file` was never served, and nothing served `/files/` or `/private/files/`, so every attachment in the product failed with "Method upload_file not found" and a File row was only ever metadata. Ported `frappe/handler.py:upload_file`, the File doctype's storage pipeline (hash, dedupe, name, write, move, delete) and the two serving routes, which check the File rule before opening a private file; the browser's own fetches of a private file carry the access token in a cookie scoped to that path | **fixed** 29 Sep 2026 |
+| 50 | frontend: every page load | low | `GET /assets/crm/manifest/manifest-icon-192.maskable.png` answers 404 on each load. Upstream serves the PWA manifest's icons from the CRM app's `public/` folder under `/assets/crm/`; nothing here serves that path. The browser only wants it for the add-to-home-screen icon | open |
+| 51 | frontend: Export in any list view | medium | `frappe.desk.reportview.export_query` was never served, and the frontend started the download by navigating to the URL, which carries no bearer token. Ported the export for the parameters the lists send (Excel and CSV, ticked rows, the view's filters and order, every matching row); the frontend now fetches the file with the header and hands it to the browser as a download | **fixed** 29 Sep 2026 |
+| 52 | frontend: Bulk Edit in any list view | medium | The Field dropdown was empty. `crm.api.doc.get_fields` described the Django model's columns and never sent the `hidden` and `read_only` flags; the dialog keeps a field only when both are 0, and a missing key fails that test. It now serves the DocType's own field rows from the metadata, flags filled with their zero defaults, layout breaks excluded unless asked for | **fixed** 29 Sep 2026 |
+| 53 | frontend: Kanban view of Tasks, Leads and Deals | medium | A task card showed its title and its id number, nothing else; upstream shows the description, the priority, the age and the linked lead or deal. The three models never declared `default_kanban_settings`, so `get_data` fell back to `["name"]`, and the frontend saved that fallback into the standard kanban view the first time a column was reordered. The models now carry upstream's defaults and migration `crm_app` 0011 repairs the saved rows | **fixed** 29 Sep 2026 |
+| 54 | frontend: the Reference Document Type field of notes, tasks and call logs | medium | A Link to `DocType`. `search_link` answered 404 because the port has no DocType doctype, so the dropdown was empty and the Reference Doc beside it had nothing to search; the Link's "Create New" fallback then tried to open and insert a `DocType`, the other 404s of the Notes pass. `search_link` now answers a DocType search from the registry, ignoring permissions as upstream does | **fixed** 29 Sep 2026 |
+| 55 | frontend: load time | medium | The app is slow to load during hand testing. Not investigated yet, by decision: to be looked at after the browser testing is finished and this branch is merged. What is known (finding 29's cold-start cost, the boot calls, the blocking boot-values request), what has never been measured (a warm reload, a production build) and the order to work in are in `specs/KNOWN_ISSUES.md` 9 | open, deferred |
+| 56 | frontend: deleting an organization that has a deal | low | "Unlink all" in the delete dialog leaves the deal linked, so the organization still cannot be deleted; only "Delete", which removes the deal, gets through. The port matches upstream here: upstream's unlink blanks the generic reference pair only, which a deal does not have (upstream bug 42). Reproduced and pinned by a test. Decision 30 Sep 2026: leave as upstream for now, open a pull request for the fix once the browser testing is finished | open, PR after testing |
+| 57 | frontend: Settings → Profile → Email Settings → Add Email | medium | The port's `User` has no `user_emails` table (upstream's `User Email` child rows), so an outgoing account picked under "Add Email" has nowhere to be stored, and the email composer's "from" switcher, which reads the same rows, can never offer one. Separately, and the same upstream: the dropdown says "No results" until an Email Account with Enable Outgoing exists, which is an empty state, not a fault. Ported: `User Email` child rows on `User`, filled by an account that carries the user's address and by a System Manager's Add Email, as upstream's permlevel 1 has it | **fixed** 6 Oct 2026 |
+| 58 | frontend: Settings → Preferences → Language | medium | The Language dropdown was empty: it is a Link to the framework's `Language` doctype, which the port did not have, so its search answered 404. Ported the doctype, seeded from the framework's `languages.csv` by `seed_defaults`, everyone reads and System Manager writes; the picker shows the name and offers enabled languages only. The choice is stored on the user and changes nothing on screen, because the port ships no translations | **fixed** 30 Sep 2026 |
+| 59 | frontend and backend: translations | medium | Nothing is translated. The boot values carry an empty `translated_messages`, so the Vue app stays in English whatever language a user picks, and the server's messages are English literals. Upstream translates both from the PO files each app ships. Deferred by decision until the browser testing is finished; the design, including translated server messages and Frappe's meaning of `enabled`, is in `specs/KNOWN_ISSUES.md` 10 | open, deferred |
+| 60 | frontend: Settings → General → "Mark lead/deal as replied on response" and "Reopen lead/deal on new communication" | medium | The two switches are stored and nothing reads them. Upstream's `on_communication_update` sets the lead's or deal's `communication_status` to Replied for a sent email and to Open for a received one when the matching switch is on. The port's handler only bumps `modified`. Found by reading the code while laying out the Settings rows, not by a failing screen. Decision 30 Sep 2026: to be ported once the browser testing is finished | open, deferred |
+| 61 | frontend: the Notifications panel, signed in as an administrator | high | An administrator's bell listed every user's notifications, and "Mark all as read" marked them read for everybody. Upstream's two notification methods filter on `to_user = session.user` for everyone; the port read through the permission rule, which is unrestricted for an administrator. Both now filter on the caller. This is also why the panel did not open: see 62 | **fixed** 30 Sep 2026 |
+| 62 | frontend: the Notifications panel, for whoever is assigned a task that is not tied to a lead or deal | medium | The panel does not open at all: such a notification has no reference, the panel builds a link to the lead page from it, and the router refuses a link with no id, which takes the whole panel down. The data and the Vue file are both upstream's, so upstream has the same fault (upstream bug 43). Administrator hit it here only because of 61, which put other users' rows in the list | open, same as upstream |
+| 63 | frontend: Settings → Dashboard → Dashboard Currency and Exchange Rate Provider | medium | The currency dropdown is empty: it is a Link to the framework's `Currency` doctype, which the port does not have, so its search answers 404. With no currency set the provider select stays disabled, and behind it the exchange-rate call is a stub that always answers 1 (a phase 3 decision). Decision 30 Sep 2026: port Currency once the browser testing is finished | open, deferred |
+| 64 | frontend: Settings → Defaults | medium | The section goes blank. The page reads and writes the framework's `System Settings` document and its metadata, neither of which the port has: both calls answer 404, the document never loads, and the template then reads a field off nothing. In the port the same six values (currency, the two precisions, number, date and time format) are fixed in Django settings and sent with the boot values, so they cannot be changed from the app. Decision 30 Sep 2026: to be built after the browser testing, as one piece of work with 63 (Currency) and the system-language step of 59 (translations) | open, deferred |
+| 65 | frontend: Settings → Email → Accounts → Add | high | Adding a real Gmail account with a correct app password ended in "Failed to create email account: invalid credentials". The login had succeeded; the save then failed because the local `.env` had no `FIELD_ENCRYPTION_KEY`, without which a password cannot be stored, and the screen prints that one sentence for any error at all. The key is now checked before the login, anything the mail libraries raise is a refusal and not a 500, and the setup docs say the key is required | **fixed** 1 Oct 2026; needs `FIELD_ENCRYPTION_KEY` in `.env` |
+| 66 | frontend: Salutation and Gender on a contact, a lead and a deal | medium | Upstream offers both as dropdowns, Links to the framework's `Salutation` and `Gender` doctypes. The port had neither doctype: on a contact the two were plain text boxes, and on a lead or deal the dropdowns existed but listed nothing. Ported both doctypes, seeded with upstream's nine salutations and seven genders, everyone reads and System Manager writes, and the contact's two fields are declared Links | **fixed** 1 Oct 2026 |
+| 67 | frontend: the Email and Mobile No dropdowns on a contact's page | high | Picking another number as primary answered "Only one Mobile No can be set as primary" and left two rows flagged, after which nothing on that contact would save. Editing or removing a number or an address from the dropdown answered 404. The flags are now written as one unit, old ones cleared first, and `frappe.client.set_value` / `delete` reach a contact's email and phone rows through the contact, as upstream's do | **fixed** 1 Oct 2026 |
+| 68 | frontend: Remove Image on an organization's logo | medium | The menu item sends `organization_logo: null`, which upstream's `set_value` stores as an empty field. The port's text columns refuse `null` ("This field may not be null."), so the logo could be changed but never removed. `null` on a text field now means empty, on both write routes | **fixed** 5 Oct 2026 |
+| 69 | frontend: the Calls tab of a lead or deal | high | A call log pointed at a lead (Reference Document Type and Reference Name) never showed on that lead's Calls tab. `get_linked_calls` found the call but returned it raw; upstream's last line runs every call through `parse_call_log`, and the call card reads `_caller` and `_receiver` off each row, so it could not be drawn. The port of that function had stopped one line short | **fixed** 5 Oct 2026 |
+| 70 | frontend: bulk Edit on the task list, emptying Assigned To | low | Tick tasks → Edit → "Assigned To" left empty → Update does not clear the assignee; setting a user the same way works. The upstream demo behaves the same. Recorded without looking for the cause, by decision on 5 Oct 2026 | open, not investigated |
+| 71 | frontend: bulk actions on a list (seen on Leads) | low | After a bulk action finishes (Edit, Assign To, Clear Assignment, Convert to Deal, Delete) the ticked rows stay ticked and have to be unticked by hand. Recorded on 5 Oct 2026 without looking for the cause or comparing with upstream, by decision | open, not investigated |
+| 72 | frontend: a call log edited from a lead's Calls tab | low | Changing a call's time in its form and closing the form leaves the old value on the lead's Calls tab until the page is reloaded. Recorded on 5 Oct 2026 without looking for the cause or comparing with upstream, by decision | open, not investigated |
+| 73 | frontend: Convert to Deal on a lead's page | high | "Error converting to deal: Internal Server Error". The dialog sends the deal's fields with `doctype` and `__newDocument` among them, and the port handed them to the model: `TypeError: CRMDeal() got unexpected keyword arguments: '__newDocument', 'doctype'`. Bulk convert, which sends no deal fields, worked. The dialog's form now goes through the deal's serializer, which keeps the deal fields and drops the rest | **fixed** 5 Oct 2026 |
+| 74 | frontend: the Create Deal dialog, and Convert to Deal after it | medium | The dialog's form is one object shared for the whole page session (`data/document.js`) and is never cleared after a deal is created, so the next deal starts from the last one's values. Once "Choose Existing Organization" has been used, its pick stays in the form when the switch is off and hidden, and the server prefers it to the organization details typed, upstream and here alike. The Convert to Deal dialog reads the same object. Upstream bug 45; the frontend is upstream's, so the port reproduces it. Reloading the page clears it | open, upstream bug 45 |
+| 75 | frontend: the delete dialog on a deal's page, and bulk delete | high | The dialog listed the deal's own contact row and its comments as "linked documents". Upstream lists neither: a child row is the document's own, and comments go with it. The contact row cannot be unlinked, so after "Unlink All" it was still listed and the Delete button never appeared; only "Delete All" could delete a deal that had a contact. Unlinking a comment orphaned it, in the dialog and in bulk delete. A contact's dialog listed the deal's contact row instead of the deal. The two finders now skip a child table's parent link and the framework's `ignore_links_on_delete` doctypes, and report a child row's link as its parent document | **fixed** 6 Oct 2026 |
+| 76 | API: `frappe.client.delete` and `DELETE /api/resource/` on a document that other documents still point at by reference | low | Upstream refuses with `LinkExistsError` ("Cannot delete or cancel because … is linked with …") while a task, note or call log still references the document; the port deletes it and leaves the reference dangling. Not reachable from the Vue app, whose dialog hides Delete until the list is empty, except for a linked document the caller cannot see. Links through a foreign key are refused as upstream does | open, decision deferred |
+| 77 | frontend: the Deals list would not open | high | Clicking a deal's Annual Revenue cell filed the cell's display string, "$ 500,000.00", as the filter (upstream bug 46), and the standard view saved it. Upstream's database casts the string to 0 and shows an empty list; the port's filter builder refused it with 417, and since the saved filter is replayed on every load the page never opened again, with no way to remove the chip. Filter values for numeric columns are now read for the number in them, so the click filters on the amount shown; a deliberate divergence, recorded with bug 46 | **fixed** 6 Oct 2026 |
+| 78 | frontend: Settings → Home Actions, a standard row | low | The grid lets a standard entry's Type be changed to Separator although the doctype marks it read-only for standard rows; done to Settings, the entry vanishes and nothing in the app can bring it back, since the grid lives in Settings. Upstream bug 47, seen on the demo. The port reproduces it (the frontend is upstream's) and gives `seed_defaults --force` the job of restoring the standard rows, where upstream needs Desk | open, upstream bug 47; recovery added |
+| 79 | Settings → Invite User (and every system mail: invitations, password resets, assignment notices) | medium | The invitation went to the Celery worker's console instead of the inbox. System mail is sent with Django's `EMAIL_BACKEND` from `DEFAULT_FROM_EMAIL` (`crm@example.com`), which `.env` leaves at the console backend locally, while a mail written on a lead goes through the Email Account's own SMTP. Upstream sends both through the default outgoing Email Account (`frappe.sendmail`). Seen 6 Oct 2026 (S8). Decision wanted: route system mail through the default outgoing account as upstream does, or document the `EMAIL_*` settings as the deployment's job | open, decision |
+| 80 | Settings → Assignment Rules → Save | high | Save does nothing. The screen posts `frappe.client.insert` for doctype `Assignment Rule`, a framework doctype the port does not model (`crm_app/api/assignment_rule.py`, a phase-3 decision: outside the nine platform doctypes), so the insert answers 404; the screen's error handler only clears its spinner, so nothing is shown. The list endpoint returns `[]` by the same decision. Upstream's engine is `frappe/automation/doctype/assignment_rule` (436 lines: round robin, load balancing, based on field, assign and unassign conditions, assignment days, applied on insert and update of leads and deals) plus the CRM's own JSON condition fields. Seen 6 Oct 2026 (S12). Decision wanted: port it, or defer with Currency and System Settings | open, decision |
+| 81 | Settings → SLA Policies → Assignment conditions | low | Add a custom condition, leave its fields empty, and try to remove it: the empty condition stays. Seen 6 Oct 2026 (S13); the same on the upstream demo, checked 7 Oct 2026, so it is upstream's (the condition builder is its frontend) and belongs with the upstream bugs once traced | open, upstream too, not traced |
+| 82 | Settings → SLA Policies → Duplicate | medium | Duplicate did nothing. The screen fetches the policy with `frappe.client.get` and posts the whole document back into `frappe.client.insert` with the new name; upstream's documents always carry a `doctype` key (`as_dict`), the port's did not, so the insert answered 417 "doctype is required" and the screen, with no error handler, showed nothing. Every document the port serialises now carries `doctype`, child rows included | **fixed** 7 Oct 2026 |
+| 83 | frontend: a wrong URL with a second segment, `/crm/leadsdss/CRM-LEAD-…` | low | A blank page where `/crm/leaderssf` shows "Invalid page or not permitted to access": upstream's catch-all route `/:invalidpath` matches one segment only, so a two-segment typo matches nothing. The same on the hosted demo (upstream bug 48). Patched here by decision: `/:invalidpath(.*)*`, the router's real catch-all, noted in `frontend/JWT_PATCH.md` | **fixed** 7 Oct 2026, by patch |
+| 84 | the Products grid's Edit Grid Fields dialog (D26) looks different from the hosted upstream | low | Not a port fault: the port's frontend is upstream's pinned at `6583bfcdc` (11 Sep 2026), and `git fetch` on 7 Oct 2026 shows upstream `main` at `deedce73c` (30 Sep 2026), 514 commits ahead, three of them on the grid (`946c24d8f` align child table header with rows, `53080db04` fetch_from support in fields, `b29f99452` translate Select option labels). The grid files here are byte-identical to the pinned clone, and the port's `getdoctype` for `CRM Products` matches the pinned json field for field. Kept for the day the pin moves | open, version gap |
 
 ---
 
@@ -1371,3 +1412,1189 @@ scripts reach for is still missing: `crm_products.get_product_rate_details`, whi
 script calls when a product is picked in a deal's products table, is not served, so that
 pick logs a 404 and leaves the rate at 0. The totals themselves are computed server-side
 (`test_phase3_endpoints.py`, C4). That belongs to a products pass.
+
+## 44. Contact's field labels are the model's verbose names, not upstream's
+
+**Block:** none in the http suite. Seen 28 Sep 2026 in the New Contact dialog once the
+Quick Entry layout existed (finding 43): the fields read "first name", "last name",
+"email id", "mobile no", "company name".
+
+**Expected:** "First Name", "Last Name", "Email Address", "Mobile No", "Company Name",
+the labels in Frappe's `contact.json`, which is what the dialog and the side panel
+show upstream.
+
+**Actual:** `get_fields_layout` expands each fieldname through `doctype_meta.json`, and
+Contact, a framework doctype rather than one of the CRM's, is not in that file
+(`backend/scripts/generate_field_meta.py` reads the CRM app's doctypes), so the labels
+fall back to the Django field's verbose name. Address and the other framework doctypes
+the layouts name have the same gap.
+
+**Where:** `backend/crm_app/data/doctype_meta.json` and the script that generates it.
+
+**Fixed 1 Oct 2026**, by the route Address took rather than through the generator: each
+`Contact` field carries `contact.json`'s label as its verbose name (migration
+`frappe_platform` 0013, state only), which is where both the forms and the filters read
+it. The same comparison with upstream found the contact's `status` field missing
+(Passive / Open / Replied, default Passive): `crm/install.py:514` installs the contacts
+list with three quick filters, `status`, `email_id` and `phone`, and the first had been
+silently dropped for want of the column. It is added, and the list now shows Status,
+Email Address and Phone. Two differences remain and change nothing on screen: upstream
+marks `email_id`, `mobile_no` and `phone` with `options` Email and Phone, and types
+`image` as Attach Image.
+
+## 45. The Address doctype is not modelled; the address Link field searches it
+
+**Block:** none in the http suite. Seen 28 Sep 2026 in the first browser run: the New
+Contact and New Organization dialogs, and the contact and organization pages, each
+logged `search_link DoesNotExistError`, and the failing request was
+`frappe.desk.search.search_link` with `doctype: "Address"`.
+
+**Expected:** an autocomplete over Address rows, and the AddressModal that creates one
+(`frappe.client.insert` of an Address with a `links` row back to the organization or
+contact). Upstream's Contact and Organization side panels and quick-entry layouts carry
+the `address` field, and the seeded layouts (finding 43) now show it here too.
+
+**Actual:** the port had no Address model, no registration and no routes, so the Link
+control's first search answered 404 and the console showed an error every time one of
+those dialogs opened; the "create" option of the field opened the Address dialog, whose
+save then failed the same way. `Address.country` is a Link to `Country`, which the port
+did not have either.
+
+**Where:** `frappe_platform/models.py` (`Country`, `Address`), migration
+`frappe_platform/0010`, `crm_app/permissions/platform_docs.py`, `crm_app/setup.py`
+(`add_countries`, from a copy of the framework's `country_info.json` in `crm_app/data`),
+`crm_app/api/client.py` (`search_link`'s Address filters).
+
+**Fixed 29 Sep 2026.** Both doctypes ported from the framework. Address carries
+`address.json`'s fields with upstream's labels, its `links` Table of Dynamic Link, and
+the controller's behaviour: the name is `<title>-<type>` with a numbered suffix on a
+collision, the title is mandatory, link rows take the linked document's title and are
+deduplicated, a preferred billing or shipping flag is cleared on the other addresses of
+the same document, and an address created without links takes the owner's contact's
+links. `search_link` honours `address_query`'s `link_doctype` and `link_name` keys and
+hides disabled addresses. Permissions are upstream's: every role reads, writes and
+creates an address and only System Manager deletes one; everyone reads countries and
+System Manager maintains them. `seed_defaults` writes the 250 countries. Not ported:
+`get_address_display` and the Address Template it renders, which no CRM screen calls;
+the Currency rows the country import also writes; and the title falling back to the
+first link's title at naming time, which needs rows that do not exist yet when the name
+is assigned here. `tests/test_address.py` covers all of it; the browser fixture's
+allowance for this finding is removed, so the tests insist on it.
+
+## 46. Every User Link answered 400: `ignore_user_type` was read as a field
+
+**Block:** none in the http suite, which never sent the key. Seen 28 Sep 2026 in the
+first browser run: `search_link ValidationError` on every dialog and page with a User
+Link, and on the dashboard; the request was `frappe.desk.search.search_link` with
+`doctype: "User", filters: {"ignore_user_type": 1}`, the answer 400 "Unknown field
+'ignore_user_type' for this document type".
+
+**Expected:** the enabled System Users. The CRM's Link control sends that key for every
+User field (`Field.vue:487`, `SidePanelLayout.vue:529`, `AssignToBody.vue:13`,
+`Grid.vue:636`, `Dashboard.vue:92`). Upstream routes User searches through the
+doctype's standard query, `user.py:user_query`, which pops `ignore_user_type` from the
+filters, hides Website Users unless a System User sent the flag, and lists enabled
+accounts only. `search_widget` likewise pops `include_disabled` and hides switched-off
+rows of any doctype that carries an `enabled` or `disabled` check.
+
+**Actual:** the port's `search_link` handed the filters to the query engine untouched,
+which rejected the unknown field. No owner, assignee or sales-user filter could be
+picked anywhere in the app.
+
+**Where:** `crm_app/api/client.py`, `search_link`.
+
+**Fixed 29 Sep 2026.** Both keys are popped before the query; User searches get
+`user_query`'s rules (`enabled = 1`, and `user_type != "Website User"` unless a System
+User sent the flag); other doctypes with an `enabled` or `disabled` field hide their
+switched-off rows unless `include_disabled` was sent.
+`test_phase3_endpoints.py::test_search_link_user_takes_the_frontends_ignore_user_type_key`
+covers the flag, the disabled account and the Website User.
+
+## 47. `frappe.client.get_value` was never served; the forecasting script needs it
+
+**Block:** none in the http suite. Found 28 Sep 2026 by the Codex review of the
+install-step port (finding 43): the seeded forecasting script runs on a deal's status
+change and calls `frappe.client.get_value` for the new status's probability, and the
+port's `frappe.client.*` had `get`, `get_list`, `get_single_value`, `set_value`,
+`insert`, `delete`, `rename_doc` and `get_doc_permissions`, but not `get_value`.
+
+**Expected:** `frappe/client.py:get_value(doctype, fieldname, filters, as_dict, parent)`:
+one row's fields by name or by filters, as a dict (or `{}`), or the bare value(s) when
+`as_dict` is false.
+
+**Actual:** 404, so the script's `await call(...)` rejected, the probability stayed at
+its old value, and the console logged the failure on every status change.
+
+**Where:** `crm_app/api/client.py`, beside the other `frappe.client.*` calls.
+
+**Fixed 29 Sep 2026.** Ported with upstream's shapes, through `fetch_rows` so the row
+rules and restricted-field checks of `get_list` apply. `tests/test_client_get_value.py`
+covers the script's exact call, the list and dict forms of `fieldname`, a name as the
+filter, `as_dict` off, no match, an unknown doctype and a row a Sales User may not read.
+`test_seed_defaults.py::test_every_method_the_seeded_scripts_call_is_served` now scans
+the seeded scripts for `call("...")` and holds every path but the product-rate lookup
+(finding 43) to the whitelist. The same review found the one `.values()` path finding
+40 had missed, `crm.api.views.get_views`, which goes through `wire_json_text` now, and
+a method name the library-side guard could not see because `pulse.ts` keeps it in a
+constant; the guard follows such constants into `call()` now.
+
+## 48. `yarn dev` never started on Windows: frappe-ui's proxy plugin loops forever
+
+**Block:** none in the http suite. Seen 29 Sep 2026: `yarn dev` printed
+"Local frappe-ui vite plugin not found, using npm package" and nothing more, twice,
+however long it was left. Reproduced with `vite --debug`: the config file loads, that
+line prints, and the process then burns CPU indefinitely with no further output; timing
+each frappe-ui plugin constructor on its own put the stall in `frappeProxy()`.
+
+**Expected:** the second startup line, "No common_site_config.json found, using default
+port 8000", then the server on 8080.
+
+**Actual:** `frappeProxy()` calls `getCommonSiteConfig()`, which calls `findBenchPath()`
+(`node_modules/frappe-ui/vite/utils.js:25-36`): starting from the working directory it
+walks up with `path.resolve(currentDir, '..')` until it finds a folder holding both
+`sites` and `apps`, or until `currentDir === '/'`. On Windows the walk ends at `D:\`,
+which never equals `/`, and `path.resolve('D:\\', '..')` is `D:\` again, so without a
+bench-shaped ancestor the loop never exits. Nothing on this machine's path has those
+two folders. `findAppName` (`utils.js:48-64`) has the same loop, reached only through
+`siteBanner` and `buildConfig` when a `frontendRoute` is passed, which this config does
+not do. Why the same server started on the days before is not established; nothing in
+the lockfile or the installed package changed (`frappe-ui` 1.0.0-beta.29, installed
+1 Sep). Recorded as upstream bug 41, a frappe-ui defect rather than a CRM one.
+
+**Where:** `frontend/vite.config.js`.
+
+**Fixed 29 Sep 2026.** `frappeProxy: false`, and the settings that plugin would have
+produced are written into `server` directly: port 8080 offset by the backend port, the
+same proxy rule (upstream's source list plus `ws`), the same host-preserving router,
+and the same `FRAPPE_WEB_SERVER_PORT` override. Nothing the browser sees changes.
+
+## 49. Nothing could upload a file: `upload_file` was never served, nor `/files/`
+
+**Block:** none in the http suite, which has no multipart body. Seen 29 Sep 2026 in the
+Notes pass of `BROWSER_TESTING.md` (N9): the image button in the note editor answered
+"Method upload_file not found"; the terminal showed `POST /api/method/upload_file 404`.
+
+**Expected:** `frappe/handler.py:upload_file` (130-244), registered under its bare name
+(`handler.py:get_attr` looks a dotless `cmd` up in its own module): take the multipart
+form the two uploaders send - the CRM's `filesUploaderHandler.ts` for attachments,
+frappe-ui's `fileUploadHandler.ts` behind the editor's image button and the comment and
+email boxes - check write permission on the document being attached to, store the bytes,
+answer with the File row. Then `/files/<name>` from the web server and
+`/private/files/<name>` through `download_private_file` (`utils/response.py:296-308`),
+which refuses guests and anyone the File rule refuses.
+
+**Actual:** no such method in the registry, and `config/urls.py` had only `admin/` and
+`api/`. `File` was a metadata row: `KNOWN_ISSUES.md` 3 recorded it as such ("nothing
+currently serves the bytes") and set the condition for the day something would - a
+permission check at the serving layer. Every attachment anywhere in the product was
+dead: pictures in notes, files on leads and deals, email attachments, the profile image.
+
+**Where:** `backend/crm_app/api/upload.py` (new), `backend/frappe_platform/files.py`
+(new), `backend/frappe_platform/models.py` (`File`), `backend/frappe_core/file_views.py`
+(new), `backend/config/urls.py`, `backend/frappe_core/method_views.py`,
+`frontend/src/auth/tokens.js`.
+
+**Fixed 29 Sep 2026.**
+
+- `upload_file`: `handler.py:131-244` for a signed-in user (the guest branch is dead
+  here, the method is not guest-callable). The `file` part, or `file_url` alone, or
+  `library_file_name`; chunked uploads assembled in a `.temp-` file and answered with
+  nothing until the last chunk; `optimize` through `frappe/utils/image.py:optimize_image`
+  when Pillow is installed (added to `requirements.txt`; without it the picture is kept
+  at full size); `ALLOWED_MIMETYPES` for a user without desk access, with upstream's
+  wording. `method` - handing the bytes to a whitelisted function instead of making a
+  File - is refused: no screen sends it.
+- The File model carries `file.py`'s pipeline: `before_insert` (103-138) and
+  `save_file` (858-940) hash, deduplicate against a row with the same bytes and privacy,
+  name without collisions (`utils.py:generate_file_name`) and write under `MEDIA_ROOT`,
+  `files/` for public and `private/files/` for private, the layout
+  `communication.attachment_path` was already reading; a flipped `is_private` moves the
+  bytes and rewrites the URL (313-394), the attachments panel's "Make public"; the last
+  row naming a file deletes it (680-694), also under the cascade that removes a deleted
+  document's files; an attachment is noted on the document's timeline as upstream's
+  `Attachment` and `Attachment Removed` comments (978-994).
+- One check is deliberately not ported: `validate_file_on_disk` (462-470), which refuses
+  a row whose local URL names nothing on disk. `add_comment` and `email.add_attachments`
+  copy rows by URL, every attachment fixture builds one, and the port had eight phases of
+  such rows before it could store bytes. Such a row is metadata; when the file is on disk
+  the hash and size are filled from it. The model docstring records the choice.
+- `/files/<name>` is public, as upstream's web server serves it; `/private/files/<name>`
+  asks `file_has_permission` through `find_file_by_url` (`utils.py:494-507`) and answers
+  upstream's 403 text when the caller is nobody or the rule refuses. Markup types
+  (`FORCE_DOWNLOAD_EXTENSIONS`) are sent as downloads, never inline.
+- A browser cannot put a header on the `<img>` a note embeds, so `tokens.js` keeps the
+  access token in an `access_token` cookie as well, `path=/private/files`,
+  `SameSite=Lax`, rewritten on refresh and cleared at logout. `file_views` reads it there
+  and nowhere else, on a GET; it is never read under `/api/`. `frontend/JWT_PATCH.md`
+  and `specs/SECURITY_MODEL.md` have the reasoning.
+- `MethodView._build_payload` merged a form body with `dict.update`, which copies a
+  QueryDict's raw value lists: `is_private` arrived as `["1"]`. It now takes one value
+  per key, files included.
+
+Covered by `tests/test_upload_file.py`. Not ported, and noted in `SECURITY_MODEL.md`:
+the folder tree, the per-doctype attachment limit, the site-wide extension whitelist,
+`download_file`, thumbnails, and `validate_not_referenced_in_attach_field`.
+
+## 50. The PWA manifest icon is not served
+
+**Block:** none. Seen 29 Sep 2026 on every page load:
+`GET /assets/crm/manifest/manifest-icon-192.maskable.png 404`.
+
+**Expected:** upstream ships the icon in `crm/public/manifest/`, which Frappe serves as
+`/assets/crm/manifest/...`; `frontend/index.html` links the manifest and the browser
+fetches the icon for the add-to-home-screen prompt.
+
+**Actual:** the Vite proxy forwards `/assets` to the backend, which has no route for it.
+Cosmetic: nothing on screen depends on the icon. Open; the fix is a static route for the
+CRM's `public/` folder, or moving the manifest into `frontend/public/`.
+
+## 51. Export from a list view: the method was missing, and the download carried no token
+
+**Block:** none in the http suite (the answer is a file, and the runner compares JSON).
+Seen 29 Sep 2026 in the Tasks pass of `BROWSER_TESTING.md` (T6): Export → Excel did not
+produce a file.
+
+**Expected:** `ViewControls.vue:565-590` builds
+`/api/method/frappe.desk.reportview.export_query?file_format_type=Excel&title=CRM Task&doctype=CRM Task&fields=[...]&filters={...}&order_by=...&page_length=...&selected_items=[...]`
+and navigates to it; upstream (`frappe/desk/reportview.py:427-575`) runs the
+report-builder query and answers with the file, `Sr` plus the column labels as the header
+row, the `sid` cookie having authenticated the navigation.
+
+**Actual:** two faults. The method was not in the registry, so the navigation landed on a
+404 JSON body. And had it existed, a navigation carries no `Authorization` header: the
+interceptor (`JWT_PATCH.md`) covers `fetch` and `XMLHttpRequest`, not a page load, the
+same gap as a note's `<img>` in finding 49.
+
+**Where:** `backend/crm_app/api/reportview.py` (new), `backend/frappe_core/method_views.py`,
+`frontend/src/components/ViewControls.vue`.
+
+**Fixed 29 Sep 2026.**
+
+- `export_query` for the parameters the lists send: the column keys, the view's filters
+  and order, `selected_items` replacing the filters with `name in` (488-489), every
+  matching row (upstream drops `limit_page_length`, 432), `owner` fetched as upstream
+  appends it (472-476). Rows come from `fetch_rows`, the query every list uses, so the
+  doctype's row rule applies to an export exactly as to the screen. Labels follow
+  `get_field_info` (623-668): `ID` for the name column, the field's label, the framework's
+  for a standard column. Duration columns are formatted (`format_duration`), HTML columns
+  flattened for CSV (`handle_html`, without html2text). CSV as `get_csv_bytes` with
+  `pop_csv_params`' defaults; Excel through XlsxWriter, upstream's library, with the bold
+  header and sized columns of `make_xlsx` (added to `requirements.txt`; CSV needs
+  nothing). Not ported, nothing here sends them: `export_in_background`,
+  `visible_names`, `add_totals_row`, `translate_values`; `can_export` is a role flag this
+  port does not model.
+- `MethodView` passes a Django `HttpResponse` returned by a handler through unwrapped,
+  which is upstream's `frappe.response.type = "binary"`.
+- `exportRows` fetches the URL (the interceptor adds the header), reads the filename from
+  `Content-Disposition`, and hands the blob to the browser as a download; a failure shows
+  the server's message in a toast instead of a JSON page. The deviation is recorded in
+  `frontend/JWT_PATCH.md` beside the private-file cookie.
+
+Covered by `tests/test_export_query.py`.
+
+## 52. Bulk Edit offered no fields: `get_fields` never sent the flags the dialog filters on
+
+**Block:** `07 / views` has no block for it. Seen 29 Sep 2026 in the Tasks pass of
+`BROWSER_TESTING.md` (T7): tick rows → Edit → the Field dropdown is empty; the request
+answered 200.
+
+**Expected:** `crm/api/doc.py:639-651`: `frappe.get_meta(doctype).fields` minus the
+value-less types and `Read Only`, each a DocField row with every flag present (`hidden:
+0`, `read_only: 0`, `reqd`, `options`, `description`, ...). `EditValueModal.vue:76-82`
+keeps `f.hidden == 0 && f.read_only == 0` and renders an input by `fieldtype`, with
+`options` for a Select or a Link.
+
+**Actual:** the port built the list from the Django model's concrete fields with four keys
+(`label`, `fieldname`, `fieldtype`, `options`), so `hidden` and `read_only` were
+`undefined`, `undefined == 0` is false, and the dialog's filter kept nothing. The same
+answer served `SettingsPage.vue`, which asks with `allow_all_fieldtypes` and lays its
+form out from the Tab, Section and Column Breaks the model list never contained. Labels
+were the model's verbose names and the order the model's, not the DocType's.
+
+**Where:** `backend/crm_app/api/doc.py`.
+
+**Fixed 29 Sep 2026.** `get_fields` reads `field_meta.get_fields(doctype)`, the DocType's
+own rows from `doctype_meta.json` (the platform doctypes fall back to the model as
+before), drops `no_value_fields` and `Read Only` unless `allow_all_fieldtypes`, and
+passes each row through `docfield()`, which restores the zero flags the generator
+leaves out (`hidden`, `read_only`, `reqd`, `permlevel`, `in_list_view`,
+`in_standard_filter`) and the `options` / `description` / `default` keys the frontend
+destructures. Covered by `tests/test_bulk_edit_fields.py`.
+
+## 53. Kanban cards showed the record's number: no model declared its kanban defaults
+
+**Block:** `06 / kanban` answers 200 with `kanban_fields: ["name"]`, which nothing in the
+http suite asserted against. Seen 29 Sep 2026 in the Tasks pass of `BROWSER_TESTING.md`
+(T8): each card showed the task's title and a number.
+
+**Expected:** `crm_task.py:112-118`: `column_field: status`, `title_field: title`,
+`kanban_fields: ["description", "priority", "creation"]`; `crm_lead.py:487` and
+`crm_deal.py:350` declare theirs the same way. `crm/api/doc.py:388-399` reads them when
+the request names no title field and no card fields, and `Tasks.vue:74-154` renders each
+name in `kanban_fields` off the card's row: the description, the priority icon, "3 days
+ago", and the button to the linked lead or deal.
+
+**Actual:** none of the three port models defined `default_kanban_settings`, so
+`registry.default_kanban_settings()` answered `None` and `_kanban` fell back to
+`title_field = "name"` and `kanban_fields = ["name"]`. The number on the card was the
+task's `name`, an autoincrement id. Worse, the frontend saves the kanban settings it was
+given the moment a column is reordered (`create_or_update_standard_view`), so the dev
+database's standard kanban view for CRM Task held `["name"]` and would have kept showing
+it after the models were fixed.
+
+**Where:** `backend/crm_app/models/core_sales.py` (the three models),
+`backend/crm_app/migrations/0011_kanban_fields_reset.py`.
+
+**Fixed 29 Sep 2026.** `default_kanban_settings` on `CRMLead`, `CRMDeal` and `CRMTask`,
+verbatim from upstream. Migration 0011 rewrites a saved kanban view of the three whose
+`kanban_fields` is exactly the fallback `["name"]`, or whose `title_field` is `name`, to
+the doctype's defaults; a view a person configured is left alone. Covered by
+`tests/test_kanban_defaults.py`.
+
+## 54. The Reference Document Type dropdown was empty: no search answers for `DocType`
+
+**Block:** none in the http suite. Seen 29 Sep 2026 in the Notes pass of
+`BROWSER_TESTING.md` (N10; the same field is on tasks, T17, and call logs, C12): after
+adding "Reference Document Type" and "Reference Doc" to the create dialog, the first
+dropdown offered nothing, where upstream lists the doctypes.
+
+**Expected:** `fcrm_note.json:34-37`, `crm_task.json:79-82`, `crm_call_log.json:125-128`
+declare `reference_doctype` as a Link to `DocType`, and `reference_docname` as a Dynamic
+Link on it. The Link control searches `frappe.desk.search.search_link` with
+`doctype: "DocType"`; upstream's `search_widget` answers that one search with
+`ignore_permissions=True` (`search.py:294`), so every role can pick a reference, listing
+DocType rows that contain the typed text, the ones that start with it first.
+
+**Actual:** `search_link` resolved every doctype through the registry, and `DocType` is
+not a doctype this port has, so the call answered 404 and the dropdown stayed empty. The
+Reference Doc beside it searches whatever the first field names, so it had nothing to
+search either. That accounts for the terminal's unexplained 404s of the pass: the
+`search_link` ones are this field (the control searches on mount and again when its
+filters settle), and the `getdoctype` and `frappe.client.insert` ones are the Link
+control's "Create New" fallback for the typed text, which opens the quick-entry dialog
+for a `DocType` and tries to insert one.
+
+**Where:** `backend/crm_app/api/client.py`.
+
+**Fixed 29 Sep 2026.** `search_link` answers a `DocType` search from the registry
+(`_search_doctypes`): every registered doctype, the typed text matched anywhere in the
+name with the names that start with it first, a condition on `name` in the Link's filters
+honoured in either spelling, ten at a time. No permission check, as upstream. Once the
+first field holds `CRM Lead`, the second searches leads as it always could, and the
+insert carries the pair. Covered by `tests/test_reference_doctype_search.py`.
+
+## 55. The frontend is slow to load (open, deferred)
+
+**Block:** none. Recorded 30 Sep 2026 from the hand testing in `BROWSER_TESTING.md`: the
+Vue app takes too long to load.
+
+**Status:** open and deliberately not investigated. The decision is to finish the
+browser testing and merge `phase-8-followup` first, then see what can be done.
+
+**What is known, and where to start:** `specs/KNOWN_ISSUES.md` 9. In short: finding 29's
+cold-start cost is the one measured number (a minute or two per `yarn dev` start, bound
+by the CPU); the app makes about ten calls before the first screen settles, and waits for
+the boot-values call before it mounts; nobody has timed a warm reload or a production
+build, so whether the slowness exists outside the dev server is not established. The
+first step is to measure those three cases.
+
+## 56. "Unlink all" leaves an organization's deal linked (open, same as upstream)
+
+**Block:** none. Seen 30 Sep 2026 in the Organizations pass of `BROWSER_TESTING.md`
+(O10): with a deal linked to the organization, Delete → "Unlink all" did not release the
+deal; "Delete" in the same dialog, which removes the deal, did.
+
+**Expected by a user:** Unlink detaches the deal from the organization, so the
+organization can be deleted and the deal survives.
+
+**What upstream does:** `crm/api/doc.py:721-749`. `remove_doc_link` sets
+`reference_doctype` and `reference_docname` to empty on the linked document and saves
+it. Those are the fields a task, note or call log uses to point at a lead or deal. A CRM
+Deal points at its organization through the `organization` Link field and has no such
+pair, so nothing changes: the deal is still linked, the dialog lists it again, and
+deleting the organization is refused ("Cannot delete or cancel because CRM Organization
+... is linked with CRM Deal ..."). Recorded as upstream bug 42.
+
+**What the port does:** the same. `_clear_reference` (`crm_app/api/doc.py`) blanks the
+pair on models that have it and does nothing otherwise, and the organization's delete is
+refused with the same sentence (`PROTECT` on `CRMDeal.organization`, finding 3).
+`tests/test_unlink_linked_docs.py` pins the three cases: a task is unlinked, a deal is
+not, and "Delete" frees the organization.
+
+**Status:** open, by the project's rule for a user-visible upstream bug: reproduce it and
+record the choice. Diverging would mean having unlink clear the Link field that actually
+holds the reference (`deal.organization = None`), which is what the button promises; it
+is a decision for the owner, not a port defect.
+
+**Decision, 30 Sep 2026:** leave it as it is for now. A pull request for the fix is to be
+opened once the browser testing is finished. Until then the port keeps upstream's
+behaviour, and `tests/test_unlink_linked_docs.py` will need its second case turned round
+when the fix lands. The fix itself: in `remove_doc_link` (upstream) and `_clear_reference`
+(here), for a linked document that has no reference pair, clear the Link field that names
+the record being deleted, found the same way `get_linked_docs` found it.
+
+## 57. A user's outgoing email accounts cannot be stored: `User` has no `user_emails`
+
+**Block:** none. Seen 30 Sep 2026 in the Settings pass of `BROWSER_TESTING.md` (S16):
+Profile → Email Settings → Add Email opened a dropdown that said "No results", on the
+local app and on an upstream demo alike.
+
+**Two separate things.**
+
+*The empty dropdown is an empty state, not a fault, and upstream behaves the same.*
+`UserEmailSettings.vue:140-146` lists Email Accounts with `enable_outgoing = 1`, less the
+ones already on the user. Until an account is added under Settings → Email → Accounts
+with Enable Outgoing ticked, there is nothing to list, and the dropdown has no message
+saying so. The list is also cached under `Outgoing Email Accounts`, so an account added
+in the same session may need a reload before it shows.
+
+*What comes next is a gap in this port.* Upstream's `User` carries a `user_emails` child
+table (`user.json:420-424`, rows of `User Email`: `email_account`, `email_id`,
+`enable_outgoing`, ...). Picking an account pushes a row onto `user.doc.user_emails` and
+Update saves the user; `EmailEditor.vue:266` then reads the same rows to offer the
+"from" address when composing. The port's `User` has no such table and no `User Email`
+doctype, so the pick has nowhere to go: the row is expected to vanish on reload, and the
+composer can never offer a second sender.
+
+**Where:** `backend/frappe_platform/models.py` (`User`), a new `User Email` child table.
+
+**Status:** open. The fix is a child-table model on `User` with a migration, its place in
+the user serializer, and the field-visibility review every new doctype gets
+(`specs/AS_BUILT.md`, the phase-4 checklist): upstream puts `user_emails` at permlevel 1,
+which is how it keeps a Sales User from attaching accounts to themselves.
+
+**Fixed 6 Oct 2026**, after S10 passed and the composer's From dropdown was seen empty
+with the Send button disabled, where the upstream demo offers the account.
+`frappe_platform.UserEmail` is the child table (`User Email`, migration 0015):
+`email_account`, with `email_id`, `awaiting_password` and `enable_outgoing` fetched from
+it, and `used_oauth`, off. Two things fill it, as upstream has them:
+
+* an Email Account save links the account to the user whose address it is and keeps
+  the row's flags current (`email_account.py:1072-1115`, `setup_user_email_inbox`);
+  the rows go with the account;
+* a System Manager's Add Email on the Profile screen, through `frappe.client.set_value`.
+
+The permlevel: `User.PRIVILEGED_WRITE_FIELDS = ("user_emails",)`, System Manager only,
+a new field tool in `frappe_core.field_security`. A Sales User's pick is dropped before
+validation and the rest of the save goes through, which is what upstream's
+`_validate_perm_levels` does by resetting the field. `frappe.client.get` on a user now
+carries the rows inline, which is what the composer builds its From dropdown from.
+
+Covered by `tests/test_user_emails.py`.
+
+## 58. The Language dropdown was empty: the port had no `Language` doctype
+
+**Block:** none in the http suite. Seen 30 Sep 2026 in the Settings pass of
+`BROWSER_TESTING.md` (S17): Preferences → Language opened an empty dropdown.
+
+**Expected:** `PreferencesSettings.vue:63` is `<Link doctype="Language">` bound to
+`user.doc.language`. `Language` is a framework doctype
+(`frappe/core/doctype/language/language.json`): named after `language_code`, with
+`language_name` as its title and search field and `show_title_field_in_link` set, so the
+picker lists names ("English") with the code beneath, enabled rows only. The framework
+fills it from `frappe/geo/languages.csv` when a site is set up
+(`language.py:sync_languages`).
+
+**Actual:** no such doctype in the port, so `search_link` answered 404 and the list was
+empty. The same class of gap as `Country` (finding 45) and the `DocType` search
+(finding 54).
+
+**Where:** `backend/frappe_platform/models.py` (`Language`), migration `frappe_platform`
+0011, `backend/crm_app/setup.py` (`add_languages`), `backend/crm_app/data/languages.csv`,
+`backend/crm_app/permissions/platform_docs.py`, `backend/crm_app/api/client.py`.
+
+**Fixed 30 Sep 2026.** `Language` is modelled (`language_code` as the name,
+`language_name`, `flag`, `based_on`, `enabled`) and seeded by `seed_defaults` from a copy
+of the framework's list: 82 rows, enabled as the file says. Everyone reads, System Manager
+writes, as `language.json` grants. `search_link` matches the name as well as the code and,
+for a doctype that shows its title in a Link, answers `value` / `label` / `description` as
+`build_for_autosuggest` does; a disabled language is offered only with
+`include_disabled`. Covered by `tests/test_language.py`.
+
+**What choosing a language does here:** it is stored on the user and the page reloads,
+and nothing else changes. The port ships no translation catalogues
+(`crm.api.get_translations` answers `{}`), so the interface stays in English. That is a
+recorded limit of the port, not part of this finding; it is finding 59.
+
+## 59. Nothing is translated (open, deferred)
+
+**Block:** none. Recorded 30 Sep 2026, once the Language picker worked (finding 58) and
+choosing a language changed nothing on screen.
+
+**Expected:** upstream translates the interface and the server's messages from the PO
+files each app ships (`crm/locale`, 33 languages; `frappe/locale`, 39). The page's boot
+values carry the merged dictionary for the user's language as `translated_messages`, and
+every server-side string goes through `_()`.
+
+**Actual:** the boot call answers `translated_messages: {}` (`crm_app/api/boot.py:65`),
+so the Vue app's every lookup falls back to English, and the server's 200 user-facing
+messages are English literals.
+
+**Status:** open, deferred by decision until the browser testing is finished. Two
+requirements from the owner are part of it: the chosen language must also apply to the
+messages the server sends, and `enabled` on a Language must mean what it means in
+Frappe (offered in the picker, accepted for a guest's browser language, honoured by the
+boot dictionary).
+
+**The design:** `specs/KNOWN_ISSUES.md` 10. In short: read the PO files with a Python
+parser into Frappe's dictionary shape; resolve each request's language the way
+`get_language` does; return the dictionary in the boot values, which translates the
+interface; add a `_()` that `throw()` applies to literal messages, and rewrite the
+roughly 75 f-string messages as upstream's `"... {0}".format(...)` templates so they can
+be looked up; guard the lot with a test against `main.pot`.
+
+## 60. Two General settings are stored and never acted on
+
+**Block:** none. Found 30 Sep 2026 by reading the code behind the General page of
+Settings (`BROWSER_TESTING.md` S20), not from a failing screen: both switches save and
+reload correctly.
+
+**Expected:** `crm/utils/__init__.py:173-193` and `260-290`. When a Communication on a
+lead or deal is saved, `_get_communication_status` answers `Open` for a received one if
+`auto_reopen_on_new_communication` is on, and `Replied` for a sent one if
+`auto_mark_replied_on_response` is on. `on_communication_update` writes that to the
+document's `communication_status`, provided the communication is the latest on it, in
+the same update that bumps `modified`. The page says both apply only where an SLA is
+enabled, since that is the only place the status is shown.
+
+**Actual:** the two columns exist on `FCRMSettings` (`crm_app/models/metadata.py:345-346`)
+and no code reads them. The port's handler for a new communication
+(`crm_app/async_signals.py`) implements only the third switch,
+`update_timestamp_on_new_communication`.
+
+**Reach:** "Replied on response" would fire when an email is sent from a lead or deal,
+which the port can do. "Reopen on new communication" needs a received email, and the port
+does not fetch incoming mail (`KNOWN_ISSUES.md` 7), so that half has no trigger here even
+once it is written.
+
+**Where:** `backend/crm_app/async_signals.py`.
+
+**Status:** open, deferred. Decision 30 Sep 2026: to be ported once the browser testing is
+finished. The fix is a port of `_get_communication_status` and the status write in the
+communication handler, with the latest-communication check, and a test that sends an
+email from a lead with an SLA and reads the status back.
+
+**The third switch, for the record:** `update_timestamp_on_new_communication` was verified
+in the browser the same day (`BROWSER_TESTING.md` S19), with and without a Celery worker:
+with one, a comment moves the lead's Last Modified; without one the job waits in the
+queue and nothing moves, which is how a queued job is meant to behave.
+
+## 61. An administrator's bell held everyone's notifications
+
+**Block:** `08 / notifications` replays as users who are not administrators, so it never
+saw this. Seen 30 Sep 2026 in the browser (`BROWSER_TESTING.md` NT1): clicking
+Notifications in the sidebar did nothing. The dev database held 64 notifications, none
+addressed to Administrator, and `get_notifications` answered all 64 to Administrator.
+
+**Expected:** `crm/api/notifications.py:8-13` selects `WHERE to_user = session.user`, and
+`mark_as_read` (52-57) filters on `{"to_user": user, "read": False}`. Both are the
+caller's own rows whoever the caller is.
+
+**Actual:** both port handlers read through `base_queryset("CRM Notification", user)` on
+the stated belief that the permission rule *is* `to_user = user`. It is, for an ordinary
+user. For Administrator and System Managers the rule is unrestricted, as upstream's
+`get_permission_query_conditions` is, so an administrator's bell listed every user's
+notifications, the badge counted them all, and "Mark all as read" would have marked them
+read for everybody. Among those rows were some with no reference, which is what stopped
+the panel from opening (finding 62).
+
+**Where:** `backend/crm_app/api/notifications.py`.
+
+**Fixed 30 Sep 2026.** Both handlers add `to_user = user` to the query. The permission
+rule is unchanged: an administrator can still read every row through
+`/api/resource/CRM Notification`, as upstream allows. Covered by
+`tests/test_notification_scope.py`.
+
+## 62. A notification with no lead or deal behind it takes the panel down (open, same as upstream)
+
+**Block:** none. Found 30 Sep 2026 while tracing finding 61.
+
+**Expected by a user:** the panel opens, and a notification about a task that is not tied
+to a lead or deal either goes to the task or is not a link.
+
+**What upstream does:** `crm/api/todo.py:126-131`. A task assignment's notification takes
+its reference from the task's own `reference_doctype` / `reference_docname`, empty for a
+task made on the Tasks page. `get_notifications` answers `route_name: "Lead"` with an
+empty `reference_name` for it, `Notifications.vue` renders every row as a `RouterLink` to
+`{ name: 'Lead', params: { leadId: '' } }`, and vue-router throws
+`Missing required param "leadId"` inside the render. The panel never appears for a user
+who holds one such row. Recorded as upstream bug 43.
+
+**What the port does:** the same. The rows are created the same way and the Vue file is
+upstream's unchanged. After finding 61's fix Administrator no longer sees other users'
+rows, so the panel opens there; a user who was assigned a standalone task (in the dev
+database, several of the demo Sales Users) will still find the bell dead.
+
+**Status:** open, by the project's rule for a user-visible upstream bug. The fix is in the
+frontend: a row with no reference rendered as plain text, or sent to the Tasks page. A
+candidate for the same pull request as finding 56.
+
+## 63. The dashboard currency cannot be chosen: the port has no `Currency` doctype (open, deferred)
+
+**Block:** none. Seen 30 Sep 2026 in the Settings pass of `BROWSER_TESTING.md` (S21):
+Settings → Dashboard → Dashboard Currency opened an empty dropdown, and Exchange Rate
+Provider stayed disabled.
+
+**Expected:** `DashboardSettings.vue` shows `<Link doctype="Currency">` until a currency
+is set, after which it is fixed ("Once set, cannot be edited"). `Currency` is a framework
+doctype, filled from the same `country_info.json` the countries come from
+(`frappe/geo/doctype/country/country.py:import_country_and_currency`). With a currency
+set, the provider select is enabled and `crm.api.exchange_rate.get_exchange_rate` asks
+the chosen service for a rate when a deal is in another currency.
+
+**Actual:** no `Currency` doctype in the port, so `search_link` answers 404 and the list
+is empty; the same gap as `Country` (finding 45) and `Language` (finding 58). The
+provider select is disabled by the frontend because no currency is set
+(`:disabled="!settings.doc?.currency"`). Behind it, the exchange-rate call is a stub that
+always answers 1, a recorded phase 3 decision (`crm_app/api/exchange_rate.py`): the
+`service_provider` and `access_key` settings are stored and nothing reads them.
+
+**Status:** open, deferred. Decision 30 Sep 2026: port Currency once the browser testing
+is finished. Two steps then. First the doctype, the way Language was done: a model, a
+seed from `country_info.json` through `seed_defaults`, upstream's role table, and the
+title shown in the picker. Then, separately, the four providers behind the stub, which
+is outbound HTTP and belongs with the integrations layer (`crm_app.integrations.http`).
+
+## 64. Settings → Defaults goes blank: the port has no `System Settings`
+
+**Block:** none. Seen 30 Sep 2026 in the Settings pass of `BROWSER_TESTING.md` (S5):
+choosing Defaults in the Settings dialog left its main area empty.
+
+**Expected:** `DefaultsSettings.vue` loads the framework's single `System Settings`
+document (`createDocumentResource({ doctype: 'System Settings' })`) and that doctype's
+metadata (`getMeta('System Settings')`), and offers six of its fields: `currency` (a Link
+to `Currency`), `currency_precision`, `number_format`, `float_precision`, `date_format`
+and `time_format`. The five selects take their options from the metadata
+(`system_settings.json`: for example `yyyy-mm-dd`, `dd-mm-yyyy`, `dd/mm/yyyy`,
+`dd.mm.yyyy`, `mm/dd/yyyy`, `mm-dd-yyyy` for the date). Only System Manager holds the
+doctype upstream. The values feed `frappe.defaults`, which is what the page's boot values
+carry as `sysdefaults` and what every number, date and amount on screen is formatted by.
+
+**Actual:** neither exists in the port. `frappe.client.get` and `getdoctype` both answer
+404, `settings.doc` stays empty, and the template reads `settings.doc.currency` with no
+guard, which throws inside the render and leaves the section blank. The values themselves
+do exist here, as `settings.FRAPPE_SYSDEFAULTS` (`config/settings/base.py:250-258`,
+overridable from the environment), and `crm_app/api/boot.py:63` sends them with the boot
+call. So formatting works, at the defaults; it just cannot be changed from the app.
+
+**Where:** a new single doctype in `frappe_platform`, its entry in the field metadata,
+`crm_app/api/boot.py`.
+
+**Decision, 30 Sep 2026:** deferred until the browser testing is finished, and to be
+built as one piece of work with finding 63 (Currency) and finding 59 (translations):
+Currency and System Settings first, the translation steps on top. `KNOWN_ISSUES.md` 10
+carries the order.
+
+**Status:** open, deferred. The fix is a `System Settings` single carrying at least those six
+fields, seeded from the current `FRAPPE_SYSDEFAULTS` so nothing changes on the day it
+lands; the framework's JSON added to the metadata generator so the selects get their
+options; `boot.py` reading the row instead of the Django setting; and System Manager
+alone writing it. Three other open items meet here and are best done together: the
+`currency` field needs the `Currency` doctype (finding 63), the system language the
+translation work needs is `System Settings.language` (finding 59, step 2 of
+`KNOWN_ISSUES.md` 10), and the dashboard's own currency setting reads the same list.
+
+## 65. "Invalid credentials" for a correct password: the server had no encryption key
+
+**Block:** `09 / email account` replays with made-up credentials and expects a refusal, so
+it could not see this. Seen 1 Oct 2026 in the Settings pass of `BROWSER_TESTING.md`
+(S10): a real Gmail address with an app password made minutes earlier, and the screen
+answered "Failed to create email account: invalid credentials".
+
+**Expected:** `crm/api/settings.py:5-46`. Upstream logs in to the mail server with the
+credentials, saves the account, and the list shows it. Anything that goes wrong on the
+way is re-thrown as its own text (`except Exception as e: frappe.throw(str(e))`).
+
+**Actual, three things stacked:**
+
+1. *The screen cannot tell you what went wrong.* `EmailAdd.vue:147-149` sets its error to
+   the literal "Failed to create email account: invalid credentials" in `onError`,
+   whatever the server said. That is upstream's file, unchanged.
+2. *The local server could not store any password.* The port keeps a mail password
+   encrypted at rest (`frappe_core/secrets.py`), with a key from `FIELD_ENCRYPTION_KEY`
+   in `.env`. The dev `.env` had none, and nothing in the setup docs said one was needed.
+   So the order of events was: log in to Gmail, succeed, try to save, raise
+   `MissingEncryptionKey`. Reproduced with made-up values and the login check switched
+   off: the save fails on this machine whatever the credentials.
+3. *A pasted app password could be a 500.* Google shows an app password in four groups;
+   copied from the page it can carry non-breaking spaces, which `smtplib` cannot encode.
+   That raised `UnicodeEncodeError` out of the check uncaught. Upstream's catch-all turns
+   it into a refusal; the port had no catch-all.
+
+Ruled out on the way: the network (both Gmail ports answer from this machine) and the
+SMTP conversation itself (a wrong password reaches AUTH and is refused cleanly).
+
+**Where:** `backend/crm_app/api/settings.py`, `backend/frappe_core/secrets.py`,
+`readme.md`, `docs/TESTING_GUIDE.md`.
+
+**Fixed 1 Oct 2026.**
+
+- `create_email_account` checks for the key before it logs in (`secrets.ensure_key`), so
+  a server that cannot store the password says "FIELD_ENCRYPTION_KEY is not set" in the
+  response without a pointless login first.
+- The live check is wrapped as upstream wraps it: a port exception passes through, and
+  anything else the mail libraries raise becomes a 417 carrying its own text.
+- `readme.md` ("The encryption key") and `TESTING_GUIDE.md` say the key is required, how
+  to make one, and that the server must be restarted after editing `.env`.
+
+**Still needed on each machine:** a `FIELD_ENCRYPTION_KEY` line in `.env`. The code cannot
+supply one; a key generated silently would be lost on the next deploy and take every
+stored credential with it.
+
+**Not changed:** the screen's fixed sentence. It is upstream's frontend. The true reason is
+in the response body (browser Network tab) and in the server terminal.
+
+Covered by `tests/test_email_account_setup.py`.
+
+## 66. Salutation and Gender were not dropdowns: the port had neither lookup doctype
+
+**Block:** none in the http suite. Seen 1 Oct 2026 in the Contacts pass of
+`BROWSER_TESTING.md`: the contact's Salutation and Gender were text boxes, where an
+upstream demo shows a dropdown for each.
+
+**Expected:** `contact.json` declares `salutation` as a Link to `Salutation` and `gender`
+as a Link to `Gender`; `crm_lead.json` and `crm_deal.json` do the same for their own
+copies of the fields. Both targets are one-field framework doctypes
+(`frappe/contacts/doctype/salutation`, `.../gender`), filled by the setup wizard
+(`install_fixtures.py:20-49`): Mr, Ms, Mx, Dr, Mrs, Madam, Miss, Master, Prof, and Male,
+Female, Other, Transgender, Genderqueer, Non-Conforming, Prefer not to say.
+
+**Actual:** the port had neither doctype, and the gap showed two ways. A contact's field
+metadata is derived from its Django model, where the two are text columns, so the forms
+drew text boxes. A lead's and a deal's metadata is upstream's JSON, which says Link, so
+their forms drew dropdowns whose search answered 404: they had been empty all along.
+
+**Where:** `backend/frappe_platform/models.py` (`Salutation`, `Gender`,
+`Contact.LINK_FIELDS`), migration `frappe_platform` 0012, `backend/crm_app/setup.py`,
+`backend/crm_app/permissions/platform_docs.py`, `backend/frappe_core/field_meta.py`.
+
+**Fixed 1 Oct 2026.** Both doctypes are modelled, named after their one field, and seeded
+by `seed_defaults` with upstream's lists. Everyone reads and System Manager writes, as the
+two JSON files grant. On `Contact`, `LINK_FIELDS` names the target of the two columns and
+the derived metadata says Link, which is the shape the lead and the deal already had: a
+text column in the model, a Link in the metadata.
+
+**A value that names nothing is refused, as upstream refuses it** (added the same day,
+on the owner's instruction). Upstream's `Document._validate_links` runs on every save
+and throws `LinkValidationError`, "Could not find <Label>: <value>"
+(`base_document.py:1040-1054`). The port had that for foreign-key Links only; its text
+Links stored whatever was typed. `frappe_core/links.py`, called from
+`BaseDocument.save`, now holds every text Link to the rule when its target doctype is
+registered. Nothing is listed by hand: the fields come from the doctype's metadata, so
+the rule reaches `salutation` and `gender` on Contact, CRM Lead and CRM Deal, `gender`
+on CRM Contacts, `address` on CRM Organization and `product` on CRM Product Sync Issue.
+A case-only difference is rewritten to the stored spelling, since upstream on MariaDB
+matches without regard to case and saves the stored name: `mr` becomes `Mr`.
+
+Because a save can now be refused for want of a row, the two lists cannot be left to
+`seed_defaults` alone. Migration `frappe_platform` 0014 writes them
+(`frappe_platform/reference_data.py`), so every database has them, the test database
+included; `seed_defaults` puts back one that was deleted. The dev database was checked
+before the rule went in: no existing row would be refused.
+
+Covered by `tests/test_salutation_gender.py`.
+
+This also closes the larger half of finding 44 as it affects the screens: the contact's
+form now behaves as upstream's for these two fields. Its remaining labels still come
+from the model.
+
+## 67. A second number could not be picked, and a number could not be edited or removed
+
+**Block:** none in the http suite. Seen 1 Oct 2026 in the Contacts pass of
+`BROWSER_TESTING.md` (K9): a new number was added to a contact from the Mobile No
+dropdown, and clicking it did not select it.
+
+**Expected:** the dropdown does three things to a row (`useContactFields.ts`). Clicking
+one calls `crm.api.contact.set_as_primary`, which loads the contact, flags the chosen row
+and clears the rest in memory, and saves once (`crm/api/contact.py:87-112`). The pencil
+calls `frappe.client.set_value` on `Contact Email` or `Contact Phone`, and the x calls
+`frappe.client.delete` on the same; the framework takes a child row in both, checks write
+on the parent, and saves or removes the row through the parent
+(`frappe/client.py:213-223`, `551-572`).
+
+**Actual:** two separate faults.
+
+1. *Pick.* The port's `set_as_primary` saved the rows one at a time. Each row's save
+   re-derives the contact, and the row being promoted was saved while the old primary
+   still held its flag. The contact's own rule, "Only one **Mobile No** can be set as
+   primary.", then refused it with a 417, **after** the new row's flag was already
+   written. The contact was left with two rows flagged, and from then on every save of
+   that contact failed on the same rule, which is the "could not save" seen on the page.
+2. *Edit and remove.* `frappe.client.set_value` and `frappe.client.delete` refused every
+   child table with a 404, so neither button on a row did anything.
+
+**Where:** `backend/crm_app/api/contact.py` (`set_as_primary`),
+`backend/crm_app/api/client.py` (`_child_row_and_parent`, `_set_child_value`,
+`_delete_child_row`), `backend/frappe_platform/models.py` (`CLIENT_EDITABLE` on
+`ContactEmail` and `ContactPhone`).
+
+**Fixed 1 Oct 2026.**
+
+- `set_as_primary` writes the flags as two set-based updates inside one transaction, the
+  old flags cleared before the new one is set, then re-derives the contact once. No
+  moment exists with two rows flagged, and a failure leaves nothing half-written.
+- The two client methods accept a child row whose model says `CLIENT_EDITABLE`. They find
+  the parent through the row, check write on the parent, change or remove the row, and
+  save the parent, so the contact's `email_id`, `mobile_no` and `phone` follow. Only the
+  two contact tables are opted in; the reason for not opening every child table, as
+  upstream does, is in `specs/SECURITY_MODEL.md`.
+
+**Data:** one contact in the dev database had been left with two primary mobiles by the
+fault. It was repaired by hand, keeping the number flagged last.
+
+**The filter, checked and left alone.** The Mobile No filter finds a contact by its
+primary mobile number, in whole or in part. The **Phone** quick filter finds nothing for
+a number added on the contact screens, and upstream is the same: it filters the `phone`
+column, which those screens never fill. Recorded as upstream bug 44.
+
+Covered by `tests/test_contact_numbers.py`.
+
+## 68. The organization's logo could be changed but not removed
+
+**Block:** none in the http suite; seen in the browser on 5 Oct 2026
+(`BROWSER_TESTING.md` O14), signed in as Administrator. The upstream demo removes it.
+
+**Expected:** once a logo is set, `Organization.vue` offers Change Image and Remove
+Image. Remove Image calls `changeOrganizationImage('')`, which submits
+`organization_logo: file?.file_url || null`, so `null` is what reaches
+`frappe.client.set_value`. Upstream's `set_value` (`frappe/client.py`) does
+`doc.set(fieldname, value)` and saves; a Data field holding None is stored empty, and the
+avatar goes back to the initials.
+
+**Actual:** the port's `client_set_value` writes through the doctype's serializer.
+`organization_logo` is `CharField(blank=True, null=False)`, which DRF maps to a field
+with `allow_null=False`, so the request answered 400 "This field may not be null." and
+the logo stayed. The contact page's Remove Image sends `''` instead, so it was not
+affected. But the same refusal waited for any text or select column a client clears with
+`null`, on `/api/resource/` too, and in the list's bulk Edit dialog: `EditValueModal.vue`
+sends `fieldVal || null` for an emptied value, and `bulk_action` writes through the same
+serializer, so emptying a text or select field for several rows at once put every row in
+the `failed` list, which the dialog does not show. It looked like nothing happened.
+
+**Where:** `frappe_core/serializers.py`, `DocumentSerializer`.
+
+**Fixed 5 Oct 2026.** `DocumentSerializer.to_internal_value` turns `None` into `""` for
+every text and choice field that does not itself allow null, before validation, so
+`null` means "empty" on both write routes, as it does upstream. A field the model
+declares nullable keeps `None`, and a field that refuses blank still refuses it.
+
+Covered by `tests/test_null_as_blank.py`.
+
+## 69. A call log pointed at a lead did not show on the lead's Calls tab
+
+**Block:** none in the http suite; seen in the browser on 5 Oct 2026
+(`BROWSER_TESTING.md` C12), signed in as Administrator. On the upstream demo the same
+edit puts the call on the lead's page.
+
+**Expected:** a call log carries Reference Document Type and Reference Name. A lead's or
+a deal's page asks `crm.api.activities.get_activities`, whose second bucket is the calls
+`get_linked_calls` finds for that name (`crm/api/activities.py:376-467`). The function's
+last line is `calls = [parse_call_log(call) for call in calls]`, which adds `_caller`,
+`_receiver`, `_duration`, `activity_type` and `show_recording`; `CallArea.vue` reads
+`call._caller.image` and `call._receiver.label` straight off each row.
+
+**Actual:** the reference saved correctly and `get_linked_calls` found the call, but
+returned it as read from the table. With no `_caller` on the row the call card throws
+while rendering, so the tab showed nothing. The port's docstring cited lines 373-459:
+it had stopped one line short of the parse. Nothing caught it because the demo call logs
+have no reference, and the one test of this function only checks which names come back.
+
+**Where:** `crm_app/api/activities.py`, `get_linked_calls`.
+
+**Fixed 5 Oct 2026.** `get_linked_calls` runs every call through `parse_call_log`
+(`crm_app/models/telephony.py`, already ported for the call-log list), for the lead page
+and the deal page alike.
+
+Covered by `tests/test_lead_call_tab.py`.
+
+## 70. Bulk Edit cannot empty a task's Assigned To
+
+**Block:** none in the http suite; seen in the browser on 5 Oct 2026
+(`BROWSER_TESTING.md` T18), signed in as Administrator.
+
+**Expected:** not settled. The task list hides the Assign To and Clear Assignment menu
+items (`TasksListView.vue`, `hideAssign: true`), so the bulk Edit dialog is the only way
+to change the assignee of several tasks at once, and emptying its value is the only way
+to clear it.
+
+**Actual:** tick tasks → Edit → Field "Assigned To", no value → Update: the rows keep
+their assignee. Setting a user the same way works (T16). The upstream demo behaves the
+same.
+
+**Not investigated,** by decision on 5 Oct 2026: recorded only, to be looked at with the
+other post-testing items. What is known comes from reading the dialog, not from tracing
+this failure: `EditValueModal.vue` sends `{assigned_to: fieldVal || null}` to
+`submit_cancel_or_update_docs` and does not show the response's `failed` list. Whether
+the request is sent at all, and what answers it, has not been checked on either side.
+
+**Status:** open. If the cause is upstream's own, it also belongs in the
+`UPSTREAM_BUGS` file and in the upstream PR with bugs 42, 43 and 44.
+
+## 71. The ticked rows stay ticked after a bulk action
+
+**Block:** none in the http suite; seen in the browser on 5 Oct 2026 on the leads list
+(`BROWSER_TESTING.md` L18, L20, L22), signed in as Administrator.
+
+**Actual:** tick rows → run a bulk action (Edit, Assign To, Clear Assignment, Convert to
+Deal, Delete). The action itself works, but when it finishes the rows are still ticked
+and the selection bar is still up; they have to be unticked by hand.
+
+**Not investigated, and not compared with upstream,** by decision on 5 Oct 2026:
+recorded only. What is known comes from reading `ListBulkActions.vue`, not from tracing
+this: each action is handed an `unselectAll` callback and calls `reload(unselectAll)`
+when it finishes, so the selection is meant to clear.
+
+**Status:** open.
+
+## 72. A call log edited from a lead does not refresh on the lead's Calls tab
+
+**Block:** none in the http suite; seen in the browser on 5 Oct 2026 on a lead's Calls
+tab (`BROWSER_TESTING.md` L11), signed in as Administrator.
+
+**Actual:** open a call from the lead's Calls tab → change its time in the form → save
+and close. The tab still shows the old value; a reload of the page shows the new one, so
+the change is saved.
+
+**Not investigated, and not compared with upstream,** by decision on 5 Oct 2026:
+recorded only. The tester's own guess is that the form and the tab hold the call in two
+separate pieces of state.
+
+**Status:** open.
+
+## 73. Convert to Deal on a lead's page answered 500
+
+**Block:** none in the http suite, which sends `deal: {"next_step": ...}` or no deal at
+all; seen in the browser on 5 Oct 2026 (`BROWSER_TESTING.md` L19). The dialog showed
+"Error converting to deal: Internal Server Error". Bulk convert from the list (L20)
+worked.
+
+**Expected:** `ConvertToDealModal.vue` posts `lead`, `deal: deal.doc`,
+`existing_contact` and `existing_organization` to
+`crm.fcrm.doctype.crm_lead.crm_lead.convert_to_deal`. `deal.doc` comes from
+`useDocument('CRM Deal')`, and a new document starts as `{__newDocument: true, doctype}`
+(`data/document.js`), so those two keys arrive on every conversion, before any field the
+user fills in. Upstream ends `create_deal` with `new_deal.update(deal)`
+(`crm_lead.py:375-376`): every key is set on the document, and `insert` saves the ones
+that are fields.
+
+**Actual:** `conversion.create_deal` merged the dict into its payload and called
+`CRMDeal.objects.create(**payload)`:
+`TypeError: CRMDeal() got unexpected keyword arguments: '__newDocument', 'doctype'`.
+So the button failed for everyone, every time; only the bulk action, which sends no
+deal form, could convert a lead. A Link in the form (a status, an owner) would have
+failed the same way, because the model wants `status_id`, not `status`.
+
+**Where:** `crm_app/api/lead.py`, the endpoint; `crm_app/conversion.py` is unchanged.
+
+**Fixed 5 Oct 2026.** The endpoint passes the form's deal fields through the deal's
+serializer, as the Create Deal door in `crm_app/api/deal.py` does: the read-only rules
+of `frappe.client.insert` apply, values are validated, a Link is taken by name, and keys
+that are not deal fields are dropped. Checked against the dev database with the dialog's
+exact payload inside a rolled-back transaction: 200 and a deal.
+
+Covered by `tests/test_lead_endpoints.py` (the three tests under "what the modal really
+sends").
+
+## 74. New deals were made with an earlier deal's values
+
+**Block:** none in the http suite; seen in the browser on 6 Oct 2026
+(`BROWSER_TESTING.md` D24), signed in as Administrator. After a few deals were created
+correctly, a deal created with new details came out with values from the earlier ones.
+
+**Expected:** each Create Deal starts from an empty form and makes a deal from what was
+typed.
+
+**Actual:** `useDocument('CRM Deal')` with no name hands every caller the one
+`documentsCache['CRM Deal']['']` object for the page session (`data/document.js:110-111`),
+and `DealModal.vue` never clears it: on success it only navigates (`:214-218`). So the
+next Create Deal starts from the last deal's values. Worse, once "Choose Existing
+Organization" has been used, its pick stays in `deal.doc.organization` after the switch
+is turned off; the field is hidden with its section, `createDeal()` nulls `contact` for
+the equivalent case but not `organization` (`:179`), and the server prefers
+`doc.organization` to the organization details typed (`crm_deal.py:468`, and the port's
+`crm_app/api/deal.py` the same way). The deal lands on the old organization and the
+typed one is never created. The Convert to Deal dialog reads the same object
+(`ConvertToDealModal.vue:129`), so a conversion after a Create Deal carries that
+dialog's leftover website, territory, revenue, industry, status, owner and organization
+over the lead's own values.
+
+**Where:** the frontend, which is upstream's byte for byte; recorded as upstream bug 45
+and confirmed on the upstream demo on 6 Oct 2026.
+Not a browser or server-state problem: the object lives in the page's memory, so a page
+reload clears it and a server restart changes nothing.
+
+**Status:** open, reproduced on purpose (the frontend is upstream's). Workaround until
+the upstream PR: reload the page before creating or converting a deal after another
+deal has been created. The D-rows were recorded with that workaround.
+
+## 75. The delete dialog listed a deal's own contact row and its comments
+
+**Block:** none in the http suite; found 6 Oct 2026 on request, by comparing the two
+delete paths of a deal (`BROWSER_TESTING.md` D22, D23) with upstream and probing the
+port against the dev database inside rolled-back transactions.
+
+**Expected:** `DeleteLinkedDocModal.vue` asks `crm.api.doc.get_linked_docs_of_document`
+what links to the record, offers Delete All and Unlink All while the list has rows, and
+shows the Delete button only once it is empty. Upstream's list comes from the
+framework's `get_linked_docs` and `get_dynamic_linked_docs`
+(`frappe/model/delete_doc.py:313-470`): Link and Dynamic Link fields in other doctypes,
+minus the doctypes the `ignore_links_on_delete` hook names (`frappe/hooks.py:455-470`:
+Comment, Communication, ToDo, File, Version, Activity Log and the rest, plus the CRM's
+Failed Lead Sync Log), which `delete_doc` deletes with the document. A child row's own
+`parent` column is not a Link field, so a document's own child rows are never listed;
+a child row that *does* link to the record is reported as its parent document
+(`delete_doc.py:352-384`). For a deal with a contact row, four comments, three tasks,
+two notes and two call logs, the list is the tasks, notes, calls and the notifications.
+
+**Actual:** the port's `_link_sources` walked every FK in the registry, child tables
+and their parent FKs included, and `_dynamic_link_sources` skipped nothing. So the
+list for that deal also held `CRM Contacts <row id>` and four `Comment <id>` rows.
+Three consequences:
+
+1. A contact row has no reference pair, so Unlink All left it listed and the Delete
+   button never appeared. A deal with a contact, which every deal made through the
+   dialog has, could only be deleted with Delete All, which also deletes its tasks and
+   notes.
+2. Unlinking a comment blanked its reference and the comment was left orphaned, in
+   the dialog and in `delete_bulk_docs` with "Delete" (which clears links first), where
+   upstream deletes the comments with the deal.
+3. A contact's dialog listed `CRM Contacts <row id>` for each deal it is on instead of
+   the deal, and Unlink set that row's contact to nothing instead of taking the contact
+   off the deal.
+
+Nothing caught it because the tests of this endpoint check names, permission and a
+lead's tasks, never a document with child rows or comments.
+
+**Where:** `crm_app/api/doc.py`, `_link_sources` and `_dynamic_link_sources`, used by
+both `get_linked_docs_of_document` and the bulk scan `_linked_docs_for_batch`.
+
+**Fixed 6 Oct 2026.** `_link_sources` skips a child table's parent FK (the FK whose
+reverse name is the row's `parentfield`, the same walk `client.py` uses) and every
+doctype in `IGNORE_LINKS_ON_DELETE`, the hook's list; a child table's other FKs are
+reported as the row's parent document, skipping the record itself and a parent the
+caller cannot read. `_dynamic_link_sources` skips the same doctypes. Probed again on
+the same deal: the list is the tasks, notes, calls and notifications; Unlink All
+empties it; the delete then removes the deal and its comments and leaves the tasks
+unlinked. A contact's dialog now lists the deals it is on, and `remove_contact` takes
+it off them, as upstream's `remove_contact_link` does.
+
+Not covered: a call log attached to a deal only through its `links` child table
+(`Dynamic Link` rows, written by the telephony integrations) is not listed, where
+upstream lists the call. Out of the browser log's scope with the integrations.
+
+Covered by `tests/test_delete_dialog_links.py`.
+
+## 76. A delete goes through while other documents still reference the record
+
+**Block:** none; seen in the same probe as 75, on the API only.
+
+**Expected:** upstream's `frappe.delete_doc` runs `check_if_doc_is_linked` and
+`check_if_doc_is_dynamically_linked` (`delete_doc.py:388-498`) and refuses with
+`LinkExistsError`, "Cannot delete or cancel because CRM Deal X is linked with CRM Task
+Y", while a task, note, call log or notification still points at the record. That
+refusal is why the dialog exists.
+
+**Actual:** `frappe.client.delete` and `DELETE /api/resource/` on a deal with a task
+still referencing it answer 200; the deal goes and the task keeps `reference_docname`
+pointing at nothing. A reference through a foreign key is refused as upstream does
+(`ProtectedError` becomes `LinkExistsError`, `frappe_core/exceptions.py:244`); the
+`reference_doctype` / `reference_docname` convention is not checked.
+
+**Reach:** not from the Vue app in the ordinary case, since the dialog hides Delete
+until its list is empty. The one gap is a linked document the caller cannot see: the
+port's list is permission-filtered, so a Sales User whose dialog shows nothing can
+delete a deal that a manager's private note still points at.
+
+**Status:** open, decision deferred to after the browser testing. Adding the check
+means every delete scans the dynamic link sources, and a good many tests delete
+documents that still have references; it should be decided and done as one piece.
+
+## 77. The Deals list would not open: a saved filter the port refused
+
+**Block:** none in the http suite; reported 6 Oct 2026 as "the Deals list page is not
+loading, every other list loads" (`BROWSER_TESTING.md` D25), signed in as
+Administrator. The six calls the page makes answered 200 with the default view; the
+failure was in the user's saved standard view.
+
+**Expected:** a list page replays the standard view's saved filters on every load
+(`ViewControls.vue:463`, `create_or_update_standard_view`). Clicking a cell filters
+the list on that cell's value (`ViewControls.vue:1321-1337`). For a currency cell the
+list's row object holds the display string, "$ 500,000.00" (`pages/Deals.vue:406`),
+so that string is what gets filed and saved: upstream bug 46. Upstream's
+`frappe.get_list` hands it to MariaDB, which casts it to 0 for the comparison; the
+list comes back empty and the page opens.
+
+**Actual:** Administrator's standard view on CRM Deal held
+`{"annual_revenue": "$ 500,000.00"}` (and Grace's, "$ 700,000.00"). The port's
+`build_q` handed the string to Django's `DecimalField`, which refused it:
+417 "“$ 500,000.00” value must be a decimal number." Replayed on every load, the
+refusal meant the page never rendered, and the filter chip that would remove it was
+never drawn. Other lists were fine only because no currency cell had been clicked on
+them; Leads and Organizations format the same way and would lock the same way.
+
+**Where:** `frappe_core/filters.py`, `build_q`.
+
+**Fixed 6 Oct 2026.** A filter value for a numeric column is now read for the number
+in it before the comparison: sign and point kept, everything else dropped, so
+"$ 500,000.00" compares as 500000 and "₹ 7,00,000.00" as 700000; a string with no
+number in it is 0, MariaDB's answer. Applies to `=`, `!=`, `<`, `>`, `<=`, `>=`, `in`,
+`not in` and `between`; `like` and `is` already work on the column's text and are left
+alone. A deliberate divergence from upstream's empty list, recorded under upstream
+bug 46: the click now filters on the amount shown. The saved views are untouched; the
+chip appears on the next load and can be removed as usual.
+
+Covered by `tests/test_numeric_filter_values.py`.
+
+## 78. Home Actions let the Settings entry be turned into a separator
+
+**Block:** none in the http suite; seen 6 Oct 2026 on the upstream demo during the
+Settings pass (`BROWSER_TESTING.md` S14): the Settings row's Type was changed to
+Separator by mistake, Update went through, and Settings was gone from the user menu.
+
+**Expected:** `crm_dropdown_item.json` marks Type read-only for a standard row
+(`read_only_depends_on: eval:doc.is_standard`), so the six shipped entries keep their
+kind.
+
+**Actual:** the Home Actions grid (`Grid.vue`, `GridRowModal.vue`) does not read
+`read_only_depends_on`, and the server does not refuse the change either, upstream or
+here. A Separator row draws a divider and nothing else (`UserDropdown.vue:91-104`), and
+Settings is a modal opened from that menu with no route of its own, so the grid that
+would undo the change is unreachable. Desk is no way back either: there the row's Type
+and Is Standard are read-only by the doctype's own rules, deleting a standard row is
+refused by `FCRMSettings.validate`, Restore Defaults and `bench migrate` add missing
+standard rows but never repair a changed one. The database is what is left; the console
+command is in the upstream-bug entry.
+
+**Where:** the frontend, upstream's; recorded as upstream bug 47.
+
+**Status:** open, reproduced (the frontend is upstream's). **Recovery added 6 Oct 2026:**
+`seed_defaults --force` restores the six standard rows by their Name (Label, Type, Route,
+Icon; a missing one re-added), leaves `hidden` and custom rows alone, and a plain rerun
+still writes nothing. Covered in `tests/test_seed_defaults.py`.
+
+## 82. Duplicate on an SLA policy did nothing: the document had no `doctype`
+
+**Block:** none in the http suite; seen 7 Oct 2026 in the Settings pass
+(`BROWSER_TESTING.md` S22), signed in as Administrator.
+
+**Expected:** `SlaPolicyList.vue:198-230` fetches the policy with `frappe.client.get`
+and posts the whole document back into `frappe.client.insert` with `default` off and the
+new `sla_name`. Upstream's documents always carry `doctype`
+(`base_document.py:as_dict`, line 704), child rows included, so the insert knows what to
+make; `insert` then discards `name`, the stamps and the child rows' names and creates a
+copy under the new name.
+
+**Actual:** the port's serialised documents carried no `doctype`, so the insert answered
+417 "doctype is required". The screen's create call has no error handler, so nothing
+was shown. Probed with the screen's exact two calls on the dev database inside a
+rolled-back transaction: 417 before, 200 and a copy after.
+
+**Where:** `frappe_core/serializers.py`, `DocumentSerializer.to_representation`.
+
+**Fixed 7 Oct 2026.** Every document the port serialises now names its doctype, child
+rows included: `frappe.client.get`, the resource route, and the insert and set_value
+responses, the shape upstream hands out everywhere. The rest of the round trip already
+worked: `name`, `creation` and the other stamped fields are read-only on the way in,
+and `prepare_rows` strips a child row's `name`.
+
+Covered by `tests/test_document_doctype_key.py`.

@@ -102,6 +102,7 @@ recovered: 'sw0rdfish!'   ← ["password","like","<prefix>%"], one character per
 | Create / delete | System Manager | Anyone | Managers |
 | `groups`, `is_superuser`, `is_staff` | permlevel 1 | **writable → escalation** | off the wire entirely |
 | `enabled`, `user_type` | permlevel 1 | writable | readable, not writable |
+| `user_emails` (User Email rows) | permlevel 1: System Manager writes, others' change reset silently | absent | **the same**: `PRIVILEGED_WRITE_FIELDS`, a non-manager's rows are dropped before validation and the rest of the save goes through; the rows a user does get come from the account that carries their address |
 | Built-ins hidden | yes (`user.py:1173`) | no | **yes** — ported verbatim |
 
 ³ `Desk User` holds `select` — the permission to appear in a link dropdown, not to read.
@@ -428,3 +429,72 @@ world-writable (it is on the A7 list). Forging an invitation that grants System 
 possible today but cannot be redeemed, because there is nothing to redeem it with. **That
 becomes critical the moment the endpoint is implemented** — so whoever builds it must give
 `CRM Invitation` a rule in the same change.
+
+---
+
+## Frontend stage — `Address` and `Country`
+
+Two framework doctypes added on 29 Sep 2026 for the `address` Link on organizations and
+contacts (`docs/FINDINGS.md` 45). Neither holds a credential; both are ruled so that the
+route-surface test records a decision rather than an omission.
+
+| Doctype | Upstream role table | Here |
+|---|---|---|
+| `Address` | Sales User and `All`: read, write, create; System Manager: delete | Same: `address_has_permission` allows everything but `delete`, which is System Manager's |
+| `Country` | `All`: read; System Manager: write, create | Same: `country_has_permission` allows `read` to everyone, the rest to System Manager |
+| `Language` (30 Sep 2026, `docs/FINDINGS.md` 58) | `All`: read; System Manager: everything | Same: `language_has_permission` allows `read` to everyone, the rest to System Manager. The Link target of `User.language`; reference data, no credential |
+| `Salutation`, `Gender` (1 Oct 2026, `docs/FINDINGS.md` 66) | `All`: read; System Manager: everything | Same: `reference_data_has_permission` allows `read` to everyone, the rest to System Manager. The Link targets of `salutation` and `gender` on a contact, a lead and a deal; one text field each |
+
+No row rule on either (`*_query_conditions` return `None`): an address is shared data the
+organization and contact screens show to every role, and the country list is what the
+Country picker renders. `Address.email_id` is validated as an email address
+(`EMAIL_FIELDS`); nothing on either row is sensitive or restricted.
+
+## Frontend stage — child rows through `frappe.client.*`
+
+Upstream's `frappe.client.set_value` and `frappe.client.delete` accept any child-table
+doctype and work through the parent document, checking write on the parent
+(`client.py:213-223`, `551-572`). Until 1 Oct 2026 this port refused every child table
+there with a 404. The contact page needs two of them, to edit and remove one email or one
+number (`docs/FINDINGS.md` 67).
+
+They are opened **one child table at a time**, with `CLIENT_EDITABLE = True` on the model,
+not all at once as upstream has them. Today that is `Contact Email` and `Contact Phone`.
+The reason is the same one behind the rest of this file: a row edit made this way goes
+around the parent's serializer, so it also goes around whatever the parent declares
+read-only. Some child tables are records of what happened, the status change log above
+all, and upstream protects those with nothing but the frontend not offering the edit. A
+child table is opted in only when a screen needs it and its rows are the user's own data
+to change. The check is write on the parent in both directions; on delete, a caller who
+fails it is told the row does not exist, as upstream tells them.
+
+## Frontend stage — files on disk
+
+`upload_file` and the `/files/` routes arrived on 29 Sep 2026 (`docs/FINDINGS.md` 49),
+the first time this port serves bytes. `KNOWN_ISSUES.md` 3 set the condition in advance:
+permission at the serving layer, not only on the row.
+
+| Route | Upstream | Here |
+|---|---|---|
+| `POST /api/method/upload_file` | A signed-in user, or a guest when `allow_guests_to_upload_files` is on; write permission on the document being attached to (`handler.py:check_write_permission`) | Signed-in only, the method is not guest-callable; the same write check through the doctype's own rule, with a not-yet-saved document falling back to the doctype-level check as upstream does |
+| `GET /files/<name>` | Served by the web server, no session | The same: public means public |
+| `GET /private/files/<name>` | `download_private_file`: guests refused, then `File.has_permission("read")` through `find_file_by_url`; any one attached document that admits the user is enough | The same, through `file_has_permission`: the owner, Administrator, or read on a document the file hangs off. A private file attached to nothing is its owner's alone (FINDINGS.md 22) |
+
+**Who the private route thinks you are.** The bearer header when there is one, else the
+`access_token` cookie the frontend keeps for this path (`frontend/JWT_PATCH.md`). The
+cookie is a copy of the same short-lived access token, so it is exactly as strong and
+exactly as revocable as the header; what changes is only where it can be presented, a GET
+of `/private/files/`. It is not read under `/api/`, and must not be: a cookie read there
+would turn any same-origin GET into an authenticated API call.
+
+**What a website user may upload.** `handler.py:ALLOWED_MIMETYPES`, applied when
+`user_type` is not `System User`, with upstream's wording. The port has no such user
+today; the rule is there before the first one.
+
+**Not ported, deliberately.** The folder tree (`is_folder`, the `Home` and `Attachments`
+rows), the per-doctype attachment limit and the site-wide extension whitelist are site
+settings without a home here. `download_file`, a guest-callable `/api/method/` that
+streams a file, has no caller in this frontend. `validate_not_referenced_in_attach_field`
+refuses to delete a File an Attach field still points at; the row rule already limits
+that delete to the owner or a writer of the document, which is who upstream lets remove
+the attachment anyway.

@@ -7,7 +7,8 @@ boot values will be fetched only under `yarn dev`, leaving production without th
 There are exactly **three** sanctioned frontend deviations from upstream. The JWT
 interceptor is the first and is documented immediately below; the WebSocket client is the
 second and the boot-values call the third, each with its own section at the end. Nothing
-else in `frontend/` differs.
+else in `frontend/` differs, except the two browser-built requests the JWT section turns
+into fetches (a private file, and the list views' export), noted in that section.
 
 ## Why
 
@@ -21,7 +22,7 @@ parameter name and response envelope is unchanged.
 
 | File | Change |
 |---|---|
-| `src/auth/tokens.js` | **New.** Token storage + `user_id` claim decode. Since 28 Sep 2026 it also writes and clears the `user_id` cookie that frappe-ui's own `frappe/session.js` reads (`docs/FINDINGS.md` 38); the backend ignores cookies, so it carries no authority |
+| `src/auth/tokens.js` | **New.** Token storage + `user_id` claim decode. Since 28 Sep 2026 it also writes and clears the `user_id` cookie that frappe-ui's own `frappe/session.js` reads (`docs/FINDINGS.md` 38), which the backend ignores; since 29 Sep 2026 also the `access_token` cookie for `/private/files/`, the one place a cookie carries authority (`docs/FINDINGS.md` 49, and the section below) |
 | `src/auth/jwtRequest.js` | **New.** Wraps `frappeRequest`: attaches the header, refreshes once on 401 |
 | `src/auth/interceptor.js` | **New (23 Sep 2026).** Attaches the header at `fetch` / `XMLHttpRequest` for same-origin `/api/` URLs, for everything that does not go through `resourceFetcher` (see below) |
 | `src/main.js` | `setConfig('resourceFetcher', frappeRequest)` -> `jwtRequest`; `installAuthInterceptor()`; same for the dev boot call |
@@ -61,9 +62,34 @@ token on the refresh call would be authenticated before the refresh ran. Refresh
 stays in `jwtRequest`; a bare `call()` that meets an expired token fails, as it did
 upstream with an expired session.
 
+## The third half: a private file the browser fetches by itself (29 Sep 2026)
+
+`docs/FINDINGS.md` 49. A note's `<img src="/private/files/...">` and an attachment's
+link are requests the browser builds on its own: no `fetch`, no `XMLHttpRequest`, nothing
+for the interceptor to reach, and no way to carry a header. Upstream's `sid` cookie rode
+along on them; a bearer token cannot.
+
+So `tokens.js` keeps the access token in an `access_token` cookie as well:
+`path=/private/files`, `SameSite=Lax`, `Secure` on https, rewritten on every refresh and
+cleared at logout. The backend reads it in one place, `frappe_core/file_views.py`, on a
+GET of `/private/files/<name>`, and the File rule then decides who gets the bytes. It is
+never read under `/api/`, so it cannot authenticate an API call; the path scope means the
+browser does not even send it elsewhere; and `SameSite=Lax` keeps it off a request another
+site makes for the URL. It is the same short-lived token, so it is as strong and as
+revocable as the header. Public files (`/files/`) need nothing, as upstream's web server
+serves them without a session.
+
+The list views' Export is the other browser-built request (`docs/FINDINGS.md` 51):
+upstream sets `window.location.href` to the `export_query` URL and the cookie
+authenticates the navigation. `ViewControls.vue:exportRows` fetches the URL instead, so
+the interceptor adds the header, and hands the blob to the browser as a download under
+the filename the `Content-Disposition` header gives. No cookie is involved.
+
 ## Deliberate omissions
 
-- **No CSRF token handling.** It protected cookie auth; there are no cookies now.
+- **No CSRF token handling.** It protected cookie auth. The one cookie that now carries
+  authority is read only on a GET of `/private/files/`, which changes nothing, so a forged
+  request still has nothing to do.
 - **`logout` does not revoke the access token.** With stateless JWTs it stays valid
   until it expires (5 min by default, `JWT_ACCESS_TOKEN_LIFETIME_MINUTES`; the local
   `.env` raises it for hand testing and must not ship that way). Closing that window

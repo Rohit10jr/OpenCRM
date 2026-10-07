@@ -14,6 +14,8 @@ and anything a future agent would otherwise rediscover the hard way.
 | 4 | The async stack had never run against a real broker, worker or scheduler | ✅ **Smoke-tested** — passed; see below for what is still untested |
 | 5 | The frontend test suite had never been executed; the realtime layer had never run on real Redis | ✅ **Both run** — 152 frontend tests pass, cross-process delivery confirmed |
 | 6 | Logging out does not stop an access token already issued — it works for up to 5 more minutes | ⏸️ **Open, accepted** — inherent to stateless JWT; three ways out are costed below |
+| 9 | The frontend is slow to load | ⏸️ **Open, deferred** — to be examined after the browser testing is finished and `phase-8-followup` is merged; what is known and what to measure first are below |
+| 10 | Nothing is translated: the interface and the server's messages are English only | ⏸️ **Open, deferred** — to be built after the browser testing; the design, step by step, is below |
 
 ---
 
@@ -292,9 +294,12 @@ two.
 against the *Communication*. Upstream does not chase the chain either, and doing so needs
 cycle detection for a case the product does not produce.
 
-**`File` remains metadata-only protection until something serves files.** There is still
-no upload or download route. When one is added, it must check permission **at the serving
-layer** — a `file_url` that leaked before this fix may already be written down somewhere.
+**Files are served since 29 Sep 2026** (`docs/FINDINGS.md` 49), and the condition set
+here was met: `/private/files/<name>` asks `file_has_permission` through
+`find_file_by_url` before it opens the file (`frappe_core/file_views.py`), so a `file_url`
+that leaked before the row rule is a link to a 403. `/files/` is public, as upstream's web
+server serves it. `specs/SECURITY_MODEL.md`, "Frontend stage — files on disk", has the
+per-route comparison.
 
 ---
 
@@ -565,4 +570,222 @@ the three paths sit in its `LIBRARY_OUT_OF_SCOPE` with a pointer here, so they c
 be forgotten and cannot be mistaken for a regression. Building it is a feature, not a
 fix: upstream's importer is about 1,500 lines with its own doctype, child table, file
 handling and a background job.
+
+---
+
+## 9. The frontend is slow to load
+
+Recorded 30 Sep 2026, from the hand testing in the browser (`docs/BROWSER_TESTING.md`):
+the Vue app takes too long to load. **Deferred by decision**: nothing is to be changed
+until the browser testing is finished and `phase-8-followup` is merged. This entry is
+the note to come back to, and it is `docs/FINDINGS.md` 55.
+
+### What is already known
+
+* **A cold `yarn dev` start is the large, measured cost** (`docs/FINDINGS.md` 29).
+  frappe-ui cannot be pre-bundled (finding 27: its source imports `~icons/lucide/*`
+  virtual modules esbuild cannot resolve), so Vite serves its 930 source files raw and
+  transpiles some 1,300 files before `main.js` runs: a minute or two on the development
+  machine, down from many minutes before finding 29's fix. Nine tenths of that time was
+  Vite's own TypeScript transpile and Vue compile, so it is bound by the CPU, not by the
+  network or the backend. Every restart of the dev server pays it again.
+* **The app makes about ten calls before the first screen settles**, and a list page
+  about eight more (the App boot and N1 rows of the browser log). In the `runserver` log
+  of the Notes pass the first ones after a start took 1.9 to 2.8 seconds each and later
+  ones 0.15 to 0.7 seconds.
+* **`main.js` waits for the boot-values call before it mounts** (`JWT_PATCH.md`, the
+  third deviation), so nothing is drawn until the backend has answered once.
+
+### What is not known
+
+Which of these the slowness actually is. Nobody has timed a warm reload, a page change
+inside the app, or a production build. A built bundle has none of the dev server's
+per-file transpile, so the cold-start cost may not exist outside development at all.
+Until that is measured, any fix is a guess.
+
+### Where to start, in order
+
+1. **Measure three things**: a cold dev load, a warm reload, and the same page from
+   `yarn build` served statically. Browser Network tab, plus `vite --debug transform`
+   for the dev numbers.
+2. **If it is the dev server**: `server.warmup` for the entry files; making frappe-ui
+   pre-bundlable by resolving the `~icons` imports in an esbuild plugin, which would
+   undo the root of findings 27 and 29; a newer Vite.
+3. **If it is the requests**: whether the boot calls can run in parallel or be merged,
+   whether `getdoctype` and the view calls are cached between pages, and what the slow
+   first calls on the backend are doing (each is a plain Django view; `runserver` under
+   daphne is not a production server, so compare against a real ASGI setup first).
+4. **If it is the bundle**: route-level code splitting and what the first chunk pulls
+   in (TipTap, CodeMirror and echarts all arrive through frappe-ui).
+
+Two rules already in force until then: start `yarn dev` once and leave it running, and
+never run a second Vite server against the same tree.
+
+---
+
+## 10. Nothing is translated: the interface and the server's messages are English only
+
+Recorded 30 Sep 2026, after the Language picker was made to work (`docs/FINDINGS.md` 58)
+and picking a language turned out to change nothing on screen. **Deferred by decision**:
+to be built once the browser testing is finished. This entry is the design to build from,
+and it is `docs/FINDINGS.md` 59. The owner's two requirements are written into it: a
+user's chosen language must also apply to the messages the server sends, and `enabled`
+on a Language must mean what it means in Frappe.
+
+### How upstream does it
+
+Four pieces, all in the framework (`frappe/translate.py`, version-15) unless noted.
+
+**1. The catalogue.** Each app ships one PO file per language: `crm/locale/<lang>.po`
+(33 languages and the `main.pot` template) and `frappe/locale/<lang>.po` (39 and the
+template). A line is a source string and its translation; a string may carry a context.
+They are compiled to MO files when the site is built, and `get_translations_from_mo`
+(`frappe/gettext/translate.py:347-378`) reads one locale into a dictionary: `msgid` ->
+`msgstr`, or `msgid:context` -> `msgstr` for a contextual entry. `get_all_translations`
+(148-183) merges them for a language: the parent language first (`pt` under `pt-BR`,
+`get_parent_language`, 87-96), the language itself over it, every installed app in turn,
+then the site's own `Translation` rows and the translated country names. The result is
+cached per language. An entry with an empty translation is simply absent, so that one
+string stays in English.
+
+**2. Which language a request is in** (`get_language`, 36-84, and `get_user_lang`,
+99-109). A `_lang` request parameter wins. A signed-in user gets `User.language`, else
+the System Settings language, else `en`. A guest gets the `preferred_language` cookie,
+then the browser's `Accept-Language`, each accepted **only if it, or its parent, is an
+enabled Language** (`get_all_languages`, 951-966), and failing both the system language.
+
+**3. The interface.** The page's boot values carry `translated_messages`, the whole
+merged dictionary for that language (`crm/www/crm.py:81`, `get_messages_for_boot`). The
+Vue app puts it on `window.translated_messages`, and `translation.js` looks each string
+up as `message:context`, then `message`, then falls back to the source text and fills
+the `{0}` placeholders. (`crm.api.get_translations` answers the same dictionary, but
+nothing in this frontend calls it.)
+
+**4. The server's own messages.** Every user-facing string in Python is written
+`_("... {0}").format(value)`. `_` looks the template up in the same merged dictionary
+for the request's language before the value is filled in, so "Incorrect current password.
+Please try again." reaches a German user in German.
+
+**What `enabled` does upstream.** Three things: the picker lists only enabled languages
+(the Link search filters on it); a guest's cookie or browser language is honoured only
+if enabled; and `get_boot_translations` ignores an explicitly requested language that is
+not enabled. It does not un-set a language a user already holds. A System Manager flips
+it on the Language record, in the Desk.
+
+### What the port has today
+
+* `Language` rows with `enabled`, seeded from the framework's list, and a picker that
+  offers the enabled ones (finding 58). `User.language` is stored.
+* The boot call answers `translated_messages: {}` (`crm_app/api/boot.py:65`) and
+  `crm.api.get_translations` answers `{}`. So every lookup falls back to English.
+* The server's messages are English literals, copied verbatim from upstream's `_()`
+  strings (hard rule 4): 72 `throw(...)` calls and 128 direct `raise SomeError("...")`.
+  Of those, 17 and 58 build the text with an f-string, which is the part that matters
+  below.
+* No System Settings doctype, so "the system language" has to be a Django setting.
+* The boot call is made with the bearer token once a user is signed in (`main.js:87`
+  goes through `jwtRequest`), so the server can know whose language to answer in.
+
+### The plan, in the order to build it
+
+**Step 1. Load the catalogues** (`frappe_core/translate.py`, new).
+Copy `crm/locale/*.po` and `frappe/locale/*.po` into the repository as data, the way
+`country_info.json` and `languages.csv` were copied. Read them with a PO parser in
+Python (`polib`, or Babel, which is what upstream uses) rather than Django's
+`compilemessages`: that command needs GNU gettext installed and a
+`locale/<lang>/LC_MESSAGES/` layout, neither of which these files have, and the frontend
+needs the result as a plain dictionary anyway. Build it in Frappe's exact shape, because
+`translation.js` depends on it: `msgid` -> `msgstr`, `msgid:context` for contextual
+entries, empty and fuzzy entries skipped, framework first and CRM over it, parent
+language first and the language over it. Cache per language in the process; the files
+never change at runtime.
+
+**Step 2. Decide the language of a request.** A context variable set beside the session
+user in `FrappeAPIView.initial`, holding upstream's answer: `_lang` parameter; signed-in
+user -> `User.language` -> a `DEFAULT_LANGUAGE` setting -> `en`; guest -> the
+`preferred_language` cookie -> `Accept-Language`, each only if enabled or its parent is
+-> the setting -> `en`.
+
+**Step 3. Translate the interface.** `boot.py` returns the merged dictionary for that
+language in `translated_messages`, and `crm.api.get_translations` returns the same.
+That alone translates the whole Vue app. A language with no file yields an empty
+dictionary, which is English, and nothing breaks.
+
+**Step 4. Translate the server's messages.** This is the requirement that needs care.
+A `_()` function in `frappe_core/translate.py` that looks a template up for the request's
+language and returns it unchanged when there is no entry. Then, in three moves:
+
+1. *The literal messages, with no edits to call sites.* `throw()` and the base exception
+   translate a message that is exactly a catalogue entry. That covers the roughly 125
+   call sites that pass a plain string.
+2. *The interpolated messages, one by one.* The roughly 75 f-string sites cannot match
+   a catalogue entry, because the catalogue holds the template ("DocType {0} not found")
+   and the f-string has already filled it in. Each becomes
+   `_("... {0}").format(value)`, using upstream's template, which is the line each was
+   ported from. Mechanical, but every site needs a look at its upstream source.
+3. *A guard test.* Every literal passed to `_()` or `throw()` must exist in a `main.pot`.
+   A message that does not is either a typo, which the test catches, or the port's own
+   wording (the JWT and sign-in pages have some), which goes on a short reviewed list and
+   stays English until someone translates it.
+
+Texts that are not exceptions come after: the `_server_messages` titles, the notification
+sentences built in `crm_app/api/comment.py` ("mentioned you in"), and the two email
+templates in `crm_app/templates/emails/`. Upstream translates the first two with `_()`;
+whether an email goes out in the sender's language or the recipient's needs reading
+before it is decided.
+
+**Step 5. `enabled`, as Frappe uses it.** The picker already honours it. Steps 2 and 3
+add the other two uses: a guest's language is accepted only if enabled, and the boot
+dictionary ignores a language that is not. Switching a language on or off stays a System
+Manager action on the Language record (`/api/resource/Language/<code>`; upstream has no
+CRM screen for it either). A user who already holds a language that is later disabled
+keeps it, as upstream's `get_user_lang` does not check the flag.
+
+**Step 6. Django's own strings.** Validation messages that Django and DRF produce ("This
+field is required.") come from their own catalogues. Calling
+`django.utils.translation.activate(lang)` for the request, with `USE_I18N` already on,
+translates those for free and costs one line in step 2.
+
+### Build it with System Settings and Currency
+
+Decided 30 Sep 2026: three open findings are one piece of work and are to be built
+together once the browser testing is finished.
+
+* **`docs/FINDINGS.md` 64, System Settings.** The framework's single document holding
+  the system-wide defaults. The port has none, so Settings → Defaults goes blank. It is
+  also where upstream keeps the system language that step 2 above falls back to, so the
+  `DEFAULT_LANGUAGE` setting named there becomes `System Settings.language` once the
+  document exists.
+* **`docs/FINDINGS.md` 63, Currency.** The Link target of `System Settings.currency` and
+  of the dashboard's currency setting. Same kind of port as Language and Country.
+* **`docs/FINDINGS.md` 59, translations.** This entry.
+
+Order: Currency and System Settings first (a model each, the seed, the metadata, the boot
+call reading the row), then the six steps above on top of them.
+
+### Things to settle when it is built
+
+* Only 33 of the 82 languages have a CRM file and only 17 are enabled by default; the
+  two lists overlap but are not the same. Decide whether to enable exactly the languages
+  that have a file.
+* The http suite asserts English message text. It runs as users whose language is unset,
+  so it should not move, but one block per translated message type is worth adding.
+* Tests: the loader's shape against a real PO file, language resolution for a user and
+  for a guest, the boot dictionary, one literal and one interpolated server message in a
+  second language, and the guard test of move 3.
+
+## 11. Upstream has moved on since the pin
+
+The port's frontend, and every upstream line number cited in the specs and findings,
+come from the clone at `6583bfcdc` (11 Sep 2026). `git fetch origin main` on 7 Oct 2026
+put upstream `main` at `deedce73c` (30 Sep 2026), **514 commits ahead**. Anyone comparing
+the port with a hosted demo will see differences that are not the port's: the first one
+noticed was the Products grid's Edit Grid Fields dialog (`docs/FINDINGS.md` 84), reworked
+upstream in `946c24d8f`, `53080db04` and `b29f99452`.
+
+The clone's working tree is still at the pin; only `origin/main` moved. Moving the pin is
+a piece of work of its own: re-run the frontend diff for the port's patches
+(`frontend/JWT_PATCH.md`), re-check every cited line number, and re-port whatever the
+514 commits changed on the backend side. Until then, compare against the clone, not the
+cloud, and record cloud-only differences the way 84 is recorded.
 

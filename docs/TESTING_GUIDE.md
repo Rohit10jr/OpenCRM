@@ -100,11 +100,25 @@ nothing else, read FINDINGS.md 48: frappe-ui's proxy plugin loops forever on Win
 which is why `vite.config.js` sets the proxy itself.
 
 **Reference data.** Run `python manage.py seed_defaults` once after `migrate`. It writes
-what Frappe CRM's install step writes (statuses, the Quick Entry and side-panel layouts,
-industries, lead sources, lost reasons, quick filters, the user menu, the standard form
-scripts, the dashboard) and keeps rows that exist (FINDINGS.md 42 and 43). Without it
+what Frappe CRM's install step writes (countries, languages, salutations, genders, statuses, the Quick Entry and
+side-panel layouts, industries, lead sources, lost reasons, quick filters, the user menu,
+the standard form scripts, the dashboard) and keeps rows that exist (FINDINGS.md 42, 43
+and 45). Without it
 the create dialogs show every field, the lead and deal pages have no status dropdown,
 and the user menu at the top of the sidebar is empty.
+
+**Files.** Uploads land under `backend/media/` (FINDINGS.md 49). Run
+`pip install -r requirements.txt` after pulling: `Pillow` was added for the resizing the
+uploader asks for on large pictures, and `XlsxWriter` for the Excel export of the list
+views (FINDINGS.md 51). The http suite covers neither `upload_file`, whose body is
+multipart, nor `export_query`, whose answer is a file; `tests/test_upload_file.py`,
+`tests/test_export_query.py` and the browser log do.
+
+**Encryption key.** Set `FIELD_ENCRYPTION_KEY` in `.env` before adding an email account
+or telephony settings in the browser (readme, "The encryption key"). Without it the
+password cannot be stored and Settings → Email → Accounts → Add fails with "invalid
+credentials", a sentence that screen prints for any error (FINDINGS.md 65). Restart
+`runserver` after editing `.env`.
 
 **Credentials.** The local database already holds `Administrator` (System Manager) and
 eight Sales Users named `ada`, `grace`, `alan`, `edsger`, `barbara`, `donald`,
@@ -124,7 +138,10 @@ the tokens; every later block reads them. **Access tokens die after five minutes
 you start seeing 401s, re-send 1.1 (or 1.10).
 
 **Recording.** Tick the **Tested** column in `ROUTES.md` as you go. Note anything
-surprising next to it; those notes are the output of this exercise.
+surprising next to it; those notes are the output of this exercise. Browser sessions
+are recorded in `BROWSER_TESTING.md` instead: one table per screen, one row per action,
+and a generated API coverage table at the end (`backend/scripts/browser_coverage.py`)
+that ticks each endpoint off as the rows that reach it pass.
 
 ---
 
@@ -317,6 +334,54 @@ discovered: read receipts, print formats, delayed sends and inbound mail for
 behind `clear_demo_data`.
 
 ---
+
+## Browser tests (Playwright)
+
+`frontend/tests/e2e/` drives the real app in a real Chromium against the two dev servers.
+It is the layer the http suite cannot reach: findings 26 to 43 were all faults a browser
+saw and a request-level test could not (a blank page, a spinner that never stops, a
+menu with no items).
+
+**Before running.** Django on 8000 with the demo data and `python manage.py seed_defaults`
+applied; the passwords in `docs/http/.env` (`ADMIN_PWD`, `SALES_PWD`, `MANAGER_PWD`,
+read by `playwright.config.js` and never printed); your own `yarn dev` on 8080, which
+the runner reuses. If yours sits on another port, `E2E_BASE_URL=http://localhost:8081`;
+if none is running, the runner starts one and stops it afterwards. `@playwright/test` is
+pinned to the release whose Chromium build is already on this machine; another machine
+runs `npx playwright install chromium` once.
+
+```powershell
+cd frontend
+yarn test:e2e                     # the whole suite, headless, one worker
+yarn test:e2e -g "leads"          # one file or test, by name
+yarn test:e2e:headed              # watch it
+yarn test:e2e:ui                  # Playwright's inspector
+yarn test:e2e:report              # the HTML report of the last run, with traces of failures
+```
+
+**How it is built.** `auth.setup.js` signs in once as Administrator through the real form
+and saves the browser state; every other test starts signed in. `fixtures.js` adds two
+things to every test: an uncaught exception in the page fails the test, since that is
+how the sidebar (38) and the leads list (40) went blank without a single failed
+request; and `api`, a backend client signed in as Administrator, for seeding rows and
+removing them again, so the browser only does what the test is about. Every row a test
+makes carries an `E2E` prefix and is deleted at the end of the test.
+
+| File | Covers |
+| --- | --- |
+| `auth.spec.js` | The form, a wrong password, the redirect to and from login, the open-redirect guard, sign-out and the refresh token's revocation |
+| `navigation.spec.js` | The sidebar, all seven list pages (rows or the empty state, never a blank pane), the notifications panel, the catch-all page |
+| `dashboard.spec.js` | The seventeen tiles, the period control, Refresh, the administrator's edit mode |
+| `leads.spec.js` | List row, page tabs, the status dropdown, Create Lead, its mandatory check, Delete |
+| `deals.spec.js` | A seeded deal's page, Create Deal with a new organization and contact |
+| `contacts-organizations.spec.js` | New Contact, New Organization, an organization's page |
+| `activities.spec.js` | Create Task and reopen it, Create Note, a call log's details |
+| `settings.spec.js` | The user menu, the Settings dialog and its General page, About |
+| `roles.spec.js` | What a Sales User does not get: dashboard editing, management settings |
+
+A cold `yarn dev` makes the first test slow (the setup step allows minutes for it); a
+warm server runs the suite in a few minutes. The `Tested` column of `ROUTES.md` §5 is
+the place to record what a green run covers.
 
 ## Two practices that save the most time
 
