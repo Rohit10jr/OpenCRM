@@ -676,6 +676,23 @@ def search_link(
         if title_field:
             or_filters[title_field] = ["like", f"%{txt}%"]
 
+    # Two keys the frontend sends inside `filters` that are not fields: upstream's
+    # search_widget pops `include_disabled` (search.py:204-208) and User's standard
+    # query pops `ignore_user_type` (user.py:user_query); the port read both as fields
+    # and answered 400 to every User Link in the app (FINDINGS.md 46).
+    include_disabled = False
+    ignore_user_type = False
+    if isinstance(parsed_filters, dict):
+        include_disabled = _truthy(parsed_filters.pop("include_disabled", False))
+        ignore_user_type = _truthy(parsed_filters.pop("ignore_user_type", False))
+    if doctype == "User":
+        parsed_filters = _user_query_filters(parsed_filters, ignore_user_type)
+    else:
+        if doctype == "Address" and isinstance(parsed_filters, dict):
+            parsed_filters = _address_query_filters(parsed_filters)
+        if not include_disabled and isinstance(parsed_filters, (dict, type(None))):
+            parsed_filters = _without_disabled(entry.model, parsed_filters)
+
     fields = ["name"]
     title_field = getattr(entry.model, "SEARCH_FIELD", None)
     if title_field:
@@ -696,20 +713,3 @@ def search_link(
         }
         for row in rows
     ]
-    # Two keys the frontend sends inside `filters` that are not fields: upstream's
-    # search_widget pops `include_disabled` (search.py:204-208) and User's standard
-    # query pops `ignore_user_type` (user.py:user_query); the port read both as fields
-    # and answered 400 to every User Link in the app (FINDINGS.md 46).
-    include_disabled = False
-    ignore_user_type = False
-    if isinstance(parsed_filters, dict):
-        include_disabled = _truthy(parsed_filters.pop("include_disabled", False))
-        ignore_user_type = _truthy(parsed_filters.pop("ignore_user_type", False))
-    if doctype == "User":
-        parsed_filters = _user_query_filters(parsed_filters, ignore_user_type)
-    else:
-        if doctype == "Address" and isinstance(parsed_filters, dict):
-            parsed_filters = _address_query_filters(parsed_filters)
-        if not include_disabled and isinstance(parsed_filters, (dict, type(None))):
-            parsed_filters = _without_disabled(entry.model, parsed_filters)
-
