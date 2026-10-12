@@ -11,11 +11,20 @@ DRF's default ``PrimaryKeyRelatedField`` already does exactly that.
 
 from __future__ import annotations
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from rest_framework import serializers
 
 from frappe_core import children, registry
-from frappe_core.field_security import hidden_from, readonly_fields, restricted_fields, sensitive_fields
+from frappe_core import naming as naming_strategies
+from frappe_core.exceptions import DuplicateEntryError
+from frappe_core.field_security import (
+    hidden_from,
+    readonly_fields,
+    restricted_fields,
+    sensitive_fields,
+    unwritable_by,
+)
+from frappe_core.query import wire_json_text
 
 #: Standard fields the client may never set directly; the model stamps them.
 #: Audit columns the server stamps, plus the four underscore caches.
@@ -68,8 +77,39 @@ class DocumentSerializer(serializers.ModelSerializer):
             fields[fieldname] = _build_child_field(spec)
         return fields
 
+    def to_internal_value(self, data):
+        # Upstream clears a Data field by writing None to it (`doc.set(field, None)`),
+        # and the frontend does exactly that: "Remove Image" on an organization sends
+        # `organization_logo: null` (FINDINGS.md 68). The port's text columns are
+        # `blank=True, null=False`, so DRF answered "This field may not be null." and
+        # the logo stayed. None on a text field means "empty" here, as it does there.
+        if isinstance(data, dict):
+            blank_for_none = {
+                name
+                for name, field in self.fields.items()
+                if isinstance(field, (serializers.CharField, serializers.ChoiceField))
+                and not field.allow_null
+                and not field.read_only
+            }
+            if any(data.get(name, "") is None for name in blank_for_none):
+                data = {k: ("" if v is None and k in blank_for_none else v) for k, v in data.items()}
+            # Upstream's permlevel-1 fields: a caller without the role has their value
+            # reset to the stored one, silently, and the rest of the save goes through
+            # (`field_security.privileged_write_fields`). Dropping the key here is the
+            # same outcome for a partial write.
+            dropped = unwritable_by(self.Meta.model) & set(data)
+            if dropped:
+                data = {k: v for k, v in data.items() if k not in dropped}
+        return super().to_internal_value(data)
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
+        # Every document upstream hands out names its own doctype
+        # (`base_document.py:as_dict`, line 704), child rows included, and the frontend
+        # leans on it: the SLA list's Duplicate posts the fetched document straight back
+        # into `frappe.client.insert`, which refused it here with "doctype is required"
+        # (FINDINGS.md 82).
+        data["doctype"] = type(instance).get_doctype()
         # Restricted fields are dropped here rather than excluded when the class is
         # built, because the class is built once per model and cached on the registry
         # entry - it cannot know who is asking. `hidden_from` re-checks the sensitive set
@@ -79,6 +119,9 @@ class DocumentSerializer(serializers.ModelSerializer):
         if restricted_fields(self.Meta.model):
             for fieldname in hidden_from(self.Meta.model):
                 data.pop(fieldname, None)
+        # `_assign`, `_liked_by`, `_comments` go out as JSON *strings*, as upstream's
+        # Text columns do and as the frontend parses them (FINDINGS.md 40).
+        wire_json_text(data)
         for fieldname, spec in (self.child_table_spec or {}).items():
             child_serializer = registry.get_entry(spec["doctype"]).get_serializer_class()
             data[fieldname] = child_serializer(
@@ -115,12 +158,22 @@ class DocumentSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         payloads = self._pop_child_payloads(validated_data)
-        with transaction.atomic():
-            instance = super().create(validated_data)
-            if payloads:
-                self._write_children(instance, payloads)
-                instance.refresh_from_db()
-                instance.save()
+        try:
+            with transaction.atomic():
+                instance = super().create(validated_data)
+                if payloads:
+                    self._write_children(instance, payloads)
+                    instance.refresh_from_db()
+                    instance.save()
+        except IntegrityError as exc:
+            # Outside the savepoint, which has been rolled back, so the lookup below can
+            # run. `base_document.py:598-606`: the unique-key error on insert becomes
+            # "<DocType> <strong>name</strong> already exists" (FINDINGS.md 25). Any other
+            # integrity error is not a duplicate name and keeps its own text.
+            duplicate = _duplicate_name_error(self.Meta.model, validated_data)
+            if duplicate is not None:
+                raise duplicate from exc
+            raise
         return instance
 
     def update(self, instance, validated_data):
@@ -137,6 +190,37 @@ class DocumentSerializer(serializers.ModelSerializer):
             children.replace_children(
                 instance, fieldname, self.child_table_spec[fieldname], rows or []
             )
+
+
+def _duplicate_name_error(model, validated_data) -> DuplicateEntryError | None:
+    """The name a failed insert attempted, and upstream's refusal when it is taken.
+
+    The insert raised before returning an instance, so the name is worked out the way
+    the strategy would have: the naming field's value for a ``field:`` doctype, the
+    client's ``name`` for a ``prompt`` one, the doctype's own name for a singleton
+    (``SingletonMixin.singleton_name``, FINDINGS.md 37). Hash and
+    series names cannot realistically collide, so for those - and whenever no row of
+    the attempted name exists - this returns ``None`` and the caller re-raises the
+    original error with its own text.
+    """
+    if model.is_single():
+        value = model.get_doctype()
+    else:
+        strategy = model.get_name_strategy()
+        if isinstance(strategy, naming_strategies.FieldValue):
+            value = validated_data.get(strategy.fieldname)
+        elif isinstance(strategy, naming_strategies.Prompt):
+            value = validated_data.get("name")
+        else:
+            return None
+    if hasattr(value, "pk"):
+        value = value.pk
+    name = ("" if value is None else str(value)).strip()
+    if not name or not model._default_manager.filter(pk=name).exists():
+        return None
+    return DuplicateEntryError(
+        f"{model.get_doctype()} <strong>{name}</strong> already exists", title="Duplicate Name"
+    )
 
 
 def _build_child_field(spec):

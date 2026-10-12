@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 
+from django.core.exceptions import FieldDoesNotExist
 from django.db import transaction
 from django.db.models.fields.related import ForeignKey, OneToOneField
 
@@ -293,29 +294,149 @@ def remove_assignments(
     assignment.cancel_assignment(doctype, name, parsed)
 
 
+#: The DocField flags a row always carries, as 0 when the JSON leaves them out.
+#: ``EditValueModal.vue:78`` keeps a field only when ``hidden == 0 && read_only == 0``,
+#: so a missing key (``undefined == 0`` is false) empties the bulk-edit dropdown
+#: (FINDINGS.md 52); the generator drops zero-valued keys, so they are restored here.
+DOCFIELD_FLAG_DEFAULTS = {
+    "hidden": 0,
+    "read_only": 0,
+    "reqd": 0,
+    "permlevel": 0,
+    "in_list_view": 0,
+    "in_standard_filter": 0,
+}
+
+
+def docfield(field: dict) -> dict:
+    """A DocField row as ``frappe.get_meta(doctype).fields`` hands it out: the JSON's
+    keys plus the zero flags, and ``options`` / ``description`` / ``default`` present
+    even when empty, since the frontend destructures them."""
+    row = {"options": None, "description": None, "default": None}
+    row.update(DOCFIELD_FLAG_DEFAULTS)
+    row.update(field)
+    return row
+
+
 @whitelist("crm.api.doc.get_fields")
 def get_fields(doctype: str, allow_all_fieldtypes: bool = False):
-    """``crm/api/doc.py:628-641``.
+    """``crm/api/doc.py:639-651``: the doctype's DocFields in declaration order, minus
+    the value-less types (``frappe.model.no_value_fields``) and ``Read Only``, unless
+    ``allow_all_fieldtypes`` asks for every one of them.
 
-    Upstream excludes ``no_value_fields`` plus ``Read Only`` unless
-    ``allow_all_fieldtypes``. This port never materialises the layout types as columns,
-    and has no ``Read Only`` fieldtype, so the parameter changes nothing today - it is
-    accepted because the frontend sends it.
+    Two screens read it. The bulk-edit dialog (``EditValueModal.vue``) offers the fields
+    that are neither hidden nor read-only, then renders an input by ``fieldtype`` with
+    ``options`` for a Select or a Link. The settings page (``SettingsPage.vue``) asks
+    with ``allow_all_fieldtypes`` and lays the form out from the Tab, Section and Column
+    Breaks, so those must come through too. Both need the DocType's own field list -
+    labels, order and layout - not the Django model's columns, which is what this served
+    before and why the dropdown was empty (FINDINGS.md 52).
     """
-    entry = registry.get_entry(doctype)
-    return [_field_descriptor(field) for field in _concrete_fields(entry.model)]
+    from frappe_core import field_meta
+    from frappe_core.field_meta import NO_VALUE_FIELDTYPES
+
+    registry.get_entry(doctype)  # 404 for a doctype the port does not have
+    if str(allow_all_fieldtypes).strip().lower() in ("1", "true"):
+        not_allowed = frozenset()
+    else:
+        not_allowed = NO_VALUE_FIELDTYPES | {"Read Only"}
+    return [
+        docfield(field)
+        for field in field_meta.get_fields(doctype)
+        if field.get("fieldname") and field.get("fieldtype") not in not_allowed
+    ]
+
+
+#: Doctypes whose rows go with the document instead of standing in the way of its
+#: deletion: the framework's ``ignore_links_on_delete`` hook (``frappe/hooks.py:455-470``)
+#: plus the CRM's own (``crm/hooks.py:260``). A comment, a file or an assignment is
+#: deleted with its document (``frappe_core/children.py:delete_references``); listing it
+#: as a "linked document" asked the user to unlink it first, and unlinking orphaned it
+#: (FINDINGS.md 75). Only the names this port registers matter.
+IGNORE_LINKS_ON_DELETE = frozenset(
+    {
+        "Activity Log",
+        "Comment",
+        "Communication",
+        "DocShare",
+        "Document Follow",
+        "Email Unsubscribe",
+        "Failed Lead Sync Log",
+        "File",
+        "Notification Log",
+        "Tag Link",
+        "ToDo",
+        "Version",
+        "View Log",
+    }
+)
+
+
+def _parent_fk_name(model) -> str | None:
+    """The FK a child row reaches its parent through: the one whose reverse name is the
+    row's ``parentfield`` (``crm_app/api/client.py:_child_row_and_parent`` walks the
+    same way). A polymorphic child (``CRM Products``, ``Dynamic Link``) has none; its
+    parent is a name in the ``parent`` column."""
+    try:
+        parentfield = model._meta.get_field("parentfield").default
+    except FieldDoesNotExist:
+        return None
+    for field in model._meta.concrete_fields:
+        if field.is_relation and field.remote_field.related_name == parentfield:
+            return field.name
+    return None
+
+
+def _parent_of(row):
+    """The document a child row belongs to, or ``None``."""
+    fk_name = _parent_fk_name(type(row))
+    if fk_name:
+        return getattr(row, fk_name, None)
+    parenttype, parent = getattr(row, "parenttype", ""), getattr(row, "parent", "")
+    if parenttype and parent and registry.has_doctype(parenttype):
+        return by_name(registry.get_model(parenttype), parent).first()
+    return None
 
 
 def _link_sources(target_doctype: str):
-    """Every (doctype, fieldname) whose FK points at ``target_doctype``."""
+    """Every ``(doctype, entry, fieldname, via_child)`` whose FK points at
+    ``target_doctype``.
+
+    A child table's own parent FK is not a link: the row belongs to the document and
+    goes with it. Upstream never sees it, because the ``parent`` column is not a Link
+    field (``delete_doc.py:313-319``). Listed as a linked document, a deal's own
+    contact row could not be unlinked, so after "Unlink All" it was still there and the
+    Delete button never appeared (FINDINGS.md 75). A child table's *other* FKs are
+    links, and for those upstream lists the parent document (``delete_doc.py:352-384``):
+    ``via_child`` tells the caller to resolve each row to its parent.
+    """
     for doctype in registry.all_doctypes():
+        if doctype in IGNORE_LINKS_ON_DELETE:
+            continue
         entry = registry.get_entry(doctype)
+        parent_fk = _parent_fk_name(entry.model) if entry.is_child_table else None
         for field in entry.model._meta.get_fields():
-            if not isinstance(field, (ForeignKey, OneToOneField)):
+            if not isinstance(field, (ForeignKey, OneToOneField)) or field.name == parent_fk:
                 continue
             related = field.related_model
             if getattr(related, "get_doctype", lambda: None)() == target_doctype:
-                yield doctype, entry, field.name
+                yield doctype, entry, field.name, entry.is_child_table
+
+
+def _parents_of_rows(rows, doctype: str, names: set[str], user):
+    """The parent documents of linking child rows, as upstream lists them: the document
+    being deleted is skipped (``delete_doc.py:370-372``), and so is a parent the caller
+    cannot read, the rule the rest of this endpoint keeps."""
+    for row in rows:
+        parent = _parent_of(row)
+        if parent is None:
+            continue
+        parent_doctype = type(parent).get_doctype()
+        if parent_doctype == doctype and str(parent.pk) in names:
+            continue
+        if not permissions.check_object_permission(parent, "read", user):
+            continue
+        yield parent_doctype, parent
 
 
 def _dynamic_link_sources(target_doctype: str):
@@ -325,6 +446,8 @@ def _dynamic_link_sources(target_doctype: str):
     the CRM actually uses (``reference_name`` and ``reference_docname``).
     """
     for doctype in registry.all_doctypes():
+        if doctype in IGNORE_LINKS_ON_DELETE:
+            continue
         entry = registry.get_entry(doctype)
         names = {f.name for f in entry.model._meta.get_fields() if getattr(f, "concrete", False)}
         if "reference_doctype" not in names:
@@ -381,9 +504,13 @@ def get_linked_docs_of_document(doctype: str, docname: str):
                 }
             )
 
-    for linked_doctype, linked_entry, fieldname in _link_sources(doctype):
+    for linked_doctype, linked_entry, fieldname, via_child in _link_sources(doctype):
         queryset = base_queryset(linked_doctype, user).filter(**{fieldname: docname})
-        collect(linked_doctype, linked_entry, queryset)
+        if via_child:
+            for parent_doctype, parent in _parents_of_rows(queryset, doctype, {str(docname)}, user):
+                collect(parent_doctype, None, [parent])
+        else:
+            collect(linked_doctype, linked_entry, queryset)
 
     for linked_doctype, linked_entry, name_field in _dynamic_link_sources(doctype):
         queryset = base_queryset(linked_doctype, user).filter(
@@ -595,11 +722,13 @@ def _linked_docs_for_batch(doctype: str, names: list[str]):
                 seen.add(key)
                 found.append((linked_doctype, instance))
 
-    for linked_doctype, _entry, fieldname in _link_sources(doctype):
-        collect(
-            linked_doctype,
-            base_queryset(linked_doctype, user).filter(**{f"{fieldname}__in": names}),
-        )
+    for linked_doctype, _entry, fieldname, via_child in _link_sources(doctype):
+        rows = base_queryset(linked_doctype, user).filter(**{f"{fieldname}__in": names})
+        if via_child:
+            for parent_doctype, parent in _parents_of_rows(rows, doctype, set(names), user):
+                collect(parent_doctype, [parent])
+        else:
+            collect(linked_doctype, rows)
     for linked_doctype, _entry, name_field in _dynamic_link_sources(doctype):
         collect(
             linked_doctype,

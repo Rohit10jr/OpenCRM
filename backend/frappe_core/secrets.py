@@ -75,6 +75,16 @@ def _fernet():
     return Fernet(raw)
 
 
+def ensure_key() -> None:
+    """Raise :class:`MissingEncryptionKey` now if nothing could be encrypted later.
+
+    For a caller about to do something slow or outward-facing on the way to storing a
+    credential - ``create_email_account`` logs in to the mail server first - so that a
+    server with no key says so before the login rather than after it (FINDINGS.md 65).
+    """
+    _fernet()
+
+
 def is_encrypted(value) -> bool:
     return isinstance(value, str) and value.startswith(PREFIX)
 

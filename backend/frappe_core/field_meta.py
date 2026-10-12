@@ -132,6 +132,11 @@ def _derive_from_model(doctype: str) -> list[dict]:
     from frappe_core.metadata import _frappe_fieldtype, _link_target
 
     model = registry.get_model(doctype)
+    # A text column that upstream declares as a Link (``Contact.salutation`` ->
+    # ``Salutation``): the model names the target in ``LINK_FIELDS`` and the metadata
+    # says Link, which is the shape the CRM doctypes already have for the same two
+    # fields - a text column in the model, a Link in the JSON (FINDINGS.md 66).
+    link_fields = getattr(model, "LINK_FIELDS", None) or {}
     fields = []
     for field in model._meta.get_fields():
         if not getattr(field, "concrete", False):
@@ -139,12 +144,14 @@ def _derive_from_model(doctype: str) -> list[dict]:
         fieldtype = _frappe_fieldtype(field)
         if getattr(field, "choices", None) and fieldtype == "Data":
             fieldtype = "Select"
+        if field.name in link_fields:
+            fieldtype = "Link"
         entry = {
             "fieldname": field.name,
             "fieldtype": fieldtype,
             "label": str(getattr(field, "verbose_name", field.name)),
         }
-        options = _link_target(field)
+        options = link_fields.get(field.name) or _link_target(field)
         if options:
             entry["options"] = options
         elif fieldtype == "Select" and getattr(field, "choices", None):

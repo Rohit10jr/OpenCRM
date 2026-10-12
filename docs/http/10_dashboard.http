@@ -68,16 +68,21 @@ Authorization: Bearer {{mtoken}}
 POST {{host}}/api/method/{{dash}}.reset_to_default
 Authorization: Bearer {{stoken}}
 
-### 1.4 get_dashboard -> the ten default tiles, each with its data filled in
-# @expect $.message count 10
+### 1.4 get_dashboard -> upstream's seventeen default tiles, each placed on the grid and filled in
+# (FINDINGS.md 41: the grid needs `layout`, and DashboardItem.vue draws number_chart,
+# axis_chart, donut_chart and spacer only; the spacer is the one tile with no data)
+# @expect $.message count 17
 # @expect $.message[0].name == total_leads
-# @expect $.message[0].type == number
+# @expect $.message[0].type == number_chart
+# @expect $.message[0].layout.i == total_leads
 # @expect $.message[0].data.title == Total leads
 # @expect $.message[0].data.value exists
 # @expect $.message[0].data.delta exists
-# @expect $.message[4].name == deals_by_stage_donut
-# @expect $.message[4].data.categoryColumn == stage
-# @expect $.message[7].type == bar
+# @expect $.message[7].type == spacer
+# @expect $.message[7].data == null
+# @expect $.message[11].name == deals_by_stage_donut
+# @expect $.message[11].data.categoryColumn == stage
+# @expect $.message[16].type == axis_chart
 POST {{host}}/api/method/{{dash}}.get_dashboard
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -93,7 +98,7 @@ Content-Type: application/json
 {"from_date": "2026-01-01", "to_date": "2026-12-31"}
 
 ### 1.6 a Sales User gets the dashboard scoped to herself (dashboard.py:36-40) -> 200
-# @expect $.message count 10
+# @expect $.message count 17
 # @expect $.message[0].data.value exists
 POST {{host}}/api/method/{{dash}}.get_dashboard
 Authorization: Bearer {{stoken}}
@@ -102,7 +107,7 @@ Content-Type: application/json
 {"from_date": "2026-01-01", "to_date": "2026-12-31", "user": "{{manager}}"}
 
 ### 1.7 a manager may scope it to anyone -> 200
-# @expect $.message count 10
+# @expect $.message count 17
 POST {{host}}/api/method/{{dash}}.get_dashboard
 Authorization: Bearer {{mtoken}}
 Content-Type: application/json
@@ -120,7 +125,7 @@ PUT {{host}}/api/resource/CRM%20Dashboard/Manager%20Dashboard
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"layout": "[{\"name\": \"total_leads\", \"type\": \"number\", \"width\": 1}, {\"name\": \"won_deals\", \"type\": \"number\", \"width\": 1}, {\"name\": \"lost_deal_reasons\", \"type\": \"bar\", \"width\": 2}]"}
+{"layout": "[{\"name\": \"total_leads\", \"type\": \"number_chart\", \"layout\": {\"x\": 0, \"y\": 0, \"w\": 4, \"h\": 3, \"i\": \"total_leads\"}}, {\"name\": \"won_deals\", \"type\": \"number_chart\", \"layout\": {\"x\": 4, \"y\": 0, \"w\": 4, \"h\": 3, \"i\": \"won_deals\"}}, {\"name\": \"lost_deal_reasons\", \"type\": \"axis_chart\", \"layout\": {\"x\": 0, \"y\": 3, \"w\": 20, \"h\": 9, \"i\": \"lost_deal_reasons\"}}]"}
 
 ### 1.10 -> get_dashboard follows the saved layout
 # @expect $.message count 3
@@ -137,7 +142,7 @@ PUT {{host}}/api/resource/CRM%20Dashboard/Manager%20Dashboard
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"layout": "[{\"name\": \"total_leads\", \"type\": \"number\", \"width\": 1}, {\"name\": \"no_such_chart\", \"type\": \"number\", \"width\": 1}]"}
+{"layout": "[{\"name\": \"total_leads\", \"type\": \"number_chart\", \"layout\": {\"x\": 0, \"y\": 0, \"w\": 4, \"h\": 3, \"i\": \"total_leads\"}}, {\"name\": \"no_such_chart\", \"type\": \"number_chart\", \"layout\": {\"x\": 4, \"y\": 0, \"w\": 4, \"h\": 3, \"i\": \"no_such_chart\"}}]"}
 
 ### 1.12 -> null data for the unknown tile
 # @expect $.message count 2
@@ -186,7 +191,7 @@ Content-Type: application/json
 
 {"name": "average_deal_value", "type": "number", "from_date": "2026-01-01", "to_date": "2026-12-31"}
 
-### 2.5 average_won_deal_value and average_ongoing_deal_value -> 200
+### 2.5 average_won_deal_value -> 200
 # @expect $.message.value exists
 POST {{host}}/api/method/{{dash}}.get_chart
 Authorization: Bearer {{token}}
@@ -194,7 +199,7 @@ Content-Type: application/json
 
 {"name": "average_won_deal_value", "type": "number", "from_date": "2026-01-01", "to_date": "2026-12-31"}
 
-### 2.6 -> 200
+### 2.6 average_ongoing_deal_value -> 200
 # @expect $.message.value exists
 POST {{host}}/api/method/{{dash}}.get_chart
 Authorization: Bearer {{token}}
@@ -314,8 +319,8 @@ Content-Type: application/json
 POST {{host}}/api/method/{{dash}}.reset_to_default
 Authorization: Bearer {{token}}
 
-### 3.2 -> ten tiles again
-# @expect $.message count 10
+### 3.2 -> seventeen tiles again
+# @expect $.message count 17
 POST {{host}}/api/method/{{dash}}.get_dashboard
 Authorization: Bearer {{token}}
 Content-Type: application/json

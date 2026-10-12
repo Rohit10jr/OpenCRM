@@ -248,7 +248,34 @@ def fetch_rows(
     else:
         queryset = queryset[start : start + coerce_page_length(limit_page_length)]
 
-    return list(queryset.values(*selected))
+    return [wire_json_text(row) for row in queryset.values(*selected)]
+
+
+#: The three underscore caches that are **JSON text** on the wire. Upstream stores them
+#: in Text columns holding a JSON string (``base_document.py:520-523`` lists them among
+#: the text fields), so a list row carries ``_assign: '["ada@example.com"]'`` and the
+#: frontend parses it: ``JSON.parse(lead._assign || '[]')`` (``Leads.vue:490``,
+#: ``Deals.vue:456``) and ``JSON.parse(item)`` for ``_liked_by`` in every list view. The
+#: port stores them as ``JSONField`` (``frappe_core/models.py:151-153``), which is the
+#: better column but came out of ``values()`` and the serializer as a **decoded list** -
+#: and ``JSON.parse`` of a list throws, which is why the leads and deals lists never
+#: rendered (FINDINGS.md 40). ``_user_tags`` is a comma-separated string on both sides.
+JSON_TEXT_FIELDS = ("_assign", "_liked_by", "_comments")
+
+
+def wire_json_text(row: dict) -> dict:
+    """Encode the JSON caches as strings, in place, the way upstream's rows carry them.
+
+    Applied by :func:`fetch_rows` and by the serializer's ``to_representation``, which
+    together cover every path that hands a document or a row to the client. An empty
+    cache becomes ``"[]"`` rather than ``""``: both parse, and the frontend's
+    ``JSON.parse(x || '[]')`` guards handle either, but ``isLiked`` parses whatever it
+    is given without a guard.
+    """
+    for key in JSON_TEXT_FIELDS:
+        if key in row and not isinstance(row[key], str):
+            row[key] = json.dumps(row[key] if row[key] is not None else [])
+    return row
 
 
 def count_rows(

@@ -23,6 +23,7 @@ import {
 } from 'frappe-ui'
 
 import { jwtRequest } from '@/auth/jwtRequest'
+import { installAuthInterceptor } from '@/auth/interceptor'
 import { telemetryPlugin } from 'frappe-ui/frappe'
 // injects the lucide SVG sprite into the DOM so the IconPicker and lucide Icons
 // (used for view icons) can render from it
@@ -50,7 +51,15 @@ let app = createApp(App)
 // attaches the header and refreshes on 401. This one line is the whole integration -
 // none of the 225 createResource call sites change.
 setConfig('resourceFetcher', jwtRequest)
-app.use(FrappeUI)
+// ...and the second half: frappe-ui's `call()` and its upload helpers never consult
+// resourceFetcher, so the header is attached at fetch / XMLHttpRequest for same-origin
+// /api/ URLs (src/auth/interceptor.js, docs/FINDINGS.md 30).
+installAuthInterceptor()
+// `socketio: false`: the plugin would otherwise start upstream's socket.io client
+// against port 9000, which nothing here listens on, and retry forever. The port's
+// realtime client is ./socket.js, installed on $socket in mount() below (JWT_PATCH.md,
+// the realtime patch; docs/FINDINGS.md 31).
+app.use(FrappeUI, { socketio: false })
 app.use(spritePlugin)
 app.use(pinia)
 app.use(router)
@@ -62,23 +71,29 @@ app.use(telemetryPlugin, { app_name: 'crm' })
 
 app.config.globalProperties.$dialog = createDialog
 
+// BOOT PATCH (see ../JWT_PATCH.md, the third deviation): upstream makes this call only
+// under `yarn dev`, because its production page arrives with the boot values already
+// written into the HTML by a Jinja template. The Django port serves no HTML, so this
+// endpoint is the only source of `window.sysdefaults`, `window.timezone` and the rest,
+// in production as much as in dev. A failed call logs and mounts anyway: an error on
+// screen beats the blank page of an app that never mounted (docs/FINDINGS.md 26).
 let socket
-if (import.meta.env.DEV) {
-  jwtRequest({ url: '/api/method/crm.www.crm.get_context_for_dev' }).then(
-    (values) => {
-      for (let key in values) {
-        window[key] = values[key]
-      }
-      socket = initSocket()
-      app.config.globalProperties.$socket = socket
-      app.mount('#app')
-    },
-  )
-} else {
+function mount() {
   socket = initSocket()
   app.config.globalProperties.$socket = socket
   app.mount('#app')
 }
+
+jwtRequest({ url: '/api/method/crm.www.crm.get_context_for_dev' })
+  .then((values) => {
+    for (let key in values) {
+      window[key] = values[key]
+    }
+  })
+  .catch((error) => {
+    console.error('Boot values could not be loaded; mounting without them', error)
+  })
+  .then(mount)
 
 if (import.meta.env.DEV) {
   window.$dialog = createDialog

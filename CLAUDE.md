@@ -9,8 +9,8 @@ existing Vue frontend.
 |---|---|
 | **`specs/AS_BUILT.md`** | **What already exists. Read this first** |
 | `PORT_PLAN.md` | Source inventory, frontend contract, settled architecture decisions |
-| `specs/README.md` | Index of per-phase specs and their status |
-| `specs/PHASE_<N>_*.md` | Your phase's spec |
+| `docs/history/SPECS_README.md` | Index of the per-phase specs, moved to history on 7 Oct 2026 |
+| `docs/history/PHASE_<N>_*.md` | The spec of the phase that built what you are touching; the decisions in them still apply |
 | **`specs/SECURITY_MODEL.md`** | **Required before touching any permission rule or field-visibility declaration.** Per-doctype comparison with upstream, the four field tools and when each applies |
 | `specs/UNROUTED_DOCTYPES.md` | Doctypes withheld from `/api/resource/`, and why |
 | `specs/VERSION_HISTORY.md` | What change history is recorded and pruned. **Read before touching `clear_old_versions`** — its name invites a change that deletes the timeline |
@@ -36,10 +36,9 @@ Read them whenever behaviour is unclear. **Never invent semantics** — match th
 or flag the ambiguity in your report. If something looks impossible, suspect a missing
 framework mechanism before suspecting your own code.
 
-**When upstream is wrong** — and it sometimes is; **39 cases** are recorded across the
-`UPSTREAM_BUGS_PHASE_*.md` files (1–9 and 36–38 in the `0-2` file, 10–35 and 39 in the
-`3-6` file, which despite its name now spans phases 3–8 and the follow-up) — diverge
-only on bugs nothing can observe, and reproduce user-visible ones. Check whether anything
+**When upstream is wrong** — and it sometimes is; **48 cases** are recorded in
+`UPSTREAM_BUGS.md` — diverge only on bugs nothing can observe, and reproduce user-visible
+ones. Check whether anything
 actually reads the field before deciding, and record the choice.
 
 **Security is the standing exception to that rule.** Upstream protects most doctypes with
@@ -51,7 +50,8 @@ per-doctype detail and the two questions that settle each case.
 ## Hard rules
 
 1. The frontend wire protocol (`PORT_PLAN.md` §3) is a fixed external contract. JWT
-   auth and the WebSocket transport are the only two sanctioned deviations.
+   auth, the WebSocket transport and the boot-values call (`frontend/JWT_PATCH.md`) are
+   the only three sanctioned deviations.
 2. Phases 0 and 2 are single-agent. Everything else fans out by cluster/module.
 3. No two concurrent agents edit the same file.
 4. Preserve `frappe.throw` message text verbatim — it is user-facing copy.
@@ -116,8 +116,9 @@ tier you used.
 | **2** | Codex via PowerShell 5.1 | Same reviewer, fallback shell |
 | **3** | Claude subagent | **Degraded** — same model and same spec, so correlated blind spots |
 
-Full procedure: `docs/internal/RUNBOOK_PHASE_7.md` §3. (`RUNBOOK.md` covered the
-phases 3-6 run and is now a record of it.)
+This section is the whole of the procedure. The long form lived in the phase-7 runbook
+(`docs/history/RUNBOOK_PHASE_7.md` §3), removed with the other run records on 7 Oct 2026
+and still in git history.
 
 ## Tier 1 — Codex (default)
 

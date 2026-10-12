@@ -1,15 +1,18 @@
-# The frappe-ui patches — JWT (phase 0) and realtime (phase 6)
+# The frappe-ui patches — JWT (phase 0), realtime (phase 6) and boot (follow-up)
 
 **Read this before upgrading `frappe-ui`.** An upgrade that resets `main.js` will
-silently revert the patch and every request will go out unauthenticated.
+silently revert two of the patches: every request will go out unauthenticated, and the
+boot values will be fetched only under `yarn dev`, leaving production without them.
 
-There are exactly **two** sanctioned frontend deviations from upstream. The JWT
+There are exactly **three** sanctioned frontend deviations from upstream. The JWT
 interceptor is the first and is documented immediately below; the WebSocket client is the
-second and has its own section at the end. Nothing else in `frontend/` differs.
+second and the boot-values call the third, each with its own section at the end. Nothing
+else in `frontend/` differs, except the two browser-built requests the JWT section turns
+into fetches (a private file, and the list views' export), noted in that section.
 
 ## Why
 
-`PORT_PLAN.md` section 10 and `specs/PHASE_0_FOUNDATION.md` section 7: the Django port
+`PORT_PLAN.md` section 10 and `docs/history/PHASE_0_FOUNDATION.md` section 7: the Django port
 authenticates with JWT bearer tokens, not Frappe's `sid` session cookie. This is the
 **only** sanctioned deviation from the Frappe wire protocol - the 225 `createResource` /
 `createListResource` / `createDocumentResource` call sites are untouched, and every URL,
@@ -19,9 +22,10 @@ parameter name and response envelope is unchanged.
 
 | File | Change |
 |---|---|
-| `src/auth/tokens.js` | **New.** Token storage + `user_id` claim decode |
+| `src/auth/tokens.js` | **New.** Token storage + `user_id` claim decode. Since 28 Sep 2026 it also writes and clears the `user_id` cookie that frappe-ui's own `frappe/session.js` reads (`docs/FINDINGS.md` 38), which the backend ignores; since 29 Sep 2026 also the `access_token` cookie for `/private/files/`, the one place a cookie carries authority (`docs/FINDINGS.md` 49, and the section below) |
 | `src/auth/jwtRequest.js` | **New.** Wraps `frappeRequest`: attaches the header, refreshes once on 401 |
-| `src/main.js` | `setConfig('resourceFetcher', frappeRequest)` -> `jwtRequest`; same for the dev boot call |
+| `src/auth/interceptor.js` | **New (23 Sep 2026).** Attaches the header at `fetch` / `XMLHttpRequest` for same-origin `/api/` URLs, for everything that does not go through `resourceFetcher` (see below) |
+| `src/main.js` | `setConfig('resourceFetcher', frappeRequest)` -> `jwtRequest`; `installAuthInterceptor()`; same for the dev boot call |
 | `src/stores/session.js` | `sessionUser()` reads the token instead of the `user_id` cookie; `login` stores the pair; `logout` clears it |
 
 The integration point is one line, because frappe-ui centralises HTTP:
@@ -41,20 +45,77 @@ setConfig('resourceFetcher', jwtRequest)   // was: frappeRequest
 
 Implemented in `backend/frappe_core/api/auth.py`; covered by `backend/tests/test_auth.py`.
 
+## The second half: requests that never consult `resourceFetcher`
+
+`docs/FINDINGS.md` 30, found the first time the frontend ran in a browser. frappe-ui's
+`call()` (`utils/call.ts`) builds its own `fetch` and reads no config; its two upload
+helpers (`useFileUpload.ts`, `fileUploadHandler.ts`) build their own `XMLHttpRequest`.
+Thirty-two files under `src/` import `call` directly, the router guard among them, and
+every attachment upload takes the XHR path. Upstream never notices, because the `sid`
+cookie rides on every same-origin request whoever builds it; a bearer header does not.
+
+`src/auth/interceptor.js` closes that at the two browser primitives instead of in 32
+components: `window.fetch` and `XMLHttpRequest.prototype.open/send` add
+`Authorization: Bearer` to same-origin `/api/` URLs when the caller has not set one.
+`/api/method/login` and `/api/method/token/refresh` are excluded, because a stale access
+token on the refresh call would be authenticated before the refresh ran. Refresh-on-401
+stays in `jwtRequest`; a bare `call()` that meets an expired token fails, as it did
+upstream with an expired session.
+
+## The third half: a private file the browser fetches by itself (29 Sep 2026)
+
+`docs/FINDINGS.md` 49. A note's `<img src="/private/files/...">` and an attachment's
+link are requests the browser builds on its own: no `fetch`, no `XMLHttpRequest`, nothing
+for the interceptor to reach, and no way to carry a header. Upstream's `sid` cookie rode
+along on them; a bearer token cannot.
+
+So `tokens.js` keeps the access token in an `access_token` cookie as well:
+`path=/private/files`, `SameSite=Lax`, `Secure` on https, rewritten on every refresh and
+cleared at logout. The backend reads it in one place, `frappe_core/file_views.py`, on a
+GET of `/private/files/<name>`, and the File rule then decides who gets the bytes. It is
+never read under `/api/`, so it cannot authenticate an API call; the path scope means the
+browser does not even send it elsewhere; and `SameSite=Lax` keeps it off a request another
+site makes for the URL. It is the same short-lived token, so it is as strong and as
+revocable as the header. Public files (`/files/`) need nothing, as upstream's web server
+serves them without a session.
+
+The list views' Export is the other browser-built request (`docs/FINDINGS.md` 51):
+upstream sets `window.location.href` to the `export_query` URL and the cookie
+authenticates the navigation. `ViewControls.vue:exportRows` fetches the URL instead, so
+the interceptor adds the header, and hands the blob to the browser as a download under
+the filename the `Content-Disposition` header gives. No cookie is involved.
+
 ## Deliberate omissions
 
-- **No CSRF token handling.** It protected cookie auth; there are no cookies now.
+- **No CSRF token handling.** It protected cookie auth. The one cookie that now carries
+  authority is read only on a GET of `/private/files/`, which changes nothing, so a forged
+  request still has nothing to do.
 - **`logout` does not revoke the access token.** With stateless JWTs it stays valid
-  until it expires (60 min by default, `JWT_ACCESS_TOKEN_LIFETIME_MINUTES`). Add
-  `rest_framework_simplejwt.token_blacklist` if that window is unacceptable - the
-  backend already calls `.blacklist()` when the app is installed.
+  until it expires (5 min by default, `JWT_ACCESS_TOKEN_LIFETIME_MINUTES`; the local
+  `.env` raises it for hand testing and must not ship that way). Closing that window
+  would mean a blacklist lookup on every request, which discards most of the reason
+  for stateless tokens, so it is documented instead. The **refresh** token *is*
+  revoked: `token_blacklist` is installed, and since 25 Sep 2026 the `logout` resource
+  sends the refresh token so the backend can blacklist it (`docs/FINDINGS.md` 35);
+  before that the call went out empty and revoked nothing.
 
 ## Not done in phase 0
 
 This SPA has **no login page** - upstream redirects to the Frappe desk's
 (`session.js:35`, `window.location.href = '/login?redirect-to=/crm'`). Something has to
 serve that page and call `login`, and it is not in any phase 0-4 spec. Flagged in
-`docs/internal/PROGRESS.md`.
+`docs/internal/PROGRESS.md`. Phase 8 added the page inside the SPA.
+
+## What an in-app login changes (24-25 Sep 2026)
+
+Upstream signs in and out through full page loads, so every Pinia store and resource
+cache starts from nothing on each side of the boundary. With the login page inside the
+SPA the app keeps running through both, and three things had to become explicit
+(`docs/FINDINGS.md` 32-34): the login response is read from under `message`, because
+frappe-ui returns the login body wrapped; the router guard decides "not logged in" before
+it creates the users store, and re-fetches that store if an early fetch had failed; and
+sign-out is a real page load to `/crm/login`, so the next user does not inherit the
+previous one's stores.
 
 Concurrent 401s collapse into a single refresh (`refreshInFlight`), because a list
 screen can fire a dozen requests at once and each must not spend a refresh token.
@@ -73,6 +134,11 @@ and last sanctioned frontend deviation.
 |---|---|
 | `src/socket.js` | **Rewritten.** A raw `WebSocket` client with socket.io's `on` / `off` / `emit` surface |
 | `src/auth/tokens.js` | `refreshAccessToken` moved here from `jwtRequest.js` - the socket needs it too, and the single-flight guard is only a guarantee if there is one of it |
+
+**`app.use(FrappeUI, { socketio: false })`** (23 Sep 2026, `docs/FINDINGS.md` 31): the
+plugin's default is `socketio: true`, which starts upstream's socket.io client against
+port 9000 and retries forever. `$socket` is set once, in `main.js`'s `mount()`, to the
+client below.
 
 **No component changed.** All seven `$socket` call sites - `Notifications.vue`,
 `MobileNotification.vue`, `Activities.vue`, `ERPNextSettings.vue`, `ExotelCallUI.vue`,
@@ -135,3 +201,62 @@ cannot carry a WebSocket. `/ws/` has to be proxied to it alongside `/api/`; set
 `ENABLE_REALTIME=0` on the backend removes the route entirely. Nothing breaks: the client
 fails to connect, retries with backoff, and the app is exactly as functional as it was
 before phase 6.
+
+---
+
+# The boot patch (phase 8 follow-up, 23 Sep 2026)
+
+`docs/FINDINGS.md` 26. The page needs a few server-side facts before it can draw: the
+date, time, number and currency formats (`window.sysdefaults`), the system and user
+timezone, the translation tables, and three site flags. Upstream calls this set the
+**boot** (`crm/www/crm.py:get_boot`) and delivers it two ways. In production the
+Jinja-rendered `crm/www/crm.html` carries a `<script>` that writes every key onto
+`window`, so the page arrives with them. Under `yarn dev` Vite serves the raw
+`index.html`, no template runs, and `main.js` posts to `crm.www.crm.get_context_for_dev`
+and copies the reply onto `window` before it mounts.
+
+This port serves no HTML, so the endpoint is the only source, in every mode. This is the
+third and last sanctioned deviation.
+
+## What changed - one file
+
+| File | Change |
+|---|---|
+| `src/main.js` | The fetch-then-mount step runs always, not only under `import.meta.env.DEV`; a failed call logs and mounts anyway |
+
+The call, its URL and the keys it copies onto `window` are upstream's own; only the
+condition around it went. Mounting on failure is deliberate: with the values missing the
+list pages throw on their first date cell (`utils/index.js:82` reads
+`window.sysdefaults.date_format` with no guard), but the login page renders and the
+console names the cause, where the alternative was a blank page with no message at all.
+
+## Backend contract
+
+| Endpoint | Returns |
+|---|---|
+| `POST /api/method/crm.www.crm.get_context_for_dev` (guest-allowed) | `{"message": {"sysdefaults": {...seven format keys...}, "timezone": {"system", "user"}, "translated_messages": {}, "translated_doctypes": [], "state_options": {}, "is_demo_site": false, "demo_data_created": false, "is_fc_site": false}}` |
+
+Implemented in `backend/crm_app/api/boot.py`; covered by `backend/tests/test_boot.py`.
+The name is upstream's, "for_dev" included, so the guard test and the route inventory
+match the string the frontend sends. Upstream's developer-mode gate is not reproduced,
+because production is a caller here, and nothing in the answer is secret. The seven format
+values come from `FRAPPE_SYSDEFAULTS` in `config/settings/base.py`, each overridable from
+`.env`, since the port has no System Settings doctype; `currency` ships empty, as on a
+fresh Frappe site, and the frontend shows USD until `FRAPPE_CURRENCY` is set.
+
+## Deployment
+
+The `yarn build` output is served as static files, with `index.html` returned for every
+path under `/crm/`; the app then fetches the boot values itself. Nothing renders a
+template. The `buildConfig.indexHtmlPath` in `vite.config.js` still points at upstream's
+app folder and needs changing before the first production build - a deployment item
+outside this patch.
+
+## Other frontend patches (7 Oct 2026)
+
+Not part of the three sanctioned deviations, listed here so every edit to upstream's
+frontend is in one place.
+
+| File | Change | Why |
+|---|---|---|
+| `src/router.js` | the catch-all route is `/:invalidpath(.*)*` instead of `/:invalidpath` | Upstream's form matches one segment, so a mistyped list name in a record URL (`/crm/leadsdss/CRM-LEAD-…`) matched nothing and drew a blank page. Upstream bug 48, `docs/FINDINGS.md` 83; diverged by decision |

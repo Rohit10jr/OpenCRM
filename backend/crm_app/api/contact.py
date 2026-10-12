@@ -103,27 +103,38 @@ def create_new(contact: str, field: str, value: str):
 
 @whitelist("crm.api.contact.set_as_primary")
 def set_as_primary(contact: str, field: str, value: str):
-    """``crm/api/contact.py:83-106``. Exactly one row ends up flagged."""
+    """``crm/api/contact.py:87-111``. Exactly one row ends up flagged.
+
+    Upstream flags the rows in memory and saves the contact once, so its "only one can
+    be primary" check sees the finished table. Saving the rows one at a time does not:
+    each row's save re-derives the contact (the rows' own signal), and at the moment the
+    new primary is written the old one is still flagged. That threw "Only one Mobile No
+    can be set as primary." and left both rows flagged, after which nothing on the
+    contact would save (FINDINGS.md 67).
+
+    So the flags are written as two set-based updates, which fire no per-row signal, the
+    old ones cleared first, inside one transaction; the contact is derived once at the
+    end, and a refusal there undoes the flags.
+    """
+    from django.db import transaction
+
     instance = _require_contact(contact, "write")
 
     if field == "email":
-        for row in instance.email_ids.all():
-            row.is_primary = row.email_id == value
-            row.save(update_fields=["is_primary"])
+        rows, column, flag = instance.email_ids, "email_id", "is_primary"
     elif field in ("mobile_no", "phone"):
-        attr = "is_primary_mobile_no" if field == "mobile_no" else "is_primary_phone"
-        for row in instance.phone_nos.all():
-            setattr(row, attr, row.phone == value)
-            row.save(update_fields=[attr])
+        rows, column = instance.phone_nos, "phone"
+        flag = "is_primary_mobile_no" if field == "mobile_no" else "is_primary_phone"
     else:
         throw("Invalid field")
 
-    # The denormalised email_id / mobile_no / phone follow the child rows via signal,
-    # but update_fields=[...] on a child does not carry the parent - refresh explicitly.
-    instance.sync_primary_values()
-    type(instance)._default_manager.filter(pk=instance.pk).update(
-        email_id=instance.email_id, mobile_no=instance.mobile_no, phone=instance.phone
-    )
+    with transaction.atomic():
+        rows.exclude(**{column: value}).update(**{flag: False})
+        rows.filter(**{column: value}).update(**{flag: True})
+        instance.sync_primary_values()
+        type(instance)._default_manager.filter(pk=instance.pk).update(
+            email_id=instance.email_id, mobile_no=instance.mobile_no, phone=instance.phone
+        )
     return True
 
 

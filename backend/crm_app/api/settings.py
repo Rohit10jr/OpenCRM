@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from frappe_core.exceptions import throw
+from frappe_core.exceptions import FrappeError, throw
 from frappe_core.mail import validate_email_account
+from frappe_core.secrets import ensure_key
 from frappe_core.query import parse_json_param
 from frappe_core.whitelist import whitelist
 
@@ -132,9 +133,24 @@ def create_email_account(data: str | dict):
     if not fields["email_account_name"]:
         throw("Email account name is required")
 
+    # A credential is about to be stored, and it is stored encrypted. With no
+    # FIELD_ENCRYPTION_KEY the save below would fail *after* a successful login to the
+    # mail server, and the screen would call that "invalid credentials" (FINDINGS.md 65).
+    # Say so first, before anything goes over the network.
+    if fields.get("password") or fields.get("api_secret"):
+        ensure_key()
+
     # Validate before the row exists, so a rejected account leaves nothing behind.
-    # Upstream checks inside validate(), which is the same point in its lifecycle.
-    validate_email_account(EmailAccount(**fields))
+    # Upstream checks inside validate(), which is the same point in its lifecycle. Its
+    # ``except Exception as e: frappe.throw(str(e))`` (crm/api/settings.py:45-46) is why
+    # anything the mail libraries raise is a refusal here and not a 500: a pasted Google
+    # app password can carry non-breaking spaces, which smtplib cannot encode.
+    try:
+        validate_email_account(EmailAccount(**fields))
+    except FrappeError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - upstream catches everything at this point
+        throw(str(exc))
 
     account = EmailAccount._default_manager.create(**fields)
     return account.name

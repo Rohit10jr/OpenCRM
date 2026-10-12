@@ -1,0 +1,218 @@
+"""Uploaded bytes on disk: where they live and how they are named.
+
+Upstream keeps a site's files under ``sites/<site>/public/files`` and
+``sites/<site>/private/files``, and ``File.file_url`` is the path a browser fetches them
+by: ``/files/<name>`` or ``/private/files/<name>``. Here the same two folders sit under
+``MEDIA_ROOT`` as ``files`` and ``private/files``, the layout
+``crm_app.communication.attachment_path`` has read for outgoing mail since phase 5, so a
+URL and its disk path differ only by the root.
+
+Ports ``frappe/core/doctype/file/utils.py`` (``get_content_hash``, ``generate_file_name``,
+``get_file_name``, ``get_safe_file_name``, ``delete_file``, ``find_file_by_url``),
+``frappe.utils.get_files_path`` and ``frappe/utils/image.py:optimize_image``.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import io
+import os
+import re
+import secrets
+from pathlib import Path
+from urllib.parse import unquote
+
+from django.conf import settings
+
+from frappe_core.exceptions import throw
+
+URL_PREFIXES = ("http://", "https://")
+PUBLIC_URL = "/files/"
+PRIVATE_URL = "/private/files/"
+
+#: ``frappe/utils/response.py:311-327``: served as a download, never inline, because a
+#: browser would run what is inside them.
+FORCE_DOWNLOAD_EXTENSIONS = (
+    ".svg",
+    ".svgz",
+    ".html",
+    ".htm",
+    ".xhtml",
+    ".xht",
+    ".shtml",
+    ".shtm",
+    ".mhtml",
+    ".mht",
+    ".xml",
+)
+
+
+def max_file_size() -> int:
+    """``frappe/core/api/file.py:get_max_file_size``: a site setting upstream, 25 MB by
+    default; ``settings.MAX_FILE_SIZE`` here."""
+    return int(getattr(settings, "MAX_FILE_SIZE", 25 * 1024 * 1024))
+
+
+def get_files_path(*parts: str, is_private: bool = False) -> Path:
+    """``frappe.utils.get_files_path``: ``MEDIA_ROOT/files`` or ``MEDIA_ROOT/private/files``."""
+    root = Path(settings.MEDIA_ROOT)
+    base = root / "private" / "files" if is_private else root / "files"
+    return base.joinpath(*parts)
+
+
+def file_url(file_name: str, is_private: bool) -> str:
+    return (PRIVATE_URL if is_private else PUBLIC_URL) + file_name
+
+
+def is_local_url(url: str | None) -> bool:
+    return bool(url) and str(url).startswith((PUBLIC_URL, PRIVATE_URL))
+
+
+def path_for_url(url: str | None) -> Path | None:
+    """The disk path a local ``file_url`` names.
+
+    ``None`` when the URL is not one of ours, or when it would resolve outside its
+    folder: a ``file_url`` is a database value, and a row saying ``/files/../../x`` must
+    not read or write anything (``utils.py:check_path_safety``).
+    """
+    if not url:
+        return None
+    clean = str(url).split("?")[0].split("#")[0]
+    if clean.startswith(PRIVATE_URL):
+        private, rest = True, clean[len(PRIVATE_URL) :]
+    elif clean.startswith(PUBLIC_URL):
+        private, rest = False, clean[len(PUBLIC_URL) :]
+    else:
+        return None
+    base = get_files_path(is_private=private).resolve()
+    try:
+        candidate = (base / unquote(rest)).resolve()
+    except OSError:
+        return None
+    if candidate == base or base not in candidate.parents:
+        return None
+    return candidate
+
+
+def get_content_hash(content: bytes | str) -> str:
+    if isinstance(content, str):
+        content = content.encode()
+    return hashlib.md5(content, usedforsecurity=False).hexdigest()  # nosec - a content id, not a secret
+
+
+def get_safe_file_name(file_name: str) -> str:
+    return re.sub(r"[/\\%?#]", "_", file_name)
+
+
+def get_file_name(fname: str, optional_suffix: str | None = None) -> str:
+    partial, extn = os.path.splitext(str(fname))
+    suffix = optional_suffix or secrets.token_hex(3)
+    return f"{partial}{suffix}{extn}"
+
+
+def generate_file_name(
+    name: str, suffix: str | None = None, is_private: bool = False, content_hash: str | None = None
+) -> str:
+    """``utils.py:226-249``: a name nothing else on disk is using.
+
+    The name itself if it is free, or taken by the very same bytes; else the name with
+    ``suffix``; else the name with a random suffix.
+    """
+
+    def different_file_exists_at_path(candidate: str) -> bool:
+        path = get_files_path(candidate, is_private=is_private)
+        if not path.exists():
+            return False
+        if content_hash:
+            return get_content_hash(path.read_bytes()) != content_hash
+        return True
+
+    if not different_file_exists_at_path(name):
+        return name
+    candidate = get_file_name(name, suffix)
+    if different_file_exists_at_path(candidate):
+        return generate_file_name(name, is_private=is_private)
+    return candidate
+
+
+def write_file(path: Path, content: bytes) -> Path:
+    """``file.py:840-856``, the disk half: written and fsynced."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as handle:
+        handle.write(content)
+        handle.flush()
+        os.fsync(handle.fileno())
+    return path
+
+
+def delete_file(url: str | None) -> None:
+    """``utils.py:181-198``: the bytes behind a local ``file_url``, if they are there."""
+    if not url:
+        return
+    if ".." in url.split("/"):
+        throw(f"It is risky to delete this file: {url}. Please contact your System Manager.")
+    head, name = os.path.split(url.strip("/"))
+    path = get_files_path(name, is_private=head != "files")
+    if path.exists():
+        path.unlink()
+
+
+def find_file_by_url(url: str, name: str | None = None):
+    """``utils.py:494-507``: the first File row at ``url`` the session user may read.
+
+    A file can hang off several documents; if any one of them lets the user in, the
+    bytes are theirs to fetch.
+    """
+    from frappe_core.permissions import check_object_permission
+    from frappe_platform.models import File
+
+    rows = File._default_manager.filter(file_url=str(url))
+    if name:
+        rows = rows.filter(pk=str(name))
+    for row in rows:
+        if check_object_permission(row, "read"):
+            return row
+    return None
+
+
+def optimize_image(
+    content: bytes,
+    content_type: str,
+    max_width: int = 1024,
+    max_height: int = 768,
+    optimize: bool = True,
+    quality: int = 85,
+) -> bytes:
+    """``frappe/utils/image.py:optimize_image``: shrink an uploaded picture.
+
+    Needs Pillow, which ``requirements.txt`` lists. Without it the bytes come back
+    untouched, which is also what upstream does when Pillow fails on the picture (it
+    ``msgprint``s "Failed to optimize image" and returns the original).
+    """
+    if content_type == "image/svg+xml":
+        return content
+    try:
+        from PIL import Image
+    except ImportError:
+        return content
+    try:
+        image = Image.open(io.BytesIO(content))
+        exif = image.getexif()
+        width, height = image.size
+        max_height = max(min(max_height, height * 0.8), 200)
+        max_width = max(min(max_width, width * 0.8), 200)
+        image_format = content_type.split("/")[1]
+        image.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+        output = io.BytesIO()
+        image.save(
+            output,
+            format=image_format,
+            optimize=optimize,
+            quality=quality,
+            save_all=True if image_format == "gif" else None,
+            exif=exif,
+        )
+        optimized = output.getvalue()
+        return optimized if len(optimized) < len(content) else content
+    except Exception:  # noqa: BLE001 - upstream catches everything here too
+        return content

@@ -583,11 +583,45 @@ async function exportRows() {
     url += `&selected_items=${JSON.stringify(selectedRows.value)}`
   }
 
-  window.location.href = url
+  // Upstream navigates to the URL and lets the session cookie authenticate the
+  // download. A bearer token cannot ride on a navigation, so the file is fetched
+  // (the interceptor adds the header) and handed to the browser as a download
+  // (frontend/JWT_PATCH.md, docs/FINDINGS.md 51).
+  try {
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(await exportErrorMessage(response))
+    }
+    const blob = await response.blob()
+    const disposition = response.headers.get('Content-Disposition') || ''
+    const match = disposition.match(/filename="?([^";]+)"?/)
+    const extension = export_type.value === 'CSV' ? 'csv' : 'xlsx'
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = match ? match[1] : `${props.doctype}.${extension}`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(link.href)
+  } catch (error) {
+    toast.error(error.message || __('Export failed'))
+  }
 
   showExportDialog.value = false
   export_all.value = false
   export_type.value = 'Excel'
+}
+
+async function exportErrorMessage(response) {
+  try {
+    const body = await response.json()
+    const messages = JSON.parse(body._server_messages || '[]').map(
+      (m) => JSON.parse(m).message,
+    )
+    return messages[0] || body.exception || response.statusText
+  } catch {
+    return response.statusText || __('Export failed')
+  }
 }
 
 let standardViews = []

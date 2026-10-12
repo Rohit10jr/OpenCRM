@@ -54,11 +54,15 @@ def call(client, path: str, payload: dict | None = None):
 #: has a place, and `test_out_of_scope_list_is_not_hiding_a_regression` keeps it honest.
 OUT_OF_SCOPE: set[str] = set()
 
-#: A dotted path at a `url:` / `method:` key, or as the first argument of `call(...)`.
-#: The second form was missed until 16 Sep 2026, which is how twenty paths the Vue app
-#: calls stayed unserved through eight phases (docs/TESTING_GUIDE.md, "Gaps you will
-#: hit"); every one of them was a `call('...')` site.
-_PATH_RE = re.compile(r"(?:(?:url|method):\s*|\bcall\(\s*)'([a-z_]+(?:\.[a-z_]+)+)'")
+#: A dotted path at a `url:` / `method:` key, or as the first argument of `call(...)`,
+#: with or without the `/api/method/` prefix. The `call(...)` form was missed until
+#: 16 Sep 2026, which is how twenty paths the Vue app calls stayed unserved through
+#: eight phases (docs/TESTING_GUIDE.md, "Gaps you will hit"); the prefixed form was
+#: missed until 23 Sep 2026, which is how the one call `main.js` makes before it mounts
+#: stayed unserved and the page stayed blank (docs/FINDINGS.md 26).
+_PATH_RE = re.compile(
+    r"(?:(?:url|method):\s*|\bcall\(\s*)'(?:/api/method/)?([a-z_]+(?:\.[a-z_]+)+)'"
+)
 
 
 def frontend_called_paths() -> set[str]:
@@ -70,6 +74,68 @@ def frontend_called_paths() -> set[str]:
             continue
         found.update(_PATH_RE.findall(path.read_text(encoding="utf-8", errors="ignore")))
     return found
+
+
+#: frappe-ui makes a handful of calls of its own, from inside the installed package,
+#: which no scan of `frontend/src` can see: `useOnboarding` (FINDINGS.md 39), the Link
+#: search, the form-load bundle, the Frappe Cloud bridge and the Data Import page.
+#: Scanned separately over the package's two source trees. The library writes some
+#: calls with double quotes, so its regex accepts either quote; and it ships file-picker
+#: components for Frappe Drive whose `drive.api.*` calls belong to that app, which this
+#: frontend never mounts, so only the framework's and the CRM's namespaces count.
+LIBRARY_SRC = FRONTEND_SRC.parent / "node_modules" / "frappe-ui"
+LIBRARY_DIRS = ("frappe", "src")
+LIBRARY_NAMESPACES = ("frappe.", "crm.")
+_LIBRARY_PATH_RE = re.compile(
+    r"(?:(?:url|method):\s*|\bcall\(\s*)['\"](?:/api/method/)?([a-z_]+(?:\.[a-z_]+)+)['\"]"
+)
+#: `const NAME = 'dotted.path'` - counted only when `call(NAME)` appears in the same file.
+_LIBRARY_CONST_RE = re.compile(r"\b([A-Za-z_]\w*)\s*=\s*['\"]([a-z_]+(?:\.[a-z_]+)+)['\"]")
+
+#: Data Import is a framework feature the port has not built: no doctype, no endpoints,
+#: and the three `/crm/data-import` pages are reachable only by typing the URL.
+#: `specs/KNOWN_ISSUES.md` 8 records it; these three stay here until it is built.
+LIBRARY_OUT_OF_SCOPE = {
+    "frappe.core.doctype.data_import.data_import.form_start_import",
+    "frappe.core.doctype.data_import.data_import.get_import_logs",
+    "frappe.core.doctype.data_import.data_import.get_preview_from_template",
+}
+
+
+def library_called_paths() -> set[str]:
+    if not LIBRARY_SRC.exists():
+        pytest.skip("frappe-ui package not installed")
+    found: set[str] = set()
+    for sub in LIBRARY_DIRS:
+        for path in (LIBRARY_SRC / sub).rglob("*"):
+            if path.suffix not in (".js", ".ts", ".vue"):
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            found.update(_LIBRARY_PATH_RE.findall(text))
+            # A path held in a constant and passed to call() by name, which the regex
+            # above cannot see: `const X = 'frappe.a.b'; call(X)` (pulse.ts does this).
+            for constant, dotted in _LIBRARY_CONST_RE.findall(text):
+                if re.search(r"\bcall\(\s*" + re.escape(constant) + r"\b", text):
+                    found.add(dotted)
+    return {p for p in found if p.startswith(LIBRARY_NAMESPACES)}
+
+
+def test_every_library_dotted_path_resolves():
+    """The same contract for the calls frappe-ui makes on the app's behalf.
+
+    `useOnboarding` runs on every screen with the onboarding panel and its two calls
+    answered 404 for eight phases (FINDINGS.md 39), because the guard above reads the
+    app's source and these live in the package.
+    """
+    registered = set(all_methods())
+    missing = sorted(library_called_paths() - registered - LIBRARY_OUT_OF_SCOPE)
+    assert not missing, f"frappe-ui calls these but nothing serves them: {missing}"
+
+
+def test_library_out_of_scope_list_is_not_hiding_a_regression():
+    called = library_called_paths()
+    stale = sorted(p for p in LIBRARY_OUT_OF_SCOPE if p not in called)
+    assert not stale, f"LIBRARY_OUT_OF_SCOPE lists paths frappe-ui no longer calls: {stale}"
 
 
 def test_every_frontend_dotted_path_resolves():
@@ -1311,6 +1377,30 @@ def test_search_link_is_permission_filtered(auth_api, alice, bob, administrator)
 
     response = call(auth_api, "frappe.desk.search.search_link", {"doctype": "CRM Lead"})
     assert [r["value"] for r in response.json()["message"]] == [mine.name]
+
+
+def test_search_link_user_takes_the_frontends_ignore_user_type_key(auth_api, alice, make_user):
+    """FINDINGS.md 46. Every User Link in the app sends ``filters: {ignore_user_type: 1}``
+    (Field.vue, SidePanelLayout.vue, AssignToBody.vue, Dashboard.vue); upstream's
+    ``user_query`` pops the key and the port read it as a field, answering 400."""
+    make_user("portal@example.com", first_name="Portal", user_type="Website User")
+    make_user("off@example.com", first_name="Off", enabled=False)
+
+    def names(filters):
+        response = call(
+            auth_api, "frappe.desk.search.search_link", {"doctype": "User", "filters": filters}
+        )
+        assert response.status_code == 200, response.content[:300]
+        return [r["value"] for r in response.json()["message"]]
+
+    listed = names({"ignore_user_type": 1})
+    assert alice.name in listed
+    assert "off@example.com" not in listed, "disabled accounts stay out (user_query)"
+    assert "portal@example.com" in listed, "a System User asking with the flag sees Website Users"
+
+    plain = names({})
+    assert alice.name in plain
+    assert "portal@example.com" not in plain, "without the flag, Website Users are hidden"
 
 
 def test_rename_doc_moves_the_row(auth_api, alice):

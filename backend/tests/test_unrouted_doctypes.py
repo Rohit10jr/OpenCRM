@@ -114,7 +114,7 @@ def test_a_user_cannot_self_assign_their_way_into_an_invisible_deal(alice, bob, 
     `org_hierarchy` grants access to a record you are assigned to and the caller had just
     written that assignment. Nothing errored, so nothing logged.
 
-    Upstream Frappe CRM has the same hole (UPSTREAM_BUGS_PHASE_3-6.md #16).
+    Upstream Frappe CRM has the same hole (UPSTREAM_BUGS.md #16).
     """
     with session_user(administrator.name):
         status = CRMDealStatus.objects.create(deal_status="Qualification", type="Open")

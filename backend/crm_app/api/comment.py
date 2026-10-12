@@ -176,8 +176,9 @@ def _add_attachments(comment, attachments) -> None:
 
     Upstream accepts either a File name or a ``{"fname", "fcontent"}`` dict from
     ``frappe.attach_print``. Only the first form is reachable from the frontend; the
-    second is skipped rather than half-implemented, because writing file *content*
-    needs the storage layer this port has not built.
+    second, a rendered print, has no producer here and is skipped. (Storing bytes is
+    ``File._content`` + ``save()`` since FINDINGS.md 49; the gap is the print, not the
+    storage.)
     """
     from frappe_platform.models import File
 

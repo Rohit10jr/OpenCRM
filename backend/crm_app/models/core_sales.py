@@ -650,6 +650,16 @@ class CRMLead(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
             ],
         }
 
+    @staticmethod
+    def default_kanban_settings():
+        """Verbatim from ``crm_lead.py:487-493``: the column, the card title and the
+        card's fields when no saved view says otherwise (FINDINGS.md 53)."""
+        return {
+            "column_field": "status",
+            "title_field": "lead_name",
+            "kanban_fields": '["organization", "email", "mobile_no", "_assign", "modified"]',
+        }
+
 
 @register_doctype("CRM Deal")
 class CRMDeal(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDocument):
@@ -960,6 +970,15 @@ class CRMDeal(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
             ],
         }
 
+    @staticmethod
+    def default_kanban_settings():
+        """Verbatim from ``crm_deal.py:350-356`` (FINDINGS.md 53)."""
+        return {
+            "column_field": "status",
+            "title_field": "organization",
+            "kanban_fields": '["annual_revenue", "email", "mobile_no", "_assign", "modified"]',
+        }
+
 
 @register_doctype("CRM Contacts", is_child_table=True)
 class CRMContacts(BaseDocument):
@@ -1056,6 +1075,15 @@ class CRMTask(AutoIncrementDocument):
                 "reference_docname",
                 "modified",
             ],
+        }
+
+    @staticmethod
+    def default_kanban_settings():
+        """Verbatim from ``crm_task.py:112-118``: what a task card shows (FINDINGS.md 53)."""
+        return {
+            "column_field": "status",
+            "title_field": "title",
+            "kanban_fields": '["description", "priority", "creation"]',
         }
 
     # -- assignment: crm_task.py:30-56 --------------------------------------------------

@@ -3,8 +3,9 @@
 Porting **Frappe CRM** (Python/Frappe framework) to **Django + DRF**, keeping the
 existing Vue frontend.
 
-This file holds standing rules only. Which phase the port is in, and what has shipped,
-lives in `specs/README.md` — read it there rather than trusting anything dated in here.
+This file holds standing rules only. What has shipped lives in `specs/AS_BUILT.md`, and
+the phase-by-phase record in `docs/history/SPECS_README.md` — read those rather than
+trusting anything dated in here.
 
 ## Read before working
 
@@ -13,8 +14,8 @@ lives in `specs/README.md` — read it there rather than trusting anything dated
 | **`specs/AS_BUILT.md`** | **What already exists. Read this first.** Where it and a phase spec disagree, it wins — the specs were written before the code. Its security section lists the mechanisms a doctype can use |
 | `PORT_PLAN.md` | Source inventory, frontend contract, settled architecture decisions |
 | `specs/SECURITY_MODEL.md` | Per-doctype comparison with upstream, and the 11 places we deliberately differ |
-| `specs/README.md` | Index of the phase specs, and the current status of each |
-| `specs/PHASE_<N>_*.md` | The spec for the phase you were asked about |
+| `docs/history/SPECS_README.md` | Index of the per-phase specs, moved to history on 7 Oct 2026 |
+| `docs/history/PHASE_<N>_*.md` | The spec of the phase that built what you are touching; the decisions in them still apply |
 
 These encode decisions that are already settled. Do not re-litigate them; if you
 believe one is wrong, say so in your report rather than working around it.
@@ -40,9 +41,10 @@ the port is right or wrong.
 ## Hard rules
 
 1. The frontend wire protocol (`PORT_PLAN.md` §3) is a fixed external contract. JWT
-   auth and the WebSocket transport are the only two sanctioned deviations.
+   auth, the WebSocket transport and the boot-values call (`frontend/JWT_PATCH.md`) are
+   the only three sanctioned deviations.
 2. String primary keys per the six `autoname` strategies in
-   `specs/PHASE_0_FOUNDATION.md` §2 — three doctypes are genuinely autoincrement.
+   `docs/history/PHASE_0_FOUNDATION.md` §2 — three doctypes are genuinely autoincrement.
 3. `_assign` is a denormalised cache of `ToDo` records. Never use it for access control.
 4. Preserve `frappe.throw` message text verbatim — it is user-facing copy.
 5. Postgres, not MariaDB: map Frappe's `like` to `ilike`/`icontains`.

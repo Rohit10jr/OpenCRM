@@ -158,7 +158,7 @@ def test_the_connect_timeout_is_passed_to_the_backend(monkeypatch, settings):
     host blocks the save until the OS gives up - 20 to 130 seconds, during which the user
     sees a spinner rather than the error written for them.
 
-    Recorded in UPSTREAM_BUGS_PHASE_3-6.md. If a slow but working relay is ever reported
+    Recorded in UPSTREAM_BUGS.md. If a slow but working relay is ever reported
     as broken, raise ``MAIL_CONNECT_TIMEOUT`` - do not remove it.
     """
     settings.MAIL_CONNECT_TIMEOUT = 7

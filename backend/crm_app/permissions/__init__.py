@@ -131,6 +131,35 @@ def register() -> None:
         has_permission=platform_docs.app_settings_has_permission,
     )
 
+    # Address and Country (FINDINGS.md 45): upstream's role tables, reproduced. Every
+    # role reads, writes and creates an address and only System Manager deletes one;
+    # everyone reads the country list and System Manager maintains it.
+    register_permission_hooks(
+        "Address",
+        permission_query_conditions=platform_docs.address_query_conditions,
+        has_permission=platform_docs.address_has_permission,
+    )
+    register_permission_hooks(
+        "Country",
+        permission_query_conditions=platform_docs.country_query_conditions,
+        has_permission=platform_docs.country_has_permission,
+    )
+    # Language (FINDINGS.md 58): the same shape, reference data every role reads and
+    # System Manager maintains.
+    register_permission_hooks(
+        "Language",
+        permission_query_conditions=platform_docs.language_query_conditions,
+        has_permission=platform_docs.language_has_permission,
+    )
+    # Salutation and Gender (FINDINGS.md 66): the two lookups behind the contact, lead
+    # and deal forms. Everyone reads, System Manager maintains.
+    for doctype in ("Salutation", "Gender"):
+        register_permission_hooks(
+            doctype,
+            permission_query_conditions=platform_docs.reference_data_query_conditions,
+            has_permission=platform_docs.reference_data_has_permission,
+        )
+
     # The org tree is an *input to this very engine* - `org_hierarchy` resolves "owned by
     # anyone in my subtree" against it on every Lead and Deal read. Unruled, a Sales User
     # could add themselves and reparent a colleague underneath, taking that colleague's

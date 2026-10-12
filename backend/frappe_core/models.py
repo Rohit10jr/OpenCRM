@@ -195,6 +195,14 @@ class BaseDocument(models.Model, metaclass=DocumentBase):
             if value:
                 validate_email_address(str(value))
 
+    def _validate_text_links(self) -> None:
+        """``document.py:_validate_links`` for the Links this port keeps as text columns:
+        a value that names no document is refused, as upstream refuses it
+        (:mod:`frappe_core.links`)."""
+        from frappe_core.links import validate_text_links
+
+        validate_text_links(self)
+
     def apply_fetch_from(self) -> None:
         """Copy each declared ``FETCH_FROM`` value off its linked document."""
         for target, (link_field, source_field) in self.FETCH_FROM.items():
@@ -253,6 +261,7 @@ class BaseDocument(models.Model, metaclass=DocumentBase):
 
         self.apply_fetch_from()
         self._validate_email_fields()
+        self._validate_text_links()
 
         creating = self._state.adding
         if creating:

@@ -581,11 +581,13 @@ Authorization: Bearer {{token}}
 
 # ---- the framework plumbing the pages call on load -------------------------------------------------
 #
-# Four framework calls and one CRM call that are not about CRM records at all:
+# Four framework calls and two CRM calls that are not about CRM records at all:
 # frappe/apps.py:17-55 (the app switcher), frappe/core/doctype/user/user.py:783-792 (the
 # time-zone dropdown), frappe/integrations/frappe_providers/frappecloud_billing.py:43-71
 # (Frappe Cloud billing), the telemetry boot config - which does not exist in version-15,
-# but the router calls it on every navigation - and crm/demo/api.py:clear_demo_data.
+# but the router calls it on every navigation - crm/demo/api.py:clear_demo_data, and
+# crm/www/crm.py:get_context_for_dev, the boot values main.js copies onto window before
+# it mounts (FINDINGS.md 26: unserved, it left the page blank).
 #
 # No teardown: none of these writes anything. current_site_info and clear_demo_data both
 # reproduce frappe.only_for, in its two different forms - one silent, one naming the roles
@@ -632,6 +634,24 @@ Authorization: Bearer {{token}}
 # @expect $.message == This action is only allowed for <strong>Sales Manager</strong>, <strong>System Manager</strong>
 POST {{host}}/api/method/crm.demo.api.clear_demo_data
 Authorization: Bearer {{stoken}}
+
+### 9.9 get_context_for_dev with no token -> 200: the boot values, guest-allowed because the first visit has none yet
+# @expect $.message.sysdefaults.date_format == yyyy-mm-dd
+# @expect $.message.sysdefaults.number_format == #,###.##
+# @expect $.message.sysdefaults.currency exists
+# @expect $.message.timezone.system == UTC
+# @expect $.message.is_fc_site == false
+# @expect $.message.demo_data_created == false
+POST {{host}}/api/method/crm.www.crm.get_context_for_dev
+
+### 9.10 ...and with a token, the caller's own time_zone when set, else the system zone -> 200
+# @expect $.message.timezone.user exists
+POST {{host}}/api/method/crm.www.crm.get_context_for_dev
+Authorization: Bearer {{stoken}}
+
+### 9.11 ...POST only, as upstream declares it -> 403
+# @expect $.message == Method crm.www.crm.get_context_for_dev does not accept GET
+GET {{host}}/api/method/crm.www.crm.get_context_for_dev
 
 # ---- the list view's bulk actions, and the composer's template renderer --------------------------
 #

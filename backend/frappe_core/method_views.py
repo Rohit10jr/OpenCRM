@@ -9,6 +9,7 @@ Responses are wrapped in ``{"message": ...}``.
 
 from __future__ import annotations
 
+from django.http import HttpResponseBase
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -60,6 +61,10 @@ class MethodView(FrappeAPIView):
         if getattr(func, "__frappe_wants_request__", False):
             payload["_request"] = request
         result = func(**bind_arguments(func, payload))
+        if isinstance(result, HttpResponseBase):
+            # A file, not JSON: upstream's ``frappe.response.type = "binary"``
+            # (``export_query``). The handler built the whole response; nothing to wrap.
+            return result
         if isinstance(result, WithResponseKeys):
             # ``frappe.response[...]`` siblings of ``message``, e.g. getdoctype's ``docs``.
             return Response(
@@ -74,7 +79,12 @@ class MethodView(FrappeAPIView):
         for key, value in request.query_params.items():
             payload[key] = parse_json_param(value, value)
         data = getattr(request, "data", None)
-        if isinstance(data, dict):
+        if hasattr(data, "dict"):
+            # A form or multipart body is a QueryDict, whose ``dict.update`` copies the
+            # raw value *lists*; ``.dict()`` gives one value per key, files included,
+            # which is what ``upload_file`` reads.
+            payload.update(data.dict())
+        elif isinstance(data, dict):
             payload.update(data)
         # `cmd` is Frappe's legacy method selector; it is never a real parameter.
         payload.pop("cmd", None)

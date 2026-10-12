@@ -205,6 +205,31 @@ def test_logout_succeeds(auth_api):
     assert response.json() == {"message": {"message": "Logged Out"}}
 
 
+def test_logout_blacklists_the_refresh_token_it_is_given(api, alice):
+    """FINDINGS.md 35: the frontend sends its refresh token at sign-out, and from then on
+    that token must not mint access tokens. Upstream's logout deletes the session, which
+    kills the cookie at once; this is the nearest a stateless pair gets."""
+    pair = login(api, alice.name, "secret123").json()["message"]
+    api.credentials(HTTP_AUTHORIZATION=f"Bearer {pair['access']}")
+    assert api.post(LOGOUT, {"refresh": pair["refresh"]}, format="json").status_code == 200
+
+    api.credentials()
+    response = api.post(REFRESH, {"refresh": pair["refresh"]}, format="json")
+    assert response.status_code == 401
+    assert response.json()["exc_type"] == "AuthenticationError"
+
+
+def test_logout_without_a_refresh_token_revokes_nothing(api, alice):
+    """The backend cannot blacklist what it is not given: a bare logout leaves the pair
+    usable. This pins the contract the frontend now honours rather than a wish."""
+    pair = login(api, alice.name, "secret123").json()["message"]
+    api.credentials(HTTP_AUTHORIZATION=f"Bearer {pair['access']}")
+    assert api.post(LOGOUT, {}, format="json").status_code == 200
+
+    api.credentials()
+    assert api.post(REFRESH, {"refresh": pair["refresh"]}, format="json").status_code == 200
+
+
 # --- user model ---------------------------------------------------------------
 
 

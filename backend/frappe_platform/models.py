@@ -13,15 +13,21 @@ carries a confidence note; the set is flagged in docs/internal/PROGRESS.md for r
 """
 
 import contextvars
+import re
+import shutil
+from html import escape
+from urllib.parse import quote, unquote
 
+from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 from django.db.models.signals import post_delete, post_save, pre_delete
 from django.utils import timezone
 
 from frappe_core.assignment import register_todo_model
-from frappe_core.exceptions import ValidationError
+from frappe_core.exceptions import MandatoryError, ValidationError, throw
 from frappe_core.models import BaseDocument
+from frappe_platform import files as file_store
 from frappe_core.naming import FieldValue, Hash, Prompt, append_number_if_name_exists
 from frappe_core.registry import register_doctype
 from frappe_core.secrets import EncryptedFieldsMixin
@@ -123,6 +129,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     time_zone = models.CharField(max_length=100, blank=True, default="")
     mobile_no = models.CharField(max_length=140, blank=True, default="")
     phone = models.CharField(max_length=140, blank=True, default="")
+    #: Upstream's ``User.onboarding_status`` (``frappe/onboarding.py``): a JSON object
+    #: keyed ``<app>_onboarding_status`` holding the steps a user has completed or
+    #: skipped in each app's onboarding panel. frappe-ui's ``useOnboarding`` reads and
+    #: writes it through ``frappe.onboarding.*`` (``crm_app/api/onboarding.py``,
+    #: FINDINGS.md 39). Empty means "no status yet".
+    onboarding_status = models.TextField(blank=True, default="")
     #: Phase 3: read by ``crm.api.session.get_users`` (``crm/api/session.py:29``) and
     #: ``crm.api.get_translations`` (``crm/api/__init__.py:14``).
     language = models.CharField(max_length=20, blank=True, default="")
@@ -206,6 +218,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     #: System User versus Website User - so it is locked here as cheap precaution before
     #: phase 8 gives it meaning, not because it is currently exploitable.
     READONLY_FIELDS = ("enabled", "user_type")
+    #: ``user_emails`` sits at permlevel 1 upstream (``user.json``): everybody sees their
+    #: outgoing accounts on the Profile screen, System Manager alone may change the list.
+    #: A Sales User's "Add Email" is dropped on save, as upstream resets it
+    #: (``frappe_core.field_security.privileged_write_fields``, FINDINGS.md 57). The
+    #: rows a Sales User does get come from the account itself: an Email Account links
+    #: itself to the user whose address it is (:func:`_link_email_account_to_its_user`).
+    PRIVILEGED_WRITE_FIELDS = ("user_emails",)
+    PRIVILEGED_WRITE_ROLES = ("System Manager",)
 
     class Meta:
         db_table = "tabUser"
@@ -291,24 +311,60 @@ class Contact(BaseDocument):
     the email address.
     """
 
-    first_name = models.CharField(max_length=140, blank=True, default="")
-    middle_name = models.CharField(max_length=140, blank=True, default="")
-    last_name = models.CharField(max_length=140, blank=True, default="")
+    # The first argument of each field is ``contact.json``'s label. Contact has no entry
+    # in doctype_meta.json, so every form, filter and quick filter reads its labels off
+    # the model; without these the screens showed "email id" and "mobile no"
+    # (FINDINGS.md 44).
+    first_name = models.CharField("First Name", max_length=140, blank=True, default="")
+    middle_name = models.CharField("Middle Name", max_length=140, blank=True, default="")
+    last_name = models.CharField("Last Name", max_length=140, blank=True, default="")
     EMAIL_FIELDS = ("email_id",)
 
-    full_name = models.CharField(max_length=420, blank=True, default="")
-    salutation = models.CharField(max_length=140, blank=True, default="")
-    company_name = models.CharField(max_length=140, blank=True, default="")
-    designation = models.CharField(max_length=140, blank=True, default="")
-    gender = models.CharField(max_length=140, blank=True, default="")
-    image = models.CharField(max_length=500, blank=True, default="")
+    full_name = models.CharField("Full Name", max_length=420, blank=True, default="")
+    salutation = models.CharField("Salutation", max_length=140, blank=True, default="")
+    company_name = models.CharField("Company Name", max_length=140, blank=True, default="")
+    designation = models.CharField("Designation", max_length=140, blank=True, default="")
+    gender = models.CharField("Gender", max_length=140, blank=True, default="")
+    image = models.CharField("Image", max_length=500, blank=True, default="")
+    #: ``contact.json``: a Select, default Passive, and a standard filter. It is the
+    #: first of the three quick filters the contacts list is installed with
+    #: (``crm/install.py:514``), which had been silently dropped for want of the column.
+    status = models.CharField(
+        "Status",
+        max_length=20,
+        choices=[(s, s) for s in ("Passive", "Open", "Replied")],
+        blank=True,
+        default="Passive",
+    )
+
+    #: ``contact.json``: ``salutation`` and ``gender`` are Links. The columns stay text,
+    #: as they are on CRM Lead and CRM Deal, and the metadata the forms read says Link,
+    #: so both render as dropdowns over the two lookup doctypes (FINDINGS.md 66).
+    LINK_FIELDS = {"salutation": "Salutation", "gender": "Gender"}
+    #: ``contact.json``'s Link to Address, which the seeded Contact layouts carry and the
+    #: contact page edits through the Address dialog (FINDINGS.md 45). A foreign key,
+    #: unlike the organization's ``address``: Contact has no JSON in doctype_meta.json,
+    #: so its field metadata comes from the model, and only a key reads as a Link.
+    address = models.ForeignKey(
+        "Address",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contacts",
+        verbose_name="Address",
+    )
     user = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="contacts"
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contacts",
+        verbose_name="User Id",
     )
     # Denormalised from the child tables below.
-    email_id = models.CharField(max_length=140, blank=True, default="")
-    mobile_no = models.CharField(max_length=140, blank=True, default="")
-    phone = models.CharField(max_length=140, blank=True, default="")
+    email_id = models.CharField("Email Address", max_length=140, blank=True, default="")
+    mobile_no = models.CharField("Mobile No", max_length=140, blank=True, default="")
+    phone = models.CharField("Phone", max_length=140, blank=True, default="")
 
     class Meta:
         ordering = ["-modified"]
@@ -440,6 +496,9 @@ class ContactEmail(BaseDocument):
     parenttype = models.CharField(max_length=140, default="Contact")
     parentfield = models.CharField(max_length=140, default="email_ids")
     EMAIL_FIELDS = ("email_id",)
+    #: ``frappe.client.set_value`` and ``delete`` may reach this row through its contact:
+    #: the contact page edits and removes one address that way (FINDINGS.md 67).
+    CLIENT_EDITABLE = True
 
     email_id = models.CharField(max_length=140)
     is_primary = models.BooleanField(default=False)
@@ -462,6 +521,8 @@ class ContactPhone(BaseDocument):
     )
     parenttype = models.CharField(max_length=140, default="Contact")
     parentfield = models.CharField(max_length=140, default="phone_nos")
+    #: As on ``ContactEmail``: editable and removable through the contact (FINDINGS.md 67).
+    CLIENT_EDITABLE = True
     phone = models.CharField(max_length=140)
     is_primary_phone = models.BooleanField(default=False)
     is_primary_mobile_no = models.BooleanField(default=False)
@@ -660,15 +721,36 @@ class EmailTemplate(BaseDocument):
         }
 
 
+#: ``file.py:189``: what may not appear in ``attached_to_field``.
+_SPECIAL_CHAR_PATTERN = re.compile(r"[\W]", flags=re.UNICODE)
+
+
 @register_doctype("File")
 class File(BaseDocument):
-    """Attachments.
+    """Attachments - and, since the frontend stage, the bytes behind them.
 
     ``crm/api/comment.py:118`` attaches files with ``attached_to_doctype`` /
     ``attached_to_name``; ``crm/api/activities.py:128`` reads them back per reference.
+    ``upload_file`` (``crm_app/api/upload.py``) creates rows *with* content, and the
+    ``/files/`` and ``/private/files/`` routes (``frappe_core/file_views.py``) serve it.
 
-    Note ``file_url`` is a URL string, not a Django ``FileField`` - PHASE_1_MODELS.md
-    section 2 maps ``Attach`` that way.
+    ``file_url`` is a URL string, not a Django ``FileField`` - PHASE_1_MODELS.md section 2
+    maps ``Attach`` that way - and :mod:`frappe_platform.files` maps it to a path under
+    ``MEDIA_ROOT``.
+
+    The insert pipeline is ``file.py:103-138`` (``before_insert``) and ``858-940``
+    (``save_file``): the content is hashed, deduplicated against a row with the same hash
+    and privacy, named without collisions and written. A public/private flip on an
+    existing row moves the bytes (``313-394``); deleting the last row that names a file
+    deletes the file (``680-694``).
+
+    **One check is deliberately not ported.** Upstream refuses a row whose local
+    ``file_url`` names nothing on disk (``validate_file_on_disk``, 462-470). Rows carrying
+    a URL and no content are how ``add_comment`` and ``email.add_attachments`` copy an
+    attachment onto a comment or an email, the shape every attachment test builds, and
+    the shape this port had for eight phases before it could store bytes at all. Such a
+    row is metadata; when its file *is* on disk the hash and size are filled from it, as
+    upstream's ``get_content`` would.
     """
 
     file_name = models.CharField(max_length=280, blank=True, default="")
@@ -681,6 +763,10 @@ class File(BaseDocument):
     file_size = models.BigIntegerField(default=0)
     content_hash = models.CharField(max_length=140, blank=True, default="")
 
+    #: The bytes to store, set by the uploader before ``save()``. Never a column:
+    #: upstream's ``content`` is the same transient attribute (``file.py:78-84``).
+    _content: bytes | None = None
+
     class Meta:
         ordering = ["-creation"]
         name_strategy = Hash()
@@ -690,6 +776,315 @@ class File(BaseDocument):
                 name="file_attached_to_idx",
             ),
         ]
+
+    # ------------------------------------------------------------------ lifecycle
+
+    @property
+    def is_remote_file(self) -> bool:
+        """``file.py:87-90``."""
+        if self.file_url:
+            return self.file_url.startswith(file_store.URL_PREFIXES)
+        return not self._content
+
+    def save(self, *args, **kwargs):
+        creating = self._state.adding
+        if creating:
+            self._before_insert()
+        else:
+            self._handle_is_private_changed()
+        self._validate()
+        super().save(*args, **kwargs)
+        if creating:
+            self._create_attachment_record()
+
+    def delete(self, *args, **kwargs):
+        """``file.py:240-248`` (``on_trash``). The bytes go in the ``pre_delete`` receiver
+        below, so a cascade from the referenced document's own deletion
+        (``frappe_core.children``) clears them too; the "Attachment Removed" comment is
+        added only here, on a direct delete, since in the cascade the document that would
+        carry it is itself going."""
+        self._add_comment_in_reference_doc("Attachment Removed", self.file_name)
+        return super().delete(*args, **kwargs)
+
+    def _before_insert(self) -> None:
+        """``file.py:103-138``, minus the folder tree, the extension whitelist and the
+        attachment limit, which are site settings this port does not have."""
+        if self.attached_to_doctype and not self.attached_to_name:
+            self.attached_to_doctype = ""
+            self.attached_to_field = ""
+        self.file_url = unquote(self.file_url) if self.file_url else ""
+        if not self.folder:
+            self.folder = "Home/Attachments" if self.attached_to_doctype else "Home"
+        if not self.is_private and self.file_url:
+            self.is_private = self.file_url.startswith("/private")
+        self._set_file_name()
+        if self.is_remote_file:
+            self._validate_remote_file()
+        else:
+            self._save_file(self._get_content())
+        self._validate_duplicate_entry()
+
+    def _validate(self) -> None:
+        """``file.py:167-182``: the reference and URL checks. ``validate_file_on_disk`` is
+        left out, see the class docstring."""
+        if self.attached_to_doctype and self.attached_to_field:
+            if _SPECIAL_CHAR_PATTERN.search(self.attached_to_field):
+                throw("The fieldname you've specified in Attached To Field is invalid")
+        self._validate_file_path()
+        self._validate_file_url()
+
+    # ------------------------------------------------------------------ naming and URL
+
+    def _set_file_name(self) -> None:
+        """``file.py:524-533``."""
+        if not self.file_name and not self.file_url:
+            throw("Fields `file_name` or `file_url` must be set for File", exc=MandatoryError)
+        elif not self.file_name and self.file_url:
+            self.file_name = self.file_url.split("/")[-1].split("?")[0]
+        else:
+            self.file_name = re.sub(r"/", "", self.file_name)
+
+    def _validate_remote_file(self) -> None:
+        """``file.py:434-438``: a URL on this very site is a local file after all."""
+        site_url = settings.SITE_URL
+        if self.file_url and "/files/" in self.file_url and self.file_url.startswith(site_url):
+            self.file_url = self.file_url.split(site_url, 1)[1]
+
+    def _validate_file_path(self) -> None:
+        """``file.py:291-299``: a local URL must stay inside its folder."""
+        if self.is_remote_file or not file_store.is_local_url(self.file_url):
+            return
+        if file_store.path_for_url(self.file_url) is None:
+            throw("The File URL you've entered is incorrect", title="Invalid File URL")
+
+    def _validate_file_url(self) -> None:
+        """``file.py:302-311``."""
+        if self.is_remote_file or not self.file_url:
+            return
+        if not self.file_url.startswith((file_store.PUBLIC_URL, file_store.PRIVATE_URL)):
+            throw("URL must start with http:// or https://", title="Invalid URL")
+
+    # ------------------------------------------------------------------ the bytes
+
+    def _disk_path(self):
+        return file_store.path_for_url(self.file_url)
+
+    def _exists_on_disk(self) -> bool:
+        """``file.py:764-765``."""
+        path = self._disk_path()
+        return bool(path is not None and path.exists())
+
+    def _get_content(self) -> bytes | None:
+        """``file.py:767-804``, for bytes: the content handed in, else the file the URL
+        names, else nothing (the class docstring says why not an error)."""
+        if self._content:
+            return self._content
+        path = self._disk_path()
+        if path is not None and path.is_file():
+            self._content = path.read_bytes()
+        return self._content
+
+    def _check_max_file_size(self, content: bytes) -> int:
+        """``file.py:942-954``."""
+        limit = file_store.max_file_size()
+        size = len(content)
+        if size > limit:
+            throw(f"File size exceeded the maximum allowed size of {limit / 1048576} MB")
+        return size
+
+    def _save_file(self, content: bytes | None) -> None:
+        """``file.py:858-940``: hash, deduplicate, name and write.
+
+        A row with the same bytes and the same privacy whose file is on disk lends its
+        URL, so the same picture uploaded twice is stored once. Otherwise the name is made
+        collision-free and the bytes are written under it.
+        """
+        if self.is_remote_file or not content:
+            return
+        self.is_private = bool(self.is_private)
+        self.file_size = self._check_max_file_size(content)
+        self.content_hash = file_store.get_content_hash(content)
+
+        duplicates = File._default_manager.filter(
+            content_hash=self.content_hash, is_private=self.is_private
+        )
+        if self.pk:
+            duplicates = duplicates.exclude(pk=self.pk)
+        duplicate = next((row for row in duplicates if row._exists_on_disk()), None)
+        if duplicate is not None:
+            if not self._exists_on_disk() or not self.file_url:
+                self.file_url = duplicate.file_url
+            return
+
+        self.file_name = file_store.generate_file_name(
+            name=self.file_name,
+            suffix=self.content_hash[-6:],
+            is_private=self.is_private,
+            content_hash=self.content_hash,
+        )
+        safe_name = file_store.get_safe_file_name(self.file_name)
+        self.file_url = file_store.file_url(safe_name, self.is_private)
+        self._write_file(content)
+
+    def _write_file(self, content: bytes) -> None:
+        """``file.py:840-856``."""
+        path = self._disk_path()
+        if path is None:
+            throw(f"There is some problem with the file url: {self.file_url}")
+        file_store.write_file(path, content)
+
+    def _generate_content_hash(self) -> None:
+        """``file.py:535-544``, without the "File does not exist" error (class docstring)."""
+        if self.content_hash or not self.file_url or self.is_remote_file:
+            return
+        path = self._disk_path()
+        if path is not None and path.is_file():
+            self.content_hash = file_store.get_content_hash(path.read_bytes())
+
+    def _validate_duplicate_entry(self) -> None:
+        """``file.py:494-522``: the same bytes already attached to the same document
+        keep their URL rather than uploading a duplicate."""
+        if not self.content_hash:
+            self._generate_content_hash()
+        if not self.content_hash:
+            return
+        rows = File._default_manager.filter(
+            content_hash=self.content_hash, is_private=self.is_private
+        )
+        if self.pk:
+            rows = rows.exclude(pk=self.pk)
+        if self.attached_to_doctype and self.attached_to_name:
+            rows = rows.filter(
+                attached_to_doctype=self.attached_to_doctype,
+                attached_to_name=self.attached_to_name,
+            )
+        duplicate = rows.first()
+        if duplicate is not None and duplicate._exists_on_disk():
+            self.file_url = duplicate.file_url
+
+    def _handle_is_private_changed(self) -> None:
+        """``file.py:313-394``: a flipped ``is_private`` moves the bytes between the
+        public and the private folder and rewrites the URL, then repoints the Attach
+        field on the document that carried the old URL. A file other rows still name is
+        copied rather than moved. The "cannot find file" refusal is a 417 here where
+        upstream raises a bare ``FileNotFoundError``."""
+        stored = (
+            File._default_manager.filter(pk=self.pk).values_list("is_private", "file_url").first()
+        )
+        if stored is None:
+            return
+        was_private, old_url = stored
+        if bool(was_private) == bool(self.is_private) or self.is_remote_file:
+            return
+        file_name = self.file_url.split("/")[-1]
+        source = file_store.get_files_path(file_name, is_private=not self.is_private)
+        target = file_store.get_files_path(file_name, is_private=bool(self.is_private))
+        updated_url = file_store.file_url(file_name, bool(self.is_private))
+        if updated_url == old_url:
+            return
+        if not source.exists():
+            throw(f"Cannot find file {source} on disk")
+        if target.exists():
+            target_name = file_store.generate_file_name(name=file_name, is_private=bool(self.is_private))
+            target = file_store.get_files_path(target_name, is_private=bool(self.is_private))
+            updated_url = file_store.file_url(target_name, bool(self.is_private))
+        other_refs_exist = bool(self.content_hash) and (
+            File._default_manager.filter(content_hash=self.content_hash, file_url=self.file_url)
+            .exclude(pk=self.pk)
+            .exists()
+        )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if other_refs_exist:
+            shutil.copy2(source, target)
+        else:
+            shutil.move(source, target)
+        self.file_url = updated_url
+        self._repoint_attach_field(old_url)
+
+    def _repoint_attach_field(self, old_url: str) -> None:
+        """``file.py:378-405``: the Attach field that held the old URL gets the new one."""
+        from frappe_core import registry
+
+        if not (self.attached_to_doctype and self.attached_to_name):
+            return
+        if not registry.has_doctype(self.attached_to_doctype):
+            return
+        model = registry.get_model(self.attached_to_doctype)
+        reference = model._default_manager.filter(pk=self.attached_to_name).first()
+        if reference is None:
+            return
+        field = self.attached_to_field
+        if not field:
+            for concrete in reference._meta.concrete_fields:
+                if not concrete.is_relation and getattr(reference, concrete.attname, None) == old_url:
+                    field = concrete.name
+                    break
+            if not field:
+                return
+            self.attached_to_field = field
+        if not any(f.name == field for f in reference._meta.concrete_fields):
+            return
+        setattr(reference, field, self.file_url)
+        reference.save(update_fields=[field, "modified", "modified_by"])
+
+    def _delete_file_on_disk(self) -> None:
+        """``file.py:680-694``: the bytes go only when no other row names them."""
+        if not self.content_hash:
+            return
+        shared = (
+            File._default_manager.filter(content_hash=self.content_hash, file_url=self.file_url)
+            .exclude(pk=self.pk)
+            .exists()
+        )
+        if not shared:
+            file_store.delete_file(self.file_url)
+
+    # ------------------------------------------------------------------ the timeline
+
+    def _create_attachment_record(self) -> None:
+        """``file.py:978-986``."""
+        icon = ' <i class="fa fa-lock text-warning"></i>' if self.is_private else ""
+        url = quote(self.file_url, safe="/:") if self.file_url else self.file_name
+        name = escape(self.file_name or self.file_url)
+        self._add_comment_in_reference_doc(
+            "Attachment", f"<a href='{url}' target='_blank'>{name}</a>{icon}"
+        )
+
+    def _add_comment_in_reference_doc(self, comment_type: str, text: str) -> None:
+        """``file.py:988-994``: a timeline entry on the document the file hangs off, if it
+        exists; upstream swallows the DoesNotExistError the same way."""
+        from frappe_core import registry
+        from frappe_core.session import get_current_user
+
+        if not (self.attached_to_doctype and self.attached_to_name):
+            return
+        if not registry.has_doctype(self.attached_to_doctype):
+            return
+        model = registry.get_model(self.attached_to_doctype)
+        if not model._default_manager.filter(pk=self.attached_to_name).exists():
+            return
+        user = get_current_user()
+        full_name = (
+            User._default_manager.filter(pk=user).values_list("full_name", flat=True).first() or user
+        )
+        Comment._default_manager.create(
+            comment_type=comment_type,
+            reference_doctype=self.attached_to_doctype,
+            reference_name=str(self.attached_to_name),
+            content=text,
+            comment_email=user,
+            comment_by=full_name,
+        )
+
+
+def _file_deleting(sender, instance, **kwargs):
+    """``file.py:240-248``: a File row on its way out takes its bytes with it, unless
+    another row still names them. A receiver rather than ``delete()`` alone so that
+    ``frappe_core.children``'s cascade, which deletes through the queryset, is covered."""
+    instance._delete_file_on_disk()
+
+
+pre_delete.connect(_file_deleting, sender=File, dispatch_uid="file.deleting")
 
 
 @register_doctype("Tag")
@@ -801,6 +1196,76 @@ class EmailAccount(EncryptedFieldsMixin, BaseDocument):
 register_todo_model(ToDo)
 
 
+@register_doctype("User Email", is_child_table=True)
+class UserEmail(BaseDocument):
+    """Child of User: the outgoing accounts a user sends from (``user_email.json``).
+
+    Fields verbatim: ``email_account``, with ``email_id``, ``awaiting_password`` and
+    ``enable_outgoing`` fetched from it, and ``used_oauth``, which stays off because
+    the port has no OAuth mail. Profile → Email Settings lists and edits the rows
+    (``UserEmailSettings.vue``), and the email composer's From dropdown is built from
+    them (``EmailEditor.vue:266``). Rows go with their account (``remove_user_email_inbox``
+    upstream; CASCADE here). FINDINGS.md 57.
+    """
+
+    parent_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="user_emails")
+    parenttype = models.CharField(max_length=140, default="User")
+    parentfield = models.CharField(max_length=140, default="user_emails")
+    FETCH_FROM = {
+        "email_id": ("email_account", "email_id"),
+        "awaiting_password": ("email_account", "awaiting_password"),
+        "enable_outgoing": ("email_account", "enable_outgoing"),
+    }
+
+    email_account = models.ForeignKey(EmailAccount, on_delete=models.CASCADE, related_name="+")
+    email_id = models.CharField(max_length=140, blank=True, default="")
+    awaiting_password = models.BooleanField(default=False)
+    enable_outgoing = models.BooleanField(default=False)
+    used_oauth = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["idx"]
+        name_strategy = Hash()
+
+
+def _link_email_account_to_its_user(sender, instance, **kwargs):
+    """``email_account.py:1072-1115``, ``setup_user_email_inbox``, run from the account's
+    ``on_update``: the account links itself to the user whose address it is - a row on
+    that user's ``user_emails`` - and keeps the row's flags current afterwards. Upstream
+    matches ``User.email``; here the user's name is the address too, so either matches.
+    That is how a Sales User gets an account on the Profile screen without being able
+    to add one (``User.PRIVILEGED_WRITE_FIELDS``)."""
+    address = (instance.email_id or "").strip()
+    if not address:
+        return
+    flags = {
+        "email_id": address,
+        "awaiting_password": instance.awaiting_password,
+        "enable_outgoing": instance.enable_outgoing,
+    }
+    users = User._default_manager.filter(
+        models.Q(email__iexact=address) | models.Q(pk__iexact=address)
+    )
+    for user in users:
+        existing = UserEmail._default_manager.filter(parent_user=user, email_account=instance)
+        if existing.exists():
+            existing.update(**flags)
+            continue
+        UserEmail._default_manager.create(
+            parent_user=user,
+            email_account=instance,
+            idx=UserEmail._default_manager.filter(parent_user=user).count() + 1,
+            **flags,
+        )
+
+
+post_save.connect(
+    _link_email_account_to_its_user,
+    sender=EmailAccount,
+    dispatch_uid="frappe_platform.user_email.link_account",
+)
+
+
 @register_doctype("Dynamic Link", is_child_table=True)
 class DynamicLink(BaseDocument):
     """Frappe's generic "this document points at that one" child table.
@@ -836,6 +1301,277 @@ class DynamicLink(BaseDocument):
             models.Index(fields=["parenttype", "parent"], name="dynamic_link_parent_idx"),
             models.Index(fields=["link_doctype", "link_name"], name="dynamic_link_target_idx"),
         ]
+
+
+def _document_title(doctype: str, name: str) -> str:
+    """``Document.get_title``: the ``title_field`` value when the doctype declares one,
+    else the name. What a Dynamic Link row's ``link_title`` shows."""
+    from frappe_core import registry
+
+    if not registry.has_doctype(doctype):
+        return name
+    model = registry.get_model(doctype)
+    title_field = (getattr(model, "_doc_meta", None) or {}).get("title_field")
+    if not title_field:
+        return name
+    value = model._default_manager.filter(pk=name).values_list(title_field, flat=True).first()
+    return value or name
+
+
+@register_doctype("Country")
+class Country(BaseDocument):
+    """Frappe ``Country`` (``frappe/geo/doctype/country/country.json``), the Link target
+    of ``Address.country`` (FINDINGS.md 45).
+
+    The framework seeds it when a site is set up, before any app installs
+    (``country.py:import_country_and_currency``, from ``frappe/geo/country_info.json``);
+    here ``manage.py seed_defaults`` does, from a copy of that file in ``crm_app/data``.
+    The Currency rows the same import writes are not ported: nothing in the CRM reads
+    them. ``country.json``: everyone reads, System Manager writes
+    (``crm_app/permissions/platform_docs.py``).
+    """
+
+    country_name = models.CharField("Country Name", max_length=140, unique=True)
+    date_format = models.CharField("Date Format", max_length=140, blank=True, default="")
+    time_format = models.CharField("Time format", max_length=140, blank=True, default="")
+    time_zones = models.TextField("Time Zones", blank=True, default="")
+    code = models.CharField("Code", max_length=140, blank=True, default="")
+
+    class Meta:
+        ordering = ["name"]
+        name_strategy = FieldValue("country_name", label="Country Name")
+
+
+@register_doctype("Language")
+class Language(BaseDocument):
+    """Frappe ``Language`` (``frappe/core/doctype/language/language.json``), the Link
+    target of ``User.language``: the Language picker in Settings -> Preferences
+    (FINDINGS.md 58).
+
+    Named after its code (``autoname: field:language_code``). The picker shows and
+    searches the name (``show_title_field_in_link``, ``search_fields``), and offers only
+    enabled rows. The framework fills the table from ``frappe/geo/languages.csv`` when a
+    site is set up (``language.py:sync_languages``); here ``manage.py seed_defaults``
+    does, from a copy in ``crm_app/data``, and ``enabled`` is that file's own column.
+    ``language.json``: everyone reads, System Manager writes
+    (``crm_app/permissions/platform_docs.py``).
+
+    Choosing a language stores its code on the user and nothing more: this port ships no
+    translation catalogues (``crm.api.get_translations`` answers ``{}``), so the
+    interface stays in English whichever one is picked.
+    """
+
+    language_code = models.CharField("Language Code", max_length=140, unique=True)
+    language_name = models.CharField("Language Name", max_length=140)
+    flag = models.CharField("Flag", max_length=140, blank=True, default="")
+    based_on = models.CharField("Based On", max_length=140, blank=True, default="")
+    enabled = models.BooleanField("Enabled", default=False)
+
+    #: ``search_fields`` and ``title_field``: what ``search_link`` matches besides the
+    #: name, and the label it shows in place of it.
+    SEARCH_FIELD = "language_name"
+    SHOW_TITLE_FIELD_IN_LINK = True
+
+    class Meta:
+        ordering = ["name"]
+        name_strategy = FieldValue("language_code", label="Language Code")
+
+
+@register_doctype("Salutation")
+class Salutation(BaseDocument):
+    """Frappe ``Salutation`` (``frappe/contacts/doctype/salutation/salutation.json``):
+    the Link target of ``salutation`` on a contact, a lead and a deal (FINDINGS.md 66).
+
+    One field, which is also the name (``autoname: field:salutation``). The framework's
+    setup wizard writes nine of them (``install_fixtures.py:update_salutations``); here
+    ``manage.py seed_defaults`` does. ``salutation.json``: everyone reads, System Manager
+    writes (``crm_app/permissions/platform_docs.py``).
+    """
+
+    salutation = models.CharField("Salutation", max_length=140, unique=True)
+
+    class Meta:
+        ordering = ["name"]
+        name_strategy = FieldValue("salutation", label="Salutation")
+
+
+@register_doctype("Gender")
+class Gender(BaseDocument):
+    """Frappe ``Gender`` (``frappe/contacts/doctype/gender/gender.json``): the Link target
+    of ``gender`` on a contact, a lead and a deal (FINDINGS.md 66). Same shape as
+    :class:`Salutation`; seven rows from ``install_fixtures.py:update_genders``."""
+
+    gender = models.CharField("Gender", max_length=140, unique=True)
+
+    class Meta:
+        ordering = ["name"]
+        name_strategy = FieldValue("gender", label="Gender")
+
+
+#: ``address.json`` ``address_type`` options, in order.
+ADDRESS_TYPES = (
+    "Billing",
+    "Shipping",
+    "Office",
+    "Personal",
+    "Plant",
+    "Postal",
+    "Shop",
+    "Subsidiary",
+    "Warehouse",
+    "Current",
+    "Permanent",
+    "Other",
+)
+
+
+@register_doctype("Address")
+class Address(BaseDocument):
+    """Frappe ``Address`` (``frappe/contacts/doctype/address/``), the target of the
+    ``address`` Link on CRM Organization and Contact (FINDINGS.md 45).
+
+    The Vue app creates one through the generic doctype dialog
+    (``Organization.vue:showAddressModal`` -> ``frappe.client.insert``) with the seeded
+    Address Quick Entry layout, then writes the new name onto the organization or
+    contact. The labels on the fields are upstream's, since this doctype has no entry in
+    ``doctype_meta.json`` and the metadata falls back to the model.
+
+    ``links`` is a Table of Dynamic Link (``address.json``), declared here the way
+    CRM Call Log declares its own. Upstream's ``validate`` runs four steps over those
+    rows; here they run in :meth:`save`, after the row has a name and after the
+    serializer has written the rows (it saves the parent a second time once they are
+    in), which reaches the same state.
+
+    Not ported: ``get_address_display`` and the Address Template it renders, which no
+    CRM screen calls, and ``address_title`` falling back to the first link's title in
+    ``autoname``, which needs rows that do not exist yet when the name is assigned here.
+    ``address.json``: every role reads, writes and creates; only System Manager deletes
+    (``crm_app/permissions/platform_docs.py``).
+    """
+
+    address_title = models.CharField("Address Title", max_length=140, blank=True, default="")
+    address_type = models.CharField(
+        "Address Type", max_length=20, choices=[(t, t) for t in ADDRESS_TYPES]
+    )
+    address_line1 = models.CharField("Address Line 1", max_length=240)
+    address_line2 = models.CharField("Address Line 2", max_length=240, blank=True, default="")
+    city = models.CharField("City/Town", max_length=140)
+    county = models.CharField("County", max_length=140, blank=True, default="")
+    state = models.CharField("State/Province", max_length=140, blank=True, default="")
+    country = models.ForeignKey(
+        Country, on_delete=models.PROTECT, related_name="addresses", verbose_name="Country"
+    )
+    pincode = models.CharField("Postal Code", max_length=140, blank=True, default="")
+    email_id = models.CharField("Email Address", max_length=140, blank=True, default="")
+    phone = models.CharField("Phone", max_length=140, blank=True, default="")
+    fax = models.CharField("Fax", max_length=140, blank=True, default="")
+    is_primary_address = models.BooleanField("Preferred Billing Address", default=False)
+    is_shipping_address = models.BooleanField("Preferred Shipping Address", default=False)
+    disabled = models.BooleanField("Disabled", default=False)
+
+    #: ``links``, the Table of Dynamic Link in address.json.
+    POLYMORPHIC_CHILD_TABLES = {"links": "Dynamic Link"}
+    #: ``email_id`` is ``options: Email`` in address.json, so it is validated as one.
+    EMAIL_FIELDS = ("email_id",)
+    #: ``address.py:92``: the two flags only one address per linked document may carry.
+    PREFERRED_FLAGS = ("is_primary_address", "is_shipping_address")
+
+    class Meta:
+        ordering = ["name"]
+
+    def _assign_name(self) -> bool:
+        """``Address.autoname`` (address.py:60-71): ``<title>-<type>``, and on a collision
+        the numbered form ``make_autoname("<title>-<type>-.#")`` produces, which is
+        ``-1``, ``-2`` ... as :func:`append_number_if_name_exists` counts them."""
+        if self.pk:
+            return False
+        title = (self.address_title or "").strip()
+        if not title:
+            raise ValidationError("Address Title is mandatory.")
+        base = f"{title}-{str(self.address_type or '').strip()}"
+        self.pk = append_number_if_name_exists(type(self), base)
+        return True
+
+    def link_rows(self):
+        return DynamicLink._default_manager.filter(
+            parenttype="Address", parent=str(self.pk)
+        ).order_by("idx", "pk")
+
+    def save(self, *args, **kwargs):
+        creating = self._state.adding
+        super().save(*args, **kwargs)
+        # address.py:73-77, `validate`, over the rows now in the table.
+        if creating:
+            self.link_address()
+        self.deduplicate_links()
+        self.set_link_title()
+        self.validate_preferred_address()
+
+    def link_address(self) -> bool:
+        """``address.py:79-89``: an address created without links takes the links of
+        the Contact whose email is the owner's, which is how a portal user's address
+        attaches to their own customer."""
+        if self.link_rows().exists():
+            return False
+        contact = Contact._default_manager.filter(email_id=self.owner_id).first()
+        if contact is None:
+            return False
+        rows = DynamicLink._default_manager.filter(
+            parenttype="Contact", parent=str(contact.pk)
+        ).order_by("idx", "pk")
+        for idx, row in enumerate(rows, start=1):
+            DynamicLink(
+                parenttype="Address",
+                parent=str(self.pk),
+                parentfield="links",
+                idx=idx,
+                link_doctype=row.link_doctype,
+                link_name=row.link_name,
+            ).save()
+        return rows.exists()
+
+    def deduplicate_links(self) -> None:
+        """``dynamic_link.py:deduplicate_dynamic_links``: one row per (doctype, name),
+        the first kept."""
+        seen: set[tuple[str, str]] = set()
+        for row in self.link_rows():
+            key = (row.link_doctype, row.link_name)
+            if key in seen:
+                row.delete()
+            else:
+                seen.add(key)
+
+    def set_link_title(self) -> None:
+        """``address_and_contact.py:set_link_title``: each row's ``link_title`` is the
+        linked document's title, or its name."""
+        for row in self.link_rows():
+            title = _document_title(row.link_doctype, row.link_name)
+            if row.link_title != title:
+                type(row)._default_manager.filter(pk=row.pk).update(link_title=title)
+
+    def validate_preferred_address(self) -> None:
+        """``address.py:91-100``: a preferred flag set here is cleared on every other
+        enabled address linked to the same document."""
+        for flag in self.PREFERRED_FLAGS:
+            if not getattr(self, flag):
+                continue
+            for row in self.link_rows():
+                others = (
+                    DynamicLink._default_manager.filter(
+                        parenttype="Address",
+                        link_doctype=row.link_doctype,
+                        link_name=row.link_name,
+                    )
+                    .exclude(parent=str(self.pk))
+                    .values_list("parent", flat=True)
+                )
+                type(self)._default_manager.filter(
+                    pk__in=list(others), disabled=False, **{flag: True}
+                ).update(**{flag: False})
+
+    def has_link(self, doctype: str, name: str) -> bool:
+        """``address.py:105-108``."""
+        return self.link_rows().filter(link_doctype=doctype, link_name=name).exists()
 
 
 class UserSettings(models.Model):

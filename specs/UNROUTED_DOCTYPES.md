@@ -97,7 +97,7 @@ the attack so it fails loudly if the route returns without a rule.
 
 ## Upstream has this too
 
-Recorded as `UPSTREAM_BUGS_PHASE_3-6.md` #16. Five guards could have stopped it upstream
+Recorded as `UPSTREAM_BUGS.md` #16. Five guards could have stopped it upstream
 and none does:
 
 | Guard | What it actually does |

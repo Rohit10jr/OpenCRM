@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { createResource } from 'frappe-ui'
 import router from '@/router'
 import { ref, computed } from 'vue'
-import { clearTokens, getTokenUser, setTokens } from '@/auth/tokens'
+import { clearTokens, getRefreshToken, getTokenUser, setTokens } from '@/auth/tokens'
 
 export const sessionStore = defineStore('crm-session', () => {
   // JWT PATCH (see ../../JWT_PATCH.md): the port issues bearer tokens instead of the
@@ -45,8 +45,16 @@ export const sessionStore = defineStore('crm-session', () => {
       throw new Error(__('Invalid Email or Password'))
     },
     // JWT PATCH: /api/method/login now returns a token pair instead of setting `sid`.
+    //
+    // The pair sits under `message`, and it arrives wrapped: frappe-ui's request layer
+    // returns the *whole* body for the login URL (frappeRequest.ts, `url ===
+    // '/api/method/login'`), because upstream's login answer keeps `home_page` and
+    // `full_name` at the top level. Every other endpoint is unwrapped to `message`
+    // before a resource sees it, which is how UpdatePassword.vue and AcceptInvitation.vue
+    // receive a bare pair. Reading `data` here stored nothing and the guard bounced the
+    // user straight back to Login (docs/FINDINGS.md 32).
     onSuccess(data) {
-      acceptTokens(data)
+      acceptTokens(data?.message ?? data)
       login.reset()
       // Phase 8: return them to whatever they were trying to reach. The guard puts it in
       // `?redirect=` when it bounces an unauthenticated visitor.
@@ -63,15 +71,27 @@ export const sessionStore = defineStore('crm-session', () => {
 
   const logout = createResource({
     url: 'logout',
+    // JWT PATCH: hand the backend the refresh token so it can blacklist it. Without it
+    // `logout` had nothing to revoke and the token stayed good for its full lifetime,
+    // seven days by default, so a copy of it could keep minting access tokens after
+    // sign-out (docs/FINDINGS.md 35). Upstream has no such window: its logout deletes
+    // the server-side session and the cookie is dead from that instant. The access
+    // token is stateless and lives until it expires; that window is documented, not
+    // closed. The two call sites keep calling `logout.submit()` with no arguments.
+    makeParams() {
+      return { refresh: getRefreshToken() || '' }
+    },
     onSuccess() {
       // JWT PATCH: nothing to expire server-side, so drop the tokens locally.
       clearTokens()
       user.value = null
-      // Phase 8: the second half of the same bug the router had. This was
-      // `window.location.href = '/login?redirect-to=/crm'`, which took a user who had just
-      // signed out to a URL nothing serves. Caught by the phase-8 review, outside the
-      // files it was asked to look at.
-      router.replace({ name: 'Login' })
+      // Phase 8 replaced upstream's `window.location.href = '/login?redirect-to=/crm'`,
+      // a URL nothing here serves, with an in-app route change. That kept the app, and
+      // every store in it, alive across sign-out: the next person to sign in on the same
+      // tab inherited the previous user's users list, views and caches, because each
+      // store believed it had already loaded (docs/FINDINGS.md 34). A real page load to
+      // the login page discards all of it, which is what upstream's jump did for free.
+      window.location.assign('/crm/login')
     },
   })
 

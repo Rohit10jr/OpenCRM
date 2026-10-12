@@ -9,6 +9,13 @@ django-environ==0.11.2
 # Trees (phase 2 hierarchy / territory) - declared now so the stack is fixed.
 django-treebeard==4.7.1
 
+# Image resizing for uploads (`optimize=1`, frappe_platform/files.py:optimize_image);
+# without it uploads still work, pictures are just stored at their original size.
+Pillow==11.1.0
+# Excel export from the list views (frappe.desk.reportview.export_query), the same
+# library upstream's xlsxutils writes with. CSV export needs nothing.
+XlsxWriter==3.2.0
+
 # Async stack (phases 5-6) - declared now, unused in phases 0-4.
 celery==5.4.0
 redis==5.2.1

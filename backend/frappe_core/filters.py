@@ -20,6 +20,7 @@ section 10). Getting this wrong silently diverges every text search in the produ
 from __future__ import annotations
 
 import re
+from decimal import Decimal, InvalidOperation
 from typing import Any, Callable
 
 from django.db.models import Q
@@ -343,6 +344,63 @@ def _tree_op(inclusive: bool, negate: bool = False, ancestors: bool = False):
     return build
 
 
+#: Columns whose filter values are read as numbers (FINDINGS.md 77).
+_NUMERIC_INTERNAL_TYPES = {
+    "DecimalField",
+    "FloatField",
+    "IntegerField",
+    "BigIntegerField",
+    "SmallIntegerField",
+    "PositiveIntegerField",
+    "PositiveSmallIntegerField",
+    "PositiveBigIntegerField",
+}
+_INTEGER_INTERNAL_TYPES = {name for name in _NUMERIC_INTERNAL_TYPES if "Integer" in name}
+#: The operators that compare a numeric column with a value. `like` and `is` work on
+#: the column's text and are left alone, as are the tree operators.
+_NUMERIC_COERCED_OPERATORS = {"=", "!=", ">", "<", ">=", "<=", "in", "not in", "between"}
+_NOT_NUMBER_CHARS = re.compile(r"[^0-9.\-]")
+
+
+def _number_from(value, integer: bool):
+    """A filter value for a numeric column, as a number.
+
+    A list files the amount a cell *shows* when it is clicked to filter by it:
+    "$ 500,000.00" (upstream bug 46). Upstream's database casts that string to 0 and
+    the list is silently empty; Django refused it, and because the standard view
+    replays its filters on every load the Deals page stopped opening (FINDINGS.md 77).
+    So a string that is not a number is read for the number in it, sign and point
+    kept, everything else dropped; a string with no number in it is 0, MariaDB's
+    answer. Anything that is not a string is handed on as it is.
+    """
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    try:
+        number = Decimal(text)
+    except InvalidOperation:
+        digits = _NOT_NUMBER_CHARS.sub("", text)
+        digits = ("-" if digits.startswith("-") else "") + digits.replace("-", "")
+        try:
+            number = Decimal(digits)
+        except InvalidOperation:
+            number = Decimal(0)
+    if not number.is_finite():
+        number = Decimal(0)
+    return int(number) if integer else number
+
+
+def coerce_numeric_filter_value(field, operator: str, value):
+    """``value`` as the column can compare it; see :func:`_number_from`."""
+    internal = field.get_internal_type()
+    if internal not in _NUMERIC_INTERNAL_TYPES or operator not in _NUMERIC_COERCED_OPERATORS:
+        return value
+    integer = internal in _INTEGER_INTERNAL_TYPES
+    if operator in ("in", "not in", "between"):
+        return [_number_from(item, integer) for item in _coerce_sequence(value, operator)]
+    return _number_from(value, integer)
+
+
 _OPERATORS: dict[str, Callable] = {
     "=": _op_equals,
     "!=": _op_not_equals,
@@ -411,6 +469,7 @@ def build_q(
         if field is None or not getattr(field, "concrete", False):
             raise FilterError(f"Unknown field {fieldname!r} for this document type")
         path = resolve_field_path(model, fieldname)
+        value = coerce_numeric_filter_value(field, operator, value)
         q = handler(model, path, fieldname, value)
         if result is None:
             result = q

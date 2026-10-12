@@ -323,6 +323,42 @@ it, because a unit test of the endpoint will not.
 
 ---
 
+### Added by the frontend stage (29 Sep 2026)
+
+| Need | Call |
+|---|---|
+| Store uploaded bytes | `row = File(...); row._content = data; row.save()` — hashed, deduplicated, named and written by the model (`frappe_platform/models.py`; `file.py:103-138`, `858-940`) |
+| Where a `file_url` lives on disk | `frappe_platform.files.path_for_url(url)` → a path under `MEDIA_ROOT`, or `None` when it would escape; `get_files_path(name, is_private=)` |
+| Serve a file | `/files/<name>` public, `/private/files/<name>` after `file_has_permission` (`frappe_core/file_views.py`) |
+| Who a non-API request is | `file_views.authenticated_user(request)` — the bearer header, else the `access_token` cookie |
+| A handler that reads a multipart body | `@whitelist(path, wants_request=True)` and `_request.FILES`; form fields arrive one value each (`method_views._build_payload`) |
+| A handler that answers with a file, not JSON | Return a Django `HttpResponse` from the whitelisted function; `MethodView` passes it through unwrapped (`crm_app/api/reportview.py:export_query`) |
+
+**The `access_token` cookie is read on one route.** It exists because a browser cannot put
+a header on an `<img>`; `frontend/JWT_PATCH.md` has the reasoning. Reading it anywhere under
+`/api/` would turn a same-origin GET into an authenticated API call, so do not.
+
+**A File row without bytes is legal.** `add_comment` and `email.add_attachments` copy rows
+by URL, and every attachment fixture builds one; upstream's `validate_file_on_disk` is the one
+check the model does not port, and its docstring says so. Do not add the check without first
+giving those callers a file.
+
+**Platform doctypes the browser passes added (30 Sep to 6 Oct 2026),** each a framework
+doctype the Vue app links to and the port lacked: `Country` and `Address` (FINDINGS 45),
+`Language` (58), `Salutation` and `Gender` (66), and `User Email` (57), a child of `User`
+holding the accounts a user sends from. The reference ones follow one pattern: a model in
+`frappe_platform`, seeded by `seed_defaults`, read by all and written by System Manager
+(`crm_app/permissions/platform_docs.py`), a `SEARCH_FIELD` for `search_link`. Text Link
+columns are validated on every save (`frappe_core/links.py`, "Could not find …").
+
+**A field everybody reads and only a role writes** — upstream's permlevel 1 — is
+`PRIVILEGED_WRITE_FIELDS` on the model (`frappe_core/field_security.py`), the fourth
+field tool beside sensitive, read-only and restricted. A caller without the role has the
+field dropped from their payload before validation and the rest of the save goes through,
+which is upstream's silent reset. `User.user_emails` is the one use so far.
+
+---
+
 ### Added by the phase-4 security review — read this before adding any doctype
 
 Registering a doctype **publishes it**. `@register_doctype("X")` gives every authenticated
@@ -504,10 +540,9 @@ Available fixtures in `tests/conftest.py`: `alice`, `bob`, `administrator`, `mak
 
 ## 6. The rule that governed every divergence
 
-Upstream has bugs. **21** are catalogued across `UPSTREAM_BUGS_PHASE_0-2.md` and
-`UPSTREAM_BUGS_PHASE_3-6.md` — both gitignored as local working notes (`.gitignore:59`),
-so a divergence recorded only there is invisible to a reviewer. Summarise the ones that
-matter in the phase's progress file too.
+Upstream has bugs. **48** are catalogued in `UPSTREAM_BUGS.md`, each with the port's
+stance. A divergence recorded only there is easy to miss in review, so name the ones that
+matter in the finding or the spec that made them too.
 
 > **Diverge on bugs nothing can observe. Reproduce bugs that are user-visible.**
 

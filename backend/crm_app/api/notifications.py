@@ -43,11 +43,14 @@ def get_notifications():
     from frappe_platform.models import User
 
     user = get_current_user()
-    # base_queryset applies the phase-2 rule for CRM Notification, which *is*
-    # `to_user = user` - reading through it keeps one definition of that rule rather
-    # than a second copy here that could drift from the permission layer.
+    # Upstream's query is ``WHERE to_user = session.user`` for everyone (lines 8-13),
+    # and the filter has to be stated here too. The permission rule is `to_user = user`
+    # only for ordinary users; for Administrator and System Managers it is
+    # unrestricted, as upstream's is, so reading through ``base_queryset`` alone put
+    # every user's notifications in an administrator's bell (FINDINGS.md 61).
     rows = list(
         base_queryset("CRM Notification", user)
+        .filter(to_user=user)
         .order_by("-creation")
         .values(
             "creation",
@@ -105,7 +108,12 @@ def mark_as_read(doc: str | None = None):
 
     from frappe_core.query import base_queryset
 
-    queryset = base_queryset("CRM Notification", get_current_user()).filter(read=False)
+    # ``filters = {"to_user": user, "read": False}`` upstream (line 54), for every caller.
+    # Stated here rather than left to the permission rule, which is unrestricted for an
+    # administrator: without it "Mark all as read" cleared every user's notifications
+    # (FINDINGS.md 61).
+    user = get_current_user()
+    queryset = base_queryset("CRM Notification", user).filter(to_user=user, read=False)
     if doc:
         queryset = queryset.filter(Q(comment=doc) | Q(notification_type_doc=doc))
 
