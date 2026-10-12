@@ -13,16 +13,25 @@ class CrmAppConfig(AppConfig):
 
         register()
 
-        # C8: the three polymorphic child tables have no FK, so nothing cascades when
-        # their parent is deleted (frappe/model/delete_doc.py:207-227 does this
-        # explicitly upstream). Wire the equivalent onto every model that declares one.
-        from django.apps import apps as django_apps
+        # C8: what `frappe.delete_doc` does for every doctype and Django's FK cascade does
+        # not. The polymorphic child tables have no FK, so their rows go with the parent
+        # here (delete_doc.py:207-227), and the rows that *reference* a document - its
+        # comments, assignments, versions, communications and attached files, bytes
+        # included (delete_doc.py:200, `remove_all`) - go with it too. Wired onto every
+        # registered doctype, not only the ones declaring a polymorphic child and not
+        # only this app's: walking `crm_app`'s declaring models alone left an Address's
+        # Dynamic Link rows and a note's attached file behind on delete
+        # (`tests/test_address.py`, `tests/test_upload_file.py`). Child tables are left
+        # out, their rows are replaced wholesale and reference nothing; so are the
+        # reference doctypes themselves (a comment has no comments), which would
+        # otherwise cost five queries per row in every cascade.
+        from frappe_core import registry
+        from frappe_core.children import REFERENCE_DOCTYPES, connect_cascade
 
-        from frappe_core.children import connect_cascade
-
-        for model in django_apps.get_app_config("crm_app").get_models():
-            if getattr(model, "POLYMORPHIC_CHILD_TABLES", None):
-                connect_cascade(model)
+        for doctype in registry.all_doctypes():
+            entry = registry.get_entry(doctype)
+            if not entry.is_child_table and doctype not in REFERENCE_DOCTYPES:
+                connect_cascade(entry.model)
 
         # Phase 3: importing the package runs the @whitelist decorators, which is what
         # makes each dotted path resolvable. Without this the method map is empty.
