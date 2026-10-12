@@ -41,7 +41,7 @@ def _provider_enabled(flag: str, doctype: str) -> bool:
 
     model = registry.get_model(doctype)
     return bool(
-        model._default_manager.filter(pk=model.SINGLETON_NAME)
+        model._default_manager.filter(pk=model.singleton_name())
         .values_list("enabled", flat=True)
         .first()
     )
