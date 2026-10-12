@@ -3,12 +3,16 @@
 Porting **Frappe CRM** (Python/Frappe framework) to **Django + DRF**, keeping the
 existing Vue frontend.
 
+This file holds standing rules only. What has shipped lives in `specs/AS_BUILT.md`, and
+the phase-by-phase record in `docs/history/SPECS_README.md` — read those rather than
+trusting anything dated in here.
+
 ## Read before working
 
 | File | What it is |
 |---|---|
+| **`specs/AS_BUILT.md`** | **What already exists. Read this first.** Where it and a phase spec disagree, it wins — the specs were written before the code. Its security section lists the mechanisms a doctype can use |
 | `PORT_PLAN.md` | Source inventory, frontend contract, settled architecture decisions |
-| `specs/AS_BUILT.md` | What already exists. Its security section lists the mechanisms a doctype can use |
 | `specs/SECURITY_MODEL.md` | Per-doctype comparison with upstream, and the 11 places we deliberately differ |
 | `docs/history/SPECS_README.md` | Index of the per-phase specs, moved to history on 7 Oct 2026 |
 | `docs/history/PHASE_<N>_*.md` | The spec of the phase that built what you are touching; the decisions in them still apply |
@@ -18,13 +22,21 @@ believe one is wrong, say so in your report rather than working around it.
 
 ## Source of truth
 
-The Frappe original:
+Two repositories, both readable:
 
 ```
-D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm
+CRM app    D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm    (main)
+framework  D:\02_Personal\01_OpenSource\02_FrameWorks\frappe           (version-15)
 ```
 
-Read it whenever behaviour is unclear. **Never invent semantics.**
+That pairing is what the CRM's own CI uses. **Do not read `develop`** — it is v16
+pre-release, and a finding checked against it can be wrong for the version this port
+follows.
+
+Read them whenever behaviour is unclear. **Never invent semantics.** Much of what a
+document does on save, rename or delete is not in the CRM app at all but in the
+framework — if the CRM source cannot explain a behaviour, look there before concluding
+the port is right or wrong.
 
 ## Hard rules
 
@@ -47,12 +59,12 @@ Read it whenever behaviour is unclear. **Never invent semantics.**
 Django + DRF + SimpleJWT, PostgreSQL 17, Redis, Celery, Django Channels,
 django-treebeard. Python 3.13.
 
-## Your role in this repo
+## When reviewing
 
-You are usually invoked as a **reviewer**, giving a second opinion on code written by
-Claude. Prioritise, in order: correctness against the Frappe source, permission/security
-correctness, and adherence to the phase spec. Be specific — cite file and line. Say
-plainly when something is right; do not manufacture findings.
+Reviews here are a second opinion on code another agent wrote. Prioritise, in order:
+correctness against the Frappe source, permission/security correctness, and adherence to
+the spec. Be specific — cite file and line. Say plainly when something is right; do not
+manufacture findings.
 
 ### What has actually gone wrong here before
 
@@ -74,6 +86,31 @@ Worth knowing, because these are the shapes that survived the author's own tests
   the list; `has_permission` guards the document. Setting one and not the other leaves the
   other route open.
 
-**Phase 7 is the credential-heavy phase** — ERPNext API keys, Meta long-lived page tokens,
-webhook signing secrets. Signature verification on webhooks is an acceptance criterion, not
-a nicety: an unsigned webhook is an unauthenticated write path from the public internet.
+### Public paths get the most scrutiny
+
+An endpoint that needs no login — an `allow_guest` method, or a webhook — is reachable
+from the public internet. Treat each one as an attack surface in its own right:
+
+* **A webhook must verify its signature.** Without it, the webhook is an unauthenticated
+  write path. This is a requirement, not a nicety.
+* **A guest method gets the same scrutiny**, however harmless it looks.
+
+### How to report
+
+**If you cannot read this repository, say so and stop.** Make the first line of your
+output `REVIEW NOT PERFORMED`, followed by the reason — a sandbox error, a path you could
+not open. Do not ask for files to be pasted, and do not review from the prompt or from
+memory. Reviews that silently did not happen have been accepted here before.
+
+**Do not report test results you did not produce.** Reviews run read-only. Say a test
+passes or fails only if you ran it, and quote the output.
+
+**One block per finding, most severe first:**
+
+* **Severity** — high, medium or low
+* **Where** — `path:line` in this repo
+* **Claim** — what is wrong, in one or two sentences
+* **Evidence** — the upstream `path:line` you compared against, CRM app or framework
+* **Recorded** — if the repo's docs already write this up, where; otherwise `new`
+
+Where you are unsure, say so and name what would settle it. End with a one-line verdict.
