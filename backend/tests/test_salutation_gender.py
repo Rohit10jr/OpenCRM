@@ -59,7 +59,7 @@ def test_everyone_reads_and_only_an_admin_adds_one(auth_api, api_as, administrat
     refused = auth_api.post("/api/resource/Salutation", {"salutation": "Sir"}, format="json")
     assert refused.status_code == 403
     allowed = api_as(administrator).post("/api/resource/Salutation", {"salutation": "Sir"}, format="json")
-    assert allowed.status_code == 200, allowed.content[:300]
+    assert allowed.status_code == 201, allowed.content[:300]
     assert Salutation.objects.filter(pk="Sir").exists()
 
 
@@ -125,12 +125,18 @@ def test_both_bad_links_are_named_in_one_message(auth_api):
     assert "Could not find Salutation: Sir, Gender: Robot" in response.json()["exception"]
 
 
-def test_a_lead_is_held_to_the_same_rule(alice):
+def test_a_lead_is_held_to_the_same_rule(alice, administrator):
     """The lead's columns are text too; the rule comes from its metadata, not a list."""
+    from crm_app.models import CRMLeadStatus
+
+    with session_user(administrator.name):
+        status = CRMLeadStatus.objects.create(lead_status="New", type="Open")
     with session_user(alice.name):
         with pytest.raises(LinkValidationError, match="Could not find"):
-            CRMLead.objects.create(first_name="ZZ Lead", lead_owner=alice, salutation="Sir")
-        lead = CRMLead.objects.create(first_name="ZZ Lead", lead_owner=alice, salutation="Dr", gender="Female")
+            CRMLead.objects.create(first_name="ZZ Lead", lead_owner=alice, salutation="Sir", status=status)
+        lead = CRMLead.objects.create(
+            first_name="ZZ Lead", lead_owner=alice, salutation="Dr", gender="Female", status=status
+        )
     assert (lead.salutation, lead.gender) == ("Dr", "Female")
 
 

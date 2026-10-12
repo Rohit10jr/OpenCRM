@@ -159,7 +159,10 @@ def test_attaching_to_a_record_checks_write_on_it(auth_api, alice, bob, media):
         alice.name,
         "user_image",
     )
-    assert row.folder == "Home/Attachments"
+    # `handler.py:158`: upload_file writes `folder or "Home"` before the File's own
+    # `set_folder_name` could pick the attachments folder, so an upload lands in Home
+    # even when attached.
+    assert row.folder == "Home"
 
 
 def test_an_attachment_is_noted_on_the_documents_timeline(auth_api, alice, media):

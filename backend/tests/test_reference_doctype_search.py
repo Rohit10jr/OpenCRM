@@ -56,8 +56,11 @@ def test_a_doctype_the_port_does_not_have_is_still_a_404(auth_api):
 def test_the_reference_pair_can_be_picked_and_saved(auth_api, api_as, alice, administrator):
     """The dialog's two steps: pick ``CRM Lead``, then a lead through the Dynamic Link,
     then create the note against it."""
+    from crm_app.models import CRMLeadStatus
+
     with session_user(administrator.name):
-        lead = CRMLead.objects.create(first_name="ZZ Referenced", lead_owner=alice)
+        status = CRMLeadStatus.objects.create(lead_status="New", type="Open")
+        lead = CRMLead.objects.create(first_name="ZZ Referenced", lead_owner=alice, status=status)
 
     assert "CRM Lead" in search(auth_api, txt="CRM Lead")
     assert lead.name in search(auth_api, doctype="CRM Lead", txt="ZZ Referenced")

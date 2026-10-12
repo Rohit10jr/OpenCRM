@@ -41,6 +41,16 @@ REVIEWED_NOT_CREDENTIALS = {
         "will supply credentials later' switch (`email_account.py:157`). Ported in A4 as "
         "one of three escape hatches around credential validation."
     ),
+    ("User Email", "awaiting_password"): (
+        "The same **boolean flag**, copied onto the user's row from its Email Account "
+        "(`user_email.json`, `fetch_from: email_account.awaiting_password`) so the "
+        "Profile screen can show which account still wants its password. FINDINGS.md 57."
+    ),
+    ("User Email", "used_oauth"): (
+        "A **boolean flag**: whether the account signs in with OAuth rather than a "
+        "password (`user_email.json`). Always off here, the port has no OAuth mail; "
+        "carried so the row has upstream's shape. FINDINGS.md 57."
+    ),
     ("User", "last_reset_password_key_generated_on"): (
         "A **timestamp**, not a secret: when the current reset key was issued. Matched on "
         "the name alone, which is the heuristic doing its job. It is in SENSITIVE_FIELDS "

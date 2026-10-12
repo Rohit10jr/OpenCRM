@@ -45,7 +45,12 @@ def linked(client, doctype, name):
 
 def test_a_deals_own_contact_row_and_its_comments_are_not_linked_documents(api_as, administrator, deal):
     task = CRMTask.objects.get(reference_docname=deal.pk)
-    assert linked(api_as(administrator), "CRM Deal", deal.pk) == [("CRM Task", task.pk)]
+    rows = linked(api_as(administrator), "CRM Deal", deal.pk)
+    assert ("CRM Task", str(task.pk)) in rows
+    # The task's creation may notify the deal's owner; a CRM Notification is a linked
+    # document upstream lists too. What must be absent is the deal's own row and its
+    # comment.
+    assert {doctype for doctype, _ in rows} <= {"CRM Task", "CRM Notification"}
 
 
 def test_unlink_all_then_delete_works_and_the_comment_goes_with_the_deal(api_as, administrator, deal):

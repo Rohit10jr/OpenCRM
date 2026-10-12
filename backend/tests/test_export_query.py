@@ -105,9 +105,12 @@ def test_page_length_does_not_cut_the_export(api_as, administrator, tasks):
 
 def test_the_row_rule_applies_to_an_export(api_as, alice, bob, administrator):
     """A Sales User exports the leads they may see, through the same query every list uses."""
+    from crm_app.models import CRMLeadStatus
+
     with session_user(administrator.name):
-        CRMLead.objects.create(first_name="ZZ Mine", lead_owner=alice)
-        CRMLead.objects.create(first_name="ZZ Theirs", lead_owner=bob)
+        status = CRMLeadStatus.objects.create(lead_status="New", type="Open")
+        CRMLead.objects.create(first_name="ZZ Mine", lead_owner=alice, status=status)
+        CRMLead.objects.create(first_name="ZZ Theirs", lead_owner=bob, status=status)
     response = export(
         api_as(alice), doctype="CRM Lead", title="CRM Lead", fields=json.dumps(["first_name"])
     )
