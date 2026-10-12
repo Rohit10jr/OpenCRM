@@ -414,6 +414,10 @@ class CRMLead(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
     #: ownership, dates - without an entry every time somebody corrects a typo. Widening
     #: it is a one-line change; the mechanism is unchanged.
     #:
+    #: ``title_field`` in crm_lead.json: what a Link search matches besides the name
+    #: (``search.py:search_widget``), so the Reference Doc picker finds a lead typed by
+    #: its name and shows it beneath the id.
+    SEARCH_FIELD = "lead_name"
     #: ``status`` is deliberately absent: it already reaches the timeline through
     #: ``CRM Status Change Log``, which also carries the duration spent in each status.
     TRACKED_FIELDS = (
@@ -667,6 +671,9 @@ class CRMDeal(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
     status_model_name = "CRM Deal Status"
     default_status = "Qualification"
 
+    #: ``title_field`` in crm_deal.json, see :attr:`CRMLead.SEARCH_FIELD`; a Link to
+    #: CRM Organization, matched on the organization's name it stores.
+    SEARCH_FIELD = "organization"
     #: See :attr:`CRMLead.TRACKED_FIELDS`. The money fields matter most here - "who
     #: raised this to 80k?" is the question this exists to answer.
     TRACKED_FIELDS = (
@@ -1129,6 +1136,9 @@ class CRMTask(AutoIncrementDocument):
 @register_doctype("FCRM Note")
 class FCRMNote(BaseDocument):
     """No ``autoname`` in the JSON - Frappe's default for that is ``hash``."""
+
+    #: ``title_field`` in fcrm_note.json, see :attr:`CRMLead.SEARCH_FIELD`.
+    SEARCH_FIELD = "title"
 
     title = models.CharField(max_length=280)
     content = models.TextField(blank=True, default="")
