@@ -1798,6 +1798,15 @@ the boot-values call before it mounts; nobody has timed a warm reload or a produ
 build, so whether the slowness exists outside the dev server is not established. The
 first step is to measure those three cases.
 
+**Seen again, 12 Oct 2026**, after `node_modules` was deleted and reinstalled: the dev
+server took 48 seconds to report ready and the first page load several minutes, on a
+machine with 368 MB of its 4 GB free. Not a regression. A reinstall also discards Vite's
+pre-bundled dependency cache, which that first load rebuilds, and a timing taken while
+the machine is paging measures the paging. Both are written up in
+`specs/KNOWN_ISSUES.md` 9, with the rule that any measurement records free memory
+beside it. The `brace_expansion` warning the dev server prints at every start is
+unrelated and explained there too.
+
 ## 56. "Unlink all" leaves an organization's deal linked (open, same as upstream)
 
 **Block:** none. Seen 30 Sep 2026 in the Organizations pass of `BROWSER_TESTING.md`

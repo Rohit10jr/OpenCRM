@@ -589,6 +589,31 @@ the note to come back to, and it is `docs/FINDINGS.md` 55.
   machine, down from many minutes before finding 29's fix. Nine tenths of that time was
   Vite's own TypeScript transpile and Vue compile, so it is bound by the CPU, not by the
   network or the backend. Every restart of the dev server pays it again.
+* **A reinstall adds a one-off pass on top of that** (seen 12 Oct 2026). Vite keeps
+  its pre-bundled dependencies in `node_modules/.vite/deps` (the chunks finding 29
+  describes; 120 files on 12 Oct), and that cache survives a restart of the dev server. Deleting `node_modules`,
+  `yarn dev --force`, or a change to the lockfile or to `optimizeDeps` discards it, and
+  the first page load after that runs esbuild over the whole `optimizeDeps.include` list
+  (echarts, reka-ui, the TipTap family, CodeMirror) before the usual transpile even
+  starts. On 12 Oct, after `node_modules` was deleted and reinstalled with the lockfile
+  unchanged, the server reported ready in 48 seconds, the browser then spun for several
+  minutes, and the login page appeared; `.vite/deps` was created during that load, and
+  Vite served `main.js`, `Login.vue` and `App.vue` without a transform error. Not a
+  regression and nothing to diagnose: a hard reload in that state only starts the wait
+  again.
+* **The machine's memory is a confound in every number above.** The development
+  machine has 4 GB. On 12 Oct, 368 MB were free, with Chrome holding about 1 GB across
+  24 processes and node 285 MB across four, and Claude Code had killed a background job
+  for low memory in the same session. A timing taken while the machine is paging
+  measures the paging. Step 1 below records free memory beside each number for that
+  reason, and the three servers (`runserver`, the Celery worker, Vite) plus one browser
+  should be the only things running when it is taken.
+* **The warning `yarn dev` prints at every start is unrelated.** `An error occurred
+  when globbing for files. '(0 , brace_expansion_1.expand) is not a function'` comes
+  from the PWA plugin's workbox precache glob: `package.json` pins `brace-expansion` to
+  2.1.0 under `resolutions` (upstream's own pin) while minimatch 10 expects version 5.
+  It only empties the service worker's precache list (`precache 1 entries`), which the
+  dev build does not rely on; it costs no time and does not touch the page.
 * **The app makes about ten calls before the first screen settles**, and a list page
   about eight more (the App boot and N1 rows of the browser log). In the `runserver` log
   of the Notes pass the first ones after a start took 1.9 to 2.8 seconds each and later
@@ -607,7 +632,8 @@ Until that is measured, any fix is a guess.
 
 1. **Measure three things**: a cold dev load, a warm reload, and the same page from
    `yarn build` served statically. Browser Network tab, plus `vite --debug transform`
-   for the dev numbers.
+   for the dev numbers. Record free memory beside each number, and take the cold
+   number with `node_modules/.vite` already present, not right after a reinstall.
 2. **If it is the dev server**: `server.warmup` for the entry files; making frappe-ui
    pre-bundlable by resolving the `~icons` imports in an esbuild plugin, which would
    undo the root of findings 27 and 29; a newer Vite.
