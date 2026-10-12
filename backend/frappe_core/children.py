@@ -150,6 +150,14 @@ def prepare_rows(
 
     for index, row in enumerate(rows or [], start=1):
         payload = {k: v for k, v in (row or {}).items() if k in accepted and k != "name"}
+        # The parent is the document being written, never the row's own say: a row
+        # fetched from one document and posted into another (the SLA list's Duplicate
+        # sends the whole document back into insert) still names its old parent, and
+        # with both the name and the `_id` column in the payload Django would keep the
+        # old one. `replace_children` sets the parent after this.
+        if parent_field:
+            payload.pop(parent_field, None)
+            payload.pop(f"{parent_field}_id", None)
         for field in fields:
             if not _is_link(field) or field.name not in payload:
                 continue
@@ -266,6 +274,12 @@ _REFERENCE_CLEANUP: tuple[tuple[str, str, str, str], ...] = (
     ("File", "attached_to_doctype", "attached_to_name", "delete"),
     ("Communication", "reference_doctype", "reference_name", "clear"),
 )
+
+#: The doctypes above, which are references and have none of their own: the cascade is
+#: not wired onto them. It was, briefly, and a bulk delete of leads ran the five cleanup
+#: queries once more for every ToDo it removed (`tests/test_phase3_endpoints.py`, the
+#: batched-delete query budgets).
+REFERENCE_DOCTYPES = frozenset(row[0] for row in _REFERENCE_CLEANUP)
 
 
 #: True while a caller has already cleaned the references for a whole batch, so the
