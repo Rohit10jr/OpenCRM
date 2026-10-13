@@ -234,8 +234,20 @@ def update_modified_background(doctype: str, docname: str) -> bool:
 def send_invitation_email(invitation_name: str) -> bool:
     """``crm_invitation.py:37-51``.
 
-    Outbound identity comes from the configured default-outgoing ``Email Account``, not
-    ``DEFAULT_FROM_EMAIL`` (`PHASE_5_ASYNC.md` §3).
+    The carrier is what ``crm_app.mail.send`` finds with the outgoing-account lookup: the
+    default outgoing ``Email Account``, else the config account Django's mail settings
+    describe (FINDINGS.md 79) - never ``DEFAULT_FROM_EMAIL`` on its own
+    (`PHASE_5_ASYNC.md` §3). The From is that account's name and address, upstream's
+    ``default_sender``.
+
+    **A deployment with neither fails this task once.** ``mail.send`` raises
+    ``OutgoingEmailError``, which is not in ``autoretry_for`` - retrying would not make
+    an account appear - so the task fails with a logged traceback and ``email_sent_at``
+    stays null. Upstream fails the invitation in front of the inviter instead: it sends
+    inside ``after_insert`` (``crm_invitation.py:34-51``, ``frappe.sendmail(now=True)``),
+    so the insert itself is refused. Here the insert has already answered by the time the
+    worker runs, which is the phase-5 trade-off of sending from a task rather than inside
+    the request (`PHASE_5_ASYNC.md` §3).
 
     Idempotent: it skips an invitation that already has ``email_sent_at``, so neither a
     redelivery nor a retry after a partial failure sends a second invite.

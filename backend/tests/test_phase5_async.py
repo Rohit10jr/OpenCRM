@@ -25,6 +25,18 @@ from frappe_core.session import session_user
 pytestmark = pytest.mark.django_db
 
 
+@pytest.fixture(autouse=True)
+def _config_account():
+    """An invitation's task needs a carrier (FINDINGS.md 79): with no ``Email Account`` and
+    no ``EMAIL_HOST`` it raises, and under eager Celery that raise comes out of
+    ``CRMInvitation.objects.create``. The config account carries every invitation this
+    module makes; the no-carrier case is ``test_mail_config_account.py``'s."""
+    from django.test import override_settings
+
+    with override_settings(EMAIL_HOST="smtp.example.test"):
+        yield
+
+
 @pytest.fixture
 def lead(alice, administrator):
     from crm_app.models import CRMLead, CRMLeadStatus
@@ -362,27 +374,32 @@ def test_creating_an_invitation_sends_one_email(administrator):
     assert invitation.key in mail.outbox[0].body
 
 
-def test_the_invitation_email_uses_the_default_outgoing_account(administrator):
+def test_the_invitation_email_uses_the_default_outgoing_account(administrator, monkeypatch):
     """`PHASE_5_ASYNC.md` §3 — identity comes from the Email Account, not
-    ``DEFAULT_FROM_EMAIL``."""
+    ``DEFAULT_FROM_EMAIL``: the account's ``default_sender``, its name and address
+    (``email_account.py:468-469``), which is what ``frappe.sendmail`` with no sender uses.
+
+    The saved account's ``open_backend`` would open its SMTP session; locmem instead, as
+    ``test_email_make.py`` does. The config account (the module fixture) is also present
+    and must lose to the saved one.
+    """
+    from django.core.mail.backends.locmem import EmailBackend
+
+    from crm_app import communication
     from frappe_platform.models import EmailAccount
 
+    monkeypatch.setattr(communication, "open_backend", lambda account: EmailBackend())
     with session_user(administrator.name):
         EmailAccount.objects.create(
-            email_account_name="Outbound", email_id="sales@acme.com", default_outgoing=True
+            email_account_name="Outbound",
+            email_id="sales@acme.com",
+            enable_outgoing=True,
+            default_outgoing=True,
         )
 
     mail.outbox.clear()
     _invitation("invitee2@example.com", administrator=administrator)
-    assert mail.outbox[0].from_email == "sales@acme.com"
-
-
-def test_the_invitation_email_falls_back_when_no_account_is_configured(administrator):
-    from django.conf import settings as django_settings
-
-    mail.outbox.clear()
-    _invitation("invitee3@example.com", administrator=administrator)
-    assert mail.outbox[0].from_email == django_settings.DEFAULT_FROM_EMAIL
+    assert mail.outbox[0].from_email == "Outbound <sales@acme.com>"
 
 
 def test_sending_records_the_timestamp(administrator):

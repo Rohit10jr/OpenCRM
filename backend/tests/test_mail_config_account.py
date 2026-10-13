@@ -242,3 +242,99 @@ def test_the_queued_path_sends_through_the_config_account_too(
     row = Communication.objects.get(pk=response.json()["message"]["name"])
     assert row.email_account == ""
     assert row.communication_date is not None
+
+
+# --- system mail: invitations and password resets -------------------------------------------
+
+#: ``find_outgoing(_raise_error=True)``, ``email_account.py:530``, verbatim.
+NO_ACCOUNT = "Please setup default outgoing Email Account from Tools > Email Account"
+
+RESET = "/api/method/frappe.core.doctype.user.user.reset_password"
+
+
+def _invitation(email, administrator):
+    from crm_app.models import CRMInvitation
+
+    with session_user(administrator.name):
+        return CRMInvitation.objects.create(
+            email=email, role="Sales User", status="Pending", key=f"k-{email}"
+        )
+
+
+def test_an_invitation_is_sent_from_the_config_account(administrator, config_account):
+    """``frappe.sendmail`` with no sender uses the account's ``default_sender``
+    (``QueueBuilder.sender``, ``email_queue.py:719-724``; ``email_account.py:468-469``):
+    the account's name and address, so ``Frappe <notifications@...>``."""
+    from crm_app.models import CRMInvitation
+
+    mail.outbox.clear()
+    invitation = _invitation("invitee@example.test", administrator)
+
+    assert len(mail.outbox) == 1
+    message = mail.outbox[0]
+    assert message.from_email == f"Frappe <{FROM}>"
+    assert message.to == ["invitee@example.test"]
+    assert invitation.key in message.body
+    assert CRMInvitation.objects.get(pk=invitation.pk).email_sent_at is not None
+
+
+def test_the_sender_name_setting_names_the_config_account(administrator, config_account):
+    """``email_sender_name`` (``email_account.py:585``) is the virtual account's ``name``,
+    and ``default_sender`` is built from it."""
+    mail.outbox.clear()
+    with override_settings(EMAIL_SENDER_NAME="Acme CRM"):
+        _invitation("invitee2@example.test", administrator)
+
+    assert mail.outbox[0].from_email == f"Acme CRM <{FROM}>"
+
+
+def test_an_invitation_with_nothing_to_send_through_fails_its_task_once(
+    administrator, no_config_account, monkeypatch
+):
+    """Upstream throws in front of the inviter (``find_outgoing(_raise_error=True)``,
+    ``email_account.py:528-532``, reached from ``after_insert``); here the insert has
+    already answered, so the task fails - once, since ``OutgoingEmailError`` is not a
+    transport failure and a retry would not make an account appear - and
+    ``email_sent_at`` stays null. The phase-5 trade-off of sending from a task."""
+    from crm_app.models import CRMInvitation
+    from crm_app.tasks import send_invitation_email
+    from frappe_core.exceptions import OutgoingEmailError
+
+    # The row without the signal's eager dispatch, which is how a worker meets it.
+    monkeypatch.setattr(send_invitation_email, "delay", lambda *args, **kwargs: None)
+    invitation = _invitation("nobody-carries@example.test", administrator)
+    mail.outbox.clear()
+
+    assert not issubclass(OutgoingEmailError, send_invitation_email.autoretry_for)
+    with pytest.raises(OutgoingEmailError) as raised:
+        send_invitation_email(invitation.pk)
+    assert raised.value.message == NO_ACCOUNT
+
+    assert mail.outbox == []
+    assert CRMInvitation.objects.get(pk=invitation.pk).email_sent_at is None
+
+
+def test_a_password_reset_is_sent_from_the_config_account(api, alice, config_account):
+    mail.outbox.clear()
+    response = api.post(RESET, {"user": alice.pk}, format="json")
+
+    assert response.status_code == 200
+    assert len(mail.outbox) == 1
+    assert mail.outbox[0].from_email == f"Frappe <{FROM}>"
+    assert mail.outbox[0].to == [alice.email or alice.pk]
+    assert "/crm/update-password?key=" in mail.outbox[0].body
+
+
+def test_a_password_reset_with_nothing_to_send_through_stays_silent(
+    api, alice, no_config_account
+):
+    """``user.py:1055-1062`` catches and logs every failure and answers the one sentence;
+    a missing account is one more failure the response must not reveal."""
+    from crm_app.api import auth_pages
+
+    mail.outbox.clear()
+    response = api.post(RESET, {"user": alice.pk}, format="json")
+
+    assert response.status_code == 200
+    assert response.json()["message"]["message"] == auth_pages.GENERIC_RESET_RESPONSE
+    assert mail.outbox == []

@@ -43,6 +43,20 @@ def _clear_rate_limits():
     cache.clear()
 
 
+@pytest.fixture(autouse=True)
+def _config_account():
+    """Something to send through (FINDINGS.md 79). A reset and an invitation both go out
+    through the outgoing-account lookup now, and with no ``Email Account`` and no
+    ``EMAIL_HOST`` there is nothing to carry them: the reset endpoint would answer its one
+    sentence with no mail behind it, and an invitation's task would raise out of
+    ``CRMInvitation.objects.create`` under eager Celery. The config account carries both
+    here; the no-carrier cases are ``test_mail_config_account.py``'s."""
+    from django.test import override_settings
+
+    with override_settings(EMAIL_HOST="smtp.example.test"):
+        yield
+
+
 def _post(api, path, payload=None):
     return api.post(f"/api/method/{path}", payload or {}, format="json")
 
