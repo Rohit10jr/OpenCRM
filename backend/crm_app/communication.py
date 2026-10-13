@@ -15,7 +15,7 @@ Ported from, in order:
   ``mail_bcc`` (who actually receives it), ``mail_sender`` / ``mail_sender_fullname`` /
   ``get_mail_sender_with_displayname`` (the From), ``get_outgoing_email_account``
 * ``frappe/email/doctype/email_account/email_account.py`` — ``find_outgoing`` /
-  ``find_default_outgoing``
+  ``find_default_outgoing`` / ``find_from_config``
 * ``frappe/email/email_body.py`` — ``get_message_id``, ``replace_sender``,
   ``set_message_id``, ``set_in_reply_to``
 
@@ -26,6 +26,12 @@ Ported from, in order:
 :func:`frappe_core.mail.check_smtp` builds it — *not* a global SMTP from `.env`. Checking
 credentials with one stack and sending with another is how a check passes where sending
 fails, and the check was already written against Django's backend.
+
+The one account that *does* send through Django's configured backend and settings is the
+**config account** (:func:`config_account`, FINDINGS.md 79): upstream's
+``find_from_config``, the unsaved Email Account built from ``site_config.json``, whose
+port reads Django's own ``EMAIL_*`` settings. It is not a row, it carries system mail and
+any lead mail no saved account matches, and it exists only while ``EMAIL_HOST`` is set.
 
 **Sending is queued through Celery**, which is this port's Email Queue (phase 5). The
 task retries on ``smtplib.SMTPException`` / ``OSError`` exactly as ``send_invitation_email``
@@ -344,21 +350,74 @@ def add_attachments(communication_name: str, attachments) -> int:
 # ---------------------------------------------------------------------------
 
 
-def find_outgoing_account(sender=None, reference_doctype=None):
-    """``EmailAccount.find_outgoing`` + ``find_default_outgoing`` (``email_account.py:384-417``).
+def config_account():
+    """``EmailAccount.find_from_config`` (``email_account.py:493-498``) — the account
+    ``site_config.json`` describes, read here from Django's mail settings.
 
-    Three steps, upstream's order:
+    ``None`` unless ``EMAIL_HOST`` is set, as upstream's
+    ``get_account_details_from_site_config`` returns ``{}`` while ``mail_server`` is unset
+    (``email_account.py:563-565``). Otherwise an **unsaved** ``Email Account``
+    (``from_record``, ``email_account.py:478-481``) carrying the settings as the fields the
+    rest of this module reads — the From rules in :func:`sender_with_displayname`, the name
+    and address that make upstream's ``default_sender`` for system mail — and
+    ``from_site_config``, upstream's ``_from_site_config``, which :func:`open_backend` reads
+    to send it through Django's configured backend rather than an SMTP session of its own.
+    The settings are read at call time so ``override_settings`` works in tests.
+
+    The password is deliberately not set: it is an encrypted column, and nothing reads it
+    for this account — ``django.core.mail.get_connection`` takes the credentials from the
+    settings itself. On Frappe Cloud this is the account a site with no Email Account
+    sends from (``notifications@<site>``); it is not a document, so Settings shows nothing.
+    FINDINGS.md 79.
+    """
+    from frappe_platform.models import EmailAccount
+
+    host = settings.EMAIL_HOST
+    if not host:
+        return None
+
+    login = settings.EMAIL_HOST_USER or ""
+    address = settings.DEFAULT_FROM_EMAIL
+    account = EmailAccount(
+        email_account_name=settings.EMAIL_SENDER_NAME,
+        email_id=address,
+        enable_outgoing=True,
+        smtp_server=host,
+        smtp_port=settings.EMAIL_PORT,
+        use_tls=bool(settings.EMAIL_USE_TLS),
+        use_ssl_for_outgoing=bool(settings.EMAIL_USE_SSL),
+        login_id=login,
+        login_id_is_different=bool(login) and login != address,
+        no_smtp_authentication=not login,
+        always_use_account_email_id_as_sender=bool(
+            settings.EMAIL_ALWAYS_USE_ACCOUNT_EMAIL_ID_AS_SENDER
+        ),
+    )
+    account.from_site_config = True
+    return account
+
+
+def find_outgoing_account(sender=None, reference_doctype=None):
+    """``EmailAccount.find_outgoing`` + ``find_default_outgoing`` (``email_account.py:506-540``).
+
+    Four steps, upstream's order:
 
     1. an outgoing-enabled account whose ``email_id`` *is* the sender's address;
     2. an account that is both incoming- and outgoing-enabled and appends to the reference
        doctype — the CRM configures exactly this (``crm/api/settings.py:36`` sets
        ``append_to = "CRM Lead"``), so leaving it out would pick a different account than
        upstream for any deployment with an inbox;
-    3. the default outgoing account.
+    3. the default outgoing account;
+    4. the config account (``find_from_config``, ``email_account.py:538``), with Django's
+       mail settings standing in for ``site_config.json`` — see :func:`config_account`.
+       ``None`` while ``EMAIL_HOST`` is unset.
 
-    Upstream's two further fallbacks are not ported: ``find_from_config`` reads
-    ``site_config.json``, which this port does not have, and ``create_dummy`` exists only
-    for ``mute_emails``, a test flag.
+    Called with no arguments this is what ``frappe.sendmail`` reaches with no sender
+    (``QueueBuilder.sender``, ``email_queue.py:719-724``): steps 3 and 4, which is how
+    system mail finds its carrier (``crm_app.mail``).
+
+    Upstream's last fallback, ``create_dummy``, is not ported: it exists only for
+    ``mute_emails``, a test flag.
     """
     from frappe_platform.models import EmailAccount
 
@@ -377,9 +436,13 @@ def find_outgoing_account(sender=None, reference_doctype=None):
         if account is not None:
             return account
 
-    return EmailAccount._default_manager.filter(
+    account = EmailAccount._default_manager.filter(
         enable_outgoing=True, default_outgoing=True
     ).first()
+    if account is not None:
+        return account
+
+    return config_account()
 
 
 def outgoing_account_for(communication):
@@ -388,6 +451,12 @@ def outgoing_account_for(communication):
     ``db_set("email_account", ...)`` upstream; an ``update()`` here for the same reason
     ``toggle_like`` uses one: stamping which account sent a message is not an edit of the
     message and must not bump ``modified``, which is the default list sort.
+
+    **The config account is not stamped.** ``email_account`` names a row, and the config
+    account has none: upstream writes its virtual ``name`` ("Frappe") into that Link field,
+    where it points at nothing. Here the stamp is read back by the lookup above it, so a
+    stamp of "Frappe" would make the next call find no account and the queued send give
+    up; a stamp that names nothing is not worth keeping.
     """
     from frappe_platform.models import Communication, EmailAccount
 
@@ -395,7 +464,7 @@ def outgoing_account_for(communication):
         return EmailAccount._default_manager.filter(pk=communication.email_account).first()
 
     account = find_outgoing_account(communication.sender, communication.reference_doctype)
-    if account is not None and communication.sent_or_received == "Sent":
+    if account is not None and account.pk and communication.sent_or_received == "Sent":
         Communication._default_manager.filter(pk=communication.pk).update(
             email_account=account.pk
         )
@@ -513,11 +582,15 @@ def build_message(communication, account, copy_to: str | None = None):
 
 
 def open_backend(account):
-    """The SMTP connection for one ``Email Account``.
+    """The connection for one ``Email Account``.
 
-    Built the way :func:`frappe_core.mail.check_smtp` builds the one it validates the
-    account with, so what was checked at save time is what sends. The flags are the
-    account's own, per the settled decision — there is no global SMTP from `.env`:
+    The config account (:func:`config_account`) is the one account whose transport is
+    Django's configured backend and settings: ``get_connection()`` reads ``EMAIL_HOST``,
+    ``EMAIL_PORT``, the login and the TLS flags itself, through whatever ``EMAIL_BACKEND``
+    names — so the console backend carries it in development. Every saved account still
+    sends through its own SMTP details, built the way :func:`frappe_core.mail.check_smtp`
+    builds the connection it validates the account with, so what was checked at save time
+    is what sends:
 
     * ``use_ssl_for_outgoing`` -> implicit TLS (``use_ssl``). Django refuses both flags at
       once, so ``use_tls`` is dropped when it is set; the default port follows.
@@ -528,11 +601,18 @@ def open_backend(account):
 
     **This is the one function the tests patch.** Returning a
     ``locmem.EmailBackend`` from it puts the built message in ``django.core.mail.outbox``,
-    which is what makes everything above assertable without a mail server.
+    which is what makes everything above assertable without a mail server. (The config
+    account needs no patch: under the test settings ``get_connection()`` *is* locmem.)
     """
+    from django.core.mail import get_connection
     from django.core.mail.backends.smtp import EmailBackend
 
     from frappe_core import mail as mail_checks
+
+    if getattr(account, "from_site_config", False):
+        # The same explicit timeout as below. The base backend takes it as a keyword too,
+        # so the console and locmem backends accept it.
+        return get_connection(fail_silently=False, timeout=mail_checks._timeout())
 
     # One source for the flags, shared with the save-time check (`validate_email_account`),
     # so what was checked is what sends.

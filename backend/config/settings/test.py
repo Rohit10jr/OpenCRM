@@ -21,6 +21,12 @@ CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
+# And no config account (docs/FINDINGS.md 79) unless a test asks for one with
+# `override_settings(EMAIL_HOST=...)`. `base.py` reads the developer's `.env`, which
+# `.env.example` tells them to give an EMAIL_HOST; the tests that assert "nothing to send
+# through" must not depend on what that file says.
+EMAIL_HOST = ""
+
 # No Redis either (docs/internal/RUNBOOK.md, same section). The in-memory layer is process-local, which
 # is all `WebsocketCommunicator` needs: publisher and consumer are the same process.
 CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}

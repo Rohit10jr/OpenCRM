@@ -212,6 +212,48 @@ CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default=REDIS_URL)
 
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
 
+# The port's `site_config.json` mail keys (docs/FINDINGS.md 79). Upstream builds an
+# unsaved Email Account from `mail_server`, `mail_port`, `use_tls`, `mail_login`,
+# `mail_password`, `auto_email_id`, `email_sender_name` and
+# `always_use_account_email_id_as_sender`
+# (frappe/email/doctype/email_account/email_account.py:563-590), and that account carries
+# every mail no saved Email Account matches - system mail above all. These are Django's
+# own names on purpose: `django.core.mail.get_connection()` reads EMAIL_HOST, EMAIL_PORT,
+# EMAIL_HOST_USER, EMAIL_HOST_PASSWORD, EMAIL_USE_TLS and EMAIL_USE_SSL itself, so the
+# config account's transport is whatever EMAIL_BACKEND names, with no plumbing of its own,
+# and the console backend keeps working for development. A *saved* Email Account never
+# reads these; it sends through its own SMTP details.
+# `crm_app.communication.config_account` turns them into the account.
+#
+# EMAIL_HOST empty means there is no config account at all, exactly as upstream returns
+# `{}` while `mail_server` is unset (email_account.py:564-565).
+EMAIL_HOST = env("EMAIL_HOST", default="")
+# `mail_login` and `mail_password`. No login means no SMTP authentication.
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+# `use_tls`, falling back to whether there is a login - upstream's
+# `("use_tls", "mail_login")` pair (email_account.py:570).
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=bool(EMAIL_HOST_USER))
+EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
+# `mail_port`. Unset, the port the TLS flags imply, the way `frappe_core.mail.smtp_settings`
+# picks one for a saved account; 25 is plain SMTP, Django's own default.
+EMAIL_PORT = env.int("EMAIL_PORT", default=0) or (465 if EMAIL_USE_SSL else 587 if EMAIL_USE_TLS else 25)
+# `auto_email_id`, falling back to `mail_login` and then to upstream's placeholder
+# (email_account.py:572-575). The address system mail is From, and the address a lead's
+# mail is From when EMAIL_ALWAYS_USE_ACCOUNT_EMAIL_ID_AS_SENDER is on. Set it explicitly
+# when EMAIL_HOST_USER is not an address.
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="") or EMAIL_HOST_USER or "notifications@example.com"
+# `email_sender_name` (email_account.py:585): the account's name, which is the display
+# name on system mail - `Frappe <notifications@...>` - and the fallback display name on a
+# lead's mail when the sender has no full name.
+EMAIL_SENDER_NAME = env("EMAIL_SENDER_NAME", default="Frappe")
+# `always_use_account_email_id_as_sender` (email_account.py:577-580): a relay that only
+# accepts its own envelope sender wants this on; a lead's mail is then From
+# DEFAULT_FROM_EMAIL with the user's display name.
+EMAIL_ALWAYS_USE_ACCOUNT_EMAIL_ID_AS_SENDER = env.bool(
+    "EMAIL_ALWAYS_USE_ACCOUNT_EMAIL_ID_AS_SENDER", default=False
+)
+
 # Seconds to wait for a mail server when validating an Email Account
 # (frappe_core/mail.py). Upstream passes no timeout, so an unreachable host blocks the
 # save until the OS gives up - 20 to 130 seconds, during which the user sees a spinner
@@ -231,7 +273,6 @@ MAIL_CONNECT_TIMEOUT = env.int("MAIL_CONNECT_TIMEOUT", default=10)
 # rest" means, and is the correct failure. Generate one with:
 #     python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 FIELD_ENCRYPTION_KEY = env("FIELD_ENCRYPTION_KEY", default="")
-DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="crm@example.com")
 
 # Product telemetry (crm_app/api/desk.py:boot_config). Both must be set to switch it on;
 # with either blank the frontend is told telemetry is off and skips the persona wizard.
