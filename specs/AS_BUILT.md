@@ -316,6 +316,21 @@ Three days to accept, one hour to choose a password once you have.
 `APP_DIRS` finds it. Both emails go through `crm_app.mail`, so there is one answer to
 "where does the wording live".
 
+**The config account carries what no saved Email Account does** (FINDINGS.md 79, 13 Oct
+2026). Upstream's fourth outgoing-account step, `find_from_config`, is ported:
+`crm_app.communication.config_account()` builds an *unsaved* `Email Account` from Django's
+mail settings - `EMAIL_HOST` (empty means there is no config account), `EMAIL_PORT`,
+`EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, `EMAIL_USE_SSL`,
+`DEFAULT_FROM_EMAIL`, `EMAIL_SENDER_NAME`, `EMAIL_ALWAYS_USE_ACCOUNT_EMAIL_ID_AS_SENDER`,
+the port's `site_config.json` - and `find_outgoing_account` returns it after the default
+outgoing account. `open_backend` sends it through `django.core.mail.get_connection()`, so
+`EMAIL_BACKEND` is that account's transport and nothing else's; a saved account still uses
+its own SMTP details. System mail (`crm_app.mail.send`: invitations, password resets) runs
+the same `find_outgoing_account()` lookup as a lead's mail, From the account's name and
+address (upstream's `default_sender`), and raises `OutgoingEmailError` when there is
+nothing to send through - which fails the invitation's task once, where upstream refuses
+the insert. Development runs with `EMAIL_HOST=localhost` and the console backend.
+
 **An emailed link points at a page, never at `/api/method/`.** Upstream can link to its
 endpoints because they answer a GET with an HTTP redirect into the Desk; ours answer with
 JSON, so a link to one lands a person on a JSON blob. `scripts/walk_auth_flow.py` asserts

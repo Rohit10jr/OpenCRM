@@ -88,7 +88,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 76 | API: `frappe.client.delete` and `DELETE /api/resource/` on a document that other documents still point at by reference | low | Upstream refuses with `LinkExistsError` ("Cannot delete or cancel because … is linked with …") while a task, note or call log still references the document; the port deletes it and leaves the reference dangling. Not reachable from the Vue app, whose dialog hides Delete until the list is empty, except for a linked document the caller cannot see. Links through a foreign key are refused as upstream does | open, decision deferred |
 | 77 | frontend: the Deals list would not open | high | Clicking a deal's Annual Revenue cell filed the cell's display string, "$ 500,000.00", as the filter (upstream bug 46), and the standard view saved it. Upstream's database casts the string to 0 and shows an empty list; the port's filter builder refused it with 417, and since the saved filter is replayed on every load the page never opened again, with no way to remove the chip. Filter values for numeric columns are now read for the number in them, so the click filters on the amount shown; a deliberate divergence, recorded with bug 46 | **fixed** 6 Oct 2026 |
 | 78 | frontend: Settings → Home Actions, a standard row | low | The grid lets a standard entry's Type be changed to Separator although the doctype marks it read-only for standard rows; done to Settings, the entry vanishes and nothing in the app can bring it back, since the grid lives in Settings. Upstream bug 47, seen on the demo. The port reproduces it (the frontend is upstream's) and gives `seed_defaults --force` the job of restoring the standard rows, where upstream needs Desk | open, upstream bug 47; recovery added |
-| 79 | Settings → Invite User (and every system mail: invitations, password resets, assignment notices) | medium | The invitation went to the Celery worker's console instead of the inbox. System mail is sent with Django's `EMAIL_BACKEND` from `DEFAULT_FROM_EMAIL` (`crm@example.com`), which `.env` leaves at the console backend locally, while a mail written on a lead goes through the Email Account's own SMTP. Upstream sends both through the default outgoing Email Account (`frappe.sendmail`). Seen 6 Oct 2026 (S8). Decision wanted: route system mail through the default outgoing account as upstream does, or document the `EMAIL_*` settings as the deployment's job | open, decision |
+| 79 | Settings → Invite User (and every system mail: invitations, password resets) | medium | The invitation went to the Celery worker's console instead of the inbox. System mail was sent with Django's `EMAIL_BACKEND` from `DEFAULT_FROM_EMAIL` (`crm@example.com`), which `.env` leaves at the console backend locally, while a mail written on a lead went through the Email Account's own SMTP; and a site with no Email Account could not send a lead's mail at all, where upstream falls through to the account `site_config.json` describes. Seen 6 Oct 2026 (S8). Both now run upstream's four-step lookup, with Django's `EMAIL_*` settings as the port's `site_config.json` - the config account; `EMAIL_HOST=localhost` with the console backend for development | **fixed** 13 Oct 2026 |
 | 80 | Settings → Assignment Rules → Save | high | Save does nothing. The screen posts `frappe.client.insert` for doctype `Assignment Rule`, a framework doctype the port does not model (`crm_app/api/assignment_rule.py`, a phase-3 decision: outside the nine platform doctypes), so the insert answers 404; the screen's error handler only clears its spinner, so nothing is shown. The list endpoint returns `[]` by the same decision. Upstream's engine is `frappe/automation/doctype/assignment_rule` (436 lines: round robin, load balancing, based on field, assign and unassign conditions, assignment days, applied on insert and update of leads and deals) plus the CRM's own JSON condition fields. Seen 6 Oct 2026 (S12). Decision wanted: port it, or defer with Currency and System Settings | open, decision |
 | 81 | Settings → SLA Policies → Assignment conditions | low | Add a custom condition, leave its fields empty, and try to remove it: the empty condition stays. Seen 6 Oct 2026 (S13); the same on the upstream demo, checked 7 Oct 2026, so it is upstream's (the condition builder is its frontend) and belongs with the upstream bugs once traced | open, upstream too, not traced |
 | 82 | Settings → SLA Policies → Duplicate | medium | Duplicate did nothing. The screen fetches the policy with `frappe.client.get` and posts the whole document back into `frappe.client.insert` with the new name; upstream's documents always carry a `doctype` key (`as_dict`), the port's did not, so the insert answered 417 "doctype is required" and the screen, with no error handler, showed nothing. Every document the port serialises now carries `doctype`, child rows included | **fixed** 7 Oct 2026 |
@@ -2580,6 +2580,97 @@ command is in the upstream-bug entry.
 `seed_defaults --force` restores the six standard rows by their Name (Label, Type, Route,
 Icon; a missing one re-added), leaves `hidden` and custom rows alone, and a plain rerun
 still writes nothing. Covered in `tests/test_seed_defaults.py`.
+
+## 79. System mail bypassed the Email Account, and a site with no account could not send
+
+**Block:** none in the http suite; seen 6 Oct 2026 in the Settings pass
+(`BROWSER_TESTING.md` S8): Settings → Invite User, and the invitation went to the Celery
+worker's console instead of the inbox, while a mail written on a lead reached the relay.
+
+**Expected:** every mail leaves through the outgoing Email Account lookup, and a
+deployment with no Email Account at all can still send from a configured address. That
+is what the Frappe Cloud demo shows: a site with no Email Account sends its invitations
+and password resets from `notifications@<site>`, and Settings → Email Accounts shows
+nothing, because the account that sends them is not a document. A mail written on a lead
+falls through to the same account, from the user's own address unless the account's
+sender flag is on.
+
+**What upstream does:** `EmailAccount.find_outgoing` + `find_default_outgoing`
+(`frappe/email/doctype/email_account/email_account.py:506-540`) has four steps: an
+outgoing account whose address is the sender's; an incoming-and-outgoing account whose
+`append_to` is the reference doctype; the default outgoing account; and `find_from_config`
+(`:493-498`), an **unsaved** Email Account (`from_record`, `:478-481`) built from
+`site_config.json` by `get_account_details_from_site_config` (`:563-600`): `mail_server`
+(unset means no account, `{}`), `mail_port`, `use_tls` (falling back to whether
+`mail_login` is set), `mail_login`, `mail_password`, `auto_email_id` (falling back to
+`mail_login`, then `notifications@example.com`), `email_sender_name` (default `Frappe`,
+and it becomes the account's `name`) and `always_use_account_email_id_as_sender`; flagged
+`_from_site_config`, never saved. System mail passes no sender (`frappe.sendmail` from
+`crm_invitation.py:45-51` and the reset in `user.py`), so `QueueBuilder.sender`
+(`email_queue.py:719-724`) takes the account's `default_sender`,
+`formataddr((name, email_id))` (`email_account.py:468-469`): `Frappe <notifications@…>`.
+Nothing to send through throws `OutgoingEmailError`, "Please setup default outgoing
+Email Account from Tools > Email Account" (`:528-532`) - in front of the inviter, since
+the invitation sends inside `after_insert`.
+
+**What the port did:** two paths. A lead's mail ran steps 1-3 in
+`crm_app.communication.find_outgoing_account` and went through the account's own SMTP
+details; step 4 was left out as "`site_config.json`, which this port does not have", so
+a site with no account was refused. System mail (`crm_app.mail`) never ran the lookup:
+`default_sender()` borrowed the default outgoing account's *address*, or
+`DEFAULT_FROM_EMAIL` (`crm@example.com`), and the message went through Django's
+`EMAIL_BACKEND`, which `.env` leaves at the console backend - so the invitation printed
+in the worker's terminal while the lead's mail reached the relay, and in production the
+two would have left through two different servers.
+
+**Fix (13 Oct 2026):** step 4 is ported, with Django's own mail settings as the port's
+`site_config.json` (`config/settings/base.py`, each read from the environment):
+
+| Setting | Upstream key |
+|---|---|
+| `EMAIL_HOST` | `mail_server`; empty means there is no config account |
+| `EMAIL_PORT` | `mail_port`; unset, 465 with SSL, 587 with TLS, else 25 |
+| `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` | `mail_login` / `mail_password`; no login means no SMTP authentication |
+| `EMAIL_USE_TLS` | `use_tls`, defaulting to whether `EMAIL_HOST_USER` is set |
+| `EMAIL_USE_SSL` | Django's own; the account's `use_ssl_for_outgoing` |
+| `DEFAULT_FROM_EMAIL` | `auto_email_id`, then `EMAIL_HOST_USER`, then `notifications@example.com` |
+| `EMAIL_SENDER_NAME` | `email_sender_name`, default `Frappe`: the account's name and the display name on system mail |
+| `EMAIL_ALWAYS_USE_ACCOUNT_EMAIL_ID_AS_SENDER` | `always_use_account_email_id_as_sender` |
+
+The names are Django's own on purpose: `django.core.mail.get_connection()` reads the
+first six itself, so the config account is the one account whose transport is
+`EMAIL_BACKEND` - `communication.open_backend` hands it to `get_connection()` - and the
+console backend carries it in development. `communication.config_account()` builds the
+unsaved `Email Account` from them, flagged `from_site_config`; `find_outgoing_account`
+returns it after the default-outgoing step. `outgoing_account_for` does not stamp it on
+`Communication.email_account`: the field names a row, the config account has none, and
+since the stamp is read back by the lookup a "Frappe" there would make the queued send
+find no account. `crm_app.mail.send` now runs the same lookup with no sender and no
+doctype, sends From `formataddr((account.email_account_name, account.email_id))`
+through `open_backend`, and raises `OutgoingEmailError` with upstream's sentence when
+there is nothing; `default_sender()` is gone.
+
+**Development:** `EMAIL_HOST=localhost` beside the console `EMAIL_BACKEND`
+(`.env.example`). The host is never contacted; its being set is what makes the config
+account exist, and the mail prints in the Celery worker's terminal as before.
+`DEFAULT_FROM_EMAIL` should be set explicitly when `EMAIL_HOST_USER` is not an address,
+since it falls back to the login the way upstream falls back to `mail_login`.
+
+**The invitation trade-off:** `OutgoingEmailError` is not in `send_invitation_email`'s
+`autoretry_for` - retrying would not make an account appear - so a deployment with no
+account and no `EMAIL_HOST` fails the task once with a logged traceback, and
+`email_sent_at` stays null, where upstream fails the invitation in front of the inviter.
+That is the phase-5 decision to send from a task rather than inside the request, now
+written on the task. The password-reset endpoint already catches everything and answers
+its one sentence.
+
+**Status:** fixed 13 Oct 2026. `tests/test_mail_config_account.py` covers the account's
+field map, the lookup order, both From rules on a lead's mail, and the invitation and the
+reset with and without the config account; `tests/test_phase5_async.py`,
+`tests/test_auth_pages.py` and `tests/test_invitation_access.py` create their invitations
+with the config account present, since an invitation with nothing to send through now
+fails its task. `config/settings/test.py` pins `EMAIL_HOST` empty so a developer's
+`.env` cannot vary what "no account" means under test.
 
 ## 82. Duplicate on an SLA policy did nothing: the document had no `doctype`
 
