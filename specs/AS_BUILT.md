@@ -372,6 +372,33 @@ field tool beside sensitive, read-only and restricted. A caller without the role
 field dropped from their payload before validation and the rest of the save goes through,
 which is upstream's silent reset. `User.user_emails` is the one use so far.
 
+**The Getting started panel is frappe-ui's, unchanged (recorded 13 Oct 2026).** The
+sidebar file is upstream's and the frappe-ui version is the one CRM pins, so the panel
+looks and behaves as upstream's does: shown to every CRM user on the desktop sidebar while
+their stored status has an unfinished step, opening by itself on each load until then;
+8 steps for a Sales User, 9 for a manager ("Invite your team"); done or skipped, the
+sidebar shows Help and the help centre instead, with "Reset onboarding steps" in its
+menu. Even its one defect is reproduced, the empty frame a finished user gets once on a
+browser that has not cached them (`UPSTREAM_BUGS.md` 49). What is the port's is behind
+it: the status pair `frappe.onboarding.get_onboarding_status` /
+`update_user_onboarding_status` on `User.onboarding_status` (`crm_app/api/onboarding.py`,
+FINDINGS 39; one divergence, an unset status is `{}` where upstream's first save 500s,
+`UPSTREAM_BUGS.md` 40); `get_first_lead` / `get_first_deal` for the steps that open a
+record; and the per-user browser cache keyed by the `user_id` cookie the port writes from
+the JWT (`frontend/JWT_PATCH.md`), Frappe's login cookie upstream. **"Clear Demo Data"
+never shows here**, by design: the sidebar lists it for a manager only when the boot
+values say `demo_data_created`, and the port's boot answer (`crm_app/api/boot.py`) is
+always false, since `crm/demo/` is regenerated as fixtures and there is no defaults store
+to hold upstream's marker (`crm_app/api/demo.py`). **The persona wizard at `/onboarding`**
+(`pages/PersonaForm.vue`) is upstream's one-time questionnaire for an admin after first
+sign-in - how you manage sales today, where leads come from - whose answers go only to
+telemetry; `FCRM Settings.persona_captured` stops it recurring, and the router shows it
+only to an admin while that flag is unset *and* telemetry is enabled. The port answers
+`frappe.utils.telemetry.pulse.client.boot_config` itself (`crm_app/api/desk.py`), enabled
+only with a PostHog project and host configured, so locally the wizard is skipped, as on
+an upstream site with telemetry off. A Sales User who types the URL is sent Home, there
+and here.
+
 ---
 
 ### Added by the phase-4 security review — read this before adding any doctype
