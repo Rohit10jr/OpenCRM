@@ -231,10 +231,15 @@ EMAIL_HOST = env("EMAIL_HOST", default="")
 # `mail_login` and `mail_password`. No login means no SMTP authentication.
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
-# `use_tls`, falling back to whether there is a login - upstream's
-# `("use_tls", "mail_login")` pair (email_account.py:570).
-EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=bool(EMAIL_HOST_USER))
+# Django's own, with no upstream key: the account's `use_ssl_for_outgoing`, implicit TLS
+# on 465. Read first because the next line depends on it.
 EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
+# `use_tls`, falling back to whether there is a login - upstream's
+# `("use_tls", "mail_login")` pair (email_account.py:570) - and never alongside SSL:
+# Django's SMTP backend raises ValueError when both flags are set, so a deployment that
+# set EMAIL_USE_SSL and a login, and left this one to its default, could not send at
+# all. The same rule `frappe_core.mail.smtp_settings` applies to a saved account.
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=bool(EMAIL_HOST_USER)) and not EMAIL_USE_SSL
 # `mail_port`. Unset, the port the TLS flags imply, the way `frappe_core.mail.smtp_settings`
 # picks one for a saved account; 25 is plain SMTP, Django's own default.
 EMAIL_PORT = env.int("EMAIL_PORT", default=0) or (465 if EMAIL_USE_SSL else 587 if EMAIL_USE_TLS else 25)

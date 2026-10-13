@@ -2631,8 +2631,8 @@ two would have left through two different servers.
 | `EMAIL_HOST` | `mail_server`; empty means there is no config account |
 | `EMAIL_PORT` | `mail_port`; unset, 465 with SSL, 587 with TLS, else 25 |
 | `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` | `mail_login` / `mail_password`; no login means no SMTP authentication |
-| `EMAIL_USE_TLS` | `use_tls`, defaulting to whether `EMAIL_HOST_USER` is set |
-| `EMAIL_USE_SSL` | Django's own; the account's `use_ssl_for_outgoing` |
+| `EMAIL_USE_TLS` | `use_tls`, defaulting to whether `EMAIL_HOST_USER` is set, and off whenever `EMAIL_USE_SSL` is on |
+| `EMAIL_USE_SSL` | Django's own; the account's `use_ssl_for_outgoing`. Django's SMTP backend refuses both flags at once, so SSL drops TLS the way `frappe_core.mail.smtp_settings` does for a saved account (Codex, 13 Oct 2026: a login plus SSL with TLS unset defaulted TLS on and could not send) |
 | `DEFAULT_FROM_EMAIL` | `auto_email_id`, then `EMAIL_HOST_USER`, then `notifications@example.com` |
 | `EMAIL_SENDER_NAME` | `email_sender_name`, default `Frappe`: the account's name and the display name on system mail |
 | `EMAIL_ALWAYS_USE_ACCOUNT_EMAIL_ID_AS_SENDER` | `always_use_account_email_id_as_sender` |

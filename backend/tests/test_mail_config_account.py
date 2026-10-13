@@ -14,6 +14,11 @@ settings point at ``locmem`` - so its sends reach ``django.core.mail.outbox`` th
 ``open_backend`` would open a socket, so the fixture below patches that case only.
 """
 
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 from django.core import mail
 from django.test import override_settings
@@ -28,6 +33,17 @@ MAKE = "/api/method/frappe.core.doctype.communication.email.make"
 
 HOST = "smtp.example.test"
 FROM = "notifications@example.test"
+
+BACKEND = Path(__file__).resolve().parent.parent
+
+#: Builds the SMTP backend from the settings, which is what ``get_connection()`` returns in
+#: production, and reports the connection it would open. No ``django.setup()``: the backend
+#: reads the settings lazily and touches no model.
+SMTP_PROBE = (
+    "import os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.test'); "
+    "from django.core.mail.backends.smtp import EmailBackend; "
+    "b = EmailBackend(); print(f'FLAGS:{int(b.use_tls)},{int(b.use_ssl)},{b.port}')"
+)
 
 
 # --- fixtures ---------------------------------------------------------------------------
@@ -166,6 +182,40 @@ def test_no_login_means_no_smtp_authentication():
 
     assert account.no_smtp_authentication is True
     assert account.login_id_is_different is False
+
+
+@pytest.mark.parametrize("explicit_tls", [None, "True"], ids=["tls-unset", "tls-true"])
+def test_ssl_turns_tls_off_so_the_config_account_can_connect(explicit_tls):
+    """``EMAIL_USE_SSL`` with a login and ``EMAIL_USE_TLS`` unset defaulted TLS on too, and
+    Django's SMTP backend refuses both flags (``ValueError``) before it opens a socket, so
+    the config account could not send at all (Codex, 13 Oct 2026). SSL now drops TLS, the
+    rule ``frappe_core.mail.smtp_settings`` applies to a saved account, whether TLS was
+    left to its default or set outright.
+
+    The defaults are computed when ``base.py`` is imported, out of ``override_settings``'s
+    reach, so a fresh interpreter evaluates them - as ``test_integration_isolation`` does.
+    Building the backend is the assertion: the broken pair fails right there. ``base.py``
+    also reads the developer's ``.env`` for whatever the environment leaves unset, so the
+    unset case is only as strict as that file; the explicit case does not depend on it.
+    """
+    env = {k: v for k, v in os.environ.items() if k not in ("EMAIL_USE_TLS", "EMAIL_PORT")}
+    env.update(EMAIL_HOST=HOST, EMAIL_HOST_USER="relay-login", EMAIL_USE_SSL="True")
+    if explicit_tls is not None:
+        env["EMAIL_USE_TLS"] = explicit_tls
+
+    result = subprocess.run(
+        [sys.executable, "-c", SMTP_PROBE],
+        cwd=BACKEND,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+
+    assert result.returncode == 0, result.stderr[-2000:]
+    line = [l for l in result.stdout.splitlines() if l.startswith("FLAGS:")]
+    assert line, f"probe did not report; stdout={result.stdout[-500:]}"
+    assert line[0] == "FLAGS:0,1,465", "use_tls, use_ssl, port: implicit TLS on 465, STARTTLS off"
 
 
 def test_the_config_account_sends_through_the_configured_backend(config_account):
