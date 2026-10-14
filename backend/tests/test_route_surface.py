@@ -89,7 +89,6 @@ NOT_YET_REVIEWED = {
     "CRM Telephony Agent": "holds colleagues' phone numbers",
     "CRM Service Level Agreement": "SLA definitions; writes change response deadlines",
     "CRM Product": "catalogue data; writes change prices used in deal totals",
-    "Email Template": "writes change the wording of mail the system sends on your behalf",
 }
 
 

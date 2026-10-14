@@ -153,6 +153,13 @@ def register() -> None:
         permission_query_conditions=platform_docs.contact_query_conditions,
         has_permission=platform_docs.contact_has_permission,
     )
+    # Email Template (FINDINGS.md 87, the role passes): upstream's role table, reproduced.
+    # Every role reads; System Manager alone creates, writes and deletes.
+    register_permission_hooks(
+        "Email Template",
+        permission_query_conditions=platform_docs.email_template_query_conditions,
+        has_permission=platform_docs.email_template_has_permission,
+    )
     # Language (FINDINGS.md 58): the same shape, reference data every role reads and
     # System Manager maintains.
     register_permission_hooks(

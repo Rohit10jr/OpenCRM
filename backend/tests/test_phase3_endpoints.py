@@ -1407,15 +1407,17 @@ def test_search_link_user_takes_the_frontends_ignore_user_type_key(auth_api, ali
     assert "portal@example.com" not in plain, "without the flag, Website Users are hidden"
 
 
-def test_rename_doc_moves_the_row(auth_api, alice):
+def test_rename_doc_moves_the_row(api_as, administrator):
+    """As a System Manager: since FINDINGS.md 87 an Email Template is written by System
+    Manager alone, as upstream's role table says (``tests/test_email_template_rule.py``)."""
     from frappe_platform.models import EmailTemplate
 
-    with session_user(alice.name):
+    with session_user(administrator.name):
         template = EmailTemplate(name="Welcome", subject="Hi")
         template.save()
 
     response = call(
-        auth_api,
+        api_as(administrator),
         "frappe.client.rename_doc",
         {"doctype": "Email Template", "old_name": "Welcome", "new_name": "Greeting"},
     )
@@ -1424,15 +1426,15 @@ def test_rename_doc_moves_the_row(auth_api, alice):
     assert not EmailTemplate.objects.filter(pk="Welcome").exists()
 
 
-def test_rename_doc_refuses_merge(auth_api, alice):
+def test_rename_doc_refuses_merge(api_as, administrator):
     from frappe_platform.models import EmailTemplate
 
-    with session_user(alice.name):
+    with session_user(administrator.name):
         EmailTemplate(name="A", subject="a").save()
         EmailTemplate(name="B", subject="b").save()
 
     response = call(
-        auth_api,
+        api_as(administrator),
         "frappe.client.rename_doc",
         {"doctype": "Email Template", "old_name": "A", "new_name": "B", "merge": True},
     )

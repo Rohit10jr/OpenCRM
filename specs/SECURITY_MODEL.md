@@ -93,6 +93,25 @@ recovered: 'sw0rdfish!'   ← ["password","like","<prefix>%"], one character per
 
 ---
 
+## `Email Template`
+
+Ruled on 14 Oct 2026 from the role passes (`docs/FINDINGS.md` 87). Upstream's
+`email_template.json`: `Desk User` reads, and that is the role every System User holds
+(`frappe/permissions.py:36`), so every CRM user; `System Manager` alone creates, writes
+and deletes. CRM adds nothing to the table and shows the Templates page to every role.
+
+| Action | Upstream | Before | Now |
+|---|---|---|---|
+| Read, list | Every System User | Anyone | Anyone — the mail editor's picker needs the list |
+| Create / write / delete / rename | System Manager | **Anyone** | **System Manager** — match |
+
+`email_template_has_permission` answers every door at once: the resource route and the
+`frappe.client.*` methods the Templates page uses. No field is sensitive; the risk was
+rewriting the wording of mail sent in the company's name. Matches upstream exactly,
+unlike `Email Account`, where this port lets managers write (divergence 2).
+
+---
+
 ## `User`
 
 | | Upstream | Before | Now |

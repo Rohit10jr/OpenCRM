@@ -371,7 +371,7 @@ locally and on the hosted demo for comparison. Deletes (area 1) are still to do.
 | Delete: contact (K7) | Deleted Administrator's | Deleted Administrator's | **finding 86**: upstream lets a rep or manager delete only a contact they created (`contact.json`, the `All` row with `if_owner`); the demo refused both. Ruled 14 Oct 2026; retest |
 | Delete: address | No control in the frontend | No control | ok: the address modal creates and edits, "remove" clears the link; the API refuses both, as upstream (System Manager only) |
 | Delete: email account | No control in the frontend | No page | ok: an account is disabled, not deleted; through the API a manager may delete here where upstream allows System Manager only, divergence 2 in `specs/SECURITY_MODEL.md` |
-| Email templates (S11) | Creates, edits, deletes | Creates, edits, deletes | **open**: upstream's `email_template.json` is System Manager for create, edit and delete, read for everyone else, and CRM adds nothing; the port has no rule. Decision pending: match upstream, or managers as for email accounts |
+| Email templates (S11) | Created, edited, deleted | Created, edited, deleted | **finding 87**: upstream's `email_template.json` is System Manager for create, edit and delete, read for everyone else, and CRM adds nothing; the port had no rule. Ruled 14 Oct 2026 to match upstream; retest: both see the list and the mail editor's picker, both refused on New, edit and delete |
 
 ## API coverage
 
