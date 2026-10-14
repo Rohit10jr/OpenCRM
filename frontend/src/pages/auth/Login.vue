@@ -3,7 +3,7 @@
   token pair and `stores/session.js` already stores it. This is the page that was missing.
 -->
 <template>
-  <AuthLayout :title="__('Sign in to Frappe CRM')">
+  <AuthLayout :title="__('Sign in to Open CRM')">
     <form class="flex flex-col gap-4" @submit.prevent="submit">
       <!--
         `type="text"`, not `type="email"`. The backend authenticates against `User.name`,
