@@ -11,7 +11,7 @@ test.use({ storageState: { cookies: [], origins: [] } })
 test.describe('the login page', () => {
   test('shows the sign-in form', async ({ page }) => {
     await page.goto('/crm/login')
-    await expect(page.getByRole('heading', { name: 'Sign in to Frappe CRM' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Sign in to Open CRM' })).toBeVisible()
     await expect(page.locator('input[name="username"]')).toBeVisible()
     await expect(page.locator('input[name="password"]')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible()

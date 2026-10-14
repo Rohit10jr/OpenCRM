@@ -36,7 +36,7 @@ from django.template.loader import render_to_string
 logger = logging.getLogger(__name__)
 
 #: Upstream's own product name, used in subjects and bodies.
-APP_NAME = "Frappe CRM"
+APP_NAME = "Open CRM"
 
 
 def send(template: str, *, subject: str, to: str, context: dict) -> None:

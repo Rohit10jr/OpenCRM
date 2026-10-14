@@ -157,6 +157,7 @@
       v-if="showHelpModal"
       v-model="showHelpModal"
       v-model:articles="articles"
+      title="Open CRM"
       :logo="CRMLogo"
       :afterSkip="(step) => capture('onboarding_step_skipped_' + step)"
       :afterSkipAll="() => capture('onboarding_steps_skipped')"
@@ -719,7 +720,7 @@ const articles = ref([
     ],
   },
   {
-    title: __('Frappe CRM mobile'),
+    title: __('Open CRM mobile'),
     opened: false,
     subArticles: [
       { name: 'mobile-app-installation', title: __('Mobile App Installation') },
