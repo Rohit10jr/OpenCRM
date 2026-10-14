@@ -15,6 +15,8 @@ and anything a future agent would otherwise rediscover the hard way.
 | 5 | The frontend test suite had never been executed; the realtime layer had never run on real Redis | ✅ **Both run** — 152 frontend tests pass, cross-process delivery confirmed |
 | 6 | Logging out does not stop an access token already issued — it works for up to 5 more minutes | ⏸️ **Open, accepted** — inherent to stateless JWT; three ways out are costed below |
 | 9 | The frontend is slow to load | ⏸️ **Open, deferred** — to be examined after the browser testing is finished and `phase-8-followup` is merged; what is known and what to measure first are below |
+| 11 | Upstream has moved on since the pin | ⏸️ **Open** — compare against the clone, not the cloud, until the pin moves |
+| 12 | The frontend still says "Frappe" in a few places after the Open CRM rename | ⏸️ **Open** — the locations are listed; to be handled later |
 | 10 | Nothing is translated: the interface and the server's messages are English only | ⏸️ **Open, deferred** — to be built after the browser testing; the design, step by step, is below |
 
 ---
@@ -826,4 +828,38 @@ a piece of work of its own: re-run the frontend diff for the port's patches
 (`frontend/JWT_PATCH.md`), re-check every cited line number, and re-port whatever the
 514 commits changed on the backend side. Until then, compare against the clone, not the
 cloud, and record cloud-only differences the way 84 is recorded.
+
+---
+
+## 12. The frontend still says "Frappe" in a few places after the Open CRM rename
+
+Every "Frappe CRM" in `frontend/` became "Open CRM" on 14 Oct 2026 (`7e466b0`), and the
+two system mails followed (`09fb491`). These are the places that still say "Frappe",
+listed to be handled later. Paths under `frontend/src/` unless given in full.
+
+**Visible text**
+
+- `components/Modals/AboutModal.vue:32` — "© Frappe Technologies Pvt. Ltd. and contributors"
+- `components/Modals/AboutModal.vue:51,56,61,66,71` — the Website, GitHub Repository,
+  Documentation, Report an Issue and Contact Support links, all to frappe.io, Frappe's
+  GitHub, docs.frappe.io and support.frappe.io
+- `components/Layouts/AppSidebar.vue:166` — the help centre's `docsLink`,
+  `https://docs.frappe.io/crm`
+- `components/Settings/emailConfig.js:81,156-159,173` — the "Frappe Mail" provider and
+  its "Frappe Mail Site" field
+- `components/UserDropdown.vue:146-148` and `composables/frappecloud.js:17-40` — the
+  "Login to Frappe Cloud" menu item and its dialog (renders only when `window.is_fc_site`)
+
+**Code**
+
+- the `frappe.*` method names in every `call(...)` and resource `url`, and the
+  `frappe-ui` imports
+- `components/FilesUploader/filesUploaderHandler.ts:98` — the `X-Frappe-CSRF-Token` header
+- the onboarding key `frappecrm` (`useOnboarding('frappecrm')` in the sidebar and twelve
+  other components; it names `User.onboarding_status` and the browser cache)
+
+**Comments**
+
+- `auth/jwtRequest.js:37`, `auth/tokens.js:4-6`, `socket.js:4`,
+  `components/Controls/GeolocationControl.vue:221,247`, `components/SidePanelLayout.vue:302`
 
