@@ -94,6 +94,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 82 | Settings → SLA Policies → Duplicate | medium | Duplicate did nothing. The screen fetches the policy with `frappe.client.get` and posts the whole document back into `frappe.client.insert` with the new name; upstream's documents always carry a `doctype` key (`as_dict`), the port's did not, so the insert answered 417 "doctype is required" and the screen, with no error handler, showed nothing. Every document the port serialises now carries `doctype`, child rows included | **fixed** 7 Oct 2026 |
 | 83 | frontend: a wrong URL with a second segment, `/crm/leadsdss/CRM-LEAD-…` | low | A blank page where `/crm/leaderssf` shows "Invalid page or not permitted to access": upstream's catch-all route `/:invalidpath` matches one segment only, so a two-segment typo matches nothing. The same on the hosted demo (upstream bug 48). Patched here by decision: `/:invalidpath(.*)*`, the router's real catch-all, noted in `frontend/JWT_PATCH.md` | **fixed** 7 Oct 2026, by patch |
 | 84 | the Products grid's Edit Grid Fields dialog (D26) looks different from the hosted upstream | low | Not a port fault: the port's frontend is upstream's pinned at `6583bfcdc` (11 Sep 2026), and `git fetch` on 7 Oct 2026 shows upstream `main` at `deedce73c` (30 Sep 2026), 514 commits ahead, three of them on the grid (`946c24d8f` align child table header with rows, `53080db04` fetch_from support in fields, `b29f99452` translate Select option labels). The grid files here are byte-identical to the pinned clone, and the port's `getdoctype` for `CRM Products` matches the pinned json field for field. Kept for the day the pin moves | open, version gap |
+| 85 | Settings → Brand (S6): the logo and favicon showed for the account that uploaded them and for nobody else; the same for a profile photo and the lead, contact and organization images | medium | frappe-ui uploads privately unless told otherwise and the image uploaders never tell it otherwise, so each image is a private File row attached to nothing, which the File rule lets its owner alone read. Upstream has the same upload and the same rule, and shows the logo to everyone because a framework hook, `attach_files_to_document`, runs on every document save and attaches the file an Attach field names to that document; the File rule then defers to the document, and FCRM Settings is readable by every CRM role. The port had no such step. Ported as a `post_save` receiver on every doctype with an Attach field (`frappe_platform.files`), `ATTACH_FIELDS` declared on User and Contact, whose metadata is derived from the model | **fixed** 14 Oct 2026 |
 
 ---
 
@@ -2698,3 +2699,44 @@ worked: `name`, `creation` and the other stamped fields are read-only on the way
 and `prepare_rows` strips a child row's `name`.
 
 Covered by `tests/test_document_doctype_key.py`.
+
+---
+
+## 85. The brand logo showed for the account that uploaded it and for nobody else
+
+**Block:** Settings → Brand (S6), 14 Oct 2026. Administrator uploads a logo and a
+favicon, presses Update, and sees them in the sidebar. Every other account sees the
+default. The same holds for a profile photo and for the lead, contact and organization
+images: each is visible to its uploader alone.
+
+**Why.** frappe-ui's `FileUploader` (1.0.0-beta.29, the version CRM pins) sends
+`is_private=1` unless its `uploadArgs` say otherwise, and none of the image uploaders in
+this app say otherwise - `ImageUploader.vue` passes no arguments, and neither do the
+uploaders on the lead, contact, organization and profile pages. Nor do they name a
+document. So each image is a private File row attached to nothing. The port's File rule
+(`crm_app/permissions/attachments.py`, upstream's `file.py:1066-1106`) lets a private
+unattached file be read by its owner alone, so every other account's `<img>` gets a 403.
+Confirmed in the local database: `/private/files/queryn-logo-plain.ico`, two rows, both
+private, both unattached, both owned by Administrator.
+
+**Why upstream shows it anyway.** Upstream has the same uploader and the same rule. What
+it also has is `attach_files_to_document` (`frappe/core/doctype/file/utils.py:354-415`),
+run from `frappe/hooks.py:205,227` on every document's `on_update`: for each Attach and
+Attach Image field whose value is a file URL, it finds the unattached File row at that
+URL and stamps it with the document, field and the privacy the URL implies, or creates a
+URL-only row if there is none. From then on the File rule defers to the attached
+document, and FCRM Settings is readable by every CRM role (SECURITY_MODEL.md), as a User
+is here (divergence 5), so the logo and the avatars reach everyone. The port had no such
+step: `upload_file` attaches only when the upload itself names a document, which these
+uploaders never do.
+
+**Fix (14 Oct 2026):** the hook is ported as `frappe_platform.files.attach_files_to_document`,
+wired by `connect_attach_on_save` from `crm_app.apps.ready` to `post_save` of every
+non-child doctype that declares an Attach field, so a doctype without one pays nothing.
+The fields come from the DocType JSON for a CRM doctype and, for the platform doctypes
+that ship none, from a new `ATTACH_FIELDS` declaration on the model, which
+`field_meta._derive_from_model` reports as `Attach Image`: `User.user_image` and
+`Contact.image`. Rows already uploaded attach the next time their document is saved -
+pressing Update on the Brand page once is enough for the existing logo.
+
+Covered by `tests/test_attach_on_save.py`.

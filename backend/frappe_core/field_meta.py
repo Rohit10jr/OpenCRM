@@ -137,6 +137,11 @@ def _derive_from_model(doctype: str) -> list[dict]:
     # says Link, which is the shape the CRM doctypes already have for the same two
     # fields - a text column in the model, a Link in the JSON (FINDINGS.md 66).
     link_fields = getattr(model, "LINK_FIELDS", None) or {}
+    # Likewise a text column that upstream declares as an Attach Image (``User.user_image``,
+    # ``Contact.image``): the model lists it in ``ATTACH_FIELDS``, which is how the
+    # attach-on-save hook (``frappe_platform.files.attach_files_to_document``) learns that
+    # the column holds a file URL (FINDINGS.md 85).
+    attach_fields = getattr(model, "ATTACH_FIELDS", None) or ()
     fields = []
     for field in model._meta.get_fields():
         if not getattr(field, "concrete", False):
@@ -146,6 +151,8 @@ def _derive_from_model(doctype: str) -> list[dict]:
             fieldtype = "Select"
         if field.name in link_fields:
             fieldtype = "Link"
+        elif field.name in attach_fields:
+            fieldtype = "Attach Image"
         entry = {
             "fieldname": field.name,
             "fieldtype": fieldtype,

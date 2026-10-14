@@ -117,6 +117,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     #: ``options: Email`` upstream; a Django EmailField's own validator does not run on
     #: ``save()``, so the Frappe check is declared like everywhere else.
     EMAIL_FIELDS = ("email",)
+    #: ``Attach Image`` upstream (``user.json``). A text column says nothing about what it
+    #: holds; this is what lets attach-on-save (``frappe_platform.files``) make a profile
+    #: photo the User's attachment, readable by colleagues (FINDINGS.md 85).
+    ATTACH_FIELDS = ("user_image",)
 
     name = models.CharField(max_length=140, primary_key=True)
     email = models.EmailField(max_length=140, blank=True, default="")
@@ -326,6 +330,8 @@ class Contact(BaseDocument):
     designation = models.CharField("Designation", max_length=140, blank=True, default="")
     gender = models.CharField("Gender", max_length=140, blank=True, default="")
     image = models.CharField("Image", max_length=500, blank=True, default="")
+    #: ``Attach Image`` upstream (``contact.json``); see ``User.ATTACH_FIELDS``.
+    ATTACH_FIELDS = ("image",)
     #: ``contact.json``: a Select, default Passive, and a standard filter. It is the
     #: first of the three quick filters the contacts list is installed with
     #: (``crm/install.py:514``), which had been silently dropped for want of the column.

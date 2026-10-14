@@ -33,6 +33,19 @@ class CrmAppConfig(AppConfig):
             if not entry.is_child_table and doctype not in REFERENCE_DOCTYPES:
                 connect_cascade(entry.model)
 
+        # Upstream's `attach_files_to_document` runs on every document's `on_update`
+        # (frappe/hooks.py:205,227): the file an Attach field names becomes the document's
+        # attachment, and the File rule then lets anyone who may read the document fetch
+        # it. Without it the brand logo, a private upload like every other, was readable
+        # by its uploader alone (FINDINGS.md 85). Only a model that declares an Attach
+        # field gets a receiver.
+        from frappe_platform.files import connect_attach_on_save
+
+        for doctype in registry.all_doctypes():
+            entry = registry.get_entry(doctype)
+            if not entry.is_child_table:
+                connect_attach_on_save(entry.model, doctype)
+
         # Phase 3: importing the package runs the @whitelist decorators, which is what
         # makes each dotted path resolvable. Without this the method map is empty.
         from crm_app import api  # noqa: F401
