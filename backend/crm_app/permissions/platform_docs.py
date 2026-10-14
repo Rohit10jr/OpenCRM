@@ -408,6 +408,27 @@ def address_has_permission(doc, ptype: str = "read", user: str | None = None):
     return _is_admin(user)
 
 
+def contact_query_conditions(doctype: str, user: str | None = None):
+    """Everyone reads every contact: the Sales User and Sales Manager rows of
+    ``contact.json`` carry ``read`` with no owner condition."""
+    return None
+
+
+def contact_has_permission(doc, ptype: str = "read", user: str | None = None):
+    """``contact.json``'s role table (FINDINGS.md 86). Sales User and Sales Manager hold
+    read, write and create on every contact and **no delete**; the ``All`` row holds
+    delete with ``if_owner``, so a contact is deleted by the user who created it or by a
+    System Manager, and by nobody else. The hosted demo refuses a manager the same way.
+    """
+    user = user or get_current_user()
+    if ptype != "delete":
+        return True
+    if _is_admin(user):
+        return True
+    owner = getattr(doc, "owner_id", None) or getattr(doc, "owner", None)
+    return bool(owner) and str(owner) == str(user)
+
+
 def country_query_conditions(doctype: str, user: str | None = None):
     """Everyone reads the list; it is what the Country picker shows."""
     return None

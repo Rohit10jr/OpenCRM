@@ -366,6 +366,12 @@ locally and on the hosted demo for comparison. Deletes (area 1) are still to do.
 | Another user's notes and tasks | Edits Administrator's | Edits Administrator's | ok: no owner rule on either, as upstream |
 | Settings sections | Every group | Profile, Preferences, Email → Templates, Integrations → Telephony only | ok |
 | Dashboard | User filter, no Edit | Neither | ok |
+| Delete: lead, deal | Deletes what she sees | Deletes what she sees | ok: all three roles hold delete upstream; visibility is the hierarchy rule above |
+| Delete: note, task, call log, organization | Deletes any | Deletes any | ok: all three roles hold delete upstream, no owner condition |
+| Delete: contact (K7) | Deleted Administrator's | Deleted Administrator's | **finding 86**: upstream lets a rep or manager delete only a contact they created (`contact.json`, the `All` row with `if_owner`); the demo refused both. Ruled 14 Oct 2026; retest |
+| Delete: address | No control in the frontend | No control | ok: the address modal creates and edits, "remove" clears the link; the API refuses both, as upstream (System Manager only) |
+| Delete: email account | No control in the frontend | No page | ok: an account is disabled, not deleted; through the API a manager may delete here where upstream allows System Manager only, divergence 2 in `specs/SECURITY_MODEL.md` |
+| Email templates (S11) | Creates, edits, deletes | Creates, edits, deletes | **open**: upstream's `email_template.json` is System Manager for create, edit and delete, read for everyone else, and CRM adds nothing; the port has no rule. Decision pending: match upstream, or managers as for email accounts |
 
 ## API coverage
 

@@ -841,7 +841,16 @@ def test_exactly_the_intended_doctypes_have_row_rules():
     # them (FINDINGS.md 45, 58, 66): reference data everyone reads and System Manager
     # writes, upstream's own role tables reproduced (permissions/platform_docs.py).
     added_by_the_browser_passes = {"Address", "Country", "Language", "Salutation", "Gender"}
-    assert with_rules == upstream | added_by_phase_4 | added_by_phase_7 | added_by_the_browser_passes
+    # The role passes (FINDINGS.md 86): upstream's Contact role table reproduced - every
+    # role reads, writes and creates; the creator or a System Manager deletes.
+    added_by_the_role_passes = {"Contact"}
+    assert with_rules == (
+        upstream
+        | added_by_phase_4
+        | added_by_phase_7
+        | added_by_the_browser_passes
+        | added_by_the_role_passes
+    )
 
 
 def test_the_upstream_three_still_use_the_org_hierarchy_rule():

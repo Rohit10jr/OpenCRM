@@ -83,8 +83,7 @@ REVIEWED_OPEN = {
 #: Registered, routable, and **nobody has audited it**. Each entry names the question,
 #: not a guess. Emptying this list is A7.
 NOT_YET_REVIEWED = {
-    "Contact": "shared across leads and deals; upstream relies on role permissions",
-    "CRM Organization": "same as Contact - is org data meant to be company-wide?",
+    "CRM Organization": "is org data meant to be company-wide? (Contact got its rule on 14 Oct 2026)",
     "Tag": "low risk, but writes are unconstrained",
     "CRM Call Log": "call history references leads and deals; recording URLs are on the row",
     "CRM Telephony Agent": "holds colleagues' phone numbers",
