@@ -49,7 +49,7 @@ from the Notes pass; every one answered 200.
 | # | Action | How | Calls | Result | Finding | Auto |
 |---|---|---|---|---|---|---|
 | B1 | Page load | Sign in, or reload any page; the sidebar, the user menu and the notification bell render | `crm.www.crm.get_context_for_dev`, `frappe.utils.telemetry.pulse.client.boot_config`, `crm.api.session.get_users`, `frappe.client.get_single_value`, `crm.api.notifications.get_notifications`, `crm.integrations.api.is_call_integration_enabled`, `frappe.client.get`, `frappe.apps.get_apps`, `crm.api.views.get_views` | ok | 50 (icon only) | e2e |
-| B2 | Getting started panel | Shown to every CRM user on the desktop sidebar while their stored status (`User.onboarding_status`) has an unfinished step, and the panel opens by itself on each load until then; a Sales User gets 8 steps, a manager 9 (Invite your team). Steps link to your first lead and first deal. Done or skipped, the sidebar shows Help instead; the panel's ⋯ → Reset onboarding steps brings it back. The browser caches the status per user (`localStorage` `onboardingStatus`, `isOnboardingStepsCompletedfrappecrm<user>`), so a user whose row says all done opens to an empty panel once on a fresh browser (upstream 49). "Clear demo data" shows only when the site says demo data was created, which the local port does not | `crm.api.onboarding.get_first_lead`, `crm.api.onboarding.get_first_deal`, `crm.demo.api.clear_demo_data` | | upstream 49 | |
+| B2 | Getting started panel | Shown to every CRM user on the desktop sidebar while their stored status (`User.onboarding_status`) has an unfinished step, and the panel opens by itself on each load until then; a Sales User gets 8 steps, a manager 9 (Invite your team). Steps link to your first lead and first deal. Done or skipped, the sidebar shows Help instead; the panel's ⋯ → Reset onboarding steps brings it back. The browser caches the status per user (`localStorage` `onboardingStatus`, `isOnboardingStepsCompletedfrappecrm<user>`), so a user whose row says all done opens to an empty panel once on a fresh browser (upstream 49). "Clear demo data" shows only when the site says demo data was created, which the local port does not | `crm.api.onboarding.get_first_lead`, `crm.api.onboarding.get_first_deal`, `crm.demo.api.clear_demo_data` | ok | upstream 49 | |
 
 ## Notes (`/crm/notes`)
 
@@ -309,7 +309,7 @@ it. A5 needs a short token life: set `JWT_ACCESS_TOKEN_LIFETIME_MINUTES=1` in th
 | A4 | The session survives a reload | Reload any page: still signed in, no login page, the user menu shows you | `frappe.auth.get_logged_user`, the boot calls | ok | | e2e |
 | A5 | Token refresh | With the one-minute token life: sign in, wait two minutes, click anything; it works with no login page, the pair was renewed behind the click | `token/refresh` | ok | | |
 | A6 | Sign out | User menu → Log out → the login page; Back does not show the app; a reload stays on the login page | `logout` | ok | | e2e |
-| A7 | Forgot password | Login page → Forgot Password → your address → Send; the worker's console prints the link (system mail through the config account, so `EMAIL_HOST` must be set in `.env`, finding 79; with none the worker logs "Please setup default outgoing Email Account") → open it → a new password twice → Update; sign in with it | `frappe.core.doctype.user.user.reset_password`, `frappe.core.doctype.user.user.update_password`, `login` | | 79 | e2e (form only) |
+| A7 | Forgot password | Login page → Forgot Password → your address → Send; the worker's console prints the link (system mail through the config account, so `EMAIL_HOST` must be set in `.env`, finding 79; with none the worker logs "Please setup default outgoing Email Account") → open it → a new password twice → Update; sign in with it | `frappe.core.doctype.user.user.reset_password`, `frappe.core.doctype.user.user.update_password`, `login` | ok | 79 | e2e (form only) |
 | A8 | Accept an invitation | The link the worker printed for S8 (same `EMAIL_HOST` need as A7; an invitation sent with no account is not retried, so send a new one after setting it) → set a password → the invited user lands in the app, with the role the invite gave | `crm.api.accept_invitation`, `login` |   | 79 | |
 | A9 | A wrong URL | Signed in, open `/crm/leaderssf` → "Invalid page or not permitted to access" (upstream's `InvalidPage.vue`, its catch-all route); open a lead URL with a wrong id → "Document not found" from the lead page | `frappe.client.get` | failed: a wrong path with a second segment (/crm/leadsdss/CRM-LEAD-...) drew a blank page, here and on the demo; the one-segment cases showed their messages. Router patched; retried 13 Oct 2026: ok, both URLs show their messages | 83 (fixed, patch) | |
 
@@ -354,6 +354,18 @@ The rows where permissions differ, repeated as Sales Manager (`grace@example.com
 Sales User (`ada@example.com`) after the Administrator pass: delete on each doctype,
 another user's records, the Settings sections, the dashboard's Edit button. Recorded as
 extra columns on those rows rather than separate tables.
+
+### Results, 14 Oct 2026
+
+Three of the four areas done as Grace and then Ada, with Enable Sales Hierarchy off,
+locally and on the hosted demo for comparison. Deletes (area 1) are still to do.
+
+| Area | Grace (Sales Manager) | Ada (Sales User) | Verdict |
+|---|---|---|---|
+| Another user's leads and deals | Sees and edits Administrator's leads; the owner filter works | Sees only the leads she owns or is assigned; Administrator's are not listed | **ok, matches upstream**: a Sales User outside the hierarchy gets own and assigned records whatever the switch says (`crm/permissions/org_hierarchy.py:53-60`, here `crm_app/permissions/org_hierarchy.py:187`); the switch only widens that to the subtree. The demo behaves the same. The tester's brief had said "everyone sees everything with the switch off", which was wrong |
+| Another user's notes and tasks | Edits Administrator's | Edits Administrator's | ok: no owner rule on either, as upstream |
+| Settings sections | Every group | Profile, Preferences, Email → Templates, Integrations → Telephony only | ok |
+| Dashboard | User filter, no Edit | Neither | ok |
 
 ## API coverage
 
