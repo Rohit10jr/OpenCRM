@@ -144,6 +144,22 @@ def register() -> None:
         permission_query_conditions=platform_docs.country_query_conditions,
         has_permission=platform_docs.country_has_permission,
     )
+    # Contact (FINDINGS.md 86, the role passes): upstream's role table, reproduced. Every
+    # role reads, writes and creates any contact; delete is the `All` row's with
+    # `if_owner`, so the creator or a System Manager. Without this any CRM user deleted
+    # any contact - the security exception CLAUDE.md names, read as a missing hook.
+    register_permission_hooks(
+        "Contact",
+        permission_query_conditions=platform_docs.contact_query_conditions,
+        has_permission=platform_docs.contact_has_permission,
+    )
+    # Email Template (FINDINGS.md 87, the role passes): upstream's role table, reproduced.
+    # Every role reads; System Manager alone creates, writes and deletes.
+    register_permission_hooks(
+        "Email Template",
+        permission_query_conditions=platform_docs.email_template_query_conditions,
+        has_permission=platform_docs.email_template_has_permission,
+    )
     # Language (FINDINGS.md 58): the same shape, reference data every role reads and
     # System Manager maintains.
     register_permission_hooks(

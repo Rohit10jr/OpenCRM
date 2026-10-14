@@ -93,6 +93,25 @@ recovered: 'sw0rdfish!'   ← ["password","like","<prefix>%"], one character per
 
 ---
 
+## `Email Template`
+
+Ruled on 14 Oct 2026 from the role passes (`docs/FINDINGS.md` 87). Upstream's
+`email_template.json`: `Desk User` reads, and that is the role every System User holds
+(`frappe/permissions.py:36`), so every CRM user; `System Manager` alone creates, writes
+and deletes. CRM adds nothing to the table and shows the Templates page to every role.
+
+| Action | Upstream | Before | Now |
+|---|---|---|---|
+| Read, list | Every System User | Anyone | Anyone — the mail editor's picker needs the list |
+| Create / write / delete / rename | System Manager | **Anyone** | **System Manager** — match |
+
+`email_template_has_permission` answers every door at once: the resource route and the
+`frappe.client.*` methods the Templates page uses. No field is sensitive; the risk was
+rewriting the wording of mail sent in the company's name. Matches upstream exactly,
+unlike `Email Account`, where this port lets managers write (divergence 2).
+
+---
+
 ## `User`
 
 | | Upstream | Before | Now |
@@ -444,6 +463,7 @@ route-surface test records a decision rather than an omission.
 | `Country` | `All`: read; System Manager: write, create | Same: `country_has_permission` allows `read` to everyone, the rest to System Manager |
 | `Language` (30 Sep 2026, `docs/FINDINGS.md` 58) | `All`: read; System Manager: everything | Same: `language_has_permission` allows `read` to everyone, the rest to System Manager. The Link target of `User.language`; reference data, no credential |
 | `Salutation`, `Gender` (1 Oct 2026, `docs/FINDINGS.md` 66) | `All`: read; System Manager: everything | Same: `reference_data_has_permission` allows `read` to everyone, the rest to System Manager. The Link targets of `salutation` and `gender` on a contact, a lead and a deal; one text field each |
+| `Contact` (14 Oct 2026, `docs/FINDINGS.md` 86, the role passes) | Sales User and Sales Manager: read, write, create, **no delete**; `All` with `if_owner`: delete; System Manager: delete | Same: `contact_has_permission` allows everything but `delete`, which is the creator's or System Manager's. The hosted demo refuses a manager the same way; before the rule any CRM user deleted any contact |
 
 No row rule on either (`*_query_conditions` return `None`): an address is shared data the
 organization and contact screens show to every role, and the country list is what the

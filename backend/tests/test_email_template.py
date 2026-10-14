@@ -127,23 +127,19 @@ def test_a_missing_template_is_a_404(auth_api):
 
 
 def test_any_authenticated_user_may_render_a_template(auth_api, template, lead):
-    """**No 403 case exists for Email Template in this port**, so this asserts the
-    opposite of what a permission test usually would.
-
-    Upstream calls ``check_permission("read")``, which resolves to the DocType's *role*
-    permissions - a layer this port does not model - and the port registers no row rule
-    for ``Email Template`` (``crm_app/permissions/__init__.py``): ``check_object_permission``
-    therefore answers True for every authenticated user. That matches the product, where
-    the composer's template picker lists templates to every Sales User
+    """Upstream calls ``check_permission("read")``, which resolves to the DocType's role
+    permissions: ``email_template.json`` gives ``Desk User`` read, and every System User
+    holds that role, so every CRM user may render a template. Since FINDINGS.md 87 the
+    port has the row rule that says the same (``crm_app/permissions/__init__.py``): reads
+    open to everyone, create, write and delete for System Manager alone. The composer's
+    template picker keeps listing templates to every Sales User
     (``docs/http/13_bulk_and_misc.http`` 3.7 drives the same read through
-    ``/api/resource/``).
+    ``/api/resource/``); the refused writes are ``tests/test_email_template_rule.py``.
 
-    The check is still called, so a rule added later takes effect here with no change to
-    the endpoint - and the second assertion makes *this test* fail when that happens,
-    rather than leaving a stale claim behind.
+    The endpoint still calls the check, so this is the rule answering, not its absence.
     """
-    assert registry.get_entry("Email Template").has_permission is None, (
-        "a row rule now exists for Email Template - this test should assert a 403 instead"
+    assert registry.get_entry("Email Template").has_permission is not None, (
+        "the Email Template row rule is gone - FINDINGS.md 87"
     )
     response = render(auth_api, template.name, {"first_name": "Ada"})
     assert response.status_code == 200

@@ -187,6 +187,32 @@ def email_account_has_permission(doc, ptype: str = "read", user: str | None = No
 
 
 # ---------------------------------------------------------------------------
+# Email Template
+# ---------------------------------------------------------------------------
+#
+# Upstream's `email_template.json` (FINDINGS.md 87, the role passes): `Desk User` reads,
+# and `Desk User` is the role every System User holds (`frappe/permissions.py:36`), so
+# every CRM user; `System Manager` alone creates, writes and deletes. CRM adds nothing to
+# that table, and its Templates page is shown to every role, so a Sales User or Sales
+# Manager sees the list, picks a template in the mail editor, and is refused on New, on
+# an edit and on delete. The port had no rule, so any CRM user rewrote the wording of
+# mail sent in the company's name.
+
+
+def email_template_query_conditions(doctype: str, user: str | None = None):
+    """Everyone reads every template: the list feeds the mail editor's picker."""
+    return None
+
+
+def email_template_has_permission(doc, ptype: str = "read", user: str | None = None):
+    """Read for everyone; create, write and delete for System Manager."""
+    user = user or get_current_user()
+    if ptype in ("read", "select"):
+        return True
+    return _is_admin(user)
+
+
+# ---------------------------------------------------------------------------
 # Integration settings singles - A4
 # ---------------------------------------------------------------------------
 #
@@ -406,6 +432,27 @@ def address_has_permission(doc, ptype: str = "read", user: str | None = None):
     if ptype != "delete":
         return True
     return _is_admin(user)
+
+
+def contact_query_conditions(doctype: str, user: str | None = None):
+    """Everyone reads every contact: the Sales User and Sales Manager rows of
+    ``contact.json`` carry ``read`` with no owner condition."""
+    return None
+
+
+def contact_has_permission(doc, ptype: str = "read", user: str | None = None):
+    """``contact.json``'s role table (FINDINGS.md 86). Sales User and Sales Manager hold
+    read, write and create on every contact and **no delete**; the ``All`` row holds
+    delete with ``if_owner``, so a contact is deleted by the user who created it or by a
+    System Manager, and by nobody else. The hosted demo refuses a manager the same way.
+    """
+    user = user or get_current_user()
+    if ptype != "delete":
+        return True
+    if _is_admin(user):
+        return True
+    owner = getattr(doc, "owner_id", None) or getattr(doc, "owner", None)
+    return bool(owner) and str(owner) == str(user)
 
 
 def country_query_conditions(doctype: str, user: str | None = None):

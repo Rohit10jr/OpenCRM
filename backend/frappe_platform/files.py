@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import logging
 import os
 import re
 import secrets
@@ -173,6 +174,109 @@ def find_file_by_url(url: str, name: str | None = None):
         if check_object_permission(row, "read"):
             return row
     return None
+
+
+logger = logging.getLogger(__name__)
+
+#: ``Attach`` and ``Attach Image``: the two fieldtypes whose value is a file URL.
+ATTACH_FIELDTYPES = ("Attach", "Attach Image")
+#: ``utils.py:367``: a value that names a file, as opposed to a data URL or free text.
+_FILE_URL_PREFIXES = ("/files", "/private/files", "http://", "https://")
+
+
+def attach_fields_of(doctype: str) -> list[str]:
+    """The Attach and Attach Image fields ``doctype`` declares, by name.
+
+    From the DocType JSON for a CRM doctype; from the model's ``ATTACH_FIELDS`` for a
+    platform doctype, which ships none (``frappe_core.field_meta._derive_from_model``).
+    """
+    from frappe_core import field_meta
+
+    return [
+        field["fieldname"]
+        for field in field_meta.get_fields(doctype)
+        if field.get("fieldtype") in ATTACH_FIELDTYPES
+    ]
+
+
+def attach_files_to_document(instance, doctype: str, fieldnames=None) -> None:
+    """``utils.py:354-415`` (``attach_files_to_document``), the ``on_update`` hook upstream
+    runs for every doctype (``frappe/hooks.py:205,227``): the file an Attach field names
+    becomes an attachment of the document.
+
+    This is what makes a private upload readable by colleagues. frappe-ui uploads
+    privately unless told otherwise, and the image uploaders - brand logo and favicon,
+    profile photo, the lead, contact and organization images - neither tell it otherwise
+    nor name a document, so the File row lands unattached, readable by its owner alone
+    (``file_has_permission``). Attached, the File rule defers to the document: anyone who
+    may read FCRM Settings may fetch the brand logo (FINDINGS.md 85).
+
+    Per field: an attachment this document already has is left alone; an unattached row
+    at that URL is stamped with the document and field, ``is_private`` following the URL
+    as upstream sets it (``:398``); no row at all gets a URL-only one in Home/Attachments
+    (``:404-415``). That last insert cannot fail the save that triggered it - upstream
+    logs and moves on, and so does this.
+    """
+    from frappe_platform.models import File
+
+    if fieldnames is None:
+        fieldnames = attach_fields_of(doctype)
+    name = str(instance.pk)
+    for fieldname in fieldnames:
+        value = getattr(instance, fieldname, None) or ""
+        if not isinstance(value, str) or not value.startswith(_FILE_URL_PREFIXES):
+            continue
+        rows = File._default_manager.filter(file_url=value)
+        if rows.filter(
+            attached_to_doctype=doctype, attached_to_name=name, attached_to_field=fieldname
+        ).exists():
+            continue
+        unattached = rows.filter(
+            attached_to_doctype="", attached_to_name="", attached_to_field=""
+        ).first()
+        if unattached is not None:
+            # update(), as upstream's db.set_value: the insert path does not run again
+            # and no bytes are touched.
+            File._default_manager.filter(pk=unattached.pk).update(
+                attached_to_doctype=doctype,
+                attached_to_name=name,
+                attached_to_field=fieldname,
+                is_private=value.startswith("/private"),
+            )
+            continue
+        try:
+            File(
+                file_url=value,
+                attached_to_doctype=doctype,
+                attached_to_name=name,
+                attached_to_field=fieldname,
+                folder="Home/Attachments",
+            ).save()
+        except Exception:  # noqa: BLE001 - upstream's breadth: the document's save must stand
+            logger.exception("Error Attaching File: %s %s.%s", doctype, name, fieldname)
+
+
+def connect_attach_on_save(model, doctype: str) -> None:
+    """Wire :func:`attach_files_to_document` to ``post_save`` of a model that declares an
+    Attach field. A model that declares none gets no receiver, so the check costs nothing
+    on the saves that could never attach anything."""
+    from django.db.models.signals import post_save
+
+    fieldnames = attach_fields_of(doctype)
+    if not fieldnames:
+        return
+
+    def receiver(sender, instance, raw=False, **kwargs):
+        if raw:  # a fixture load; upstream's hook does not run there either
+            return
+        attach_files_to_document(instance, doctype, fieldnames)
+
+    post_save.connect(
+        receiver,
+        sender=model,
+        weak=False,
+        dispatch_uid=f"frappe_platform.files.attach.{model._meta.label}",
+    )
 
 
 def optimize_image(

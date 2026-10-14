@@ -94,6 +94,9 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 82 | Settings → SLA Policies → Duplicate | medium | Duplicate did nothing. The screen fetches the policy with `frappe.client.get` and posts the whole document back into `frappe.client.insert` with the new name; upstream's documents always carry a `doctype` key (`as_dict`), the port's did not, so the insert answered 417 "doctype is required" and the screen, with no error handler, showed nothing. Every document the port serialises now carries `doctype`, child rows included | **fixed** 7 Oct 2026 |
 | 83 | frontend: a wrong URL with a second segment, `/crm/leadsdss/CRM-LEAD-…` | low | A blank page where `/crm/leaderssf` shows "Invalid page or not permitted to access": upstream's catch-all route `/:invalidpath` matches one segment only, so a two-segment typo matches nothing. The same on the hosted demo (upstream bug 48). Patched here by decision: `/:invalidpath(.*)*`, the router's real catch-all, noted in `frontend/JWT_PATCH.md` | **fixed** 7 Oct 2026, by patch |
 | 84 | the Products grid's Edit Grid Fields dialog (D26) looks different from the hosted upstream | low | Not a port fault: the port's frontend is upstream's pinned at `6583bfcdc` (11 Sep 2026), and `git fetch` on 7 Oct 2026 shows upstream `main` at `deedce73c` (30 Sep 2026), 514 commits ahead, three of them on the grid (`946c24d8f` align child table header with rows, `53080db04` fetch_from support in fields, `b29f99452` translate Select option labels). The grid files here are byte-identical to the pinned clone, and the port's `getdoctype` for `CRM Products` matches the pinned json field for field. Kept for the day the pin moves | open, version gap |
+| 85 | Settings → Brand (S6): the logo and favicon showed for the account that uploaded them and for nobody else; the same for a profile photo and the lead, contact and organization images | medium | frappe-ui uploads privately unless told otherwise and the image uploaders never tell it otherwise, so each image is a private File row attached to nothing, which the File rule lets its owner alone read. Upstream has the same upload and the same rule, and shows the logo to everyone because a framework hook, `attach_files_to_document`, runs on every document save and attaches the file an Attach field names to that document; the File rule then defers to the document, and FCRM Settings is readable by every CRM role. The port had no such step. Ported as a `post_save` receiver on every doctype with an Attach field (`frappe_platform.files`), `ATTACH_FIELDS` declared on User and Contact, whose metadata is derived from the model | **fixed** 14 Oct 2026 |
+| 86 | Contacts (K7), the role passes: Grace and Ada deleted a contact Administrator created; the hosted demo refuses both | medium | Upstream's `contact.json` gives Sales User and Sales Manager read, write and create on every contact and no delete; delete comes from the `All` row with `if_owner`, so the creator or a System Manager. The port registered no rule for Contact, so any CRM user deleted any contact: upstream protection read as a missing hook, the security exception `CLAUDE.md` names. Ruled: `contact_has_permission`, everything but delete open, delete for the creator or System Manager; the resource route, `frappe.client.delete`, the delete dialog and bulk delete all consult it | **fixed** 14 Oct 2026 |
+| 87 | Settings → Email → Templates (S11), the role passes: Grace and Ada created, edited and deleted templates | medium | Upstream's `email_template.json` gives `Desk User`, the role every System User holds, read only, and System Manager create, write and delete; CRM adds nothing, and shows the page to every role. The port had no rule, so any CRM user rewrote the wording of mail sent in the company's name. Ruled: `email_template_has_permission`, read for everyone, the rest System Manager; every door consults it | **fixed** 14 Oct 2026 |
 
 ---
 
@@ -2698,3 +2701,109 @@ worked: `name`, `creation` and the other stamped fields are read-only on the way
 and `prepare_rows` strips a child row's `name`.
 
 Covered by `tests/test_document_doctype_key.py`.
+
+---
+
+## 85. The brand logo showed for the account that uploaded it and for nobody else
+
+**Block:** Settings → Brand (S6), 14 Oct 2026. Administrator uploads a logo and a
+favicon, presses Update, and sees them in the sidebar. Every other account sees the
+default. The same holds for a profile photo and for the lead, contact and organization
+images: each is visible to its uploader alone.
+
+**Why.** frappe-ui's `FileUploader` (1.0.0-beta.29, the version CRM pins) sends
+`is_private=1` unless its `uploadArgs` say otherwise, and none of the image uploaders in
+this app say otherwise - `ImageUploader.vue` passes no arguments, and neither do the
+uploaders on the lead, contact, organization and profile pages. Nor do they name a
+document. So each image is a private File row attached to nothing. The port's File rule
+(`crm_app/permissions/attachments.py`, upstream's `file.py:1066-1106`) lets a private
+unattached file be read by its owner alone, so every other account's `<img>` gets a 403.
+Confirmed in the local database: `/private/files/queryn-logo-plain.ico`, two rows, both
+private, both unattached, both owned by Administrator.
+
+**Why upstream shows it anyway.** Upstream has the same uploader and the same rule. What
+it also has is `attach_files_to_document` (`frappe/core/doctype/file/utils.py:354-415`),
+run from `frappe/hooks.py:205,227` on every document's `on_update`: for each Attach and
+Attach Image field whose value is a file URL, it finds the unattached File row at that
+URL and stamps it with the document, field and the privacy the URL implies, or creates a
+URL-only row if there is none. From then on the File rule defers to the attached
+document, and FCRM Settings is readable by every CRM role (SECURITY_MODEL.md), as a User
+is here (divergence 5), so the logo and the avatars reach everyone. The port had no such
+step: `upload_file` attaches only when the upload itself names a document, which these
+uploaders never do.
+
+**Fix (14 Oct 2026):** the hook is ported as `frappe_platform.files.attach_files_to_document`,
+wired by `connect_attach_on_save` from `crm_app.apps.ready` to `post_save` of every
+non-child doctype that declares an Attach field, so a doctype without one pays nothing.
+The fields come from the DocType JSON for a CRM doctype and, for the platform doctypes
+that ship none, from a new `ATTACH_FIELDS` declaration on the model, which
+`field_meta._derive_from_model` reports as `Attach Image`: `User.user_image` and
+`Contact.image`. Rows already uploaded attach the next time their document is saved -
+pressing Update on the Brand page once is enough for the existing logo.
+
+Covered by `tests/test_attach_on_save.py`.
+
+---
+
+## 86. Any CRM user could delete any contact
+
+**Block:** Contacts (K7), the role passes, 14 Oct 2026. As Grace (Sales Manager) and as
+Ada (Sales User), a contact Administrator had created could be deleted from its page.
+The hosted demo refuses both with "Not permitted".
+
+**Why.** Upstream's `contact.json` gives Sales User and Sales Manager read, write and
+create on every contact and **no delete**. Delete comes from the `All` row, which carries
+`if_owner`, so a contact is deleted by the user who created it or by a System Manager (and
+the two Master Manager roles CRM never assigns), and by nobody else. CRM adds no
+permission of its own to Contact: no hook in `hooks.py`, nothing in `install.py`. The port
+registered no rule for Contact at all, and a doctype without a rule answers yes to every
+question (`frappe_core.permissions.has_permission` returns `None`, which is "allowed"). So
+any CRM user deleted any contact. This is the shape `CLAUDE.md` warns about: upstream had
+protection in its role table, a layer the port does not model, and the absence of a hook
+was read as the absence of a requirement. The same reading had been written down as the
+open question on the Contact row of `tests/test_route_surface.py` ("upstream relies on
+role permissions") since phase 4.
+
+**Fix (14 Oct 2026):** `contact_has_permission` and `contact_query_conditions` in
+`crm_app/permissions/platform_docs.py`, registered beside the Address rule: reads are
+not narrowed, write and create are open to every role, delete is the creator's
+(`owner`) or a System Manager's. Every door consults it: the resource route,
+`frappe.client.delete`, the delete dialog and `delete_bulk_docs`, which refuses the
+whole batch when one row is not the caller's. `SECURITY_MODEL.md` gains the Contact row;
+`test_permissions.py` and `test_route_surface.py` move Contact to the ruled side, and
+`docs/ROUTES.md` is regenerated. `CRM Organization` stays open on purpose: upstream gives
+all three roles delete on it with no owner condition.
+
+Covered by `tests/test_contact_delete_rule.py`.
+
+---
+
+## 87. Any CRM user could create, edit and delete email templates
+
+**Block:** Settings → Email → Templates (S11), the role passes, 14 Oct 2026. As Grace
+(Sales Manager) and as Ada (Sales User), New, an edit and Delete all succeeded.
+
+**Why.** Upstream's `email_template.json` has two rows: `Desk User` with read only, and
+`System Manager` with create, write, delete and the rest. `Desk User` is the role every
+System User holds (`frappe/permissions.py:36`, `SYSTEM_USER_ROLE`), so every CRM user may
+read and pick a template; only a System Manager may change one. CRM adds no permission of
+its own - nothing in `hooks.py` or `install.py` touches the table, only a class override
+and custom fields - and its Settings page lists Templates for every role, so upstream
+shows a rep the page and refuses the writes. The port had no rule for `Email Template`,
+and a doctype without one allows everything, so any CRM user could rewrite the wording of
+mail sent in the company's name. Same shape as 86: upstream protection in the role
+table, read as a missing hook. `test_route_surface.py` had carried the question on its
+Email Template row since phase 4 ("writes change the wording of mail the system sends on
+your behalf").
+
+**Fix (14 Oct 2026):** `email_template_has_permission` and
+`email_template_query_conditions` in `crm_app/permissions/platform_docs.py`: reads not
+narrowed, so the list and the mail editor's picker keep working for everyone; create,
+write and delete for System Manager. Registered beside the Contact rule; the resource
+route and `frappe.client.set_value`, `rename_doc` and `delete`, which the Templates page
+uses, all consult it. `SECURITY_MODEL.md` gains the section; Email Template moves to the
+ruled side in `test_permissions.py` and `test_route_surface.py`; `docs/ROUTES.md` is
+regenerated. Not a divergence: the port matches upstream's table exactly, unlike
+`Email Account`, where managers may write (divergence 2).
+
+Covered by `tests/test_email_template_rule.py`.
