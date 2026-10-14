@@ -97,6 +97,16 @@ Write and Edit tools — that is what they are for, and nothing gets scanned.
 
 Chained commands count as one command. Prefer several short calls over one long chain.
 
+## Running the test suite
+
+The backend suite (`python -m pytest -q` in `backend/`) takes longer than the shell
+tool's ten-minute foreground limit, and a subagent that waits on it in the foreground
+hands back with nothing. Run it in the background with its output going to a log file,
+then read the log: **look at it at 20 minutes, and treat 40 minutes as the limit**, the
+same budget as a Codex review. Do not kill a run before 20 minutes, and do not report a
+result the log does not contain. A single file or test is fast and can run in the
+foreground.
+
 ## Stack
 
 Django + DRF + SimpleJWT, PostgreSQL 17, Redis, Celery, Django Channels,

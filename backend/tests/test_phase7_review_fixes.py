@@ -292,10 +292,15 @@ def test_a_sales_user_cannot_dismiss_a_sync_issue(settings, administrator, alice
     from crm_app.models import CRMProductSyncIssue, ERPNextCRMSettings
 
     settings.ENABLE_ERPNEXT = True
+    from crm_app.models import CRMProduct
+
     with session_user(administrator.name):
         row = ERPNextCRMSettings.load()
         row.enabled = True
         row.save()
+        # `product` is a Link to CRM Product (crm_product_sync_issue.json), validated on
+        # save since FINDINGS.md 66, so the product has to exist.
+        CRMProduct.objects.create(product_code="WIDGET", product_name="Widget")
         issue = CRMProductSyncIssue.objects.create(
             parenttype="ERPNext CRM Settings", parent=str(row.pk), idx=1,
             product="WIDGET", kind="unlinked_orphan",
@@ -313,10 +318,15 @@ def test_a_manager_can_still_dismiss_one(settings, administrator):
     from crm_app.models import CRMProductSyncIssue, ERPNextCRMSettings
 
     settings.ENABLE_ERPNEXT = True
+    from crm_app.models import CRMProduct
+
     with session_user(administrator.name):
         row = ERPNextCRMSettings.load()
         row.enabled = True
         row.save()
+        # `product` is a Link to CRM Product (crm_product_sync_issue.json), validated on
+        # save since FINDINGS.md 66, so the product has to exist.
+        CRMProduct.objects.create(product_code="WIDGET", product_name="Widget")
         issue = CRMProductSyncIssue.objects.create(
             parenttype="ERPNext CRM Settings", parent=str(row.pk), idx=1,
             product="WIDGET", kind="unlinked_orphan",

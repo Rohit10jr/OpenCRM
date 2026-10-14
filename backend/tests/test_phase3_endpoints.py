@@ -334,6 +334,10 @@ _DIRECT_ACCESS_ALLOWED = {
     "doc.py",
     "notifications.py",
     "settings.py",
+    # upload_file: the record a file is attached to is fetched by name and handed to
+    # check_write_permission before anything is stored; the library file is fetched by
+    # pk after that check; the user-type lookup gates the private flag (FINDINGS.md 49).
+    "upload.py",
     # The doctype-module endpoints (crm.fcrm.doctype.*): single-object fetches of the
     # deal, lead or call log named in the call, each behind check_object_permission or
     # _require_readable, and the rows created on the way (a contact, an organization,

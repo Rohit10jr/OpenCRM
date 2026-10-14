@@ -19,8 +19,11 @@ LINKED = "/api/method/crm.api.doc.get_linked_docs_of_document"
 
 def test_unlink_clears_the_reference_pair_of_a_task(api_as, administrator, alice):
     """What it was written for: a lead's tasks, notes and calls."""
+    from crm_app.models import CRMLeadStatus
+
     with session_user(administrator.name):
-        lead = CRMLead.objects.create(first_name="ZZ Unlink", lead_owner=alice)
+        status = CRMLeadStatus.objects.create(lead_status="New", type="Open")
+        lead = CRMLead.objects.create(first_name="ZZ Unlink", lead_owner=alice, status=status)
         task = CRMTask.objects.create(
             title="ZZ follow up", reference_doctype="CRM Lead", reference_docname=lead.name
         )

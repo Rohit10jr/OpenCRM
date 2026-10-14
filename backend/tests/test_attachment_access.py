@@ -86,7 +86,9 @@ def test_a_private_attachment_is_not_readable(alice, hidden_deal, api_as):
 
 
 def test_an_internal_remark_is_not_readable(alice, hidden_deal, api_as):
-    row = Comment.objects.get(reference_name=hidden_deal.name)
+    # The fixture's attachment also writes an "Attachment" comment on the deal, as
+    # upstream's File does (file.py:988-994); the remark is the one typed by a person.
+    row = Comment.objects.get(reference_name=hidden_deal.name, comment_type="Comment")
     assert api_as(alice).get(f"/api/resource/Comment/{row.name}").status_code == 403
 
 
