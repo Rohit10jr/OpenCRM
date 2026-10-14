@@ -17,6 +17,7 @@ and anything a future agent would otherwise rediscover the hard way.
 | 9 | The frontend is slow to load | ⏸️ **Open, deferred** — to be examined after the browser testing is finished and `phase-8-followup` is merged; what is known and what to measure first are below |
 | 11 | Upstream has moved on since the pin | ⏸️ **Open** — compare against the clone, not the cloud, until the pin moves |
 | 12 | The frontend still says "Frappe" in a few places after the Open CRM rename | ⏸️ **Open** — the locations are listed; to be handled later |
+| 13 | The backend carries the Frappe name in its packages, classes, settings and strings | ⏸️ **Open** — the locations are listed; the packages and models are renamed later, as decided |
 | 10 | Nothing is translated: the interface and the server's messages are English only | ⏸️ **Open, deferred** — to be built after the browser testing; the design, step by step, is below |
 
 ---
@@ -855,6 +856,7 @@ listed to be handled later. Paths under `frontend/src/` unless given in full.
 - the `frappe.*` method names in every `call(...)` and resource `url`, and the
   `frappe-ui` imports
 - `components/FilesUploader/filesUploaderHandler.ts:98` — the `X-Frappe-CSRF-Token` header
+- `frontend/vite.config.js:11,176` — the `FRAPPE_WEB_SERVER_PORT` environment variable
 - the onboarding key `frappecrm` (`useOnboarding('frappecrm')` in the sidebar and twelve
   other components; it names `User.onboarding_status` and the browser cache)
 
@@ -862,4 +864,54 @@ listed to be handled later. Paths under `frontend/src/` unless given in full.
 
 - `auth/jwtRequest.js:37`, `auth/tokens.js:4-6`, `socket.js:4`,
   `components/Controls/GeolocationControl.vue:221,247`, `components/SidePanelLayout.vue:302`
+
+---
+
+## 13. The backend carries the Frappe name in its packages, classes, settings and strings
+
+The companion of 12 for `backend/`, listed 14 Oct 2026 to be handled later. The packages
+and the models are renamed later, as decided. Paths under `backend/` unless given in full.
+
+**Packages, and what hangs off their names**
+
+- `frappe_core/` and `frappe_platform/` — the two Django apps (`config/settings/base.py:46-47`),
+  their `AppConfig` classes `FrappeCoreConfig` (`frappe_core/apps.py:4`) and
+  `FrappePlatformConfig` (`frappe_platform/apps.py:4`), and every `from frappe_core ...` /
+  `from frappe_platform ...` import in `crm_app`, `config`, `scripts` and `tests`
+- the app labels name the database tables (`frappe_platform_<model>`, `frappe_core_<model>`)
+  and the 15 + 2 migrations under `frappe_platform/migrations/` and `frappe_core/migrations/`
+- `config/settings/base.py:131` — `AUTH_USER_MODEL = "frappe_platform.User"`
+- `config/settings/base.py:62,65,151-152` — the middleware, exception handler and renderer
+  paths
+
+**Classes and functions**
+
+- `frappe_core/exceptions.py:38` — `FrappeError`, the base of every port exception;
+  `:68` `PermissionError`, imported as `FrappePermissionError` in 80 places;
+  `:311` `frappe_exception_handler`
+- `frappe_core/renderers.py:48` — `FrappeEnvelopeRenderer`
+- `frappe_core/views.py:38` — `FrappeAPIView`
+
+**Settings and environment**
+
+- `config/settings/base.py:296-303` — `FRAPPE_SYSDEFAULTS` and its seven `FRAPPE_*`
+  environment variables (`FRAPPE_DATE_FORMAT`, `FRAPPE_TIME_FORMAT`, `FRAPPE_NUMBER_FORMAT`,
+  `FRAPPE_FLOAT_PRECISION`, `FRAPPE_CURRENCY_PRECISION`, `FRAPPE_CURRENCY`,
+  `FRAPPE_ROUNDING_METHOD`)
+- `config/settings/base.py:254` and `.env.example:51-52` — `EMAIL_SENDER_NAME` defaults to
+  "Frappe", the display name on system mail
+
+**Strings the user or the wire sees**
+
+- `crm_app/api/settings.py:14,120` — the "Frappe Mail" email service
+- `crm_app/management/commands/seed_defaults.py:16` — the command's help text,
+  "Write the reference rows Frappe CRM's install step writes"
+- `frappe_core/exceptions.py:153` — the error envelope's `exception` field,
+  `frappe.exceptions.<exc_type>: ...`
+- the 27 whitelisted `frappe.*` method names (`@whitelist("frappe....")` in `crm_app` and
+  `frappe_core`), which are the wire protocol
+
+**Docstrings and comments** — 76 code files under `crm_app`, `frappe_core`, `frappe_platform`
+and `config`, 31 test files, the three scripts in `scripts/`, and `requirements.txt`, each
+citing upstream Frappe by name.
 
