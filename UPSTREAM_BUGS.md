@@ -1,8 +1,8 @@
 # Upstream bugs — Frappe CRM / Frappe framework
 
-Defects found in **upstream** while porting. Not our bugs. One sequence, **1 to 48**, in
+Defects found in **upstream** while porting. Not our bugs. One sequence, **1 to 49**, in
 the order they were found: 1–9 in phases 0–2, 10–35 in phases 3–8, 36–38 appended during
-the phase-4 review, 39–48 in the browser testing of the follow-up. (Until 7 Oct 2026 this
+the phase-4 review, 39–49 in the browser testing of the follow-up. (Until 7 Oct 2026 this
 was two files, `UPSTREAM_BUGS_PHASE_0-2.md` and `UPSTREAM_BUGS_PHASE_3-6.md`; `git log
 --follow` crosses the merge.)
 
@@ -13,8 +13,8 @@ Two reasons it exists:
    matters when diffing against a live install, and when deciding whether a difference is
    a port bug or a fix. *Reproduce* means the port behaves as upstream does, on purpose,
    because the bug is user-visible and a faithful port shows it.
-2. **It is the shortlist if you ever upstream anything.** Entries 42 to 48 are the
-   candidates for the first upstream pull request.
+2. **It is the shortlist if you ever upstream anything.** Entries 42 to 49 are the
+   candidates for the first upstream pull request; 49 goes to frappe-ui, not CRM.
 
 Source refs: `crm/` = `D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm`
 (branch `main`, pinned at `6583bfcdc`; `specs/KNOWN_ISSUES.md` 11 has what moved since),
@@ -71,6 +71,7 @@ the pairing CRM's own CI uses).
 | 46 | Clicking a currency cell in a list files the formatted amount as the filter | **Diverge** — the amount is parsed |
 | 47 | Home Actions lets a standard entry be turned into a separator, and Settings is gone | **Reproduce** — `seed_defaults --force` restores |
 | 48 | A wrong URL with more than one segment draws a blank page | **Diverge** — router patched |
+| 49 | The Getting started panel opens empty for a finished user on a browser that has not seen them | **Reproduce** — frappe-ui's code; once per browser profile |
 
 ## 1. A hidden column causes the *next* column to be skipped
 
@@ -1291,6 +1292,41 @@ case that gets nothing.
 `path: '/:invalidpath(.*)*'`, Vue Router's own catch-all form, so every unknown path
 lands on the invalid page. Recorded in `frontend/JWT_PATCH.md` with the port's other
 frontend patches. The same line is the fix upstream.
+
+---
+
+## 49. The Getting started panel opens empty for a finished user on a browser that has not seen them
+
+**Where:** frappe-ui `1.0.0-beta.29`, the version CRM pins: `frappe/Onboarding/onboarding.js:146-147`
+(`setUp`) and `:128-140` (`syncStatus`), with `frappe/Help/HelpModal.vue:28-39` and
+`:161-164`. Found 13 Oct 2026 in the Getting started pass (BROWSER_TESTING.md B2), in an
+incognito window as Administrator, whose stored status had every step done.
+
+The sidebar is created only after the users list has loaded (`router.js:232` here, the
+guard before the first screen), and when it is created it does two things at once:
+`useOnboarding` sends the request for the user's stored status, because this browser
+holds no copy (`onboarding.js:26-35`), and `onMounted` (`AppSidebar.vue:625-637`, the
+same file upstream) calls `setUp`, which decides whether to open the panel from the
+cached flag alone (`:147`): unknown means open. So the panel opens listing the steps
+unticked, and the answer arrives afterwards, always, since the request was only just
+sent. When the answer says every step is done, `syncStatus` flips the flag (`:140`), the
+step list's `v-if` (`HelpModal.vue:29`) removes it, and the help centre (`:39`) does not
+take its place, because that is switched on only when the panel is *opened* for a user
+already known to be finished (`:161-164`). What remains is the frame with its minimise
+and close buttons and nothing inside.
+
+Once per browser profile: the flag is then cached (`useStorage`), the next load shows the
+sidebar's Help entry instead, and a browser that already knows the user never sees it.
+An incognito window sees it on every sign-in, which is how it was found. A user with
+steps still open is unaffected, and so is a browser that cached the status while the
+steps were being done.
+
+**Us:** *Reproduce*. The code is frappe-ui's, installed from npm, and the port's sidebar
+is upstream's file unchanged, so the port shows exactly what upstream shows. The fix is
+to decide after the answer rather than before it: move `showHelpModal.value =
+!isOnboardingStepsCompleted.value` out of `setUp` into the status resource's `onSuccess`
+after `syncStatus()`, or have `syncStatus` close the panel when it flips the flag to
+true. A frappe-ui pull request, not a CRM one.
 
 ---
 

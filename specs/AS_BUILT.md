@@ -316,6 +316,21 @@ Three days to accept, one hour to choose a password once you have.
 `APP_DIRS` finds it. Both emails go through `crm_app.mail`, so there is one answer to
 "where does the wording live".
 
+**The config account carries what no saved Email Account does** (FINDINGS.md 79, 13 Oct
+2026). Upstream's fourth outgoing-account step, `find_from_config`, is ported:
+`crm_app.communication.config_account()` builds an *unsaved* `Email Account` from Django's
+mail settings - `EMAIL_HOST` (empty means there is no config account), `EMAIL_PORT`,
+`EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, `EMAIL_USE_SSL`,
+`DEFAULT_FROM_EMAIL`, `EMAIL_SENDER_NAME`, `EMAIL_ALWAYS_USE_ACCOUNT_EMAIL_ID_AS_SENDER`,
+the port's `site_config.json` - and `find_outgoing_account` returns it after the default
+outgoing account. `open_backend` sends it through `django.core.mail.get_connection()`, so
+`EMAIL_BACKEND` is that account's transport and nothing else's; a saved account still uses
+its own SMTP details. System mail (`crm_app.mail.send`: invitations, password resets) runs
+the same `find_outgoing_account()` lookup as a lead's mail, From the account's name and
+address (upstream's `default_sender`), and raises `OutgoingEmailError` when there is
+nothing to send through - which fails the invitation's task once, where upstream refuses
+the insert. Development runs with `EMAIL_HOST=localhost` and the console backend.
+
 **An emailed link points at a page, never at `/api/method/`.** Upstream can link to its
 endpoints because they answer a GET with an HTTP redirect into the Desk; ours answer with
 JSON, so a link to one lands a person on a JSON blob. `scripts/walk_auth_flow.py` asserts
@@ -356,6 +371,33 @@ columns are validated on every save (`frappe_core/links.py`, "Could not find …
 field tool beside sensitive, read-only and restricted. A caller without the role has the
 field dropped from their payload before validation and the rest of the save goes through,
 which is upstream's silent reset. `User.user_emails` is the one use so far.
+
+**The Getting started panel is frappe-ui's, unchanged (recorded 13 Oct 2026).** The
+sidebar file is upstream's and the frappe-ui version is the one CRM pins, so the panel
+looks and behaves as upstream's does: shown to every CRM user on the desktop sidebar while
+their stored status has an unfinished step, opening by itself on each load until then;
+8 steps for a Sales User, 9 for a manager ("Invite your team"); done or skipped, the
+sidebar shows Help and the help centre instead, with "Reset onboarding steps" in its
+menu. Even its one defect is reproduced, the empty frame a finished user gets once on a
+browser that has not cached them (`UPSTREAM_BUGS.md` 49). What is the port's is behind
+it: the status pair `frappe.onboarding.get_onboarding_status` /
+`update_user_onboarding_status` on `User.onboarding_status` (`crm_app/api/onboarding.py`,
+FINDINGS 39; one divergence, an unset status is `{}` where upstream's first save 500s,
+`UPSTREAM_BUGS.md` 40); `get_first_lead` / `get_first_deal` for the steps that open a
+record; and the per-user browser cache keyed by the `user_id` cookie the port writes from
+the JWT (`frontend/JWT_PATCH.md`), Frappe's login cookie upstream. **"Clear Demo Data"
+never shows here**, by design: the sidebar lists it for a manager only when the boot
+values say `demo_data_created`, and the port's boot answer (`crm_app/api/boot.py`) is
+always false, since `crm/demo/` is regenerated as fixtures and there is no defaults store
+to hold upstream's marker (`crm_app/api/demo.py`). **The persona wizard at `/onboarding`**
+(`pages/PersonaForm.vue`) is upstream's one-time questionnaire for an admin after first
+sign-in - how you manage sales today, where leads come from - whose answers go only to
+telemetry; `FCRM Settings.persona_captured` stops it recurring, and the router shows it
+only to an admin while that flag is unset *and* telemetry is enabled. The port answers
+`frappe.utils.telemetry.pulse.client.boot_config` itself (`crm_app/api/desk.py`), enabled
+only with a PostHog project and host configured, so locally the wizard is skipped, as on
+an upstream site with telemetry off. A Sales User who types the URL is sent Home, there
+and here.
 
 ---
 

@@ -114,6 +114,18 @@ Observed rather than anticipated, and the failed teardown then poisoned the *nex
 with two unrelated-looking timeouts - which is worth knowing, because that failure mode
 reads like a fresh flake rather than fallout.
 
+### Seen again, 14 Oct 2026 — a sibling test, under a loaded machine
+
+Full run on `mail-config-account`: 2084 passed, 31 skipped, one failure, and it was
+`test_a_malformed_message_does_not_drop_the_socket` in the same file, not the test above:
+`TimeoutError` on the first `receive_from(timeout=RECEIVE_TIMEOUT)` after the connect,
+the 15-second wait already in place. Passed alone immediately afterwards. The confound
+is the one this entry predicted: the suite ran while `runserver`, the Celery worker, Vite
+and Chrome shared the 4 GB (the memory rule in issue 9 applies here too). Two things
+follow. The entry's own rule stands: the timeout is not raised again. And a sighting on a
+starved machine with the servers up is not a new flake; record the free memory beside it
+and re-run the file alone before reading anything into it.
+
 ---
 
 ## 2. `crm.api.accept_invitation` was never implemented — CLOSED in phase 8

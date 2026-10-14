@@ -36,7 +36,7 @@ Read them whenever behaviour is unclear. **Never invent semantics** — match th
 or flag the ambiguity in your report. If something looks impossible, suspect a missing
 framework mechanism before suspecting your own code.
 
-**When upstream is wrong** — and it sometimes is; **48 cases** are recorded in
+**When upstream is wrong** — and it sometimes is; **49 cases** are recorded in
 `UPSTREAM_BUGS.md` — diverge only on bugs nothing can observe, and reproduce user-visible
 ones. Check whether anything
 actually reads the field before deciding, and record the choice.

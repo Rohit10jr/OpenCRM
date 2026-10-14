@@ -24,6 +24,18 @@ from frappe_core.session import session_user
 pytestmark = pytest.mark.django_db
 
 
+@pytest.fixture(autouse=True)
+def _config_account():
+    """Creating an invitation sends it (eagerly, here), and the send needs a carrier
+    (FINDINGS.md 79): with no ``Email Account`` and no ``EMAIL_HOST`` the task raises out of
+    ``CRMInvitation.objects.create``. None of this file is about mail; the config account
+    carries the invitation so the fixture below can exist."""
+    from django.test import override_settings
+
+    with override_settings(EMAIL_HOST="smtp.example.test"):
+        yield
+
+
 @pytest.fixture
 def pending_admin_invite(administrator):
     """The dangerous one: an open invitation carrying the highest role."""

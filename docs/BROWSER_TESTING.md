@@ -49,7 +49,7 @@ from the Notes pass; every one answered 200.
 | # | Action | How | Calls | Result | Finding | Auto |
 |---|---|---|---|---|---|---|
 | B1 | Page load | Sign in, or reload any page; the sidebar, the user menu and the notification bell render | `crm.www.crm.get_context_for_dev`, `frappe.utils.telemetry.pulse.client.boot_config`, `crm.api.session.get_users`, `frappe.client.get_single_value`, `crm.api.notifications.get_notifications`, `crm.integrations.api.is_call_integration_enabled`, `frappe.client.get`, `frappe.apps.get_apps`, `crm.api.views.get_views` | ok | 50 (icon only) | e2e |
-| B2 | Getting started panel | The onboarding panel `frappe-ui` shows a new user from the sidebar (Getting started): its steps link to your first lead and first deal; "Clear demo data" shows only when the site says demo data was created, which the local port does not | `crm.api.onboarding.get_first_lead`, `crm.api.onboarding.get_first_deal`, `crm.demo.api.clear_demo_data` | | | |
+| B2 | Getting started panel | Shown to every CRM user on the desktop sidebar while their stored status (`User.onboarding_status`) has an unfinished step, and the panel opens by itself on each load until then; a Sales User gets 8 steps, a manager 9 (Invite your team). Steps link to your first lead and first deal. Done or skipped, the sidebar shows Help instead; the panel's ⋯ → Reset onboarding steps brings it back. The browser caches the status per user (`localStorage` `onboardingStatus`, `isOnboardingStepsCompletedfrappecrm<user>`), so a user whose row says all done opens to an empty panel once on a fresh browser (upstream 49). "Clear demo data" shows only when the site says demo data was created, which the local port does not | `crm.api.onboarding.get_first_lead`, `crm.api.onboarding.get_first_deal`, `crm.demo.api.clear_demo_data` | | upstream 49 | |
 
 ## Notes (`/crm/notes`)
 
@@ -290,7 +290,7 @@ dialog's form is kept for the page session and never cleared (finding 74, upstre
 | D23 | Bulk delete | Tick rows → Delete in the bar → confirm; the rows are gone | `crm.api.doc.delete_bulk_docs` | ok | 75 (fixed) | |
 | D24 | Create again without reloading | After D3, without reloading the page: Create → the switches off → a new organization name and contact → Create. Expected a deal on the new organization | `crm.fcrm.doctype.crm_deal.crm_deal.create_deal` | failed: the deal was made with values from the earlier deals; the dialog's form is shared for the page session and keeps the hidden organization pick, upstream and here alike (upstream bug 45) | 74 | |
 | D25 | Filter by clicking a cell | In the list, click a deal's Annual Revenue cell; the list is filtered on that amount, the chip shows it, and the page still opens on the next visit (the filter is kept with the standard view) | `get_data`, `create_or_update_standard_view` | ok (after the fix; failed before it: the filter was filed as "$ 500,000.00", the list answered 417 and the page would not open again) | 77 (fixed) | |
-| D26 | Products grid fields | Data tab → Products → the gear on the grid (Edit Grid Fields) → change the Fields Order, add or remove a column → Save; the grid keeps it after a reload; Reset puts the shipped layout back | `frappe.model.utils.user_settings.save` | | 84 (version gap) | |
+| D26 | Products grid fields | Data tab → Products → the gear on the grid (Edit Grid Fields) → change the Fields Order, add or remove a column → Save; the grid keeps it after a reload. Reset only discards edits not yet saved; a saved layout stays (upstream does the same, checked 13 Oct 2026) | `frappe.model.utils.user_settings.save` | ok | 84 (version gap) | |
 
 The WhatsApp tab and Make a Call belong to the integrations and are out of scope.
 
@@ -309,9 +309,9 @@ it. A5 needs a short token life: set `JWT_ACCESS_TOKEN_LIFETIME_MINUTES=1` in th
 | A4 | The session survives a reload | Reload any page: still signed in, no login page, the user menu shows you | `frappe.auth.get_logged_user`, the boot calls | ok | | e2e |
 | A5 | Token refresh | With the one-minute token life: sign in, wait two minutes, click anything; it works with no login page, the pair was renewed behind the click | `token/refresh` | ok | | |
 | A6 | Sign out | User menu → Log out → the login page; Back does not show the app; a reload stays on the login page | `logout` | ok | | e2e |
-| A7 | Forgot password | Login page → Forgot Password → your address → Send; the worker's console prints the link (system mail, finding 79) → open it → a new password twice → Update; sign in with it | `frappe.core.doctype.user.user.reset_password`, `frappe.core.doctype.user.user.update_password`, `login` | | 79 | e2e (form only) |
-| A8 | Accept an invitation | The link the worker printed for S8 → set a password → the invited user lands in the app, with the role the invite gave | `crm.api.accept_invitation`, `login` |   | 79 | |
-| A9 | A wrong URL | Signed in, open `/crm/leaderssf` → "Invalid page or not permitted to access" (upstream's `InvalidPage.vue`, its catch-all route); open a lead URL with a wrong id → "Document not found" from the lead page | `frappe.client.get` | failed: a wrong path with a second segment (/crm/leadsdss/CRM-LEAD-...) drew a blank page, here and on the demo; the one-segment cases showed their messages. Router patched, to retry | 83 (fixed, patch) | |
+| A7 | Forgot password | Login page → Forgot Password → your address → Send; the worker's console prints the link (system mail through the config account, so `EMAIL_HOST` must be set in `.env`, finding 79; with none the worker logs "Please setup default outgoing Email Account") → open it → a new password twice → Update; sign in with it | `frappe.core.doctype.user.user.reset_password`, `frappe.core.doctype.user.user.update_password`, `login` | | 79 | e2e (form only) |
+| A8 | Accept an invitation | The link the worker printed for S8 (same `EMAIL_HOST` need as A7; an invitation sent with no account is not retried, so send a new one after setting it) → set a password → the invited user lands in the app, with the role the invite gave | `crm.api.accept_invitation`, `login` |   | 79 | |
+| A9 | A wrong URL | Signed in, open `/crm/leaderssf` → "Invalid page or not permitted to access" (upstream's `InvalidPage.vue`, its catch-all route); open a lead URL with a wrong id → "Document not found" from the lead page | `frappe.client.get` | failed: a wrong path with a second segment (/crm/leadsdss/CRM-LEAD-...) drew a blank page, here and on the demo; the one-segment cases showed their messages. Router patched; retried 13 Oct 2026: ok, both URLs show their messages | 83 (fixed, patch) | |
 
 ## Endpoints no screen reaches
 
@@ -458,7 +458,7 @@ failed. Generated: do not edit by hand.
 | ⚠ | `frappe.desk.search.search_link` | `crm_app/api/client.py:650` | `frappe/desk/search.py:search_link` | N10, T2, T11, T17, C2, C12, L2, O2, O3, O11, K2, S17, S21, DB5, D2, D3, D7, D9, D11, D17 | failed: S21 (finding 63) |
 | ☑ | `frappe.email.doctype.email_template.email_template.get_email_template` | `crm_app/api/email_template.py:73` | `frappe/email/doctype/email_template/email_template.py:52-58` | L13 | ok: L13 |
 | ☐ | `frappe.model.utils.user_settings.get` | `crm_app/api/user_settings.py:113` | `frappe/model/utils/user_settings.py:get` |  |  |
-| ☐ | `frappe.model.utils.user_settings.save` | `crm_app/api/user_settings.py:100` | `frappe/model/utils/user_settings.py:save` | D26 |  |
+| ☑ | `frappe.model.utils.user_settings.save` | `crm_app/api/user_settings.py:100` | `frappe/model/utils/user_settings.py:save` | D26 | ok: D26 |
 | ☐ | `frappe.onboarding.get_onboarding_status` | `crm_app/api/onboarding.py:54` | `frappe/onboarding.py:6-9` |  |  |
 | ☐ | `frappe.onboarding.update_user_onboarding_status` | `crm_app/api/onboarding.py:62` | `frappe/onboarding.py:12-25` |  |  |
 | ☑ | `frappe.utils.telemetry.pulse.client.boot_config` | `crm_app/api/desk.py:161` | `config/settings/base.py` | B1 | ok: B1 |
