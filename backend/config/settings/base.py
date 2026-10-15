@@ -284,6 +284,12 @@ FIELD_ENCRYPTION_KEY = env("FIELD_ENCRYPTION_KEY", default="")
 POSTHOG_PROJECT_ID = env("POSTHOG_PROJECT_ID", default="")
 POSTHOG_HOST = env("POSTHOG_HOST", default="")
 
+# Exchange rates (crm_app/api/exchange_rate.py, docs/FINDINGS.md 63). On, as upstream: a
+# deal or organization in a currency other than the dashboard one asks the provider
+# chosen in Settings -> Dashboard for its rate when it is saved. Set false on a site with
+# no outbound internet, and every such rate is 1 instead of a refused save.
+ENABLE_EXCHANGE_RATE_API = env.bool("ENABLE_EXCHANGE_RATE_API", default=True)
+
 # The format defaults the CRM page reads before it draws anything
 # (crm_app/api/boot.py, docs/FINDINGS.md 26). Upstream takes them from System Settings,
 # republished as `sysdefaults`. Since FINDINGS.md 64 the port has that single too, and

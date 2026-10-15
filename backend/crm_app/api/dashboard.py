@@ -27,8 +27,8 @@ import json
 from dateutil import parser as date_parser
 from dateutil.parser import ParserError
 from dateutil.relativedelta import relativedelta
-from django.db.models import Avg, Count, Q, Sum
-from django.db.models.functions import TruncDate
+from django.db.models import Avg, Count, ExpressionWrapper, F, FloatField, Q, Sum, Value
+from django.db.models.functions import Cast, Coalesce, TruncDate
 from django.utils import timezone
 
 from frappe_core.exceptions import PermissionError as FrappePermissionError
@@ -286,6 +286,16 @@ def get_won_deals(from_date, to_date, user=None):
     }
 
 
+#: ``deal_value_expr = Deal.deal_value * IfNull(Deal.exchange_rate, 1)``
+#: (``dashboard.py:230``, ``:343``, ``:397``): a deal counts in the dashboard currency.
+#: Every rate was 1 until the providers were ported (FINDINGS.md 63), so leaving it out
+#: changed nothing then.
+_DEAL_VALUE_IN_BASE_CURRENCY = ExpressionWrapper(
+    Cast("deal_value", FloatField()) * Coalesce(F("exchange_rate"), Value(1.0)),
+    output_field=FloatField(),
+)
+
+
 def _average_value(queryset, from_date, to_date, date_field: str, title: str, tooltip: str):
     """``date_field`` is either ``creation`` (a DateTimeField, so it needs the ``__date``
     lookup to compare against a date without a naive-datetime warning) or ``closed_date``
@@ -295,11 +305,11 @@ def _average_value(queryset, from_date, to_date, date_field: str, title: str, to
 
     aggregate = queryset.aggregate(
         current=Avg(
-            "deal_value",
+            _DEAL_VALUE_IN_BASE_CURRENCY,
             filter=Q(**{f"{prefix}__gte": from_date, f"{prefix}__lte": to_date}),
         ),
         previous=Avg(
-            "deal_value",
+            _DEAL_VALUE_IN_BASE_CURRENCY,
             filter=Q(**{f"{prefix}__gte": prev_from, f"{prefix}__lt": from_date}),
         ),
     )

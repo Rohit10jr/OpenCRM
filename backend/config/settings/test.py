@@ -27,6 +27,10 @@ EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 # through" must not depend on what that file says.
 EMAIL_HOST = ""
 
+# And no exchange-rate provider (docs/FINDINGS.md 63): a rate between two currencies is 1
+# unless a test turns the switch on and stubs the HTTP call (tests/test_exchange_rate.py).
+ENABLE_EXCHANGE_RATE_API = False
+
 # No Redis either (docs/internal/RUNBOOK.md, same section). The in-memory layer is process-local, which
 # is all `WebsocketCommunicator` needs: publisher and consumer are the same process.
 CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}

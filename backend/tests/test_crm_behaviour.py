@@ -250,22 +250,13 @@ def test_product_name_defaults_to_the_product_code(alice):
 
 
 def test_organization_exchange_rate_defaults_to_one(alice):
-    """``crm_organization.py:update_exchange_rate`` - same currency means rate 1."""
+    """``crm_organization.py:update_exchange_rate`` - same currency means rate 1. The rate
+    is set on save now; ``tests/test_exchange_rate.py`` has the provider cases."""
     from crm_app.models import CRMOrganization
 
     with session_user(alice.name):
         org = CRMOrganization.objects.create(organization_name="Acme", currency="USD")
-        org.update_exchange_rate(system_currency="USD")
     assert org.exchange_rate == 1
-
-
-def test_organization_exchange_rate_uses_the_injected_rate(alice):
-    from crm_app.models import CRMOrganization
-
-    with session_user(alice.name):
-        org = CRMOrganization.objects.create(organization_name="Beta", currency="EUR")
-        org.update_exchange_rate(system_currency="USD", fx_rate=1.09)
-    assert org.exchange_rate == 1.09
 
 
 @pytest.mark.parametrize("color", ["cyan", "teal", "violet", "purple"])
