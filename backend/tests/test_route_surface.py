@@ -127,6 +127,11 @@ def test_every_routable_doctype_is_accounted_for():
     )
 
 
+def test_assignment_rule_is_a_ruled_route():
+    """Its version-15 role table is System Manager-only, including reads."""
+    assert "Assignment Rule" in _ruled()
+
+
 def test_the_lists_do_not_overlap_or_go_stale():
     """A doctype that gained a rule must leave the open lists, or the lists stop meaning
     anything - a reader would not know whether an entry is a live decision or a leftover."""

@@ -112,6 +112,26 @@ unlike `Email Account`, where this port lets managers write (divergence 2).
 
 ---
 
+## `Assignment Rule`
+
+Added 15 Oct 2026 for the Settings → Assignment Rules screen (`docs/FINDINGS.md` 80).
+Version-15 `assignment_rule.json` grants every operation, reading included, to System
+Manager alone. The port matches that table through both permission hooks, so the generic
+resource routes and the `frappe.client.*` methods used by the screen agree.
+
+| Action | Upstream | This port |
+|---|---|---|
+| Read / list | System Manager | System Manager — match |
+| Create / write / rename / delete | System Manager | System Manager — match |
+| Sales Manager | Settings entry is visible, save/read refused | Refused — bug 53 reproduced |
+
+The two child doctypes (`Assignment Rule User`, `Assignment Rule Day`) remain inline and
+follow their parent through the existing child-table machinery; neither publishes a
+generic route. No field is a credential or needs field-level hiding. `last_user` and
+`current_index` are readable but client read-only, matching their upstream fields.
+
+---
+
 ## `User`
 
 | | Upstream | Before | Now |

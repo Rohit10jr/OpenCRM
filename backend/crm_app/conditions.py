@@ -54,6 +54,17 @@ def is_empty(conditions: Any) -> bool:
     return parsed == []
 
 
+def validate(conditions: Any) -> None:
+    """Validate an editor condition without evaluating it against a document."""
+
+    parsed = _load(conditions)
+    if parsed is None or parsed == []:
+        return
+    if not isinstance(parsed, list):
+        raise ConditionError("Condition must be a JSON list")
+    _parse_group(parsed)
+
+
 def document_values(instance: Model | dict[str, Any]) -> dict[str, Any]:
     """Return the concrete values Frappe's ``doc.as_dict()`` would expose."""
 

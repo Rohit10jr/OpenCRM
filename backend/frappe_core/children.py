@@ -61,15 +61,30 @@ def discover_child_tables(model) -> dict[str, dict]:
             "polymorphic": True,
         }
 
+    # Most parents declare a child doctype under exactly one fieldname, and old rows in
+    # those tables are not guaranteed to carry ``parentfield``.  Assignment Rule is the
+    # framework exception: both ``users`` and ``weighted_users`` contain Assignment Rule
+    # User rows.  Only duplicate declarations may therefore use parentfield to distinguish
+    # their rows; changing the query for every existing table would make legacy rows
+    # disappear from their parent documents.
+    counts: dict[str, int] = {}
+    for spec in found.values():
+        counts[spec["doctype"]] = counts.get(spec["doctype"], 0) + 1
+    for fieldname, spec in found.items():
+        if counts[spec["doctype"]] > 1:
+            spec["distinguish_parentfield"] = True
+            spec["fieldname"] = fieldname
+
     return found
 
 
 def read_children(instance, spec: dict) -> list:
     child_model = spec["model"]
     if spec["polymorphic"]:
-        queryset = child_model._default_manager.filter(
-            parenttype=type(instance).get_doctype(), parent=str(instance.pk)
-        )
+        filters = {"parenttype": type(instance).get_doctype(), "parent": str(instance.pk)}
+        if spec.get("distinguish_parentfield"):
+            filters["parentfield"] = spec["fieldname"]
+        queryset = child_model._default_manager.filter(**filters)
     else:
         queryset = child_model._default_manager.filter(**{spec["fk"]: instance})
     return list(queryset.order_by("idx"))
@@ -218,6 +233,9 @@ def replace_children(instance, fieldname: str, spec: dict, rows: list[dict]) -> 
         base_filter = {"parenttype": parent_doctype, "parent": str(instance.pk)}
     else:
         base_filter = {spec["fk"]: instance}
+
+    if spec.get("distinguish_parentfield"):
+        base_filter["parentfield"] = fieldname
 
     payloads = prepare_rows(child_model, rows, fieldname=fieldname, parent_field=spec["fk"])
 

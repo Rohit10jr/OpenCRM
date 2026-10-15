@@ -12,6 +12,7 @@ falls back to plain role permissions.
 from frappe_core.registry import register_permission_hooks
 
 from crm_app.permissions import (
+    assignment_rule,
     attachments,
     metadata_docs,
     notification,
@@ -180,6 +181,14 @@ def register() -> None:
         "System Settings",
         permission_query_conditions=platform_docs.system_settings_query_conditions,
         has_permission=platform_docs.system_settings_has_permission,
+    )
+    # Assignment Rule (FINDINGS.md 80): version-15 gives every operation, reading
+    # included, to System Manager alone. Sales Manager sees the CRM menu and is refused,
+    # reproducing UPSTREAM_BUGS.md 53.
+    register_permission_hooks(
+        "Assignment Rule",
+        permission_query_conditions=assignment_rule.assignment_rule_query_conditions,
+        has_permission=assignment_rule.assignment_rule_has_permission,
     )
     # Salutation and Gender (FINDINGS.md 66): the two lookups behind the contact, lead
     # and deal forms. Everyone reads, System Manager maintains.
