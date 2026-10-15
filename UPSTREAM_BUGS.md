@@ -1330,6 +1330,36 @@ true. A frappe-ui pull request, not a CRM one.
 
 ---
 
+## 50. Settings → Defaults is a blank page for a Sales Manager
+
+**Where:** `frontend/src/components/Settings/Settings.vue:121-144` and
+`frontend/src/components/Settings/DefaultsSettings.vue:43` upstream, against
+`frappe/core/doctype/system_settings/system_settings.json` in the framework. Found
+15 Oct 2026 while planning finding 64 (FINDINGS.md), and confirmed by the tester on the
+hosted demo the same day: signed in as a Sales Manager, Settings → Defaults shows an empty
+panel.
+
+The Settings dialog shows its System Configuration group (General, Dashboard, Defaults,
+Brand) when `isManager()` holds (`Settings.vue:144`), and `isManager` is true for a Sales
+Manager as well as an admin (`stores/users.js:140-142`). The data behind Defaults is the
+framework's `System Settings` single, whose role table has one row, System Manager. So the
+tab is offered to a role that cannot read what it shows. The page asks for the document
+(`createDocumentResource`, `DefaultsSettings.vue:154-157`), the server refuses, and the
+document stays empty. The form has no `v-if` waiting for the document: its first input
+binds `settings.doc.currency` (`:43`), reading a field of nothing throws while Vue renders
+the component, and Vue drops the component. The Sales Manager gets an empty panel, with
+the error in the browser console and no message on screen.
+
+**Us:** *Reproduce*. Security is the standing exception to "diverge on what nothing can
+observe", and the two fixes pull in opposite directions: giving Sales Manager read on
+System Settings widens access to a document upstream keeps for System Manager, which the
+port does not do on its own say. The port's `System Settings` (finding 64) keeps
+upstream's role table, so a Sales Manager sees the same blank. The fix upstream is in the
+frontend: give the Defaults item its own `condition: () => isAdmin()` (`users.js`
+already has it), or give the form a `v-if="settings.doc"` and a "not permitted" message.
+
+---
+
 ## Faithful behaviours we chose to keep (not bugs — decisions)
 
 Recorded here so they are not later mistaken for defects:

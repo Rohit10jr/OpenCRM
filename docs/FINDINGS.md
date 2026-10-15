@@ -2106,6 +2106,12 @@ alone writing it. Three other open items meet here and are best done together: t
 translation work needs is `System Settings.language` (finding 59, step 2 of
 `KNOWN_ISSUES.md` 10), and the dashboard's own currency setting reads the same list.
 
+**Who reads it, 15 Oct 2026:** System Manager alone, for reading as well as writing, as
+`system_settings.json` says. Upstream offers the Defaults tab to a Sales Manager too, who
+then gets a blank panel: confirmed on the hosted demo and recorded as `UPSTREAM_BUGS.md`
+50, reproduced here rather than widened. The boot call reads the row server-side, so
+nobody needs read on the doctype to have their numbers and dates formatted.
+
 ## 65. "Invalid credentials" for a correct password: the server had no encryption key
 
 **Block:** `09 / email account` replays with made-up credentials and expects a refusal, so
