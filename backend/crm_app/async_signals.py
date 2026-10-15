@@ -4,9 +4,10 @@ Upstream wires these through ``doc_events`` in ``crm/hooks.py:159-212``; here th
 Django signals, which is the mapping `PHASE_1_MODELS.md` §4 fixed for the whole port.
 
 The interesting one is ``update_modified_background``. Upstream enqueues it from
-``on_comment_insert`` (``crm/utils/__init__.py:238-249``) and from
-``on_communication_update``, behind a three-part guard, and it exists so a lead rises to
-the top of a list when someone comments on it.
+``on_comment_insert`` (``crm/utils/__init__.py:238-249``), behind a three-part guard,
+and it exists so a lead rises to the top of a list when someone comments on it. A
+communication bumps ``modified`` too, inline rather than queued, in the same write that
+sets the lead's or deal's communication status (``apply_communication_update``).
 """
 
 from __future__ import annotations
@@ -119,13 +120,88 @@ def on_comment_insert(sender, instance, created, **kwargs):
         _notify_watchers(instance, key, "add" if created else "update")
 
 
-def on_communication_write(sender, instance, created, **kwargs):
-    """``crm/utils/__init__.py:264-...``.
+def communication_status_for(instance) -> str | None:
+    """``_get_communication_status`` (``crm/utils/__init__.py:174-193``): the status a
+    lead's or deal's ``communication_status`` takes from this communication, if any.
 
-    Upstream bumps on communication **update**, not insert — a reply landing on an
-    existing thread is what should reorder the list.
+    ``Open`` for a received one when ``auto_reopen_on_new_communication`` is on,
+    ``Replied`` for a sent one when ``auto_mark_replied_on_response`` is on; the two
+    General settings in Settings (FINDINGS.md 60). Both are off by default.
     """
-    _enqueue_touch(instance.reference_doctype, instance.reference_name)
+    if not (instance.reference_doctype and instance.reference_name):
+        return None
+    if instance.sent_or_received not in ("Sent", "Received"):
+        return None
+
+    from crm_app.models import FCRMSettings
+
+    switches = FCRMSettings._default_manager.values_list(
+        "auto_reopen_on_new_communication", "auto_mark_replied_on_response"
+    ).first() or (False, False)
+    auto_reopen, auto_replied = switches
+
+    if instance.sent_or_received == "Received" and auto_reopen:
+        return "Open"
+    if instance.sent_or_received == "Sent" and auto_replied:
+        return "Replied"
+    return None
+
+
+def apply_communication_update(instance) -> None:
+    """``on_communication_update`` (``crm/utils/__init__.py:261-290``), on every save of
+    a communication, the first included, as Frappe's ``on_update`` runs on insert too.
+
+    One column write on the lead or deal, no save (``frappe.db.set_value`` with
+    ``update_modified=False``), so no validation or SLA step runs and ``modified_by``
+    is left alone:
+
+    * ``modified`` set to now when ``update_timestamp_on_new_communication`` is on;
+    * ``communication_status`` set to the status above, only when this communication is
+      the latest on the document (``frappe.get_last_doc``, ``creation desc``), so an old
+      thread edited later does not reopen a lead that has moved on.
+
+    Upstream did the ``modified`` part in a background job until 29 Mar 2026
+    (``3eb42143f``), which is what the port copied; now both are inline, as here.
+
+    A status named here that the ``CRM Communication Status`` table lacks is skipped:
+    upstream's ``set_value`` would store the dangling name, and the port's column is a
+    foreign key that cannot. ``seed_defaults`` writes both rows.
+    """
+    doctype, name = instance.reference_doctype, instance.reference_name
+    if not (doctype and name) or doctype not in TIMESTAMP_DOCTYPES:
+        return
+
+    from django.utils import timezone
+
+    from crm_app.models import CRMCommunicationStatus
+    from frappe_core import registry
+    from frappe_platform.models import Communication
+
+    values: dict = {}
+    if timestamp_updates_enabled():
+        values["modified"] = timezone.now()
+
+    status = communication_status_for(instance)
+    if status:
+        latest = (
+            Communication._default_manager.filter(reference_doctype=doctype, reference_name=name)
+            .order_by("-creation")
+            .values_list("pk", flat=True)
+            .first()
+        )
+        if latest == instance.pk:
+            if CRMCommunicationStatus._default_manager.filter(pk=status).exists():
+                values["communication_status_id"] = status
+            else:
+                logger.warning("communication status %r is not a CRM Communication Status", status)
+
+    if values and registry.has_doctype(doctype):
+        registry.get_model(doctype)._default_manager.filter(pk=name).update(**values)
+
+
+def on_communication_write(sender, instance, created, **kwargs):
+    """``crm/hooks.py:168-171``: ``on_update`` -> ``on_communication_update``."""
+    apply_communication_update(instance)
     _notify_watchers(instance, "communications", "add" if created else "update")
 
 
