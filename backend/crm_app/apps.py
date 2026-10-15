@@ -46,6 +46,13 @@ class CrmAppConfig(AppConfig):
             if not entry.is_child_table:
                 connect_attach_on_save(entry.model, doctype)
 
+        # Version-15 hooks.py applies the Assignment Rule engine and its due-date
+        # updater to every doctype's on_update. The connector keeps the same broad
+        # surface while excluding child tables and the engine's own bookkeeping rows.
+        from crm_app.assignment_rules import connect_signals as connect_assignment_rules
+
+        connect_assignment_rules()
+
         # Phase 3: importing the package runs the @whitelist decorators, which is what
         # makes each dotted path resolvable. Without this the method map is empty.
         from crm_app import api  # noqa: F401

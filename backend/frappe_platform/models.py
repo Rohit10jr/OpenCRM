@@ -737,6 +737,9 @@ class ToDo(BaseDocument):
     ]
     PRIORITY_CHOICES = [("High", "High"), ("Medium", "Medium"), ("Low", "Low")]
     LINK_FIELDS = {"assignment_rule": "Assignment Rule"}
+    # Assignment Rule is in Frappe's ``ignore_links_on_delete`` list. Its ToDos keep
+    # the rule name as audit data after deletion and must still be closable/cancellable.
+    ALLOW_DANGLING_LINK_FIELDS = ("assignment_rule",)
     READONLY_FIELDS = ("assignment_rule",)
 
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default="Open", db_index=True)

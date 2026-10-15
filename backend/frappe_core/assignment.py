@@ -149,7 +149,18 @@ def get_assigned_users(doctype: str, name, *, for_permission: bool = False) -> l
     return [u for u in dict.fromkeys(rows) if u]
 
 
-def assign_to_user(doctype: str, name, user: str, *, description: str = "") -> bool:
+_DEFAULT_DATE = object()
+
+
+def assign_to_user(
+    doctype: str,
+    name,
+    user: str,
+    *,
+    description: str = "",
+    assignment_rule: str | None = None,
+    date=_DEFAULT_DATE,
+) -> bool:
     """Port of ``frappe.desk.form.assign_to._add`` (``frappe/desk/form/assign_to.py:58``).
 
     Creates the ``ToDo`` row that *is* the assignment. Returns True if one was created,
@@ -184,6 +195,9 @@ def assign_to_user(doctype: str, name, user: str, *, description: str = "") -> b
 
     from frappe_core.session import get_current_user
 
+    if date is _DEFAULT_DATE:
+        date = timezone.localdate()
+
     _TODO_MODEL._default_manager.create(
         **{
             _FIELDS["allocated_to"] + "_id": user,
@@ -192,8 +206,9 @@ def assign_to_user(doctype: str, name, user: str, *, description: str = "") -> b
             _FIELDS["status"]: "Open",
             "description": description or f"Assignment for {doctype} {name}",
             "priority": "Medium",
-            "date": timezone.now().date(),
+            "date": date,
             "assigned_by_id": get_current_user(),
+            "assignment_rule": assignment_rule,
         }
     )
     return True
