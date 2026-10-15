@@ -89,7 +89,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 77 | frontend: the Deals list would not open | high | Clicking a deal's Annual Revenue cell filed the cell's display string, "$ 500,000.00", as the filter (upstream bug 46), and the standard view saved it. Upstream's database casts the string to 0 and shows an empty list; the port's filter builder refused it with 417, and since the saved filter is replayed on every load the page never opened again, with no way to remove the chip. Filter values for numeric columns are now read for the number in them, so the click filters on the amount shown; a deliberate divergence, recorded with bug 46 | **fixed** 6 Oct 2026 |
 | 78 | frontend: Settings → Home Actions, a standard row | low | The grid lets a standard entry's Type be changed to Separator although the doctype marks it read-only for standard rows; done to Settings, the entry vanishes and nothing in the app can bring it back, since the grid lives in Settings. Upstream bug 47, seen on the demo. The port reproduces it (the frontend is upstream's) and gives `seed_defaults --force` the job of restoring the standard rows, where upstream needs Desk | open, upstream bug 47; recovery added |
 | 79 | Settings → Invite User (and every system mail: invitations, password resets) | medium | The invitation went to the Celery worker's console instead of the inbox. System mail was sent with Django's `EMAIL_BACKEND` from `DEFAULT_FROM_EMAIL` (`crm@example.com`), which `.env` leaves at the console backend locally, while a mail written on a lead went through the Email Account's own SMTP; and a site with no Email Account could not send a lead's mail at all, where upstream falls through to the account `site_config.json` describes. Seen 6 Oct 2026 (S8). Both now run upstream's four-step lookup, with Django's `EMAIL_*` settings as the port's `site_config.json` - the config account; `EMAIL_HOST=localhost` with the console backend for development | **fixed** 13 Oct 2026 |
-| 80 | Settings → Assignment Rules → Save | high | Save does nothing. The screen posts `frappe.client.insert` for doctype `Assignment Rule`, a framework doctype the port does not model (`crm_app/api/assignment_rule.py`, a phase-3 decision: outside the nine platform doctypes), so the insert answers 404; the screen's error handler only clears its spinner, so nothing is shown. The list endpoint returns `[]` by the same decision. Upstream's engine is `frappe/automation/doctype/assignment_rule` (436 lines: round robin, load balancing, based on field, assign and unassign conditions, assignment days, applied on insert and update of leads and deals) plus the CRM's own JSON condition fields. Seen 6 Oct 2026 (S12). Decision wanted: port it, or defer with Currency and System Settings | open, decision: compared with upstream 15 Oct 2026; conditions to be evaluated from the JSON, no code run (agreed); five decisions left |
+| 80 | Settings → Assignment Rules → Save | high | Save does nothing. The screen posts `frappe.client.insert` for doctype `Assignment Rule`, a framework doctype the port does not model (`crm_app/api/assignment_rule.py`, a phase-3 decision: outside the nine platform doctypes), so the insert answers 404; the screen's error handler only clears its spinner, so nothing is shown. The list endpoint returns `[]` by the same decision. Upstream's engine is `frappe/automation/doctype/assignment_rule` (436 lines: round robin, load balancing, based on field, assign and unassign conditions, assignment days, applied on insert and update of leads and deals) plus the CRM's own JSON condition fields. Seen 6 Oct 2026 (S12). Decision wanted: port it, or defer with Currency and System Settings | open, decided 15 Oct 2026: port the engine and its four rule types, conditions from the JSON with no code run; build with the SLA engine (91) |
 | 81 | Settings → SLA Policies → Assignment conditions | low | Add a custom condition, leave its fields empty, and try to remove it: the empty condition stays. Seen 6 Oct 2026 (S13); the same on the upstream demo, checked 7 Oct 2026, so it is upstream's (the condition builder is its frontend) and belongs with the upstream bugs once traced | open, upstream too, not traced |
 | 82 | Settings → SLA Policies → Duplicate | medium | Duplicate did nothing. The screen fetches the policy with `frappe.client.get` and posts the whole document back into `frappe.client.insert` with the new name; upstream's documents always carry a `doctype` key (`as_dict`), the port's did not, so the insert answered 417 "doctype is required" and the screen, with no error handler, showed nothing. Every document the port serialises now carries `doctype`, child rows included | **fixed** 7 Oct 2026 |
 | 83 | frontend: a wrong URL with a second segment, `/crm/leadsdss/CRM-LEAD-…` | low | A blank page where `/crm/leaderssf` shows "Invalid page or not permitted to access": upstream's catch-all route `/:invalidpath` matches one segment only, so a two-segment typo matches nothing. The same on the hosted demo (upstream bug 48). Patched here by decision: `/:invalidpath(.*)*`, the router's real catch-all, noted in `frontend/JWT_PATCH.md` | **fixed** 7 Oct 2026, by patch |
@@ -2834,19 +2834,25 @@ changes it, which a test per operator, checked against the converter's output, w
 catch. Whether to keep upstream's failing date and number comparisons or fix them as a
 recorded divergence is still open; faithful is the default.
 
-**Decisions to take before building** (discussed 15 Oct 2026):
+**Decisions, taken 15 Oct 2026** with the owner:
 
-1. Conditions: **agreed**, evaluate the JSON as above, executing nothing, and refuse a
-   rule that has only Python. Open within it: whether to keep the failing date and
-   number comparisons.
-2. Rule types: all four in the engine, or the two the screen offers.
-3. Due dates and the close condition, which no CRM screen sets: port or leave out.
-4. The list endpoint reads without a permission check upstream: reproduce, or limit it
-   to System Manager under the security rule.
-5. Bug 53: reproduce, as bug 50 was.
-6. The SLA engine (finding 91) needs the same condition evaluator: with this, or next.
+1. **Conditions:** evaluate the JSON as above, executing nothing; refuse a rule that has
+   only Python. The conditions upstream cannot meet are fixed, not reproduced: a date is
+   compared as a date and "between" takes its two bounds from the list the editor
+   stores (`UPSTREAM_BUGS.md` 54, diverge). Correction to the discussion: number
+   comparisons do work upstream, since the editor stores a number as a number
+   (`CFCondition.vue:281`); dates and "between" are what fail.
+2. **Rule types:** all four in the engine (Round Robin, Load Balancing, Based on Field,
+   Weighted Distribution), though the screen offers two.
+3. **Due dates and the close condition:** ported, though no CRM screen sets them.
+4. **The list endpoint:** as upstream, no permission check, recorded as
+   `UPSTREAM_BUGS.md` 55. An upstream pull request will propose the fix, and the port
+   follows the outcome; a recorded exception to the security rule until then.
+5. **Bug 53:** reproduced, as 50 was.
+6. **The SLA engine (finding 91):** built too, sharing the condition evaluator.
 
-**Status:** open, decision. Estimate: one to two days with tests.
+**Status:** open, decided; to be built on branch `assignment-rules`. Estimate: one to two
+days with tests, and about the same again for the SLA engine.
 
 ## 82. Duplicate on an SLA policy did nothing: the document had no `doctype`
 
@@ -3073,6 +3079,6 @@ Lead conversion sets the communication status to Replied only on a lead with an 
 so that branch never runs. The communication status from finding 60 is written, but the
 page shows it only beside an SLA, so the S20 check needs this, or a look at the database.
 
-**Status:** open. To be built with finding 80 or straight after it: SLA conditions are
+**Status:** open; decided 15 Oct 2026 to build it with finding 80: SLA conditions are
 stored in the same two forms as assignment conditions, and one evaluator serves both.
 Upstream's engine is about 420 lines; an estimate like finding 80's, one to two days.
