@@ -496,3 +496,56 @@ def language_has_permission(doc, ptype: str = "read", user: str | None = None):
     if ptype == "read":
         return True
     return _is_admin(user)
+
+
+#: ``currency.json`` at version-15: read for these, everything for System Manager. Sales
+#: Manager is not in the table, but every Sales Manager also holds Sales User
+#: (``crm/api/user.py:160-175``), so it is listed rather than looked up through it.
+CURRENCY_READERS = frozenset(
+    {"Sales User", "Sales Manager", "Accounts Manager", "Accounts User", "Purchase User"}
+)
+
+
+def _reads_currency(user: str) -> bool:
+    return _is_admin(user) or bool(_roles(user) & CURRENCY_READERS)
+
+
+def currency_query_conditions(doctype: str, user: str | None = None):
+    """The list the currency pickers show, for the roles that read it."""
+    return None if _reads_currency(user or get_current_user()) else Q(pk__in=[])
+
+
+def currency_has_permission(doc, ptype: str = "read", user: str | None = None):
+    """Read for the CRM roles; write, create and delete for System Manager
+    (FINDINGS.md 63), as version-15's ``currency.json`` grants.
+
+    The ``Desk User`` ``select`` row that would open it to every desk user is on
+    ``develop`` only. Every CRM user holds Sales User, so CRM users see the same list
+    either way; a signed-in user with no CRM role is refused, as upstream.
+    """
+    user = user or get_current_user()
+    if ptype == "read":
+        return _reads_currency(user)
+    return _is_admin(user)
+
+
+def system_settings_query_conditions(doctype: str, user: str | None = None):
+    """Nothing to list for anyone but a System Manager."""
+    user = user or get_current_user()
+    return None if _is_admin(user) else Q(pk__in=[])
+
+
+def system_settings_has_permission(doc, ptype: str = "read", user: str | None = None):
+    """System Manager for everything, reading included, as ``system_settings.json``
+    grants (FINDINGS.md 64).
+
+    Nobody else needs the row: the boot call reads it server-side for every user. A
+    Sales Manager is offered the Defaults page all the same and gets a blank panel, as
+    on upstream (``UPSTREAM_BUGS.md`` 50).
+
+    Nobody deletes it: ``system_settings.json`` grants no ``delete``, and the boot call
+    depends on the row.
+    """
+    if ptype == "delete":
+        return False
+    return _is_admin(user or get_current_user())

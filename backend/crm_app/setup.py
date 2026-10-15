@@ -43,11 +43,12 @@ from crm_app.models import (
 from crm_app.models.metadata import add_standard_dropdown_items as _seed_dropdown_items
 from frappe_platform.models import Country, Language
 
-# The two lookup lists live with the framework doctypes they fill; a migration writes
-# them and this install step puts back any that were deleted (FINDINGS.md 66).
+# The lookup lists live with the framework doctypes they fill; a migration writes
+# them and this install step puts back any that were deleted (FINDINGS.md 63, 66).
 from frappe_platform.reference_data import (  # noqa: F401 - re-exported for callers
     GENDERS,
     SALUTATIONS,
+    add_currencies,
     add_genders,
     add_salutations,
 )
@@ -56,7 +57,8 @@ from frappe_platform.reference_data import (  # noqa: F401 - re-exported for cal
 # The framework seeds these when a site is set up, before any app installs, from
 # ``frappe/geo/country_info.json``; a copy of that file sits in ``crm_app/data``. They are
 # the Link target of ``Address.country`` (FINDINGS.md 45). The Currency rows the same
-# import writes are not ported: nothing in the CRM reads them.
+# import writes come from the same file, through a migration
+# (``frappe_platform.reference_data.add_currencies``, FINDINGS.md 63).
 
 COUNTRY_INFO = pathlib.Path(__file__).resolve().parent / "data" / "country_info.json"
 
@@ -557,6 +559,7 @@ def after_install(force: bool = False) -> dict[str, int]:
     return {
         "countries": add_countries(),
         "languages": add_languages(),
+        "currencies": add_currencies(),
         "genders": add_genders(),
         "salutations": add_salutations(),
         "lead_statuses": add_default_lead_statuses(),

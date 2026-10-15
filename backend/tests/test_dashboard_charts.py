@@ -113,6 +113,48 @@ def pipeline(alice, statuses):
     return locals()
 
 
+def test_deals_by_territory_and_salesperson_carry_count_and_value(alice, bob, statuses):
+    """FINDINGS.md 88: ``dashboard.py:1029-1147``. Two series each, the count as bars
+    and the value in the dashboard currency as a line on the second axis; most deals
+    first, then most value; "Empty" for no territory; the owner's full name."""
+    from crm_app.api.dashboard import get_deals_by_salesperson, get_deals_by_territory
+    from crm_app.models import CRMTerritory
+
+    qualification = statuses["Qualification"]
+    with session_user(alice.name):
+        europe = CRMTerritory.objects.create(territory_name="ZZ Europe")
+        deals = [
+            CRMDeal.objects.create(deal_owner=alice, status=qualification, territory=europe, deal_value=100),
+            CRMDeal.objects.create(deal_owner=alice, status=qualification, territory=europe, deal_value=50),
+            CRMDeal.objects.create(deal_owner=bob, status=qualification, deal_value=400),
+        ]
+    for deal in deals:
+        _stamp(deal, _at(10))
+    CRMDeal.objects.filter(pk=deals[0].pk).update(exchange_rate=2)
+
+    with session_user("Administrator"):
+        territory = get_deals_by_territory(FROM, TO)
+        salesperson = get_deals_by_salesperson(FROM, TO)
+
+    assert territory["data"] == [
+        {"territory": europe.name, "deals": 2, "value": 250.0},
+        {"territory": "Empty", "deals": 1, "value": 400.0},
+    ]
+    assert salesperson["data"] == [
+        {"salesperson": "Alice", "deals": 2, "value": 250.0},
+        {"salesperson": "Bob", "deals": 1, "value": 400.0},
+    ]
+    for chart in (territory, salesperson):
+        assert chart["yAxis"] == {"title": "Number of deals"}
+        assert chart["y2Axis"] == {"title": "Deal value ($)"}
+        assert chart["series"] == [
+            {"name": "deals", "type": "bar"},
+            {"name": "value", "type": "line", "showDataPoints": True, "axis": "y2"},
+        ]
+    assert territory["subtitle"] == "Geographic distribution of deals and revenue"
+    assert salesperson["subtitle"] == "Number of deals and total value per salesperson"
+
+
 def test_every_upstream_chart_is_registered():
     for name in (
         "sales_trend", "forecasted_revenue", "funnel_conversion",

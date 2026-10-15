@@ -15,6 +15,10 @@ platform lookups outside PHASE_1_MODELS.md section 1's list of nine. They are po
 and receives ``"Mr"``, ``"USD"``, ``"CRM Lead"``) without dragging five more platform
 tables into scope. Logged in docs/internal/PROGRESS.md.
 
+Since then all but ``DocType`` have been ported as doctypes of their own (FINDINGS.md 45,
+63, 66). The columns stayed text, and ``frappe_core/links.py`` validates each against
+its target on save, as upstream's Link check does.
+
 ### SLA fields
 
 ``sla``, ``sla_status``, ``response_by``, ``first_response_time`` and friends are ported
@@ -51,8 +55,49 @@ TASK_STATUS_CHOICES = [
 ]
 
 
+class ExchangeRateMixin(models.Model):
+    """``update_exchange_rate``, word for word the same in ``crm_deal.py:273-280`` and
+    ``crm_organization.py:34-41`` (FINDINGS.md 63).
+
+    When the currency changed, or no rate is held, the rate is recomputed: 1 when the
+    record is in the dashboard currency (FCRM Settings, USD when none is set), else what
+    ``crm.api.exchange_rate.get_exchange_rate`` answers for that pair today. A provider
+    that cannot answer refuses the save, as upstream's ``frappe.throw`` does.
+
+    The dashboard multiplies by this rate, so a deal in EUR counts in the dashboard
+    currency there. Called from ``save`` after the Link check, which is where upstream's
+    ``validate`` runs, so an unknown currency is refused before any provider is asked.
+    """
+
+    class Meta:
+        abstract = True
+
+    def update_exchange_rate(self) -> None:
+        if not (self._currency_changed() or not self.exchange_rate):
+            return
+        from crm_app.api.exchange_rate import get_exchange_rate
+        from crm_app.models.metadata import FCRMSettings
+
+        system_currency = (
+            FCRMSettings._default_manager.values_list("currency", flat=True).first() or "USD"
+        )
+        exchange_rate = 1
+        if self.currency and self.currency != system_currency:
+            exchange_rate = get_exchange_rate(self.currency, system_currency)
+        self.exchange_rate = exchange_rate
+
+    def _currency_changed(self) -> bool:
+        """``has_value_changed("currency")``: true for a new record, as upstream's is."""
+        if self._state.adding or not self.pk:
+            return True
+        previous = (
+            type(self)._default_manager.filter(pk=self.pk).values_list("currency", flat=True).first()
+        )
+        return previous != self.currency
+
+
 @register_doctype("CRM Organization")
-class CRMOrganization(BaseDocument):
+class CRMOrganization(ExchangeRateMixin, BaseDocument):
     """``autoname=field:organization_name`` - the PK is the display name, verbatim.
 
     Not slugified. ``crm/demo/deals.py:75-96`` keys a logo dict by ``"ScaleUp Labs"``
@@ -75,7 +120,8 @@ class CRMOrganization(BaseDocument):
     territory = models.ForeignKey(
         "crm_app.CRMTerritory", on_delete=models.PROTECT, null=True, blank=True, related_name="+"
     )
-    # Link to Frappe's Currency / Address - not modelled; see the module docstring.
+    # Links kept as text columns (see the module docstring); Currency is modelled now and
+    # validated on save (frappe_core/links.py), Address is a Link the metadata declares.
     currency = models.CharField(max_length=140, blank=True, default="")
     address = models.CharField(max_length=140, blank=True, default="")
     exchange_rate = models.FloatField(null=True, blank=True)
@@ -84,30 +130,13 @@ class CRMOrganization(BaseDocument):
         ordering = ["-modified"]
         name_strategy = FieldValue("organization_name")
 
-    def update_exchange_rate(self, system_currency: str = "USD", fx_rate=None):
-        """``crm_organization.py:validate -> update_exchange_rate``.
-
-        Upstream reads the system currency from ``FCRM Settings`` and calls an external
-        FX service. Both are injected here: the settings read belongs to the caller
-        (phase 3) and the FX call is a phase-7 integration behind a feature flag
-        (``ENABLE_*`` in settings). The *rule* - recompute when the currency changed or
-        no rate is set, default to 1 when the currency matches the system one - is
-        ported exactly.
-        """
-        if self.exchange_rate and not self._currency_changed():
-            return
-        rate = 1
-        if self.currency and self.currency != system_currency and fx_rate is not None:
-            rate = fx_rate
-        self.exchange_rate = rate
-
-    def _currency_changed(self) -> bool:
-        if self._state.adding or not self.pk:
-            return True
-        previous = (
-            type(self)._default_manager.filter(pk=self.pk).values_list("currency", flat=True).first()
-        )
-        return previous != self.currency
+    def save(self, *args, **kwargs):
+        """``crm_organization.py:31-32``: ``validate`` updates the exchange rate."""
+        self._validate_text_links()
+        if not kwargs.get("update_fields"):
+            # A partial save is upstream's db.set_value, which runs no validate.
+            self.update_exchange_rate()
+        return super().save(*args, **kwargs)
 
     @staticmethod
     def default_list_data():
@@ -666,7 +695,9 @@ class CRMLead(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
 
 
 @register_doctype("CRM Deal")
-class CRMDeal(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDocument):
+class CRMDeal(
+    StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, ExchangeRateMixin, BaseDocument
+):
     owner_field = "deal_owner"
     status_model_name = "CRM Deal Status"
     default_status = "Qualification"
@@ -919,6 +950,10 @@ class CRMDeal(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
             self.set_primary_email_mobile_no()
         self.validate_forecasting_fields()
         self.validate_lost_reason()
+        # crm_deal.py:102, the last step of validate, after the Link check.
+        self._validate_text_links()
+        if not kwargs.get("update_fields"):
+            self.update_exchange_rate()
         self.apply_sla()
         creating = self._state.adding
         status_moved = creating or self.status_id != getattr(self, "_loaded_status", None)

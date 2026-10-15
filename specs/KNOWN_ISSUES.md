@@ -894,7 +894,7 @@ and the models are renamed later, as decided. Paths under `backend/` unless give
 
 **Settings and environment**
 
-- `config/settings/base.py:296-303` — `FRAPPE_SYSDEFAULTS` and its seven `FRAPPE_*`
+- `config/settings/base.py:298-305` — `FRAPPE_SYSDEFAULTS` and its seven `FRAPPE_*`
   environment variables (`FRAPPE_DATE_FORMAT`, `FRAPPE_TIME_FORMAT`, `FRAPPE_NUMBER_FORMAT`,
   `FRAPPE_FLOAT_PRECISION`, `FRAPPE_CURRENCY_PRECISION`, `FRAPPE_CURRENCY`,
   `FRAPPE_ROUNDING_METHOD`)

@@ -320,7 +320,7 @@ definitions):
 | `frappe.integrations.frappe_providers.frappecloud_billing.current_site_info` | Empty, for System Managers; this port can never be a Frappe Cloud site, and any billing added later reports through this call | `13` §9 |
 | `frappe.utils.telemetry.pulse.client.boot_config`                           | `{"enabled": false}` until `POSTHOG_PROJECT_ID` and `POSTHOG_HOST` are set in `.env`  | `13` §9 |
 | `crm.demo.api.clear_demo_data`                                              | The role gate, then upstream's early return: demo seeding was never ported (`PORT_PLAN.md` §2), so there is no recorded demo state to clear | `13` §9 |
-| `crm.www.crm.get_context_for_dev` (served since 23 Sep 2026)                | The boot values `main.js` copies onto `window` before it mounts: formats from `FRAPPE_SYSDEFAULTS`, the timezone pair, empty translations, three false site flags. Guest-allowed; called in production too, since no HTML carries them here (FINDINGS.md 26) | `13` §9 |
+| `crm.www.crm.get_context_for_dev` (served since 23 Sep 2026)                | The boot values `main.js` copies onto `window` before it mounts: formats from the System Settings row, the timezone pair, empty translations, three false site flags. Guest-allowed; called in production too, since no HTML carries them here (FINDINGS.md 26) | `13` §9 |
 
 `getdoctype` is still the one to watch: if a form renders with no fields, or a Select
 with no options, start there.

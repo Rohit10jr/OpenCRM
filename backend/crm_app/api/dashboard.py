@@ -27,8 +27,8 @@ import json
 from dateutil import parser as date_parser
 from dateutil.parser import ParserError
 from dateutil.relativedelta import relativedelta
-from django.db.models import Avg, Count, Q, Sum
-from django.db.models.functions import TruncDate
+from django.db.models import Avg, Count, ExpressionWrapper, F, FloatField, Q, Sum, Value
+from django.db.models.functions import Cast, Coalesce, TruncDate
 from django.utils import timezone
 
 from frappe_core.exceptions import PermissionError as FrappePermissionError
@@ -286,40 +286,61 @@ def get_won_deals(from_date, to_date, user=None):
     }
 
 
-def _average_value(queryset, from_date, to_date, date_field: str, title: str, tooltip: str):
+#: ``deal_value_expr = Deal.deal_value * IfNull(Deal.exchange_rate, 1)``
+#: (``dashboard.py:230``, ``:343``, ``:397``): a deal counts in the dashboard currency.
+#: Every rate was 1 until the providers were ported (FINDINGS.md 63), so leaving it out
+#: changed nothing then.
+_DEAL_VALUE_IN_BASE_CURRENCY = ExpressionWrapper(
+    Cast("deal_value", FloatField()) * Coalesce(F("exchange_rate"), Value(1.0)),
+    output_field=FloatField(),
+)
+
+
+def _average_value(
+    queryset, from_date, to_date, date_field: str, title: str, tooltip: str, percent_suffix=False
+):
     """``date_field`` is either ``creation`` (a DateTimeField, so it needs the ``__date``
     lookup to compare against a date without a naive-datetime warning) or ``closed_date``
-    (already a DateField)."""
+    (already a DateField).
+
+    The delta is the difference of the two averages, 0 with no earlier one
+    (``current - prev if prev else 0``, ``dashboard.py:247,361,414``), not a percentage
+    as the count cards' is. Only "Avg. deal value" puts ``%`` after it
+    (``deltaSuffix``, ``:422``), which labels an amount as a percentage:
+    ``UPSTREAM_BUGS.md`` 51, reproduced.
+    """
     prev_from, _prev_to = _period_before(from_date, to_date)
     prefix = f"{date_field}__date" if date_field == "creation" else date_field
 
     aggregate = queryset.aggregate(
         current=Avg(
-            "deal_value",
+            _DEAL_VALUE_IN_BASE_CURRENCY,
             filter=Q(**{f"{prefix}__gte": from_date, f"{prefix}__lte": to_date}),
         ),
         previous=Avg(
-            "deal_value",
+            _DEAL_VALUE_IN_BASE_CURRENCY,
             filter=Q(**{f"{prefix}__gte": prev_from, f"{prefix}__lt": from_date}),
         ),
     )
     current = float(aggregate["current"] or 0)
     previous = float(aggregate["previous"] or 0)
-    return {
+    card = {
         "title": title,
         "tooltip": tooltip,
         "value": current,
-        "delta": _delta(current, previous),
-        "deltaSuffix": "%",
+        "delta": current - previous if previous else 0,
         "prefix": get_base_currency_symbol(),
     }
+    if percent_suffix:
+        card["deltaSuffix"] = "%"
+    return card
 
 
 def get_average_deal_value(from_date, to_date, user=None):
-    """``dashboard.py:372-424``."""
+    """``dashboard.py:372-424``: ongoing and won deals, a lost one left out (``:387``)."""
     return _average_value(
-        _deal_queryset(user), from_date, to_date, "creation",
-        "Average deal value", "Average value of all deals",
+        _deal_queryset(user).exclude(status__type="Lost"), from_date, to_date, "creation",
+        "Avg. deal value", "Average deal value of ongoing & won deals", percent_suffix=True,
     )
 
 
@@ -327,7 +348,7 @@ def get_average_won_deal_value(from_date, to_date, user=None):
     """``dashboard.py:314-369``."""
     return _average_value(
         _deal_queryset(user).filter(status__type="Won"), from_date, to_date, "closed_date",
-        "Average won deal value", "Average value of won deals based on its closure date",
+        "Avg. won deal value", "Average deal value of won deals",
     )
 
 
@@ -335,16 +356,26 @@ def get_average_ongoing_deal_value(from_date, to_date, user=None):
     """``dashboard.py:197-256``."""
     return _average_value(
         _deal_queryset(user).exclude(status__type__in=["Won", "Lost"]), from_date, to_date,
-        "creation", "Average ongoing deal value", "Average value of ongoing deals",
+        "creation", "Avg. ongoing deal value", "Average deal value of non won/lost deals",
     )
 
 
 def get_base_currency_symbol():
-    """``dashboard.py:1150-1156`` - the currency configured on FCRM Settings."""
-    from crm_app.models import FCRMSettings
+    """``dashboard.py:1150-1156``: the symbol of the currency configured on FCRM Settings,
+    USD when none is, and ``""`` for a currency with no symbol.
 
+    Before Currency was ported (FINDINGS.md 63) this answered the code itself, or ``""``
+    on a site with no currency set, where upstream shows ``$``.
+    """
+    from crm_app.models import FCRMSettings
+    from frappe_platform.models import Currency
+
+    base_currency = (
+        FCRMSettings._default_manager.values_list("currency", flat=True).first() or "USD"
+    )
     return (
-        FCRMSettings._default_manager.values_list("currency", flat=True).first() or ""
+        Currency._default_manager.filter(pk=base_currency).values_list("symbol", flat=True).first()
+        or ""
     )
 
 
@@ -423,29 +454,69 @@ def get_deals_by_source(from_date, to_date, user=None):
     }
 
 
+def _deals_and_value(queryset, from_date, to_date, field: str, label_field: str | None = None):
+    """``Count("*")`` as ``deals`` and ``Sum(deal_value * IfNull(exchange_rate, 1))`` as
+    ``value`` per ``field``, most deals first, then most value (``dashboard.py:1046-1056``,
+    ``:1106-1118``). ``value`` is in the dashboard currency (FINDINGS.md 88).
+
+    The queryset is the permission-filtered one every chart here uses, where upstream
+    reads the table directly: a Sales User's chart counts the deals they can see.
+    """
+    value = Sum(Coalesce(_DEAL_VALUE_IN_BASE_CURRENCY, Value(0.0)), output_field=FloatField())
+    fields = [field, label_field] if label_field else [field]
+    rows = (
+        queryset.filter(creation__date__gte=from_date, creation__date__lte=to_date)
+        .values(*fields)
+        .annotate(deals=Count("pk"), value=value)
+        .order_by("-deals", "-value")
+    )
+    return rows
+
+
 def get_deals_by_territory(from_date, to_date, user=None):
-    """``dashboard.py:1029-1084``."""
+    """``dashboard.py:1029-1084``: a deal with no territory counts under "Empty"."""
+    rows = _deals_and_value(_deal_queryset(user), from_date, to_date, "territory")
     return {
-        "data": _grouped(_deal_queryset(user), from_date, to_date, "territory", "territory"),
+        "data": [
+            {"territory": row["territory"] or "Empty", "deals": row["deals"], "value": row["value"] or 0}
+            for row in rows
+        ],
         "title": "Deals by territory",
-        "subtitle": "Territory-wise deal distribution",
+        "subtitle": "Geographic distribution of deals and revenue",
         "xAxis": {"title": "Territory", "key": "territory", "type": "category"},
-        "yAxis": {"title": "Count"},
-        "series": [{"name": "count", "type": "bar"}],
+        "yAxis": {"title": "Number of deals"},
+        "y2Axis": {"title": f"Deal value ({get_base_currency_symbol()})"},
+        "series": [
+            {"name": "deals", "type": "bar"},
+            {"name": "value", "type": "line", "showDataPoints": True, "axis": "y2"},
+        ],
     }
 
 
 def get_deals_by_salesperson(from_date, to_date, user=None):
-    """``dashboard.py:1087-1147``."""
+    """``dashboard.py:1087-1147``: named by the owner's full name, the owner's id when it
+    has none (``IfNull(User.full_name, CRMDeal.deal_owner)``)."""
+    rows = _deals_and_value(
+        _deal_queryset(user), from_date, to_date, "deal_owner", "deal_owner__full_name"
+    )
     return {
-        "data": _grouped(
-            _deal_queryset(user), from_date, to_date, "deal_owner", "salesperson"
-        ),
+        "data": [
+            {
+                "salesperson": row["deal_owner__full_name"] or row["deal_owner"],
+                "deals": row["deals"],
+                "value": row["value"] or 0,
+            }
+            for row in rows
+        ],
         "title": "Deals by salesperson",
-        "subtitle": "Deals owned per salesperson",
+        "subtitle": "Number of deals and total value per salesperson",
         "xAxis": {"title": "Salesperson", "key": "salesperson", "type": "category"},
-        "yAxis": {"title": "Count"},
-        "series": [{"name": "count", "type": "bar"}],
+        "yAxis": {"title": "Number of deals"},
+        "y2Axis": {"title": f"Deal value ({get_base_currency_symbol()})"},
+        "series": [
+            {"name": "deals", "type": "bar"},
+            {"name": "value", "type": "line", "showDataPoints": True, "axis": "y2"},
+        ],
     }
 
 

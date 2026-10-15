@@ -47,6 +47,8 @@ def test_the_first_run_writes_every_group(seeded):
     assert seeded == {
         "countries": 250,
         "languages": 82,
+        # Written by frappe_platform migration 0017, so the install step finds them.
+        "currencies": 0,
         # Written by frappe_platform migration 0014, so the install step finds them.
         "genders": 0,
         "salutations": 0,

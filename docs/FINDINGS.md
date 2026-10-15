@@ -72,8 +72,8 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 60 | frontend: Settings → General → "Mark lead/deal as replied on response" and "Reopen lead/deal on new communication" | medium | The two switches are stored and nothing reads them. Upstream's `on_communication_update` sets the lead's or deal's `communication_status` to Replied for a sent email and to Open for a received one when the matching switch is on. The port's handler only bumps `modified`. Found by reading the code while laying out the Settings rows, not by a failing screen. Decision 30 Sep 2026: to be ported once the browser testing is finished | open, deferred |
 | 61 | frontend: the Notifications panel, signed in as an administrator | high | An administrator's bell listed every user's notifications, and "Mark all as read" marked them read for everybody. Upstream's two notification methods filter on `to_user = session.user` for everyone; the port read through the permission rule, which is unrestricted for an administrator. Both now filter on the caller. This is also why the panel did not open: see 62 | **fixed** 30 Sep 2026 |
 | 62 | frontend: the Notifications panel, for whoever is assigned a task that is not tied to a lead or deal | medium | The panel does not open at all: such a notification has no reference, the panel builds a link to the lead page from it, and the router refuses a link with no id, which takes the whole panel down. The data and the Vue file are both upstream's, so upstream has the same fault (upstream bug 43). Administrator hit it here only because of 61, which put other users' rows in the list | open, same as upstream |
-| 63 | frontend: Settings → Dashboard → Dashboard Currency and Exchange Rate Provider | medium | The currency dropdown is empty: it is a Link to the framework's `Currency` doctype, which the port does not have, so its search answers 404. With no currency set the provider select stays disabled, and behind it the exchange-rate call is a stub that always answers 1 (a phase 3 decision). Decision 30 Sep 2026: port Currency once the browser testing is finished | open, deferred |
-| 64 | frontend: Settings → Defaults | medium | The section goes blank. The page reads and writes the framework's `System Settings` document and its metadata, neither of which the port has: both calls answer 404, the document never loads, and the template then reads a field off nothing. In the port the same six values (currency, the two precisions, number, date and time format) are fixed in Django settings and sent with the boot values, so they cannot be changed from the app. Decision 30 Sep 2026: to be built after the browser testing, as one piece of work with 63 (Currency) and the system-language step of 59 (translations) | open, deferred |
+| 63 | frontend: Settings → Dashboard → Dashboard Currency and Exchange Rate Provider | medium | The currency dropdown is empty: it is a Link to the framework's `Currency` doctype, which the port does not have, so its search answers 404. With no currency set the provider select stays disabled, and behind it the exchange-rate call is a stub that always answers 1 (a phase 3 decision). Decision 30 Sep 2026: port Currency once the browser testing is finished | **fixed** 15 Oct 2026: Currency ported, the four exchange-rate providers ported and applied on save; S4 and S21 to re-check |
+| 64 | frontend: Settings → Defaults | medium | The section goes blank. The page reads and writes the framework's `System Settings` document and its metadata, neither of which the port has: both calls answer 404, the document never loads, and the template then reads a field off nothing. In the port the same six values (currency, the two precisions, number, date and time format) are fixed in Django settings and sent with the boot values, so they cannot be changed from the app. Decision 30 Sep 2026: to be built after the browser testing, as one piece of work with 63 (Currency) and the system-language step of 59 (translations) | **fixed** 15 Oct 2026: System Settings ported, the boot call reads it; System Manager only (`UPSTREAM_BUGS.md` 50); S5 to re-check |
 | 65 | frontend: Settings → Email → Accounts → Add | high | Adding a real Gmail account with a correct app password ended in "Failed to create email account: invalid credentials". The login had succeeded; the save then failed because the local `.env` had no `FIELD_ENCRYPTION_KEY`, without which a password cannot be stored, and the screen prints that one sentence for any error at all. The key is now checked before the login, anything the mail libraries raise is a refusal and not a 500, and the setup docs say the key is required | **fixed** 1 Oct 2026; needs `FIELD_ENCRYPTION_KEY` in `.env` |
 | 66 | frontend: Salutation and Gender on a contact, a lead and a deal | medium | Upstream offers both as dropdowns, Links to the framework's `Salutation` and `Gender` doctypes. The port had neither doctype: on a contact the two were plain text boxes, and on a lead or deal the dropdowns existed but listed nothing. Ported both doctypes, seeded with upstream's nine salutations and seven genders, everyone reads and System Manager writes, and the contact's two fields are declared Links | **fixed** 1 Oct 2026 |
 | 67 | frontend: the Email and Mobile No dropdowns on a contact's page | high | Picking another number as primary answered "Only one Mobile No can be set as primary" and left two rows flagged, after which nothing on that contact would save. Editing or removing a number or an address from the dropdown answered 404. The flags are now written as one unit, old ones cleared first, and `frappe.client.set_value` / `delete` reach a contact's email and phone rows through the contact, as upstream's do | **fixed** 1 Oct 2026 |
@@ -97,6 +97,9 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 85 | Settings → Brand (S6): the logo and favicon showed for the account that uploaded them and for nobody else; the same for a profile photo and the lead, contact and organization images | medium | frappe-ui uploads privately unless told otherwise and the image uploaders never tell it otherwise, so each image is a private File row attached to nothing, which the File rule lets its owner alone read. Upstream has the same upload and the same rule, and shows the logo to everyone because a framework hook, `attach_files_to_document`, runs on every document save and attaches the file an Attach field names to that document; the File rule then defers to the document, and FCRM Settings is readable by every CRM role. The port had no such step. Ported as a `post_save` receiver on every doctype with an Attach field (`frappe_platform.files`), `ATTACH_FIELDS` declared on User and Contact, whose metadata is derived from the model | **fixed** 14 Oct 2026 |
 | 86 | Contacts (K7), the role passes: Grace and Ada deleted a contact Administrator created; the hosted demo refuses both | medium | Upstream's `contact.json` gives Sales User and Sales Manager read, write and create on every contact and no delete; delete comes from the `All` row with `if_owner`, so the creator or a System Manager. The port registered no rule for Contact, so any CRM user deleted any contact: upstream protection read as a missing hook, the security exception `CLAUDE.md` names. Ruled: `contact_has_permission`, everything but delete open, delete for the creator or System Manager; the resource route, `frappe.client.delete`, the delete dialog and bulk delete all consult it | **fixed** 14 Oct 2026 |
 | 87 | Settings → Email → Templates (S11), the role passes: Grace and Ada created, edited and deleted templates | medium | Upstream's `email_template.json` gives `Desk User`, the role every System User holds, read only, and System Manager create, write and delete; CRM adds nothing, and shows the page to every role. The port had no rule, so any CRM user rewrote the wording of mail sent in the company's name. Ruled: `email_template_has_permission`, read for everyone, the rest System Manager; every door consults it | **fixed** 14 Oct 2026 |
+| 88 | Dashboard → "Deals by territory" and "Deals by salesperson", found reading the code for 63 | low | Upstream plots two series on each, the number of deals and their value in the dashboard currency (`dashboard.py:1029-1147`), with upstream's titles and subtitles. The port plots the count alone, under different subtitles | **fixed** 15 Oct 2026: both charts return upstream's two series, the value in the dashboard currency |
+| 89 | Dashboard → the three average deal value cards, found in the review of 63 and 64 | medium | "Avg. deal value" counted lost deals, which upstream leaves out (`dashboard.py:387`); all three cards had their own titles and tooltips, and a percentage delta where upstream sends the difference of the averages | **fixed** 15 Oct 2026; the `%` upstream puts after that difference is `UPSTREAM_BUGS.md` 51, reproduced |
+| 90 | the country and currency reference data, found in the review of 63 and 64 | low | `crm_app/data/country_info.json` was the framework's `develop` copy, not version-15's: Turkey was "Türkiye" and Turkmenistan's currency TMT, where version-15 has "Turkey" and TMM. The framework checkout this port reads is on `develop`, not the `version-15` CLAUDE.md names | **fixed** 15 Oct 2026: the version-15 file; a database seeded earlier keeps its two extra rows |
 
 ---
 
@@ -2061,7 +2064,36 @@ provider select is disabled by the frontend because no currency is set
 always answers 1, a recorded phase 3 decision (`crm_app/api/exchange_rate.py`): the
 `service_provider` and `access_key` settings are stored and nothing reads them.
 
-**Status:** open, deferred. Decision 30 Sep 2026: port Currency once the browser testing
+**Doctype ported, 15 Oct 2026** (branch `currency-and-system-settings`): `Currency` in
+`frappe_platform`, its 149 rows written by migration 0017 from the copy of
+`country_info.json` the countries come from, with upstream's nine defaults enabled
+(`frappe_platform/reference_data.py:add_currencies`); the picker lists the enabled ones.
+Every role reads, System Manager writes. `currency` on a deal, an organization and FCRM
+Settings is now a validated Link, and the dashboard's currency prefix is the symbol
+(`$` with none set), not the code. Tests: `tests/test_currency.py`. S4 and S21 are for
+the tester to re-check.
+
+**Exchange rates ported, 15 Oct 2026**, the second half: `crm/api/exchange_rate.py` in
+full in `crm_app/api/exchange_rate.py`, the four providers with upstream's fallbacks
+between the two free ones, the access-key refusal and the three fetch-failure messages
+verbatim, cached per pair per day. Calls go through `crm_app/integrations/http.py` with
+upstream's five-second timeout and no retry. A deal and an organization take the rate
+on save when their currency changed or no rate is held (`ExchangeRateMixin`,
+`crm_deal.py:273-280`, `crm_organization.py:34-41`), into the dashboard currency (USD when
+none is set); the dashboard's three average cards now count `deal_value * exchange_rate`,
+as upstream's do (the forecast chart already did). `ENABLE_EXCHANGE_RATE_API`, on by
+default, switches the provider calls off for a site without outbound internet (every
+rate 1); the test settings turn it off. Tests: `tests/test_exchange_rate.py`. The
+territory and salesperson charts did not plot value at all, which is finding 88.
+
+**After the review, 15 Oct 2026:** a partial save (`save(update_fields=...)`, upstream's
+`db.set_value`) no longer asks for a rate. Records saved before this work held rate 1
+(deals) or none (organizations) whatever their currency, and upstream's rule only
+recomputes on a currency change, so `manage.py refresh_exchange_rates` writes the rate
+upstream would have: run it once after `migrate`. It is a command, not a migration,
+because it calls the provider.
+
+**Status (before the fix):** open, deferred. Decision 30 Sep 2026: port Currency once the browser testing
 is finished. Two steps then. First the doctype, the way Language was done: a model, a
 seed from `country_info.json` through `seed_defaults`, upstream's role table, and the
 title shown in the picker. Then, separately, the four providers behind the stub, which
@@ -2105,6 +2137,21 @@ alone writing it. Three other open items meet here and are best done together: t
 `currency` field needs the `Currency` doctype (finding 63), the system language the
 translation work needs is `System Settings.language` (finding 59, step 2 of
 `KNOWN_ISSUES.md` 10), and the dashboard's own currency setting reads the same list.
+
+**Fixed, 15 Oct 2026** (branch `currency-and-system-settings`): a `System Settings` single
+in `frappe_platform` with the seven fields the CRM reads (the six on the page, plus
+`rounding_method`), their options copied from `system_settings.json`; date, time and
+number format required, as there. Migration 0019 writes the row from
+`FRAPPE_SYSDEFAULTS`, so the formats did not change on the day; the boot call now reads
+the row, and writes it again if it is missing. `currency` is a validated Link to the
+Currency doctype from finding 63. `language` waits for finding 59. Tests:
+`tests/test_system_settings.py`. S5 is for the tester to re-check, as System Manager.
+
+**Who reads it, 15 Oct 2026:** System Manager alone, for reading as well as writing, as
+`system_settings.json` says. Upstream offers the Defaults tab to a Sales Manager too, who
+then gets a blank panel: confirmed on the hosted demo and recorded as `UPSTREAM_BUGS.md`
+50, reproduced here rather than widened. The boot call reads the row server-side, so
+nobody needs read on the doctype to have their numbers and dates formatted.
 
 ## 65. "Invalid credentials" for a correct password: the server had no encryption key
 
@@ -2807,3 +2854,68 @@ regenerated. Not a divergence: the port matches upstream's table exactly, unlike
 `Email Account`, where managers may write (divergence 2).
 
 Covered by `tests/test_email_template_rule.py`.
+
+## 88. "Deals by territory" and "Deals by salesperson" plot the count and not the value
+
+**Block:** none. Found 15 Oct 2026 reading `crm/api/dashboard.py` for finding 63, not in
+the browser.
+
+**Expected:** `get_deals_by_territory` and `get_deals_by_salesperson`
+(`dashboard.py:1029-1147`) select `Count("*")` as `deals` and
+`Sum(deal_value * IfNull(exchange_rate, 1))` as `value`, order by both, and return two
+series: `deals` as bars on the left axis ("Number of deals") and `value` as a line on
+the right ("Deal value (<symbol>)"), with the subtitles "Geographic distribution of
+deals and revenue" and "Number of deals and total value per salesperson".
+
+**Actual:** the port's two charts (`crm_app/api/dashboard.py`, `get_deals_by_territory`
+and `get_deals_by_salesperson`) return one `count` series under "Count", and their own
+subtitles. The upstream shape predates the port (it is in the February 2026 query-builder
+refactor, `64097938d`), so this was a simplification at porting time, likely because
+every rate was 1 then.
+
+**Fix (15 Oct 2026):** `_deals_and_value` in `crm_app/api/dashboard.py` counts the deals
+and sums `deal_value * exchange_rate` per territory or owner, most deals first, then most
+value; the two charts return upstream's series, axes, titles and subtitles, "Empty" for a
+deal with no territory and the owner's full name for a salesperson. One difference kept on
+purpose: the port's queryset is permission-filtered, as every chart here is, where
+upstream reads the table directly. Covered by
+`tests/test_dashboard_charts.py::test_deals_by_territory_and_salesperson_carry_count_and_value`.
+
+## 89. The average deal value cards were not upstream's
+
+**Block:** none. Found 15 Oct 2026 by the review of findings 63 and 64 (a fresh Claude
+reviewer; Codex was unavailable).
+
+**Expected:** `dashboard.py:197-424`. "Avg. deal value" averages ongoing and won deals,
+leaving lost ones out (`Status.type != "Lost"`, `:387`). The titles are "Avg. deal
+value", "Avg. won deal value" and "Avg. ongoing deal value", with the tooltips "Average
+deal value of ongoing & won deals", "Average deal value of won deals" and "Average deal
+value of non won/lost deals". Each delta is `current - previous if previous else 0`, and
+only the first card sends `deltaSuffix: "%"`.
+
+**Actual:** the first card averaged every deal, so one large lost deal raised it; the
+three had the port's own titles and tooltips; and every delta was a percentage with `%`.
+
+**Fix (15 Oct 2026):** the filter, the six strings and the delta in
+`crm_app/api/dashboard.py:_average_value` and its three callers. The `%` after an amount
+is upstream's mistake, reproduced: `UPSTREAM_BUGS.md` 51. Covered by
+`tests/test_exchange_rate.py::test_the_average_cards_are_upstreams` and
+`::test_a_lost_deal_is_left_out_of_the_average`.
+
+## 90. The country and currency data came from the framework's `develop` branch
+
+**Block:** none. Found 15 Oct 2026 by the same review.
+
+**What:** `crm_app/data/country_info.json`, copied for finding 45 and used again for 63,
+was byte-identical to the framework's `develop` copy. Against version-15, which CRM's CI
+pairs with, two entries differ: the country "Türkiye" is "Turkey", and Turkmenistan's
+currency is TMM ("m", "Tennesi"), not TMT. The cause is the checkout: the framework
+clone this port reads is on `develop`, not `version-15`. Reading it with
+`git show version-15:<path>` gives the right files whichever branch is checked out.
+
+**Fix (15 Oct 2026):** the version-15 file. A database seeded before keeps "Türkiye" and
+TMT beside the new "Turkey" and TMM, since the seeds add missing rows and delete nothing.
+Two other things the review found came from reading `develop`, and are corrected in the
+same change: the Currency rule cited a `Desk User` `select` row that version-15's
+`currency.json` does not have, so reading is now for the roles that table names; and
+`add_currencies` noted an escaping of `number_format` that only `develop` does.
