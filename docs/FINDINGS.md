@@ -2851,7 +2851,19 @@ recorded divergence is still open; faithful is the default.
 5. **Bug 53:** reproduced, as 50 was.
 6. **The SLA engine (finding 91):** built too, sharing the condition evaluator.
 
-**Status:** open, decided; to be built on branch `assignment-rules`. Estimate: one to two
+**Building decisions, 15 Oct 2026:**
+
+* **Where the engine runs:** after every save of every registered doctype, as upstream's
+  `"*"` `on_update` hook does (`hooks.py:172`, version-15), behind the same cached check
+  for which doctypes have an enabled rule, so a save with none costs one cache read. A
+  rule for another doctype can only come through the API here, and it works rather than
+  being stored and ignored.
+* **Who builds it:** Codex, from one brief per commit; Claude plans, reviews and commits
+  (CLAUDE.md, "Codex builds, Claude plans and reviews").
+* **Two pull requests:** Assignment Rules first, on `assignment-rules`; the SLA engine
+  (finding 91) second, on its own branch, reusing the condition evaluator.
+
+**Status:** open, decided; being built on branch `assignment-rules`. Estimate: one to two
 days with tests, and about the same again for the SLA engine.
 
 ## 82. Duplicate on an SLA policy did nothing: the document had no `doctype`
@@ -3079,6 +3091,24 @@ Lead conversion sets the communication status to Replied only on a lead with an 
 so that branch never runs. The communication status from finding 60 is written, but the
 page shows it only beside an SLA, so the S20 check needs this, or a look at the database.
 
-**Status:** open; decided 15 Oct 2026 to build it with finding 80: SLA conditions are
+**Decisions, 15 Oct 2026, with the owner:**
+
+* **Conditions** are evaluated from the JSON form with no code run, by the evaluator
+  built for finding 80; an SLA whose condition exists only as code is refused on save,
+  saying only conditions built on the screen are supported. An SLA with no condition,
+  the default one included, is unaffected. Upstream's save-time check ("The Condition
+  '{0}' is invalid: {1}") still applies to the JSON form. The dev database's one SLA has
+  no condition, so nothing stored breaks.
+* **Time zone:** upstream counts "now", working hours and holidays in System Settings'
+  `time_zone`, set by Frappe's setup wizard (`get_system_timezone`,
+  `frappe/utils/data.py:324-326`, version-15, "Asia/Kolkata" only when unset). The port
+  has no wizard and no such field, so the site's `TIME_ZONE` setting is the time zone, not
+  a fallback: made readable from `.env`, added to `.env.example`, `UTC` when unset as
+  today, and listed under "before you deploy", since working hours meant as local time
+  are wrong by the zone's offset under `UTC`. Deadlines are stored in UTC and computed
+  in that zone. The boot call already reports the same setting as the system zone.
+* **Its own pull request**, after finding 80's, on its own branch.
+
+**Status:** open; decided 15 Oct 2026 to build it after finding 80: SLA conditions are
 stored in the same two forms as assignment conditions, and one evaluator serves both.
 Upstream's engine is about 420 lines; an estimate like finding 80's, one to two days.
