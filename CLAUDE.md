@@ -114,6 +114,48 @@ django-treebeard (nested-set trees). Python 3.13.
 
 ---
 
+# Codex builds, Claude plans and reviews (from 15 Oct 2026)
+
+For the Assignment Rules and SLA work (`docs/FINDINGS.md` 80 and 91), and any task the
+owner hands over the same way, the roles are reversed: **Codex writes the code, Claude
+plans and reviews.** The owner has Codex capacity to spare and Claude capacity to save,
+so Claude should not write feature code itself while this holds.
+
+1. **Plan with the owner.** Settle the decisions first and record them in the finding.
+   Codex builds what was decided; it does not re-decide.
+2. **Write a brief per commit**, one Markdown file in `tasks/` (git-ignored), with the
+   Write tool: the branch, the finding, the upstream files and lines to follow
+   (framework read with `git show version-15:<path>`, as the checkout is on `develop`),
+   the decisions, the one change to make, the tests that must pass, and the records to
+   update. A feature is several briefs, run one after another.
+3. **Check out the branch, then run Codex** in the background with its output in a log,
+   the same 20-minute check and 40-minute limit as a review:
+
+   ```powershell
+   Get-Content tasks\<brief>.md -Raw | codex exec -s workspace-write -c sandbox_workspace_write.network_access=true - *> <scratchpad>\codex_build.log
+   ```
+
+   `network_access` is what lets the tests reach PostgreSQL on localhost. The exit code
+   means nothing (see below); read the log and `git status`. Probed 15 Oct 2026: under
+   this sandbox Codex runs single test files and edits the repo, but **cannot write
+   `.git`**, even with `--add-dir`, so it cannot commit. Granting that needs
+   `danger-full-access`, which is the owner's call, not ours. `AGENTS.md` "When
+   building" holds Codex's side: one brief one commit, message in `tasks/COMMIT_MSG`,
+   single test files only, the doctype checklist.
+4. **Review the working-tree diff** against upstream yourself, read-only. If it is right,
+   commit it: `git add <the files the message lists>`, then
+   `git commit -F tasks/COMMIT_MSG`, after checking the message ends with Codex's
+   attribution. If it is not, report the findings to the owner, including where you
+   disagree; **do not fix them in place**. A fix is a follow-up brief, so Codex builds that
+   too.
+5. **Before the pull request**, run the full suite in the background (the rules below),
+   then push and open it when the owner asks.
+
+**If Codex cannot run** (a sandbox error, a refused model), say so and stop for the
+owner's call: falling back to Claude writing the code spends the capacity this
+arrangement saves. The three tiers below still apply to reviews of anything Claude
+writes.
+
 # Reviewer policy — three tiers
 
 You write the code; something that does **not** share your blind spots reviews it.
@@ -132,7 +174,9 @@ and still in git history.
 
 ## Tier 1 — Codex (default)
 
-- codex-cli 0.147.0, on PATH as `codex`. Auth already configured.
+- codex-cli 0.153.4, model `gpt-5.6-sol`, on PATH as `codex`. Auth already configured.
+  `gpt-5.5` was refused for this ChatGPT login on 15 Oct 2026 ("not supported when using
+  Codex with a ChatGPT account"); the update fixed it. A refused model is a failed run.
 - The interactive TUI needs a live terminal, so you **cannot** drive it. Use
   `codex exec` — headless: prompt in, report to stdout.
 - Codex reads the repo itself. Point it at paths; don't paste code in.
