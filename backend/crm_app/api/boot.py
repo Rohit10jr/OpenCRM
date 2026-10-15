@@ -33,7 +33,7 @@ from django.conf import settings
 from frappe_core.query import by_name
 from frappe_core.session import GUEST_USER, get_current_user
 from frappe_core.whitelist import whitelist
-from frappe_platform.models import User
+from frappe_platform.models import SystemSettings, User
 
 
 @whitelist("crm.www.crm.get_context_for_dev", allow_guest=True, methods=("POST",))
@@ -42,13 +42,16 @@ def get_context_for_dev():
 
     * ``sysdefaults`` - upstream is ``frappe.defaults.get_defaults()``: System Settings
       republished as global defaults on every save (``system_settings.py:213-218``).
-      There is no System Settings doctype here, so the seven format keys come from
-      ``settings.FRAPPE_SYSDEFAULTS``. ``utils/index.js:82`` reads
+      Here the seven format keys are read from the System Settings row itself
+      (FINDINGS.md 64), which migration 0019 wrote from ``settings.FRAPPE_SYSDEFAULTS``
+      and the Defaults page edits; read server-side, so a caller needs no permission on
+      the doctype, which only System Manager has. ``utils/index.js:82`` reads
       ``window.sysdefaults.date_format`` with no guard, so ``sysdefaults`` must always be
-      a dict carrying that key. ``currency`` is the "Default display currency" Link on
-      System Settings (``system_settings.json:710-715``), empty on a fresh site until the
-      setup wizard picks one; ``stores/meta.js:58`` and ``FieldLayout/Field.vue:358``
-      show USD for an empty value, so it ships empty and is set from ``.env``.
+      a dict carrying that key; ``SystemSettings.load`` writes the row if it is missing.
+      ``currency`` is the "Default display currency" Link on System Settings
+      (``system_settings.json:710-715``), empty on a fresh site until the setup wizard
+      picks one; ``stores/meta.js:58`` and ``FieldLayout/Field.vue:358`` show USD for an
+      empty value.
     * ``timezone`` - ``{"system", "user"}`` as ``App.vue:43-44`` reads it: the caller's
       own ``time_zone`` when set, else the system zone; a guest gets the system zone
       twice, which is upstream's answer for a user row without one.
@@ -60,7 +63,7 @@ def get_context_for_dev():
     """
     system_zone = settings.TIME_ZONE
     return {
-        "sysdefaults": dict(settings.FRAPPE_SYSDEFAULTS),
+        "sysdefaults": SystemSettings.load().sysdefaults(),
         "timezone": {"system": system_zone, "user": _user_time_zone() or system_zone},
         "translated_messages": {},
         "translated_doctypes": [],

@@ -2115,6 +2115,15 @@ alone writing it. Three other open items meet here and are best done together: t
 translation work needs is `System Settings.language` (finding 59, step 2 of
 `KNOWN_ISSUES.md` 10), and the dashboard's own currency setting reads the same list.
 
+**Fixed, 15 Oct 2026** (branch `currency-and-system-settings`): a `System Settings` single
+in `frappe_platform` with the seven fields the CRM reads (the six on the page, plus
+`rounding_method`), their options copied from `system_settings.json`; date, time and
+number format required, as there. Migration 0019 writes the row from
+`FRAPPE_SYSDEFAULTS`, so the formats did not change on the day; the boot call now reads
+the row, and writes it again if it is missing. `currency` is a validated Link to the
+Currency doctype from finding 63. `language` waits for finding 59. Tests:
+`tests/test_system_settings.py`. S5 is for the tester to re-check, as System Manager.
+
 **Who reads it, 15 Oct 2026:** System Manager alone, for reading as well as writing, as
 `system_settings.json` says. Upstream offers the Defaults tab to a Sales Manager too, who
 then gets a blank panel: confirmed on the hosted demo and recorded as `UPSTREAM_BUGS.md`

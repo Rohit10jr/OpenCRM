@@ -838,9 +838,12 @@ def test_exactly_the_intended_doctypes_have_row_rules():
         "ERPNext CRM Settings",
     }
     # The framework doctypes the browser passes ported because the Vue app links to
-    # them (FINDINGS.md 45, 58, 63, 66): reference data everyone reads and System Manager
+    # them (FINDINGS.md 45, 58, 63, 64, 66): reference data everyone reads and System Manager
     # writes, upstream's own role tables reproduced (permissions/platform_docs.py).
-    added_by_the_browser_passes = {"Address", "Country", "Language", "Salutation", "Gender", "Currency"}
+    # System Settings is System Manager's alone, reading included.
+    added_by_the_browser_passes = {
+        "Address", "Country", "Language", "Salutation", "Gender", "Currency", "System Settings"
+    }
     # The role passes (FINDINGS.md 86, 87): upstream's role tables reproduced. Contact -
     # every role reads, writes and creates; the creator or a System Manager deletes.
     # Email Template - every role reads; System Manager creates, writes and deletes.

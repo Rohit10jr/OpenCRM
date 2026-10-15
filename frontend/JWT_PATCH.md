@@ -240,9 +240,10 @@ Implemented in `backend/crm_app/api/boot.py`; covered by `backend/tests/test_boo
 The name is upstream's, "for_dev" included, so the guard test and the route inventory
 match the string the frontend sends. Upstream's developer-mode gate is not reproduced,
 because production is a caller here, and nothing in the answer is secret. The seven format
-values come from `FRAPPE_SYSDEFAULTS` in `config/settings/base.py`, each overridable from
-`.env`, since the port has no System Settings doctype; `currency` ships empty, as on a
-fresh Frappe site, and the frontend shows USD until `FRAPPE_CURRENCY` is set.
+values come from the `System Settings` row, which Settings → Defaults edits; the row was
+first written from `FRAPPE_SYSDEFAULTS` in `config/settings/base.py`, each overridable from
+`.env` (docs/FINDINGS.md 64). `currency` ships empty, as on a fresh Frappe site, and the
+frontend shows USD until one is chosen.
 
 ## Deployment
 

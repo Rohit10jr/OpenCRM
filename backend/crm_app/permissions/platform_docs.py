@@ -516,3 +516,20 @@ def currency_has_permission(doc, ptype: str = "read", user: str | None = None):
     if ptype == "read":
         return True
     return _is_admin(user)
+
+
+def system_settings_query_conditions(doctype: str, user: str | None = None):
+    """Nothing to list for anyone but a System Manager."""
+    user = user or get_current_user()
+    return None if _is_admin(user) else Q(pk__in=[])
+
+
+def system_settings_has_permission(doc, ptype: str = "read", user: str | None = None):
+    """System Manager for everything, reading included, as ``system_settings.json``
+    grants (FINDINGS.md 64).
+
+    Nobody else needs the row: the boot call reads it server-side for every user. A
+    Sales Manager is offered the Defaults page all the same and gets a blank panel, as
+    on upstream (``UPSTREAM_BUGS.md`` 50).
+    """
+    return _is_admin(user or get_current_user())

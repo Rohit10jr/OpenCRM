@@ -286,8 +286,10 @@ POSTHOG_HOST = env("POSTHOG_HOST", default="")
 
 # The format defaults the CRM page reads before it draws anything
 # (crm_app/api/boot.py, docs/FINDINGS.md 26). Upstream takes them from System Settings,
-# republished as `sysdefaults`; this port has no System Settings doctype, so they live
-# here. Strings, as Frappe stores them, and the values are Frappe's own fallbacks for an
+# republished as `sysdefaults`. Since FINDINGS.md 64 the port has that single too, and
+# these values only write its row the first time (frappe_platform migration 0019);
+# after that Settings -> Defaults edits the row and changing them here does nothing.
+# Strings, as Frappe stores them, and the values are Frappe's own fallbacks for an
 # unset default: frappe/utils/data.py get_user_date_format / get_user_time_format /
 # fmt_money, and System Settings' field defaults for the rest. `float_precision` empty
 # would mean 3 to the frontend as well; `currency_precision` empty means "use the

@@ -174,6 +174,13 @@ def register() -> None:
         permission_query_conditions=platform_docs.currency_query_conditions,
         has_permission=platform_docs.currency_has_permission,
     )
+    # System Settings (FINDINGS.md 64): System Manager alone, reading included, as
+    # system_settings.json grants. The boot call reads the row server-side.
+    register_permission_hooks(
+        "System Settings",
+        permission_query_conditions=platform_docs.system_settings_query_conditions,
+        has_permission=platform_docs.system_settings_has_permission,
+    )
     # Salutation and Gender (FINDINGS.md 66): the two lookups behind the contact, lead
     # and deal forms. Everyone reads, System Manager maintains.
     for doctype in ("Salutation", "Gender"):

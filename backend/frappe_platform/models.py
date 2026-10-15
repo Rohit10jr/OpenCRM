@@ -1435,6 +1435,108 @@ class Currency(BaseDocument):
         name_strategy = FieldValue("currency_name", label="Currency Name")
 
 
+#: ``system_settings.json``: the Select options of the fields the CRM reads, verbatim and
+#: in upstream's order. The two precisions start with a blank, "not set".
+SYSTEM_DATE_FORMATS = ("yyyy-mm-dd", "dd-mm-yyyy", "dd/mm/yyyy", "dd.mm.yyyy", "mm/dd/yyyy", "mm-dd-yyyy")
+SYSTEM_TIME_FORMATS = ("HH:mm:ss", "HH:mm")
+SYSTEM_FLOAT_PRECISIONS = ("", "2", "3", "4", "5", "6", "7", "8", "9")
+SYSTEM_CURRENCY_PRECISIONS = ("", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
+SYSTEM_ROUNDING_METHODS = ("Banker's Rounding (legacy)", "Banker's Rounding", "Commercial Rounding")
+
+#: The fields republished as the boot call's ``sysdefaults`` (``crm_app/api/boot.py``).
+SYSDEFAULT_FIELDS = (
+    "date_format",
+    "time_format",
+    "number_format",
+    "float_precision",
+    "currency_precision",
+    "currency",
+    "rounding_method",
+)
+
+
+def _choices(values):
+    return [(value, value) for value in values]
+
+
+@register_doctype("System Settings", is_single=True)
+class SystemSettings(BaseDocument):
+    """Frappe ``System Settings`` (``frappe/core/doctype/system_settings``), a single:
+    the site's number, date and currency formats (FINDINGS.md 64).
+
+    Upstream has some 120 fields; these are the seven the CRM reads. The Defaults page
+    in Settings edits six of them (``DefaultsSettings.vue``), and every one of the seven
+    reaches the browser as ``sysdefaults`` in the boot call, which is what every date,
+    number and amount on screen is formatted by. Upstream republishes the row as global
+    defaults on save (``system_settings.py:210-222``); the boot call reads the row
+    directly instead, which is the same answer without the copy.
+
+    ``system_settings.json`` gives the doctype to System Manager alone, reading
+    included. Upstream also offers the Defaults page to a Sales Manager, who gets a
+    blank panel; reproduced, ``UPSTREAM_BUGS.md`` 50 (``crm_app/permissions/platform_docs.py``).
+
+    The row is written by migration 0019 from ``settings.FRAPPE_SYSDEFAULTS``, so a site
+    keeps the formats its ``.env`` gave it; after that the row is what counts.
+    """
+
+    date_format = models.CharField("Date Format", max_length=140, choices=_choices(SYSTEM_DATE_FORMATS))
+    time_format = models.CharField(
+        "Time Format", max_length=140, choices=_choices(SYSTEM_TIME_FORMATS), default="HH:mm:ss"
+    )
+    number_format = models.CharField(
+        "Number Format", max_length=140, choices=_choices(CURRENCY_NUMBER_FORMATS)
+    )
+    float_precision = models.CharField(
+        "Float Precision", max_length=140, blank=True, default="", choices=_choices(SYSTEM_FLOAT_PRECISIONS)
+    )
+    currency_precision = models.CharField(
+        "Currency Precision",
+        max_length=140,
+        blank=True,
+        default="",
+        choices=_choices(SYSTEM_CURRENCY_PRECISIONS),
+        help_text="If not set, the currency precision will depend on number format",
+    )
+    currency = models.CharField("Currency", max_length=140, blank=True, default="", help_text="Default display currency")
+    rounding_method = models.CharField(
+        "Rounding Method",
+        max_length=140,
+        choices=_choices(SYSTEM_ROUNDING_METHODS),
+        default="Banker's Rounding (legacy)",
+    )
+
+    #: A text column that upstream declares as a Link, so the metadata says Link and the
+    #: save validates it (``frappe_core/links.py``).
+    LINK_FIELDS = {"currency": "Currency"}
+
+    @classmethod
+    def singleton_name(cls) -> str:
+        """A single's ``name`` is its doctype (``crm_app.models.telephony.SingletonMixin``)."""
+        return cls.get_doctype()
+
+    @classmethod
+    def load(cls):
+        """The single row, written from the environment's formats if it is missing."""
+        obj = cls._default_manager.filter(pk=cls.singleton_name()).first()
+        if obj is None:
+            obj = cls(name=cls.singleton_name(), **_sysdefaults_from_environment())
+            obj.save()
+        return obj
+
+    def sysdefaults(self) -> dict[str, str]:
+        """``frappe.defaults.get_defaults()`` for the seven keys, as strings."""
+        return {field: str(getattr(self, field) or "") for field in SYSDEFAULT_FIELDS}
+
+    class Meta:
+        verbose_name = "System Settings"
+
+
+def _sysdefaults_from_environment() -> dict[str, str]:
+    """``settings.FRAPPE_SYSDEFAULTS``, limited to the row's fields."""
+    configured = getattr(settings, "FRAPPE_SYSDEFAULTS", {}) or {}
+    return {field: configured[field] for field in SYSDEFAULT_FIELDS if field in configured}
+
+
 @register_doctype("Salutation")
 class Salutation(BaseDocument):
     """Frappe ``Salutation`` (``frappe/contacts/doctype/salutation/salutation.json``):
