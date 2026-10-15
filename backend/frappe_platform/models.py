@@ -1516,11 +1516,24 @@ class SystemSettings(BaseDocument):
 
     @classmethod
     def load(cls):
-        """The single row, written from the environment's formats if it is missing."""
+        """The single row, written from the environment's formats if it is missing.
+
+        Two first requests can both find it missing; the one whose insert loses reads the
+        winner's row rather than failing the boot call. The rule refuses deleting it, as
+        upstream has no delete on a single, so this is the test database's case and a
+        restored backup's, not an everyday one.
+        """
+        from django.db import IntegrityError, transaction
+
         obj = cls._default_manager.filter(pk=cls.singleton_name()).first()
-        if obj is None:
-            obj = cls(name=cls.singleton_name(), **_sysdefaults_from_environment())
-            obj.save()
+        if obj is not None:
+            return obj
+        try:
+            with transaction.atomic():
+                obj = cls(name=cls.singleton_name(), **_sysdefaults_from_environment())
+                obj.save()
+        except IntegrityError:
+            obj = cls._default_manager.get(pk=cls.singleton_name())
         return obj
 
     def sysdefaults(self) -> dict[str, str]:

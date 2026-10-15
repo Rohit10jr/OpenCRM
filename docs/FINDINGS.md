@@ -98,6 +98,8 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 86 | Contacts (K7), the role passes: Grace and Ada deleted a contact Administrator created; the hosted demo refuses both | medium | Upstream's `contact.json` gives Sales User and Sales Manager read, write and create on every contact and no delete; delete comes from the `All` row with `if_owner`, so the creator or a System Manager. The port registered no rule for Contact, so any CRM user deleted any contact: upstream protection read as a missing hook, the security exception `CLAUDE.md` names. Ruled: `contact_has_permission`, everything but delete open, delete for the creator or System Manager; the resource route, `frappe.client.delete`, the delete dialog and bulk delete all consult it | **fixed** 14 Oct 2026 |
 | 87 | Settings → Email → Templates (S11), the role passes: Grace and Ada created, edited and deleted templates | medium | Upstream's `email_template.json` gives `Desk User`, the role every System User holds, read only, and System Manager create, write and delete; CRM adds nothing, and shows the page to every role. The port had no rule, so any CRM user rewrote the wording of mail sent in the company's name. Ruled: `email_template_has_permission`, read for everyone, the rest System Manager; every door consults it | **fixed** 14 Oct 2026 |
 | 88 | Dashboard → "Deals by territory" and "Deals by salesperson", found reading the code for 63 | low | Upstream plots two series on each, the number of deals and their value in the dashboard currency (`dashboard.py:1029-1147`), with upstream's titles and subtitles. The port plots the count alone, under different subtitles | open, recorded 15 Oct 2026 |
+| 89 | Dashboard → the three average deal value cards, found in the review of 63 and 64 | medium | "Avg. deal value" counted lost deals, which upstream leaves out (`dashboard.py:387`); all three cards had their own titles and tooltips, and a percentage delta where upstream sends the difference of the averages | **fixed** 15 Oct 2026; the `%` upstream puts after that difference is `UPSTREAM_BUGS.md` 51, reproduced |
+| 90 | the country and currency reference data, found in the review of 63 and 64 | low | `crm_app/data/country_info.json` was the framework's `develop` copy, not version-15's: Turkey was "Türkiye" and Turkmenistan's currency TMT, where version-15 has "Turkey" and TMM. The framework checkout this port reads is on `develop`, not the `version-15` CLAUDE.md names | **fixed** 15 Oct 2026: the version-15 file; a database seeded earlier keeps its two extra rows |
 
 ---
 
@@ -2082,7 +2084,14 @@ none is set); the dashboard's three average cards now count `deal_value * exchan
 as upstream's do (the forecast chart already did). `ENABLE_EXCHANGE_RATE_API`, on by
 default, switches the provider calls off for a site without outbound internet (every
 rate 1); the test settings turn it off. Tests: `tests/test_exchange_rate.py`. The
-territory and salesperson charts do not plot value at all, which is finding 88.
+territory and salesperson charts did not plot value at all, which is finding 88.
+
+**After the review, 15 Oct 2026:** a partial save (`save(update_fields=...)`, upstream's
+`db.set_value`) no longer asks for a rate. Records saved before this work held rate 1
+(deals) or none (organizations) whatever their currency, and upstream's rule only
+recomputes on a currency change, so `manage.py refresh_exchange_rates` writes the rate
+upstream would have: run it once after `migrate`. It is a command, not a migration,
+because it calls the provider.
 
 **Status (before the fix):** open, deferred. Decision 30 Sep 2026: port Currency once the browser testing
 is finished. Two steps then. First the doctype, the way Language was done: a model, a
@@ -2866,3 +2875,42 @@ every rate was 1 then.
 
 **Status:** open. The fix is the two upstream queries and their chart definitions, using
 the dashboard's `_DEAL_VALUE_IN_BASE_CURRENCY` expression that finding 63 added.
+
+## 89. The average deal value cards were not upstream's
+
+**Block:** none. Found 15 Oct 2026 by the review of findings 63 and 64 (a fresh Claude
+reviewer; Codex was unavailable).
+
+**Expected:** `dashboard.py:197-424`. "Avg. deal value" averages ongoing and won deals,
+leaving lost ones out (`Status.type != "Lost"`, `:387`). The titles are "Avg. deal
+value", "Avg. won deal value" and "Avg. ongoing deal value", with the tooltips "Average
+deal value of ongoing & won deals", "Average deal value of won deals" and "Average deal
+value of non won/lost deals". Each delta is `current - previous if previous else 0`, and
+only the first card sends `deltaSuffix: "%"`.
+
+**Actual:** the first card averaged every deal, so one large lost deal raised it; the
+three had the port's own titles and tooltips; and every delta was a percentage with `%`.
+
+**Fix (15 Oct 2026):** the filter, the six strings and the delta in
+`crm_app/api/dashboard.py:_average_value` and its three callers. The `%` after an amount
+is upstream's mistake, reproduced: `UPSTREAM_BUGS.md` 51. Covered by
+`tests/test_exchange_rate.py::test_the_average_cards_are_upstreams` and
+`::test_a_lost_deal_is_left_out_of_the_average`.
+
+## 90. The country and currency data came from the framework's `develop` branch
+
+**Block:** none. Found 15 Oct 2026 by the same review.
+
+**What:** `crm_app/data/country_info.json`, copied for finding 45 and used again for 63,
+was byte-identical to the framework's `develop` copy. Against version-15, which CRM's CI
+pairs with, two entries differ: the country "Türkiye" is "Turkey", and Turkmenistan's
+currency is TMM ("m", "Tennesi"), not TMT. The cause is the checkout: the framework
+clone this port reads is on `develop`, not `version-15`. Reading it with
+`git show version-15:<path>` gives the right files whichever branch is checked out.
+
+**Fix (15 Oct 2026):** the version-15 file. A database seeded before keeps "Türkiye" and
+TMT beside the new "Turkey" and TMM, since the seeds add missing rows and delete nothing.
+Two other things the review found came from reading `develop`, and are corrected in the
+same change: the Currency rule cited a `Desk User` `select` row that version-15's
+`currency.json` does not have, so reading is now for the roles that table names; and
+`add_currencies` noted an escaping of `number_format` that only `develop` does.

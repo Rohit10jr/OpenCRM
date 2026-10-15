@@ -119,3 +119,18 @@ def test_everyone_reads_the_list_and_only_an_admin_changes_it(auth_api, api_as, 
     allowed = api_as(administrator).put("/api/resource/Currency/NZD", {"enabled": 1}, format="json")
     assert allowed.status_code == 200, allowed.content[:300]
     assert Currency.objects.get(pk="NZD").enabled is True
+
+
+def test_the_rows_are_version_15s(administrator):
+    """The framework's ``country_info.json`` at version-15, the branch CRM runs on:
+    Turkmenistan's currency is TMM there (TMT is ``develop``'s)."""
+    assert Currency.objects.filter(pk="TMM").exists()
+    assert not Currency.objects.filter(pk="TMT").exists()
+
+
+def test_a_user_with_no_crm_role_cannot_read_it(api_as, make_user):
+    """Version-15's ``currency.json`` reads for Sales User, three ERPNext roles and
+    System Manager; the Desk User ``select`` row is ``develop``'s."""
+    outsider = make_user("outsider@example.com", first_name="Out")
+    response = api_as(outsider).get("/api/resource/Currency/USD")
+    assert response.status_code in (403, 404), response.content[:300]

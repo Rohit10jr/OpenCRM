@@ -133,7 +133,9 @@ class CRMOrganization(ExchangeRateMixin, BaseDocument):
     def save(self, *args, **kwargs):
         """``crm_organization.py:31-32``: ``validate`` updates the exchange rate."""
         self._validate_text_links()
-        self.update_exchange_rate()
+        if not kwargs.get("update_fields"):
+            # A partial save is upstream's db.set_value, which runs no validate.
+            self.update_exchange_rate()
         return super().save(*args, **kwargs)
 
     @staticmethod
@@ -950,7 +952,8 @@ class CRMDeal(
         self.validate_lost_reason()
         # crm_deal.py:102, the last step of validate, after the Link check.
         self._validate_text_links()
-        self.update_exchange_rate()
+        if not kwargs.get("update_fields"):
+            self.update_exchange_rate()
         self.apply_sla()
         creating = self._state.adding
         status_moved = creating or self.status_id != getattr(self, "_loaded_status", None)

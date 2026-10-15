@@ -9,7 +9,8 @@ the ``USD`` already stored on organizations. A migration rather than only
 ``seed_defaults``, so a fresh database, the test database included, has them from the
 start. Rows that are already there are left alone. Nothing to undo backwards.
 
-Live models, as in 0014: the table is created by 0016 and has not changed since.
+The historical model, so a column added to Currency later cannot break this step of a
+fresh ``migrate``.
 """
 
 from django.db import migrations
@@ -18,7 +19,7 @@ from django.db import migrations
 def forwards(apps, schema_editor):
     from frappe_platform.reference_data import add_currencies
 
-    add_currencies()
+    add_currencies(apps.get_model("frappe_platform", "Currency"))
 
 
 class Migration(migrations.Migration):

@@ -160,6 +160,71 @@ def test_an_unknown_currency_is_refused_before_any_provider_is_asked(http, alice
     assert http.calls == []
 
 
+def test_a_partial_save_asks_nobody(http, alice):
+    """``save(update_fields=...)`` is upstream's ``db.set_value``, which runs no validate:
+    the file-attach path saves an organization that way (``frappe_platform/models.py``)."""
+    with session_user(alice.name):
+        org = CRMOrganization.objects.create(organization_name="ZZ Partial", currency="USD")
+    CRMOrganization.objects.filter(pk=org.pk).update(currency="EUR", exchange_rate=None)
+    org = CRMOrganization.objects.get(pk=org.pk)
+    with session_user(alice.name):
+        org.organization_logo = "/files/logo.png"
+        org.save(update_fields=["organization_logo"])
+    assert http.calls == []
+
+
+def test_the_refresh_command_rates_rows_saved_before_the_rule(http, alice):
+    """A deal saved before FINDINGS.md 63 holds 1 in any currency, an organization holds
+    nothing; the command writes what upstream's save would have, one call per currency."""
+    from django.core.management import call_command
+
+    http.answers = {FRANKFURTER: {"rates": {"USD": 1.09}}}
+    with session_user(alice.name):
+        status, _ = CRMDealStatus.objects.get_or_create(deal_status="Qualification", defaults={"type": "Open"})
+        deal = CRMDeal.objects.create(deal_owner=alice, status=status, currency="USD")
+        org = CRMOrganization.objects.create(organization_name="ZZ Old", currency="USD")
+    CRMDeal.objects.filter(pk=deal.pk).update(currency="EUR", exchange_rate=1)
+    CRMOrganization.objects.filter(pk=org.pk).update(currency="EUR", exchange_rate=None)
+    http.calls.clear()
+
+    call_command("refresh_exchange_rates", stdout=None)
+
+    assert CRMDeal.objects.get(pk=deal.pk).exchange_rate == 1.09
+    assert CRMOrganization.objects.get(pk=org.pk).exchange_rate == 1.09
+    assert [url for url, _ in http.calls] == [FRANKFURTER], "one call, the second from the cache"
+
+
+def test_the_average_cards_are_upstreams(http, alice):
+    """``dashboard.py:197-424``: "Avg. deal value" leaves lost deals out; the delta is the
+    difference of the averages, with ``%`` on that card alone (UPSTREAM_BUGS.md 51)."""
+    from crm_app.api.dashboard import get_average_ongoing_deal_value, get_average_won_deal_value
+
+    with session_user(alice.name):
+        open_, _ = CRMDealStatus.objects.get_or_create(deal_status="Qualification", defaults={"type": "Open"})
+        CRMDeal.objects.create(deal_owner=alice, status=open_, currency="USD", deal_value=100)
+        today = timezone.localdate()
+        all_deals = get_average_deal_value(today, today)
+        won = get_average_won_deal_value(today, today)
+        ongoing = get_average_ongoing_deal_value(today, today)
+    assert all_deals["title"] == "Avg. deal value"
+    assert all_deals["tooltip"] == "Average deal value of ongoing & won deals"
+    assert all_deals["deltaSuffix"] == "%" and all_deals["delta"] == 0
+    assert (won["title"], ongoing["title"]) == ("Avg. won deal value", "Avg. ongoing deal value")
+    assert "deltaSuffix" not in won and "deltaSuffix" not in ongoing
+
+
+def test_a_lost_deal_is_left_out_of_the_average(http, alice):
+    with session_user(alice.name):
+        open_, _ = CRMDealStatus.objects.get_or_create(deal_status="Qualification", defaults={"type": "Open"})
+        CRMDeal.objects.create(deal_owner=alice, status=open_, currency="USD", deal_value=100)
+        lost_deal = CRMDeal.objects.create(deal_owner=alice, status=open_, currency="USD", deal_value=900)
+    lost, _ = CRMDealStatus.objects.get_or_create(deal_status="ZZ Lost", defaults={"type": "Lost"})
+    CRMDeal.objects.filter(pk=lost_deal.pk).update(status=lost)
+    with session_user(alice.name):
+        today = timezone.localdate()
+        assert get_average_deal_value(today, today)["value"] == 100
+
+
 def test_a_deal_is_converted_into_the_dashboard_currency(http, alice):
     """The dashboard currency is FCRM Settings', USD when unset; a deal in it is rate 1,
     one in another is the provider's rate, and the average counts the converted value."""

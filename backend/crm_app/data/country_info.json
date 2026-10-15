@@ -2786,13 +2786,25 @@
   ],
   "isd": "+216"
  },
+ "Turkey": {
+  "code": "tr",
+  "currency": "TRY",
+  "currency_fraction": "Kuru\u015f",
+  "currency_fraction_units": 100,
+  "currency_symbol": "\u20ba",
+  "number_format": "#.###,##",
+  "timezones": [
+   "Europe/Istanbul"
+  ],
+  "isd": "+90"
+ },
  "Turkmenistan": {
   "code": "tm",
-  "currency": "TMT",
-  "currency_fraction": "Tenge",
+  "currency": "TMM",
+  "currency_fraction": "Tennesi",
   "currency_fraction_units": 100,
   "currency_name": "Manat",
-  "currency_symbol": "TMT",
+  "currency_symbol": "m",
   "number_format": "#,###.##",
   "timezones": [
    "Asia/Ashgabat"
@@ -2817,18 +2829,6 @@
    "Pacific/Funafuti"
   ],
   "isd": "+688"
- },
-  "T\u00fcrkiye": {
-  "code": "tr",
-  "currency": "TRY",
-  "currency_fraction": "Kuru\u015f",
-  "currency_fraction_units": 100,
-  "currency_symbol": "\u20ba",
-  "number_format": "#.###,##",
-  "timezones": [
-   "Europe/Istanbul"
-  ],
-  "isd": "+90"
  },
  "Uganda": {
   "code": "ug",

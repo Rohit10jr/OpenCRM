@@ -296,10 +296,19 @@ _DEAL_VALUE_IN_BASE_CURRENCY = ExpressionWrapper(
 )
 
 
-def _average_value(queryset, from_date, to_date, date_field: str, title: str, tooltip: str):
+def _average_value(
+    queryset, from_date, to_date, date_field: str, title: str, tooltip: str, percent_suffix=False
+):
     """``date_field`` is either ``creation`` (a DateTimeField, so it needs the ``__date``
     lookup to compare against a date without a naive-datetime warning) or ``closed_date``
-    (already a DateField)."""
+    (already a DateField).
+
+    The delta is the difference of the two averages, 0 with no earlier one
+    (``current - prev if prev else 0``, ``dashboard.py:247,361,414``), not a percentage
+    as the count cards' is. Only "Avg. deal value" puts ``%`` after it
+    (``deltaSuffix``, ``:422``), which labels an amount as a percentage:
+    ``UPSTREAM_BUGS.md`` 51, reproduced.
+    """
     prev_from, _prev_to = _period_before(from_date, to_date)
     prefix = f"{date_field}__date" if date_field == "creation" else date_field
 
@@ -315,21 +324,23 @@ def _average_value(queryset, from_date, to_date, date_field: str, title: str, to
     )
     current = float(aggregate["current"] or 0)
     previous = float(aggregate["previous"] or 0)
-    return {
+    card = {
         "title": title,
         "tooltip": tooltip,
         "value": current,
-        "delta": _delta(current, previous),
-        "deltaSuffix": "%",
+        "delta": current - previous if previous else 0,
         "prefix": get_base_currency_symbol(),
     }
+    if percent_suffix:
+        card["deltaSuffix"] = "%"
+    return card
 
 
 def get_average_deal_value(from_date, to_date, user=None):
-    """``dashboard.py:372-424``."""
+    """``dashboard.py:372-424``: ongoing and won deals, a lost one left out (``:387``)."""
     return _average_value(
-        _deal_queryset(user), from_date, to_date, "creation",
-        "Average deal value", "Average value of all deals",
+        _deal_queryset(user).exclude(status__type="Lost"), from_date, to_date, "creation",
+        "Avg. deal value", "Average deal value of ongoing & won deals", percent_suffix=True,
     )
 
 
@@ -337,7 +348,7 @@ def get_average_won_deal_value(from_date, to_date, user=None):
     """``dashboard.py:314-369``."""
     return _average_value(
         _deal_queryset(user).filter(status__type="Won"), from_date, to_date, "closed_date",
-        "Average won deal value", "Average value of won deals based on its closure date",
+        "Avg. won deal value", "Average deal value of won deals",
     )
 
 
@@ -345,7 +356,7 @@ def get_average_ongoing_deal_value(from_date, to_date, user=None):
     """``dashboard.py:197-256``."""
     return _average_value(
         _deal_queryset(user).exclude(status__type__in=["Won", "Lost"]), from_date, to_date,
-        "creation", "Average ongoing deal value", "Average value of ongoing deals",
+        "creation", "Avg. ongoing deal value", "Average deal value of non won/lost deals",
     )
 
 

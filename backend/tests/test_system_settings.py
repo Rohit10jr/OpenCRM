@@ -106,3 +106,13 @@ def test_a_missing_row_is_written_again_on_the_next_boot(api):
     SystemSettings.objects.all().delete()
     assert sysdefaults(api)["date_format"]
     assert SystemSettings.objects.count() == 1
+
+
+def test_nobody_deletes_it(api_as, administrator):
+    """``system_settings.json`` grants no delete; the boot call depends on the row."""
+    client = api_as(administrator)
+    response = client.post(
+        "/api/method/frappe.client.delete", NAME, format="json"
+    )
+    assert response.status_code == 403, response.content[:300]
+    assert SystemSettings.objects.filter(pk="System Settings").exists()

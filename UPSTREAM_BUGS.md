@@ -1360,6 +1360,23 @@ already has it), or give the form a `v-if="settings.doc"` and a "not permitted" 
 
 ---
 
+## 51. "Avg. deal value" shows an amount with a percent sign
+
+**Where:** `crm/api/dashboard.py:414-423` (`get_average_deal_value`). Found 15 Oct 2026 in
+the review of findings 63 and 64.
+
+The card's `delta` is `current_month_avg - prev_month_avg`, the difference of two
+averages in the dashboard currency, and the card also sends `"deltaSuffix": "%"`. The
+dashboard prints the suffix after the delta, so an average that rose from 1,000 to 1,500
+shows "+500%". Its two siblings, "Avg. won deal value" and "Avg. ongoing deal value",
+compute the delta the same way and send no suffix, which is what this one meant to do.
+
+**Us:** *Reproduce*. It is on screen, and the port shows upstream's dashboard. The fix
+upstream is to drop `deltaSuffix` from that one return, or compute a percentage as the
+count cards do.
+
+---
+
 ## Faithful behaviours we chose to keep (not bugs — decisions)
 
 Recorded here so they are not later mistaken for defects:

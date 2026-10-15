@@ -66,35 +66,35 @@ DEFAULT_ENABLED_CURRENCIES = ("INR", "USD", "GBP", "EUR", "AED", "AUD", "JPY", "
 COUNTRY_INFO = Path(__file__).resolve().parents[1] / "crm_app" / "data" / "country_info.json"
 
 
-def add_currencies() -> int:
+def add_currencies(model=None) -> int:
     """``country.py:get_countries_and_currencies`` and ``currency.py:enable_default_currencies``.
 
     One Currency per distinct ``currency`` in ``country_info.json``, its details taken
     from the first country that names it, as upstream's ``added_currencies`` set does;
     then the nine defaults enabled. Rows that exist are left alone, enabled or not.
 
-    Upstream passes ``number_format`` through ``frappe.db.escape(...)[1:-1]``, which
-    stores the Swiss ``#'###.##`` with its quote escaped (``#\\'###.##`` on MariaDB,
-    ``#''###.##`` on Postgres), a value outside the field's own options. Stored as the
-    file has it here; nothing in the CRM reads the column.
+    ``number_format`` is stored as the file has it, as version-15's ``country.py:73``
+    does. (The ``frappe.db.escape(...)[1:-1]`` around it is on ``develop`` only.)
 
     Written with ``bulk_create``, as upstream's ``bulk_insert`` writes them, since a
     ``transaction=True`` test empties the table and the next one re-seeds all of it
     (``tests/conftest.py:builtin_users``). Stamped with Administrator, the install user.
+    ``model`` is the historical model when a migration calls it (0017).
     """
     from django.utils import timezone
 
-    from frappe_platform.models import Currency
+    if model is None:
+        from frappe_platform.models import Currency as model
 
     data = json.loads(COUNTRY_INFO.read_text(encoding="utf-8"))
-    existing = set(Currency._default_manager.values_list("pk", flat=True))
+    existing = set(model._default_manager.values_list("pk", flat=True))
     now = timezone.now()
-    rows: dict[str, Currency] = {}
+    rows: dict = {}
     for info in data.values():
         code = info.get("currency")
         if not code or code in existing or code in rows:
             continue
-        rows[code] = Currency(
+        rows[code] = model(
             name=code,
             currency_name=code,
             enabled=code in DEFAULT_ENABLED_CURRENCIES,
@@ -108,7 +108,7 @@ def add_currencies() -> int:
             creation=now,
             modified=now,
         )
-    Currency._default_manager.bulk_create(rows.values(), ignore_conflicts=True)
+    model._default_manager.bulk_create(rows.values(), ignore_conflicts=True)
     return len(rows)
 
 
