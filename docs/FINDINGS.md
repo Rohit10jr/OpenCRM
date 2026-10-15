@@ -2061,7 +2061,16 @@ provider select is disabled by the frontend because no currency is set
 always answers 1, a recorded phase 3 decision (`crm_app/api/exchange_rate.py`): the
 `service_provider` and `access_key` settings are stored and nothing reads them.
 
-**Status:** open, deferred. Decision 30 Sep 2026: port Currency once the browser testing
+**Doctype ported, 15 Oct 2026** (branch `currency-and-system-settings`): `Currency` in
+`frappe_platform`, its 149 rows written by migration 0017 from the copy of
+`country_info.json` the countries come from, with upstream's nine defaults enabled
+(`frappe_platform/reference_data.py:add_currencies`); the picker lists the enabled ones.
+Every role reads, System Manager writes. `currency` on a deal, an organization and FCRM
+Settings is now a validated Link, and the dashboard's currency prefix is the symbol
+(`$` with none set), not the code. Tests: `tests/test_currency.py`. S4 and S21 are for
+the tester to re-check.
+
+**Status (before the fix):** open, deferred. Decision 30 Sep 2026: port Currency once the browser testing
 is finished. Two steps then. First the doctype, the way Language was done: a model, a
 seed from `country_info.json` through `seed_defaults`, upstream's role table, and the
 title shown in the picker. Then, separately, the four providers behind the stub, which

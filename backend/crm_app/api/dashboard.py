@@ -340,11 +340,21 @@ def get_average_ongoing_deal_value(from_date, to_date, user=None):
 
 
 def get_base_currency_symbol():
-    """``dashboard.py:1150-1156`` - the currency configured on FCRM Settings."""
-    from crm_app.models import FCRMSettings
+    """``dashboard.py:1150-1156``: the symbol of the currency configured on FCRM Settings,
+    USD when none is, and ``""`` for a currency with no symbol.
 
+    Before Currency was ported (FINDINGS.md 63) this answered the code itself, or ``""``
+    on a site with no currency set, where upstream shows ``$``.
+    """
+    from crm_app.models import FCRMSettings
+    from frappe_platform.models import Currency
+
+    base_currency = (
+        FCRMSettings._default_manager.values_list("currency", flat=True).first() or "USD"
+    )
     return (
-        FCRMSettings._default_manager.values_list("currency", flat=True).first() or ""
+        Currency._default_manager.filter(pk=base_currency).values_list("symbol", flat=True).first()
+        or ""
     )
 
 

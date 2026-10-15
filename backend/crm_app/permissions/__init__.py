@@ -167,6 +167,13 @@ def register() -> None:
         permission_query_conditions=platform_docs.language_query_conditions,
         has_permission=platform_docs.language_has_permission,
     )
+    # Currency (FINDINGS.md 63): the same shape again, the list behind the deal,
+    # organization and dashboard currency pickers.
+    register_permission_hooks(
+        "Currency",
+        permission_query_conditions=platform_docs.currency_query_conditions,
+        has_permission=platform_docs.currency_has_permission,
+    )
     # Salutation and Gender (FINDINGS.md 66): the two lookups behind the contact, lead
     # and deal forms. Everyone reads, System Manager maintains.
     for doctype in ("Salutation", "Gender"):

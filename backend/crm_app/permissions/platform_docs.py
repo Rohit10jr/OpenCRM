@@ -496,3 +496,23 @@ def language_has_permission(doc, ptype: str = "read", user: str | None = None):
     if ptype == "read":
         return True
     return _is_admin(user)
+
+
+def currency_query_conditions(doctype: str, user: str | None = None):
+    """Everyone reads the list; it is what the currency pickers show."""
+    return None
+
+
+def currency_has_permission(doc, ptype: str = "read", user: str | None = None):
+    """Read for everyone; write, create and delete for System Manager (FINDINGS.md 63).
+
+    ``currency.json`` gives System Manager everything, read to Sales User and three
+    ERPNext roles, and ``select`` to Desk User, the role every System User holds
+    (``frappe/permissions.py:36``). ``select`` is what a Link search needs, and a deal's
+    Currency field shows its value to whoever opens the deal, so reading is everyone's,
+    a Sales Manager included. Writing is System Manager's alone.
+    """
+    user = user or get_current_user()
+    if ptype == "read":
+        return True
+    return _is_admin(user)

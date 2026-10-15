@@ -1332,8 +1332,8 @@ class Country(BaseDocument):
     The framework seeds it when a site is set up, before any app installs
     (``country.py:import_country_and_currency``, from ``frappe/geo/country_info.json``);
     here ``manage.py seed_defaults`` does, from a copy of that file in ``crm_app/data``.
-    The Currency rows the same import writes are not ported: nothing in the CRM reads
-    them. ``country.json``: everyone reads, System Manager writes
+    The Currency rows the same import writes are :class:`Currency`, seeded by a
+    migration. ``country.json``: everyone reads, System Manager writes
     (``crm_app/permissions/platform_docs.py``).
     """
 
@@ -1381,6 +1381,58 @@ class Language(BaseDocument):
     class Meta:
         ordering = ["name"]
         name_strategy = FieldValue("language_code", label="Language Code")
+
+
+#: ``currency.json``: the Select options of ``number_format``, in upstream's order.
+CURRENCY_NUMBER_FORMATS = (
+    "#,###.##",
+    "#.###,##",
+    "# ###.##",
+    "# ###,##",
+    "#'###.##",
+    "#, ###.##",
+    "#,##,###.##",
+    "#,###.###",
+    "#.###",
+    "#,###",
+)
+
+
+@register_doctype("Currency")
+class Currency(BaseDocument):
+    """Frappe ``Currency`` (``frappe/geo/doctype/currency/currency.json``), the Link
+    target of ``currency`` on a deal, an organization and FCRM Settings, and of the
+    Dashboard Currency picker in Settings (FINDINGS.md 63).
+
+    Named after its code (``autoname: field:currency_name``). The framework writes one
+    row per currency in ``country_info.json`` when a site is set up, with nine of them
+    enabled (``country.py:import_country_and_currency``, ``currency.py:9,49-50``); here
+    ``frappe_platform`` migration 0017 does, through
+    :func:`frappe_platform.reference_data.add_currencies`. The picker offers enabled rows
+    only (``search.py:244-248``). ``currency.json``: every role reads, System Manager
+    writes (``crm_app/permissions/platform_docs.py``).
+    """
+
+    currency_name = models.CharField("Currency Name", max_length=140, unique=True)
+    enabled = models.BooleanField("Enabled", default=False)
+    fraction = models.CharField("Fraction", max_length=140, blank=True, default="")
+    fraction_units = models.IntegerField("Fraction Units", default=0)
+    smallest_currency_fraction_value = models.DecimalField(
+        "Smallest Currency Fraction Value", max_digits=18, decimal_places=6, null=True, blank=True
+    )
+    symbol = models.CharField("Symbol", max_length=140, blank=True, default="")
+    number_format = models.CharField(
+        "Number Format",
+        max_length=140,
+        blank=True,
+        default="",
+        choices=[(value, value) for value in CURRENCY_NUMBER_FORMATS],
+    )
+    symbol_on_right = models.BooleanField("Show Currency Symbol on Right Side", default=False)
+
+    class Meta:
+        ordering = ["name"]
+        name_strategy = FieldValue("currency_name", label="Currency Name")
 
 
 @register_doctype("Salutation")
