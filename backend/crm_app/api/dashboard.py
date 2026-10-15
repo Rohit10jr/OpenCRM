@@ -454,29 +454,69 @@ def get_deals_by_source(from_date, to_date, user=None):
     }
 
 
+def _deals_and_value(queryset, from_date, to_date, field: str, label_field: str | None = None):
+    """``Count("*")`` as ``deals`` and ``Sum(deal_value * IfNull(exchange_rate, 1))`` as
+    ``value`` per ``field``, most deals first, then most value (``dashboard.py:1046-1056``,
+    ``:1106-1118``). ``value`` is in the dashboard currency (FINDINGS.md 88).
+
+    The queryset is the permission-filtered one every chart here uses, where upstream
+    reads the table directly: a Sales User's chart counts the deals they can see.
+    """
+    value = Sum(Coalesce(_DEAL_VALUE_IN_BASE_CURRENCY, Value(0.0)), output_field=FloatField())
+    fields = [field, label_field] if label_field else [field]
+    rows = (
+        queryset.filter(creation__date__gte=from_date, creation__date__lte=to_date)
+        .values(*fields)
+        .annotate(deals=Count("pk"), value=value)
+        .order_by("-deals", "-value")
+    )
+    return rows
+
+
 def get_deals_by_territory(from_date, to_date, user=None):
-    """``dashboard.py:1029-1084``."""
+    """``dashboard.py:1029-1084``: a deal with no territory counts under "Empty"."""
+    rows = _deals_and_value(_deal_queryset(user), from_date, to_date, "territory")
     return {
-        "data": _grouped(_deal_queryset(user), from_date, to_date, "territory", "territory"),
+        "data": [
+            {"territory": row["territory"] or "Empty", "deals": row["deals"], "value": row["value"] or 0}
+            for row in rows
+        ],
         "title": "Deals by territory",
-        "subtitle": "Territory-wise deal distribution",
+        "subtitle": "Geographic distribution of deals and revenue",
         "xAxis": {"title": "Territory", "key": "territory", "type": "category"},
-        "yAxis": {"title": "Count"},
-        "series": [{"name": "count", "type": "bar"}],
+        "yAxis": {"title": "Number of deals"},
+        "y2Axis": {"title": f"Deal value ({get_base_currency_symbol()})"},
+        "series": [
+            {"name": "deals", "type": "bar"},
+            {"name": "value", "type": "line", "showDataPoints": True, "axis": "y2"},
+        ],
     }
 
 
 def get_deals_by_salesperson(from_date, to_date, user=None):
-    """``dashboard.py:1087-1147``."""
+    """``dashboard.py:1087-1147``: named by the owner's full name, the owner's id when it
+    has none (``IfNull(User.full_name, CRMDeal.deal_owner)``)."""
+    rows = _deals_and_value(
+        _deal_queryset(user), from_date, to_date, "deal_owner", "deal_owner__full_name"
+    )
     return {
-        "data": _grouped(
-            _deal_queryset(user), from_date, to_date, "deal_owner", "salesperson"
-        ),
+        "data": [
+            {
+                "salesperson": row["deal_owner__full_name"] or row["deal_owner"],
+                "deals": row["deals"],
+                "value": row["value"] or 0,
+            }
+            for row in rows
+        ],
         "title": "Deals by salesperson",
-        "subtitle": "Deals owned per salesperson",
+        "subtitle": "Number of deals and total value per salesperson",
         "xAxis": {"title": "Salesperson", "key": "salesperson", "type": "category"},
-        "yAxis": {"title": "Count"},
-        "series": [{"name": "count", "type": "bar"}],
+        "yAxis": {"title": "Number of deals"},
+        "y2Axis": {"title": f"Deal value ({get_base_currency_symbol()})"},
+        "series": [
+            {"name": "deals", "type": "bar"},
+            {"name": "value", "type": "line", "showDataPoints": True, "axis": "y2"},
+        ],
     }
 
 
