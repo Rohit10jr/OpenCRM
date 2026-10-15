@@ -33,7 +33,7 @@ coverage section at the end; run it after recording results.
 <!-- coverage:start -->
 | Screens done | Rows ok | Rows failed | Rows skipped | Endpoints confirmed |
 |---|---|---|---|---|
-| 9 of 12 with rows | 148 | 8 | 1 | 75 of 101 |
+| 10 of 12 with rows | 151 | 8 | 0 | 81 of 101 |
 <!-- coverage:end -->
 
 Screens planned: Notes, Tasks, Call Logs, Leads, Deals, Contacts, Organizations,
@@ -204,7 +204,7 @@ Everything below System Configuration is shown to managers only.
 | S18 | Theme | Preferences → Theme → light, dark, system; the app repaints at once and keeps the choice after a reload | none, the choice is kept in the browser | ok | | |
 | S3 | General | General → Timeline timestamp format (Relative, Exact) and Timeline sort order (Oldest First, Newest First); each saves at once; a lead's or deal's activity timeline follows | `frappe.client.get`, `frappe.client.set_value` | ok | | |
 | S19 | Update timestamp on new communication | With a Celery worker running: switch on → comment on an old lead → its Last Modified becomes "just now" and it rises in the list; switch off → a comment leaves it where it was | `frappe.client.set_value`, `crm.api.comment.add_comment` | ok (with a worker the lead's Last Modified moves; without one it does not, the job waits in the queue) | | |
-| S20 | Mark as replied, reopen on new communication | The two switches save. Upstream then sets the lead's or deal's communication status to Replied when an email is sent and to Open when one is received, where an SLA applies | `frappe.client.set_value` | skipped: nothing in the port acts on the two switches, found by reading the code | 60 | |
+| S20 | Mark as replied, reopen on new communication | The two switches save. Upstream then sets the lead's or deal's communication status to Replied when an email is sent and to Open when one is received, where an SLA applies | `frappe.client.set_value` |  | 60 | |
 | S4 | Dashboard switches | Dashboard → Enable Forecasting on → Update → a deal without an Expected Closure Date is refused; Auto Update Expected Deal Value on → a deal's products set its expected value | `frappe.client.set_value` | failed: Update refuses with "Please select a currency before saving"; the Dashboard section needs a currency once forecasting is on, and the port has no Currency doctype to pick one from (63) | 63 | |
 | S21 | Dashboard currency and provider | Dashboard → Dashboard Currency → pick one; Exchange Rate Provider → pick one → Update | `search_link` (Currency), `frappe.client.set_value` | failed: the currency dropdown lists nothing, and the provider select stays disabled because no currency is set | 63 | |
 | S5 | Defaults | Defaults → the date, time and number formats load; change one → Update | `getdoctype`, `frappe.client.get`, `frappe.client.set_value` | failed: the section goes blank when opened | 64 | |
@@ -393,9 +393,9 @@ failed. Generated: do not edit by hand.
 | ☑ | `crm.api.contact.get_linked_deals` | `crm_app/api/contact.py:44` | `crm/api/contact.py:29-60` | K3 | ok: K3 |
 | ☑ | `crm.api.contact.search_emails` | `crm_app/api/contact.py:141` | `crm/api/contact.py:109-145` | L13, D16 | ok: L13, D16 |
 | ☑ | `crm.api.contact.set_as_primary` | `crm_app/api/contact.py:104` | `crm/api/contact.py:87-111` | K9 | ok: K9 |
-| ☑ | `crm.api.dashboard.get_chart` | `crm_app/api/dashboard.py:775` | `crm/api/dashboard.py:64-88` | DB6 | ok: DB6 |
-| ☑ | `crm.api.dashboard.get_dashboard` | `crm_app/api/dashboard.py:758` | `crm/api/dashboard.py:25-61` | DB1, DB2, DB3, DB4, DB5, DB9 | ok: DB1, DB2, DB3, DB4, DB5, DB9 |
-| ☑ | `crm.api.dashboard.reset_to_default` | `crm_app/api/dashboard.py:748` | `crm/api/dashboard.py:19-23` | DB9 | ok: DB9 |
+| ☑ | `crm.api.dashboard.get_chart` | `crm_app/api/dashboard.py:846` | `crm/api/dashboard.py:64-88` | DB6 | ok: DB6 |
+| ☑ | `crm.api.dashboard.get_dashboard` | `crm_app/api/dashboard.py:829` | `crm/api/dashboard.py:25-61` | DB1, DB2, DB3, DB4, DB5, DB9 | ok: DB1, DB2, DB3, DB4, DB5, DB9 |
+| ☑ | `crm.api.dashboard.reset_to_default` | `crm_app/api/dashboard.py:819` | `crm/api/dashboard.py:19-23` | DB9 | ok: DB9 |
 | ☑ | `crm.api.delete_attachment` | `crm_app/api/misc.py:126` | `crm/api/__init__.py:155-167` | N11 | ok: N11 |
 | ☑ | `crm.api.doc.delete_bulk_docs` | `crm_app/api/doc.py:668` | `crm/api/doc.py:795-837` | T9, C9, L22, D23 | ok: T9, C9, L22, D23 |
 | ☑ | `crm.api.doc.get_assigned_users` | `crm_app/api/doc.py:248` | `crm/api/doc.py:607-625` | N3, L3, L6, D4, D12 | ok: N3, L3, L6, D4, D12 |
@@ -409,15 +409,15 @@ failed. Generated: do not edit by hand.
 | ⚠ | `crm.api.doc.remove_linked_doc_reference` | `crm_app/api/doc.py:557` | `crm/api/doc.py:769-792` | O10 | failed: O10 (finding 56) |
 | ☑ | `crm.api.doc.sort_options` | `crm_app/api/doc.py:74` | `crm/api/doc.py:24-51` | N1, T1, T11, C1, C10, L1, L16, O1, O8, K1, K6, D1, D19 | ok: N1, T1, T11, C1, C10, L1, L16, O1, O8, K1, K6, D1, D19 |
 | ☑ | `crm.api.doc.update_quick_filters` | `crm_app/api/doc.py:202` | `crm/api/doc.py:207-224` | N7 | ok: N7 |
-| ☐ | `crm.api.exchange_rate.get_exchange_rate` | `crm_app/api/exchange_rate.py:27` | `crm/api/exchange_rate.py` |  |  |
+| ☐ | `crm.api.exchange_rate.get_exchange_rate` | `crm_app/api/exchange_rate.py:48` | `crm/api/exchange_rate.py:9-27` |  |  |
 | ☑ | `crm.api.get_file_uploader_defaults` | `crm_app/api/misc.py:159` | `crm/api/__init__.py:170-180` | L12, D15 | ok: L12, D15 |
 | ☐ | `crm.api.get_translations` | `crm_app/api/misc.py:31` | `crm/api/__init__.py:12-19` |  |  |
 | ☑ | `crm.api.get_user_signature` | `crm_app/api/misc.py:42` | `crm/api/__init__.py:22-50` | L13 | ok: L13 |
 | ☑ | `crm.api.invite_by_email` | `crm_app/api/misc.py:75` | `crm/api/__init__.py:106-152` | S8 | ok: S8 |
 | ☑ | `crm.api.notifications.get_notifications` | `crm_app/api/notifications.py:33` | `crm/api/notifications.py:6-49` | B1, NT1, NT4 | ok: B1, NT1, NT4 |
 | ☑ | `crm.api.notifications.mark_as_read` | `crm_app/api/notifications.py:100` | `crm/api/notifications.py:52-64` | NT2, NT3 | ok: NT2, NT3 |
-| ☐ | `crm.api.onboarding.get_first_deal` | `crm_app/api/onboarding.py:30` | `crm/api/onboarding.py:17-24` | B2 |  |
-| ☐ | `crm.api.onboarding.get_first_lead` | `crm_app/api/onboarding.py:17` | `crm/api/onboarding.py:5-14` | B2 |  |
+| ☑ | `crm.api.onboarding.get_first_deal` | `crm_app/api/onboarding.py:30` | `crm/api/onboarding.py:17-24` | B2 | ok: B2 |
+| ☑ | `crm.api.onboarding.get_first_lead` | `crm_app/api/onboarding.py:17` | `crm/api/onboarding.py:5-14` | B2 | ok: B2 |
 | ☑ | `crm.api.session.get_organizations` | `crm_app/api/session.py:158` | `crm/api/session.py:155-165` | K1, D1 | ok: K1, D1 |
 | ☐ | `crm.api.session.get_user_info` | `crm_app/api/session.py:138` | `crm/api/session.py:130-152` |  |  |
 | ☑ | `crm.api.session.get_users` | `crm_app/api/session.py:62` | `crm/api/session.py:33-127` | B1, S7 | ok: B1, S7 |
@@ -427,7 +427,7 @@ failed. Generated: do not edit by hand.
 | ☑ | `crm.api.user.remove_crm_roles_from_user` | `crm_app/api/user.py:182` | `crm/api/user.py:124-163` | S7 | ok: S7 |
 | ☑ | `crm.api.user.update_user_role` | `crm_app/api/user.py:128` | `crm/api/user.py:73-121` | S7 | ok: S7 |
 | ☑ | `crm.api.views.get_views` | `crm_app/api/views.py:12` | `crm/api/views.py:5-16` | B1, N1, N5, T1, T12, C1, C11, L1, O1, K1, D1 | ok: B1, N1, N5, T1, T12, C1, C11, L1, O1, K1, D1 |
-| ☐ | `crm.demo.api.clear_demo_data` | `crm_app/api/demo.py:18` | `crm/demo/api.py:clear_demo_data` | B2 |  |
+| ☑ | `crm.demo.api.clear_demo_data` | `crm_app/api/demo.py:18` | `crm/demo/api.py:clear_demo_data` | B2 | ok: B2 |
 | ☑ | `crm.fcrm.doctype.crm_call_log.crm_call_log.create_lead_from_call_log` | `crm_app/api/call_log.py:82` | `crm/fcrm/doctype/crm_call_log/crm_call_log.py:245-297` | C7 | ok: C7 |
 | ☑ | `crm.fcrm.doctype.crm_call_log.crm_call_log.get_call_log` | `crm_app/api/call_log.py:28` | `crm/fcrm/doctype/crm_call_log/crm_call_log.py:189-242` | C3, L11 | ok: C3, L11 |
 | ☑ | `crm.fcrm.doctype.crm_deal.api.get_deal_contacts` | `crm_app/api/deal.py:84` | `crm/fcrm/doctype/crm_deal/api.py` | D4, D9 | ok: D4, D9 |
@@ -464,8 +464,8 @@ failed. Generated: do not edit by hand.
 | ⚠ | `frappe.client.set_value` | `crm_app/api/client.py:297` | `frappe/client.py:set_value` | N3, T3, T4, C4, L4, L5, L7, L9, L10, L12, L14, L17, O3, O5, O7, O11, O12, O14, K4, K5, K10, S1, S2, S17, S3, S19, S20, S4, S21, S5, S6, S9, S10, S12, S14, S15, S16, DB6, DB7, DB8, D5, D6, D7, D8, D11, D14, D15, D17, D20 | failed: S4 (finding 63), S21 (finding 63), S5 (finding 64), S12 (finding 80) |
 | ☑ | `frappe.core.doctype.communication.email.make` | `crm_app/api/communication.py:76` | `frappe/core/doctype/communication/email.py:make` | L13, D16 | ok: L13, D16 |
 | ☑ | `frappe.core.doctype.user.user.get_timezones` | `crm_app/api/desk.py:111` | `frappe/core/doctype/user/user.py:783-785` | S2 | ok: S2 |
-| ☐ | `frappe.core.doctype.user.user.reset_password` | `crm_app/api/auth_pages.py:45` | `frappe/core/doctype/user/user.py:1041-1067` | A7 |  |
-| ☐ | `frappe.core.doctype.user.user.update_password` | `crm_app/api/auth_pages.py:99` | `frappe/core/doctype/user/user.py:826-880` | A7 |  |
+| ☑ | `frappe.core.doctype.user.user.reset_password` | `crm_app/api/auth_pages.py:45` | `frappe/core/doctype/user/user.py:1041-1067` | A7 | ok: A7 |
+| ☑ | `frappe.core.doctype.user.user.update_password` | `crm_app/api/auth_pages.py:99` | `frappe/core/doctype/user/user.py:826-880` | A7 | ok: A7 |
 | ☑ | `frappe.desk.doctype.bulk_update.bulk_update.submit_cancel_or_update_docs` | `crm_app/api/bulk_update.py:27` | `frappe/desk/doctype/bulk_update/bulk_update.py:54-79` | T7, T16, C9, L18, D21 | ok: T7, T16, C9, L18, D21 |
 | ☑ | `frappe.desk.form.assign_to.add` | `crm_app/api/client.py:518` | `frappe/desk/form/assign_to.py:add` | L6, D12 | ok: L6, D12 |
 | ☑ | `frappe.desk.form.assign_to.add_multiple` | `crm_app/api/client.py:541` | `frappe/desk/form/assign_to.py:148-156` | L18, D21 | ok: L18, D21 |
@@ -480,12 +480,12 @@ failed. Generated: do not edit by hand.
 | ☐ | `frappe.onboarding.get_onboarding_status` | `crm_app/api/onboarding.py:54` | `frappe/onboarding.py:6-9` |  |  |
 | ☐ | `frappe.onboarding.update_user_onboarding_status` | `crm_app/api/onboarding.py:62` | `frappe/onboarding.py:12-25` |  |  |
 | ☑ | `frappe.utils.telemetry.pulse.client.boot_config` | `crm_app/api/desk.py:161` | `config/settings/base.py` | B1 | ok: B1 |
-| ☑ | `login` | `frappe_core/api/auth.py:39` | `frappe/auth.py:LoginManager (session login; JWT here, JWT_PATCH.md)` | A1, A2, A3, A7, A8 | ok: A1, A2, A3 |
+| ☑ | `login` | `frappe_core/api/auth.py:39` | `frappe/auth.py:LoginManager (session login; JWT here, JWT_PATCH.md)` | A1, A2, A3, A7, A8 | ok: A1, A2, A3, A7 |
 | ☑ | `logout` | `frappe_core/api/auth.py:127` | `frappe/auth.py:LoginManager.logout (JWT here)` | A6 | ok: A6 |
 | ☑ | `token/refresh` | `frappe_core/api/auth.py:146` | `none, the JWT deviation (JWT_PATCH.md)` | A5 | ok: A5 |
 | ☑ | `upload_file` | `crm_app/api/upload.py:80` | `frappe/handler.py:131-244` | N9, L7, L12, O7, K5, S1, S6, D15 | ok: N9, L7, L12, O7, K5, S1, S6, D15 |
 
-75 of 101 endpoints confirmed; 8 not yet named by any row.
+81 of 101 endpoints confirmed; 8 not yet named by any row.
 
 **Excluded, integrations** (Twilio, Exotel, WhatsApp, ERPNext, lead sync, Frappe Cloud), not part of this log:
 
