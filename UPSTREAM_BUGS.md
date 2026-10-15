@@ -1391,10 +1391,10 @@ catches the error, shows "Auto assignment failed" and returns false
 (`assignment_rule.py:200-209`, version-15), so the rule never assigns anyone, on every
 save, with nothing on the rule itself to say why.
 
-**Us:** to be decided with finding 80. If the port evaluates the JSON form instead of
-the expression, the quote is just a character and the rule works, a divergence nothing
-can rely on. The fix upstream is to escape the value in those five branches as the
-plain comparison already does.
+**Us:** *Diverge*, by construction. Decided 15 Oct 2026 (FINDINGS.md 80, decision 1): the
+port evaluates the JSON form, not the expression, so the quote is just a character and
+the rule works. Nothing can rely on a rule silently never firing. The fix upstream is to
+escape the value in those five branches as the plain comparison already does.
 
 ---
 

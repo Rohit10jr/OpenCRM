@@ -89,7 +89,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 77 | frontend: the Deals list would not open | high | Clicking a deal's Annual Revenue cell filed the cell's display string, "$ 500,000.00", as the filter (upstream bug 46), and the standard view saved it. Upstream's database casts the string to 0 and shows an empty list; the port's filter builder refused it with 417, and since the saved filter is replayed on every load the page never opened again, with no way to remove the chip. Filter values for numeric columns are now read for the number in them, so the click filters on the amount shown; a deliberate divergence, recorded with bug 46 | **fixed** 6 Oct 2026 |
 | 78 | frontend: Settings → Home Actions, a standard row | low | The grid lets a standard entry's Type be changed to Separator although the doctype marks it read-only for standard rows; done to Settings, the entry vanishes and nothing in the app can bring it back, since the grid lives in Settings. Upstream bug 47, seen on the demo. The port reproduces it (the frontend is upstream's) and gives `seed_defaults --force` the job of restoring the standard rows, where upstream needs Desk | open, upstream bug 47; recovery added |
 | 79 | Settings → Invite User (and every system mail: invitations, password resets) | medium | The invitation went to the Celery worker's console instead of the inbox. System mail was sent with Django's `EMAIL_BACKEND` from `DEFAULT_FROM_EMAIL` (`crm@example.com`), which `.env` leaves at the console backend locally, while a mail written on a lead went through the Email Account's own SMTP; and a site with no Email Account could not send a lead's mail at all, where upstream falls through to the account `site_config.json` describes. Seen 6 Oct 2026 (S8). Both now run upstream's four-step lookup, with Django's `EMAIL_*` settings as the port's `site_config.json` - the config account; `EMAIL_HOST=localhost` with the console backend for development | **fixed** 13 Oct 2026 |
-| 80 | Settings → Assignment Rules → Save | high | Save does nothing. The screen posts `frappe.client.insert` for doctype `Assignment Rule`, a framework doctype the port does not model (`crm_app/api/assignment_rule.py`, a phase-3 decision: outside the nine platform doctypes), so the insert answers 404; the screen's error handler only clears its spinner, so nothing is shown. The list endpoint returns `[]` by the same decision. Upstream's engine is `frappe/automation/doctype/assignment_rule` (436 lines: round robin, load balancing, based on field, assign and unassign conditions, assignment days, applied on insert and update of leads and deals) plus the CRM's own JSON condition fields. Seen 6 Oct 2026 (S12). Decision wanted: port it, or defer with Currency and System Settings | open, decision: compared with upstream 15 Oct 2026, see the entry; six decisions before building |
+| 80 | Settings → Assignment Rules → Save | high | Save does nothing. The screen posts `frappe.client.insert` for doctype `Assignment Rule`, a framework doctype the port does not model (`crm_app/api/assignment_rule.py`, a phase-3 decision: outside the nine platform doctypes), so the insert answers 404; the screen's error handler only clears its spinner, so nothing is shown. The list endpoint returns `[]` by the same decision. Upstream's engine is `frappe/automation/doctype/assignment_rule` (436 lines: round robin, load balancing, based on field, assign and unassign conditions, assignment days, applied on insert and update of leads and deals) plus the CRM's own JSON condition fields. Seen 6 Oct 2026 (S12). Decision wanted: port it, or defer with Currency and System Settings | open, decision: compared with upstream 15 Oct 2026; conditions to be evaluated from the JSON, no code run (agreed); five decisions left |
 | 81 | Settings → SLA Policies → Assignment conditions | low | Add a custom condition, leave its fields empty, and try to remove it: the empty condition stays. Seen 6 Oct 2026 (S13); the same on the upstream demo, checked 7 Oct 2026, so it is upstream's (the condition builder is its frontend) and belongs with the upstream bugs once traced | open, upstream too, not traced |
 | 82 | Settings → SLA Policies → Duplicate | medium | Duplicate did nothing. The screen fetches the policy with `frappe.client.get` and posts the whole document back into `frappe.client.insert` with the new name; upstream's documents always carry a `doctype` key (`as_dict`), the port's did not, so the insert answered 417 "doctype is required" and the screen, with no error handler, showed nothing. Every document the port serialises now carries `doctype`, child rows included | **fixed** 7 Oct 2026 |
 | 83 | frontend: a wrong URL with a second segment, `/crm/leadsdss/CRM-LEAD-…` | low | A blank page where `/crm/leaderssf` shows "Invalid page or not permitted to access": upstream's catch-all route `/:invalidpath` matches one segment only, so a two-segment typo matches nothing. The same on the hosted demo (upstream bug 48). Patched here by decision: `/:invalidpath(.*)*`, the router's real catch-all, noted in `frontend/JWT_PATCH.md` | **fixed** 7 Oct 2026, by patch |
@@ -2766,10 +2766,79 @@ does not escape a quote inside a "like", "in" or "between" value, so such a rule
 fires (`UPSTREAM_BUGS.md` 52). The screen is offered to a Sales Manager who cannot save
 a rule (`UPSTREAM_BUGS.md` 53).
 
-**Decisions to take before building** (discussed 15 Oct 2026, not yet taken):
+**How upstream evaluates a condition, and why it needs a sandbox.** The engine is the
+framework's and predates the CRM's screen. In Frappe's Desk an administrator types the
+condition as one Python expression, the same idea Frappe uses for other conditions,
+because one expression can say almost anything. The CRM screen came later and, rather
+than change the engine, converts its dropdown choices into that same expression. So the
+engine holds a piece of text, and the only way to get a yes or no from text that is
+Python is to run it. Running text someone else wrote is dangerous (an expression can
+reach the operating system), so it is run through `frappe.safe_eval`
+(`frappe/utils/safe_exec.py:132-158`, version-15), a sandbox:
 
-1. Conditions: evaluate the JSON with the converter's meaning, executing nothing, and
-   refuse a rule that has only Python; or port a restricted Python evaluator.
+* the text is normalised (NFKC) and parsed, and `lambda` and the walrus operator are
+  refused outright;
+* it is compiled with RestrictedPython's `compile_restricted` under Frappe's policy, which
+  rewrites attribute and item access through guard functions, refuses names starting
+  with an underscore, and blocks a list of attributes that reach the interpreter's
+  internals (`UNSAFE_ATTRIBUTES`, `:773-797`: frame, code and traceback attributes,
+  `format`, `format_map`);
+* it runs with no built-ins at all, and only `int`, `float`, `round` and the guards as
+  globals (`WHITELISTED_SAFE_EVAL_GLOBALS`, `:986-997`), with the document's fields as
+  the local names.
+
+Pros of upstream's way: anything expressible in Python can be a condition; one mechanism
+for every doctype, SLA conditions included; the framework does the work. Cons: it runs
+text that arrived from a browser, and a sandbox around a full language is a blocklist,
+safe only while its rules are complete, which for Python sandboxes has repeatedly not
+held; writing is limited to System Manager, which narrows the risk without removing it.
+The two stored forms can drift apart, since only the expression is read. The expression
+is built as a string, so it breaks on a quote (bug 52). A failing rule is silent: it
+assigns nobody and says nothing on the rule. And the converter's meanings are odd: "like"
+is a case-sensitive contains, "between" compares text, and a value the screen stores as
+text compared with a date or a number raises in Python, so that condition never matches.
+
+**How the port will evaluate a condition (decision 1, agreed 15 Oct 2026).** It reads the
+JSON form, the list the screen saves before converting, for example
+`[["status", "equals", "New"], "and", ["territory", "in", "EU, US"]]`, and checks it
+with its own code. The user's input is data to compare against, never code to run:
+
+* **Each condition is three things.** A field name, used only to read that field from
+  the lead or deal; an operator, which must be one of the converter's list (equals,
+  not equals, `<`, `<=`, `>`, `>=`, in, not in, like, not like, is, is not, between) or
+  the condition is refused; and a value, only ever compared.
+* **The same answer as the expression would give.** Each operator does what the
+  converter's Python does, on the same values with the same types: "like" a
+  case-sensitive contains, "between" a text comparison, "Yes" and "No" true and false,
+  "is set" and "is not set" a test for an empty value, "in" a list split on commas.
+  Where upstream's expression raises, a text value against a date or a number, or a
+  field the document does not have, the condition does not match and the rule reports
+  "Auto assignment failed", as upstream's does.
+* **The same grouping.** The converter joins the parts with spaces, so Python's
+  precedence applies: "and" before "or". A nested list is a bracketed group.
+* **The expression is stored and never read.** The screen sends it and shows it, so it
+  is kept; the engine ignores it.
+* **A rule with an expression and no JSON is refused on save**, with a message saying
+  the port evaluates only conditions built on the screen. Only a rule written by hand in
+  Frappe's Desk has that shape, and the port has no Desk; it matters for data imported
+  from a real Frappe site, where such rules must be rebuilt on the screen.
+* **One evaluator for both features**: SLA conditions (finding 91) are stored the same
+  way and will use it.
+
+What this buys: nothing from a browser is ever executed, so there is no sandbox to
+escape; a malicious condition sent straight to the API can at worst fail to match. Bug
+52 cannot happen, since a quote is just a character in a value. Only one stored form is
+read, so drift between the two cannot change an answer. What it costs: hand-written
+Python rules are not supported, and the evaluator must follow the converter if upstream
+changes it, which a test per operator, checked against the converter's output, will
+catch. Whether to keep upstream's failing date and number comparisons or fix them as a
+recorded divergence is still open; faithful is the default.
+
+**Decisions to take before building** (discussed 15 Oct 2026):
+
+1. Conditions: **agreed**, evaluate the JSON as above, executing nothing, and refuse a
+   rule that has only Python. Open within it: whether to keep the failing date and
+   number comparisons.
 2. Rule types: all four in the engine, or the two the screen offers.
 3. Due dates and the close condition, which no CRM screen sets: port or leave out.
 4. The list endpoint reads without a permission check upstream: reproduce, or limit it
