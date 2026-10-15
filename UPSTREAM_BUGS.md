@@ -1377,6 +1377,44 @@ count cards do.
 
 ---
 
+## 52. An assignment condition with a quote in its value never fires
+
+**Where:** `frontend/src/utils/index.js:599-700` (`convertToConditions`), used by the
+Assignment Rules and SLA Policies screens. Found 15 Oct 2026 comparing Assignment Rules
+with upstream (FINDINGS.md 80); read, not run.
+
+The screen turns each condition into a Python expression the server evaluates with
+`frappe.safe_eval`. A plain comparison escapes a `"` in its value, but "like", "not
+like", "in", "not in" and "between" put the value between double quotes as typed:
+`(title and "5" screen" in title)`. That is not valid Python. `AssignmentRule.safe_eval`
+catches the error, shows "Auto assignment failed" and returns false
+(`assignment_rule.py:200-209`, version-15), so the rule never assigns anyone, on every
+save, with nothing on the rule itself to say why.
+
+**Us:** to be decided with finding 80. If the port evaluates the JSON form instead of
+the expression, the quote is just a character and the rule works, a divergence nothing
+can rely on. The fix upstream is to escape the value in those five branches as the
+plain comparison already does.
+
+---
+
+## 53. Assignment Rules is offered to a Sales Manager who cannot save a rule
+
+**Where:** `frontend/src/components/Settings/Settings.vue:186-205`, against the framework's
+`assignment_rule.json` (version-15). Found 15 Oct 2026 with bug 52; the same shape as 50.
+
+The Automation & Rules group (Assignment Rules, SLA Policies, Forms) shows when
+`isManager()` holds, which a Sales Manager passes. `Assignment Rule` has one role row,
+System Manager. A Sales Manager therefore sees the list, because
+`get_assignment_rules_list` reads with `frappe.get_all`, which checks no permission, and
+is refused on New, on an edit, on Duplicate and on delete.
+
+**Us:** to be decided with finding 80; reproducing it, as 50 was, is the default. The
+fix upstream is to show the item to `isAdmin()` only, or to read the list with
+`frappe.get_list`, so a Sales Manager gets a consistent "not permitted".
+
+---
+
 ## Faithful behaviours we chose to keep (not bugs — decisions)
 
 Recorded here so they are not later mistaken for defects:
