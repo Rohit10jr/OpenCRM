@@ -187,6 +187,12 @@ keeps naming the last person who actually edited the document, not the worker.
 **SLA has no scheduled job and must not acquire one** — it is computed on write. See
 `PHASE_5_ASYNC.md` §4 and `test_no_sla_job_exists_in_the_beat_schedule`.
 
+**Assignment Rules run on every save of every registered doctype**, matching upstream's
+wildcard hook, behind a cached check for whether that doctype has an enabled rule so the
+empty path costs one cache read. Conditions are evaluated as data by
+`crm_app.conditions` from the editor's JSON and no stored code is executed. The doctype,
+four rule types, engine and CRM endpoints are recorded in `docs/FINDINGS.md` 80.
+
 ### Added by phase 6
 
 | Need | Call |

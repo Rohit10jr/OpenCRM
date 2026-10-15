@@ -364,6 +364,11 @@ _DIRECT_ACCESS_ALLOWED = {
     #
     # A lookup by primary key with no list read: none of these enumerate.
     "auth_pages.py",
+    # Assignment Rules' list reproduces upstream's permission bypass: it reads with
+    # frappe.get_all, so every signed-in user sees the rule summaries (bug 55). The
+    # companion test remains meaningful because duplicate_assignment_rule sends the
+    # copy through client_insert, whose source contains check_object_permission.
+    "assignment_rule.py",
 }
 
 
