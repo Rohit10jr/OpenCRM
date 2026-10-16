@@ -216,24 +216,26 @@ const tabs = computed(() => {
           icon: PhoneIcon,
           component: markRaw(TelephonyPage),
         },
-        {
-          label: __('WhatsApp'),
-          icon: WhatsAppIcon,
-          component: markRaw(WhatsAppSettings),
-          condition: () => isWhatsappInstalled.value && isManager(),
-        },
-        {
-          label: __('ERPNext'),
-          icon: ERPNextIcon,
-          component: markRaw(ERPNextSettings),
-          condition: () => isManager(),
-        },
-        {
-          label: __('Lead Syncing'),
-          icon: 'refresh-cw',
-          component: markRaw(LeadSyncSourcePage),
-          condition: () => isManager(),
-        },
+        // Hidden by the owner's decision on 16 Oct 2026: only Telephony is shown under
+        // Integrations for now. Upstream's three other items, kept as they were:
+        // {
+        //   label: __('WhatsApp'),
+        //   icon: WhatsAppIcon,
+        //   component: markRaw(WhatsAppSettings),
+        //   condition: () => isWhatsappInstalled.value && isManager(),
+        // },
+        // {
+        //   label: __('ERPNext'),
+        //   icon: ERPNextIcon,
+        //   component: markRaw(ERPNextSettings),
+        //   condition: () => isManager(),
+        // },
+        // {
+        //   label: __('Lead Syncing'),
+        //   icon: 'refresh-cw',
+        //   component: markRaw(LeadSyncSourcePage),
+        //   condition: () => isManager(),
+        // },
       ],
     },
   ]
