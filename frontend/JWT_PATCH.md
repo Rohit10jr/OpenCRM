@@ -261,3 +261,4 @@ frontend is in one place.
 | File | Change | Why |
 |---|---|---|
 | `src/router.js` | the catch-all route is `/:invalidpath(.*)*` instead of `/:invalidpath` | Upstream's form matches one segment, so a mistyped list name in a record URL (`/crm/leadsdss/CRM-LEAD-…`) matched nothing and drew a blank page. Upstream bug 48, `docs/FINDINGS.md` 83; diverged by decision |
+| `src/components/Layouts/AppSidebar.vue` | the help centre's articles are a generic list of the app's own sections (Dashboard, Notifications, Leads, Deals, Contacts, Organizations, Notes, Tasks, Call Logs, Import Data), and `docsLink` is the app itself (`<origin>/crm`); upstream's list is kept in a comment | frappe-ui's HelpCenter opens `docsLink/<name>` in a new tab, and upstream's links lead to docs.frappe.io/crm, Frappe's manual for Frappe CRM. By the owner's decision on 16 Oct 2026, for showing the app to others: no links to the old docs. Each article now opens that section of Open CRM |
