@@ -72,6 +72,7 @@ the pairing CRM's own CI uses).
 | 47 | Home Actions lets a standard entry be turned into a separator, and Settings is gone | **Reproduce** — `seed_defaults --force` restores |
 | 48 | A wrong URL with more than one segment draws a blank page | **Diverge** — router patched |
 | 49 | The Getting started panel opens empty for a finished user on a browser that has not seen them | **Reproduce** — frappe-ui's code; once per browser profile |
+| 56 | SLA skips non-working days without resetting the time of day | **Reproduce** — user-visible deadlines |
 
 ## 1. A hidden column causes the *next* column to be skipped
 
@@ -1464,6 +1465,46 @@ answers as upstream does, and an upstream pull request will propose `frappe.get_
 (or a System Manager check); the port follows whatever upstream decides. The security
 rule would normally restrict it; this is a recorded exception, held open until that pull
 request is answered.
+
+---
+
+## 56. SLA skips a holiday or non-working day without resetting the time of day
+
+**Where:** `crm/fcrm/doctype/crm_service_level_agreement/
+crm_service_level_agreement.py:234-260` (`calc_time`). Found 16 Oct 2026 while building
+FINDINGS.md 91.
+
+When the current day is a holiday or has no working-hours row, `calc_time` adds exactly
+one day to the datetime and keeps its time. The separate branch for a working day with
+no time left instead moves to the next day's midnight. A deadline counted from 15:00 on
+Saturday consequently begins counting at 15:00 on Monday, not at Monday's working-hours
+start; the same happens across a holiday. Which branch reaches the next workday changes
+the deadline users see.
+
+**Us:** *Reproduce.* The SLA engine carries the time through skipped days and tests the
+Saturday and holiday cases explicitly. The upstream fix is to move to the next day's
+midnight in the holiday/non-working branch, as the no-time-left branch already does.
+
+---
+
+## 57. An SLA with no working hours hangs every save it applies to
+
+**Where:** `crm/fcrm/doctype/crm_service_level_agreement/
+crm_service_level_agreement.py:224-261` (`calc_time`). Found 16 Oct 2026 in the review
+of FINDINGS.md 91; read, not run.
+
+`calc_time` loops `while time_needed:`, and only a day with working time left reduces
+`time_needed`. If the SLA has no working-hours rows, every day is "not a workday" and the
+loop adds a day forever; a holiday list covering every working day does the same. The
+loop runs in `before_save` of every lead or deal the SLA applies to, so each such save
+never returns: a worker is stuck, and the user sees a request that never finishes. The
+SLA Policies screen asks for working hours, but nothing on the server requires them.
+
+**Us:** *Diverge.* A hang is nothing anyone can rely on. The port's `calc_time` returns no
+deadline when there are no working days, or after stepping over 3,660 days
+(`crm_app/sla.py`, `MAX_DAYS_SKIPPED`), and `set_response_by` already treats that as "no
+deadline". Tested in `tests/test_sla_timing.py`. The upstream fix is the same guard, or
+refusing to save an SLA without working hours.
 
 ---
 

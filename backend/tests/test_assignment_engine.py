@@ -222,8 +222,11 @@ def test_no_rule_doctype_is_query_free_after_cache_warm(status, django_assert_nu
     lead = _lead(status)
     lead.first_name = "warm"
     lead.save()
-    with django_assert_num_queries(1):
-        # The one query is the document UPDATE; the warm empty rule lookup adds none.
+    with django_assert_num_queries(4):
+        # The document UPDATE, SLA selection, and the savepoint around a full update
+        # (open and release, so a rolling-response row rolls back with a failed parent
+        # write, crm_app/models/core_sales.py). The warm empty assignment-rule lookup
+        # still adds none; unlike assignment rules, upstream checks SLA policy on save.
         lead.first_name = "still warm"
         lead.save()
 

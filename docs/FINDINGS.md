@@ -100,7 +100,8 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 88 | Dashboard → "Deals by territory" and "Deals by salesperson", found reading the code for 63 | low | Upstream plots two series on each, the number of deals and their value in the dashboard currency (`dashboard.py:1029-1147`), with upstream's titles and subtitles. The port plots the count alone, under different subtitles | **fixed** 15 Oct 2026: both charts return upstream's two series, the value in the dashboard currency |
 | 89 | Dashboard → the three average deal value cards, found in the review of 63 and 64 | medium | "Avg. deal value" counted lost deals, which upstream leaves out (`dashboard.py:387`); all three cards had their own titles and tooltips, and a percentage delta where upstream sends the difference of the averages | **fixed** 15 Oct 2026; the `%` upstream puts after that difference is `UPSTREAM_BUGS.md` 51, reproduced |
 | 90 | the country and currency reference data, found in the review of 63 and 64 | low | `crm_app/data/country_info.json` was the framework's `develop` copy, not version-15's: Turkey was "Türkiye" and Turkmenistan's currency TMT, where version-15 has "Turkey" and TMM. The framework checkout this port reads is on `develop`, not the `version-15` CLAUDE.md names | **fixed** 15 Oct 2026: the version-15 file; a database seeded earlier keeps its two extra rows |
-| 91 | every lead and deal: no SLA is ever applied, found comparing finding 80 | high | Upstream picks an SLA for each lead and deal on save and keeps its response deadline, first response and SLA status up to date (`set_sla` and `apply_sla`, about 420 lines in `crm_service_level_agreement`). The port's `apply_sla` is still the empty phase-1 placeholder, so the SLA Policies screen saves policies that nothing applies | open, recorded 15 Oct 2026 |
+| 91 | every lead and deal: no SLA is ever applied, found comparing finding 80 | high | Upstream picks an SLA for each lead and deal on save and keeps its response deadline, first response and SLA status up to date (`set_sla` and `apply_sla`, about 420 lines in `crm_service_level_agreement`). The port's `apply_sla` was the empty phase-1 placeholder, so the SLA Policies screen saved policies that nothing applied | **fixed** 16 Oct 2026 |
+| 92 | new leads and deals had no communication status | high | Upstream's DocType JSON defaults both documents to `Open`; the port left the Link empty, so SLA priority matching and the communication-status column had nothing. Brief 05 added the default and a historical-model backfill migration | **fixed** 16 Oct 2026 |
 
 ---
 
@@ -3141,6 +3142,43 @@ page shows it only beside an SLA, so the S20 check needs this, or a look at the 
   in that zone. The boot call already reports the same setting as the system zone.
 * **Its own pull request**, after finding 80's, on its own branch.
 
-**Status:** open; decided 15 Oct 2026 to build it after finding 80: SLA conditions are
-stored in the same two forms as assignment conditions, and one evaluator serves both.
-Upstream's engine is about 420 lines; an estimate like finding 80's, one to two days.
+**Fix (16 Oct 2026):** `crm_app/sla.py` now applies the selected policy from the lead and
+deal `before_save` seam: creation and rolling deadlines, first and rolling response
+times, response rows, and the upstream status overwrite order. `core_sales.py` skips the
+engine for partial (`db_set`) writes and makes the parent save and rolling child append
+one transaction. Datetimes cross one boundary into naive `TIME_ZONE` local time for the
+calculation and return aware for storage; holidays and working windows are local. There
+is still no scheduled job. `test_sla_timing.py` covers deadline edges, status changes,
+rolling responses and rollback, a deal, partial saves, and proves interval arithmetic
+against a literal port of upstream's per-second loop; the neighboring SLA, async,
+conversion, CRM behavior, communication-status and assignment suites pass too.
+
+Three decided divergences remain. Conditions come from the editor's JSON rather than
+executing stored Python; a condition that raises while policies are chosen is logged and
+treated as no match, rather than aborting the document save; and elapsed working time is
+computed by daily interval intersections instead of one Python iteration per second.
+The last produces the same integer result, including seconds and microseconds, as the
+upstream loop. The weekend/holiday time-of-day quirk is reproduced (`UPSTREAM_BUGS.md`
+56), not fixed.
+
+**Status:** **fixed** 16 Oct 2026.
+
+## 92. New leads and deals had no communication status
+
+**Block:** every newly inserted CRM Lead and CRM Deal before brief 05. Found while
+building finding 91.
+
+**Expected:** `crm_lead.json` and `crm_deal.json` give `communication_status` the default
+`Open`. That value selects the SLA priority, appears in the communication-status column,
+and is the state from which a reply transition is measured.
+
+**Actual:** the port's nullable foreign key defaulted to `None`. A document therefore
+matched no priority-specific SLA and carried no initial communication state.
+
+**Fix (16 Oct 2026, brief 05):** `SLAFieldsMixin.validate_communication_status` applies
+`Open` on insert when that status exists. Migration
+`0012_default_open_communication_status` uses historical models to backfill existing
+leads and deals, again only when the Link target exists. `test_sla_selection.py` covers
+both new rows and both migration branches.
+
+**Status:** **fixed** 16 Oct 2026.

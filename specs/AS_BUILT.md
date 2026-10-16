@@ -184,8 +184,11 @@ delete what `DELETE /api/resource/<dt>/<name>` refuses.
 `modified desc` list when someone comments. It is a bare `update()`, so `modified_by`
 keeps naming the last person who actually edited the document, not the worker.
 
-**SLA has no scheduled job and must not acquire one** — it is computed on write. See
-`PHASE_5_ASYNC.md` §4 and `test_no_sla_job_exists_in_the_beat_schedule`.
+**The SLA engine is computed on each full lead or deal save, with no scheduled job.** It
+sets local-working-time deadlines, first and rolling response durations and rows, and
+the upstream SLA statuses; partial `db_set`-style saves do not run it. Computation uses
+the site's `TIME_ZONE` while datetimes remain aware in storage. See `docs/FINDINGS.md`
+91, `PHASE_5_ASYNC.md` §4 and `test_no_sla_job_exists_in_the_beat_schedule`.
 
 **Assignment Rules run on every save of every registered doctype**, matching upstream's
 wildcard hook, behind a cached check for whether that doctype has an enabled rule so the
