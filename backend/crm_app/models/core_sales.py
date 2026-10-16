@@ -30,7 +30,7 @@ section 4, which establishes that upstream computes them on write, not on a sche
 
 from datetime import timedelta
 
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 from frappe_core import assignment, registry
@@ -222,14 +222,24 @@ class SLAFieldsMixin(models.Model):
         self.validate_communication_status()
         self.set_sla()
 
-    def apply_sla(self):
-        """PHASE 5 seam.
+    def apply_sla(self, save_kwargs: dict | None = None) -> None:
+        """Apply the selected policy, except on Frappe's hook-free ``db_set`` path."""
 
-        Upstream calls ``set_sla()`` from ``before_validate`` and ``apply_sla()`` from
-        ``before_save`` (``crm_lead.py:78-79,99-100``), mutating the fields above in
-        place. Phase 5 fills this in; phase 1 only owns the columns.
+        if (save_kwargs or {}).get("update_fields"):
+            return
+        from crm_app.sla import apply_sla
+
+        apply_sla(self)
+
+    def _sla_save_needs_transaction(self, save_kwargs: dict) -> bool:
+        """A full update may append a rolling-response row before the parent write.
+
+        Every full update, not only one that already held a rolling SLA: ``set_sla`` can
+        pick that SLA during this very save, and the row must roll back with a parent
+        write that fails. A savepoint costs next to nothing.
         """
-        return None
+
+        return not save_kwargs.get("update_fields") and not self._state.adding
 
 
 class StatusLifecycleMixin(models.Model):
@@ -673,9 +683,15 @@ class CRMLead(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
 
     def save(self, *args, **kwargs):
         self.set_sla_before_validation(kwargs)
+        if self._sla_save_needs_transaction(kwargs):
+            with transaction.atomic():
+                return self._save_with_hooks(*args, **kwargs)
+        return self._save_with_hooks(*args, **kwargs)
+
+    def _save_with_hooks(self, *args, **kwargs):
         self.validate_status()
         self.run_validate(ignore_mandatory=kwargs.pop("ignore_mandatory", False))
-        self.apply_sla()
+        self.apply_sla(kwargs)
         creating = self._state.adding
         status_moved = creating or self.status_id != getattr(self, "_loaded_status", None)
         result = super().save(*args, **kwargs)
@@ -991,6 +1007,12 @@ class CRMDeal(
 
     def save(self, *args, **kwargs):
         self.set_sla_before_validation(kwargs)
+        if self._sla_save_needs_transaction(kwargs):
+            with transaction.atomic():
+                return self._save_with_hooks(*args, **kwargs)
+        return self._save_with_hooks(*args, **kwargs)
+
+    def _save_with_hooks(self, *args, **kwargs):
         self.validate_status()
         # Child rows only exist once the parent does, so the contact-derived fields are
         # resolved post-insert on create (see below) and inline on update.
@@ -1003,7 +1025,7 @@ class CRMDeal(
         self._validate_text_links()
         if not kwargs.get("update_fields"):
             self.update_exchange_rate()
-        self.apply_sla()
+        self.apply_sla(kwargs)
         creating = self._state.adding
         status_moved = creating or self.status_id != getattr(self, "_loaded_status", None)
         won = status_moved and getattr(self.status, "type", None) == "Won"

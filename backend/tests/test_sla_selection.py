@@ -3,7 +3,7 @@
 import ast
 import importlib
 import json
-from datetime import timedelta
+from datetime import time, timedelta
 from pathlib import Path
 
 import pytest
@@ -19,6 +19,7 @@ from crm_app.models import (
     CRMLeadStatus,
     CRMServiceLevelAgreement,
     CRMServiceLevelPriority,
+    CRMServiceDay,
 )
 from frappe_core.exceptions import ValidationError
 
@@ -45,6 +46,17 @@ def _sla(name, *, priority=None, **values):
             priority=priority,
             first_response_time=3600,
         )
+        for index, workday in enumerate(
+            ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
+            start=1,
+        ):
+            CRMServiceDay.objects.create(
+                parent_sla=sla,
+                workday=workday,
+                start_time=time.min,
+                end_time=time(23, 59, 59),
+                idx=index,
+            )
     return sla
 
 
