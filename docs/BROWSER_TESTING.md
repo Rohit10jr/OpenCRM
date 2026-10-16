@@ -33,7 +33,7 @@ coverage section at the end; run it after recording results.
 <!-- coverage:start -->
 | Screens done | Rows ok | Rows failed | Rows skipped | Endpoints confirmed |
 |---|---|---|---|---|
-| 10 of 12 with rows | 151 | 7 | 1 | 84 of 102 |
+| 10 of 12 with rows | 151 | 7 | 0 | 84 of 102 |
 <!-- coverage:end -->
 
 Screens planned: Notes, Tasks, Call Logs, Leads, Deals, Contacts, Organizations,
@@ -204,7 +204,7 @@ Everything below System Configuration is shown to managers only.
 | S18 | Theme | Preferences → Theme → light, dark, system; the app repaints at once and keeps the choice after a reload | none, the choice is kept in the browser | ok | | |
 | S3 | General | General → Timeline timestamp format (Relative, Exact) and Timeline sort order (Oldest First, Newest First); each saves at once; a lead's or deal's activity timeline follows | `frappe.client.get`, `frappe.client.set_value` | ok | | |
 | S19 | Update timestamp on new communication | With a Celery worker running: switch on → comment on an old lead → its Last Modified becomes "just now" and it rises in the list; switch off → a comment leaves it where it was | `frappe.client.set_value`, `crm.api.comment.add_comment` | ok (with a worker the lead's Last Modified moves; without one it does not, the job waits in the queue) | | |
-| S20 | Mark as replied, reopen on new communication | The two switches save. Upstream then sets the lead's or deal's communication status to Replied when an email is sent and to Open when one is received, where an SLA applies | `frappe.client.set_value` | skipped: nothing in the port acts on the two switches, found by reading the code | 60 | |
+| S20 | Mark as replied, reopen on new communication | The two switches save. Upstream then sets the lead's or deal's communication status to Replied when an email is sent and to Open when one is received, where an SLA applies | `frappe.client.set_value` |  | 60 | |
 | S4 | Dashboard switches | Dashboard → Enable Forecasting on → Update → a deal without an Expected Closure Date is refused; Auto Update Expected Deal Value on → a deal's products set its expected value | `frappe.client.set_value` | failed: Update refuses with "Please select a currency before saving"; the Dashboard section needs a currency once forecasting is on, and the port has no Currency doctype to pick one from (63) | 63 | |
 | S21 | Dashboard currency and provider | Dashboard → Dashboard Currency → pick one; Exchange Rate Provider → pick one → Update | `search_link` (Currency), `frappe.client.set_value` | failed: the currency dropdown lists nothing, and the provider select stays disabled because no currency is set | 63 | |
 | S5 | Defaults | Defaults → the date, time and number formats load; change one → Update | `getdoctype`, `frappe.client.get`, `frappe.client.set_value` | failed: the section goes blank when opened | 64 | |
@@ -385,8 +385,8 @@ failed. Generated: do not edit by hand.
 |---|---|---|---|---|---|
 | ☐ | `crm.api.accept_invitation` | `crm_app/api/auth_pages.py:311` | `crm/api/__init__.py:79-106` | A8 |  |
 | ☑ | `crm.api.activities.get_activities` | `crm_app/api/activities.py:461` | `crm/api/activities.py:13-20` | C12, L3, L11, D4, D14 | ok: C12, L3, L11, D4, D14 |
-| ☐ | `crm.api.assignment_rule.duplicate_assignment_rule` | `crm_app/api/assignment_rule.py:30` | `crm/api/assignment_rule.py:27-32` | S12 |  |
-| ☐ | `crm.api.assignment_rule.get_assignment_rules_list` | `crm_app/api/assignment_rule.py:14` | `crm/api/assignment_rule.py:4-24` | S12 |  |
+| ☐ | `crm.api.assignment_rule.duplicate_assignment_rule` | `crm_app/api/assignment_rule.py:32` | `crm/api/assignment_rule.py:27-32` | S12 |  |
+| ☐ | `crm.api.assignment_rule.get_assignment_rules_list` | `crm_app/api/assignment_rule.py:16` | `crm/api/assignment_rule.py:4-24` | S12 |  |
 | ☐ | `crm.api.auth.oauth_providers` | `crm_app/api/auth.py:17` | `crm/api/auth.py:4-39` |  |  |
 | ☑ | `crm.api.comment.add_comment` | `crm_app/api/comment.py:118` | `crm/api/comment.py:69-90` | L8, S19, D13 | ok: L8, S19, D13 |
 | ☑ | `crm.api.contact.create_new` | `crm_app/api/contact.py:75` | `crm/api/contact.py:63-80` | K9 | ok: K9 |
