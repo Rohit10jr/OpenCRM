@@ -222,8 +222,9 @@ def test_no_rule_doctype_is_query_free_after_cache_warm(status, django_assert_nu
     lead = _lead(status)
     lead.first_name = "warm"
     lead.save()
-    with django_assert_num_queries(1):
-        # The one query is the document UPDATE; the warm empty rule lookup adds none.
+    with django_assert_num_queries(2):
+        # The document UPDATE plus SLA selection. The warm empty assignment-rule lookup
+        # still adds none; unlike assignment rules, upstream checks SLA policy on save.
         lead.first_name = "still warm"
         lead.save()
 

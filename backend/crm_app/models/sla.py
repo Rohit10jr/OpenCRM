@@ -9,6 +9,8 @@ records as happening on write, not on a schedule.
 
 from django.db import models
 
+from frappe_core import registry
+from frappe_core.exceptions import ValidationError
 from frappe_core.models import BaseDocument
 from frappe_core.naming import FieldValue, Hash
 from frappe_core.registry import register_doctype
@@ -65,6 +67,11 @@ class CRMHoliday(BaseDocument):
 
 @register_doctype("CRM Service Level Agreement")
 class CRMServiceLevelAgreement(BaseDocument):
+    _CODE_ONLY_MESSAGE = (
+        "This condition was written as code. Build it with the condition editor in "
+        "Settings → SLA Policies; conditions written as code are not evaluated here."
+    )
+
     sla_name = models.CharField(max_length=140)
     enabled = models.BooleanField(default=False)
     default = models.BooleanField(default=False)
@@ -84,6 +91,46 @@ class CRMServiceLevelAgreement(BaseDocument):
     class Meta:
         ordering = ["-modified"]
         name_strategy = FieldValue("sla_name", label="SLA Name")
+
+    def validate_default(self) -> None:
+        if not self.default:
+            return
+        other_slas = type(self)._default_manager.filter(apply_on=self.apply_on, default=True)
+        if self.pk:
+            other_slas = other_slas.exclude(pk=self.pk)
+        if other_slas.exists():
+            raise ValidationError(
+                f"Default Service Level Agreement already exists for {self.apply_on}"
+            )
+
+    def validate_condition(self) -> None:
+        from crm_app.conditions import ConditionError, document_values, evaluate, is_empty
+
+        try:
+            empty = is_empty(self.condition_json)
+        except ConditionError as exc:
+            raise ValidationError(
+                f"The Condition '{self.condition}' is invalid: {exc}"
+            ) from exc
+
+        if (self.condition or "").strip() and empty:
+            raise ValidationError(self._CODE_ONLY_MESSAGE)
+        if empty:
+            return
+
+        try:
+            model = registry.get_model(self.apply_on)
+            evaluate(self.condition_json, document_values(model()))
+        except ConditionError as exc:
+            raise ValidationError(
+                f"The Condition '{self.condition}' is invalid: {exc}"
+            ) from exc
+
+    def save(self, *args, **kwargs):
+        if not kwargs.get("update_fields"):
+            self.validate_default()
+            self.validate_condition()
+        return super().save(*args, **kwargs)
 
 
 @register_doctype("CRM Service Day", is_child_table=True)

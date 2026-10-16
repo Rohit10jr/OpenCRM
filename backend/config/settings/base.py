@@ -131,7 +131,7 @@ AUTH_PASSWORD_VALIDATORS = [
 AUTH_USER_MODEL = "frappe_platform.User"
 
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
+TIME_ZONE = env("TIME_ZONE", default="UTC")
 USE_I18N = True
 USE_TZ = True
 

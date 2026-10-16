@@ -15,6 +15,8 @@ from crm_app.models import (
     CRMLead,
     CRMLeadStatus,
     CRMOrganization,
+    CRMServiceLevelAgreement,
+    CRMServiceLevelPriority,
     CRMStatusChangeLog,
 )
 from frappe_core.exceptions import ValidationError
@@ -227,6 +229,18 @@ def test_the_sla_block_transfers_only_once_responded(alice, lead):
         first_responded_on=timezone.now(), first_response_time=120
     )
     lead.refresh_from_db()
+
+    # Once SLA selection runs on insert, the copied response survives only when the new
+    # deal has an applicable policy; no match deliberately clears it (crm_deal.py:209-213).
+    deal_sla = CRMServiceLevelAgreement.objects.create(
+        sla_name="Deal SLA", apply_on="CRM Deal", enabled=True
+    )
+    if lead.communication_status_id:
+        CRMServiceLevelPriority.objects.create(
+            parent_sla=deal_sla,
+            priority_id=lead.communication_status_id,
+            first_response_time=3600,
+        )
 
     with session_user(alice.name):
         deal = convert_to_deal(lead)

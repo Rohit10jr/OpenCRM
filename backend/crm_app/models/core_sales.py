@@ -191,6 +191,37 @@ class SLAFieldsMixin(models.Model):
     class Meta:
         abstract = True
 
+    def validate_communication_status(self) -> None:
+        """Apply the DocType JSON's ``Open`` default when its Link target exists."""
+
+        if not self._state.adding or self.communication_status_id:
+            return
+        status_model = registry.get_model("CRM Communication Status")
+        if status_model._default_manager.filter(pk="Open").exists():
+            self.communication_status_id = "Open"
+
+    def set_sla(self) -> None:
+        """Keep an explicit SLA, otherwise choose the first applicable policy."""
+
+        if self.sla_id:
+            return
+        from crm_app.sla import get_sla
+
+        sla = get_sla(self)
+        if sla is None:
+            self.first_responded_on = None
+            self.first_response_time = None
+            return
+        self.sla = sla
+
+    def set_sla_before_validation(self, save_kwargs: dict) -> None:
+        """Port ``before_validate``; partial saves are Frappe's hook-free ``db_set``."""
+
+        if save_kwargs.get("update_fields"):
+            return
+        self.validate_communication_status()
+        self.set_sla()
+
     def apply_sla(self):
         """PHASE 5 seam.
 
@@ -641,6 +672,7 @@ class CRMLead(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
         self.run_validate()
 
     def save(self, *args, **kwargs):
+        self.set_sla_before_validation(kwargs)
         self.validate_status()
         self.run_validate(ignore_mandatory=kwargs.pop("ignore_mandatory", False))
         self.apply_sla()
@@ -958,6 +990,7 @@ class CRMDeal(
         self.validate_lost_reason()
 
     def save(self, *args, **kwargs):
+        self.set_sla_before_validation(kwargs)
         self.validate_status()
         # Child rows only exist once the parent does, so the contact-derived fields are
         # resolved post-insert on create (see below) and inline on update.
