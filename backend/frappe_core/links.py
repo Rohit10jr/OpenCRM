@@ -53,12 +53,17 @@ def validate_text_links(instance) -> None:
     from frappe_core import registry
 
     missing: list[str] = []
+    allowed_dangling = frozenset(
+        getattr(type(instance), "ALLOW_DANGLING_LINK_FIELDS", ()) or ()
+    )
     for fieldname, target, label in text_link_fields(type(instance)):
         value = getattr(instance, fieldname, None)
         if value in (None, ""):
             continue
         manager = registry.get_model(target)._default_manager
         if manager.filter(pk=value).exists():
+            continue
+        if fieldname in allowed_dangling:
             continue
         spellings = list(manager.filter(pk__iexact=str(value)).values_list("pk", flat=True)[:2])
         if len(spellings) == 1:

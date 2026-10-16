@@ -33,7 +33,7 @@ coverage section at the end; run it after recording results.
 <!-- coverage:start -->
 | Screens done | Rows ok | Rows failed | Rows skipped | Endpoints confirmed |
 |---|---|---|---|---|
-| 10 of 12 with rows | 151 | 8 | 0 | 81 of 101 |
+| 10 of 12 with rows | 151 | 7 | 0 | 84 of 102 |
 <!-- coverage:end -->
 
 Screens planned: Notes, Tasks, Call Logs, Leads, Deals, Contacts, Organizations,
@@ -214,7 +214,7 @@ Everything below System Configuration is shown to managers only.
 | S9 | Sales Hierarchy | Sales Hierarchy → add a user under a manager; move one; the tree redraws | `frappe.client.get_list`, `frappe.client.insert`, `frappe.client.set_value` | ok | | |
 | S10 | Email accounts | Email → Accounts → Add → a service, an address, a password, Enable Outgoing ticked → Add; open it → change a field → Update. Then go back to S16: Profile → Email Settings → Add Email should now list this account | `crm.api.settings.create_email_account`, `frappe.client.set_value`, `frappe.client.rename_doc` | ok (after the fix and the key; failed before them: "invalid credentials" with a correct Gmail app password, the server had no encryption key) | 65 (fixed) | |
 | S11 | Email templates | Email → Templates → New → a name, a subject, a body → Create; open it → rename → Update; delete it | `frappe.client.get_list`, `frappe.client.insert`, `frappe.client.rename_doc`, `frappe.client.delete` | ok | | |
-| S12 | Assignment rules | Assignment Rules → New → a name, a condition, users → Create; toggle it off; Duplicate; rename; delete | `crm.api.assignment_rule.get_assignment_rules_list`, `frappe.client.insert`, `frappe.client.set_value`, `crm.api.assignment_rule.duplicate_assignment_rule`, `frappe.client.rename_doc`, `frappe.client.delete` | failed: Save does nothing; the port has no Assignment Rule doctype, the insert answers 404 and the screen shows no error | 80 | |
+| S12 | Assignment rules | Assignment Rules → New → a name, a condition, users → Create; toggle it off; Duplicate; rename; delete | `crm.api.assignment_rule.get_assignment_rules_list`, `frappe.client.insert`, `frappe.client.set_value`, `crm.api.assignment_rule.duplicate_assignment_rule`, `frappe.client.rename_doc`, `frappe.client.delete` |  | 80 | |
 | S13 | SLA policies | SLA Policies → New → a name, priorities, working hours → Create; open it → rename → Update | `frappe.client.get_list`, `frappe.client.insert`, `frappe.client.get`, `frappe.client.rename_doc` | ok | | |
 | S14 | Home actions | Home Actions → add an item with a label and a link → Update; it shows in the user menu | `frappe.client.set_value` | ok | | |
 | S15 | Signature | Profile → Email Settings → type a signature → Update; a new email on a lead or deal starts with it | `frappe.client.get`, `frappe.client.set_value` | ok | | |
@@ -385,8 +385,8 @@ failed. Generated: do not edit by hand.
 |---|---|---|---|---|---|
 | ☐ | `crm.api.accept_invitation` | `crm_app/api/auth_pages.py:311` | `crm/api/__init__.py:79-106` | A8 |  |
 | ☑ | `crm.api.activities.get_activities` | `crm_app/api/activities.py:461` | `crm/api/activities.py:13-20` | C12, L3, L11, D4, D14 | ok: C12, L3, L11, D4, D14 |
-| ⚠ | `crm.api.assignment_rule.duplicate_assignment_rule` | `crm_app/api/assignment_rule.py:26` | `crm/api/assignment_rule.py:27-32` | S12 | failed: S12 (finding 80) |
-| ⚠ | `crm.api.assignment_rule.get_assignment_rules_list` | `crm_app/api/assignment_rule.py:20` | `crm/api/assignment_rule.py:4-24` | S12 | failed: S12 (finding 80) |
+| ☐ | `crm.api.assignment_rule.duplicate_assignment_rule` | `crm_app/api/assignment_rule.py:32` | `crm/api/assignment_rule.py:27-32` | S12 |  |
+| ☐ | `crm.api.assignment_rule.get_assignment_rules_list` | `crm_app/api/assignment_rule.py:16` | `crm/api/assignment_rule.py:4-24` | S12 |  |
 | ☐ | `crm.api.auth.oauth_providers` | `crm_app/api/auth.py:17` | `crm/api/auth.py:4-39` |  |  |
 | ☑ | `crm.api.comment.add_comment` | `crm_app/api/comment.py:118` | `crm/api/comment.py:69-90` | L8, S19, D13 | ok: L8, S19, D13 |
 | ☑ | `crm.api.contact.create_new` | `crm_app/api/contact.py:75` | `crm/api/contact.py:63-80` | K9 | ok: K9 |
@@ -453,15 +453,16 @@ failed. Generated: do not edit by hand.
 | ☑ | `crm.www.crm.get_context_for_dev` | `crm_app/api/boot.py:39` | `crm/www/crm.py:get_boot` | B1 | ok: B1 |
 | ☑ | `frappe.apps.get_apps` | `crm_app/api/desk.py:40` | `frappe/apps.py:17-55` | B1 | ok: B1 |
 | ☑ | `frappe.auth.get_logged_user` | `frappe_core/api/auth.py:183` | `frappe/auth.py:get_logged_user` | A4 | ok: A4 |
-| ⚠ | `frappe.client.delete` | `crm_app/api/client.py:359` | `frappe/client.py:delete` | N4, T5, C8, L9, L10, L12, L21, O9, K7, K10, S8, S11, S12, D14, D15, D22 | failed: S12 (finding 80) |
+| ☐ | `frappe.automation.doctype.assignment_rule.assignment_rule.bulk_apply` | `crm_app/assignment_rules.py:472` | `frappe/automation/doctype/assignment_rule/assignment_rule.py:69-420` |  |  |
+| ☑ | `frappe.client.delete` | `crm_app/api/client.py:359` | `frappe/client.py:delete` | N4, T5, C8, L9, L10, L12, L21, O9, K7, K10, S8, S11, S12, D14, D15, D22 | ok: N4, T5, C8, L9, L10, L12, L21, O9, K7, K10, S8, S11, D14, D15, D22 |
 | ⚠ | `frappe.client.get` | `crm_app/api/client.py:106` | `frappe/client.py:get` | B1, N3, T3, C4, L3, O4, O12, K3, S2, S3, S5, S13, S15, S22, D4, A9 | failed: S5 (finding 64), A9 (finding 83 (fixed, patch)) |
 | ☑ | `frappe.client.get_doc_permissions` | `crm_app/api/client.py:496` | `frappe/client.py:get_doc_permissions` | N3, L3, D4 | ok: N3, L3, D4 |
 | ☑ | `frappe.client.get_list` | `crm_app/api/client.py:124` | `frappe/client.py:get_list` | N3, O4, O13, S8, S9, S11, S13, S16 | ok: N3, O4, O13, S8, S9, S11, S13, S16 |
 | ☑ | `frappe.client.get_single_value` | `crm_app/api/client.py:250` | `frappe/client.py:get_single_value` | B1 | ok: B1 |
 | ☐ | `frappe.client.get_value` | `crm_app/api/client.py:212` | `frappe/client.py:get_value` |  |  |
-| ⚠ | `frappe.client.insert` | `crm_app/api/client.py:326` | `frappe/client.py:insert` | N2, N10, T2, T17, C2, C12, L2, L9, L10, L11, O2, O3, O11, K2, S9, S11, S12, S13, S22, D10, D14, D17 | failed: S12 (finding 80) |
-| ⚠ | `frappe.client.rename_doc` | `crm_app/api/client.py:460` | `frappe/model/rename_doc.py:rename_doc` | O6, S10, S11, S12, S13 | failed: S12 (finding 80) |
-| ⚠ | `frappe.client.set_value` | `crm_app/api/client.py:297` | `frappe/client.py:set_value` | N3, T3, T4, C4, L4, L5, L7, L9, L10, L12, L14, L17, O3, O5, O7, O11, O12, O14, K4, K5, K10, S1, S2, S17, S3, S19, S20, S4, S21, S5, S6, S9, S10, S12, S14, S15, S16, DB6, DB7, DB8, D5, D6, D7, D8, D11, D14, D15, D17, D20 | failed: S4 (finding 63), S21 (finding 63), S5 (finding 64), S12 (finding 80) |
+| ☑ | `frappe.client.insert` | `crm_app/api/client.py:326` | `frappe/client.py:insert` | N2, N10, T2, T17, C2, C12, L2, L9, L10, L11, O2, O3, O11, K2, S9, S11, S12, S13, S22, D10, D14, D17 | ok: N2, N10, T2, T17, C2, C12, L2, L9, L10, L11, O2, O3, O11, K2, S9, S11, S13, S22, D10, D14, D17 |
+| ☑ | `frappe.client.rename_doc` | `crm_app/api/client.py:460` | `frappe/model/rename_doc.py:rename_doc` | O6, S10, S11, S12, S13 | ok: O6, S10, S11, S13 |
+| ⚠ | `frappe.client.set_value` | `crm_app/api/client.py:297` | `frappe/client.py:set_value` | N3, T3, T4, C4, L4, L5, L7, L9, L10, L12, L14, L17, O3, O5, O7, O11, O12, O14, K4, K5, K10, S1, S2, S17, S3, S19, S20, S4, S21, S5, S6, S9, S10, S12, S14, S15, S16, DB6, DB7, DB8, D5, D6, D7, D8, D11, D14, D15, D17, D20 | failed: S4 (finding 63), S21 (finding 63), S5 (finding 64) |
 | ☑ | `frappe.core.doctype.communication.email.make` | `crm_app/api/communication.py:76` | `frappe/core/doctype/communication/email.py:make` | L13, D16 | ok: L13, D16 |
 | ☑ | `frappe.core.doctype.user.user.get_timezones` | `crm_app/api/desk.py:111` | `frappe/core/doctype/user/user.py:783-785` | S2 | ok: S2 |
 | ☑ | `frappe.core.doctype.user.user.reset_password` | `crm_app/api/auth_pages.py:45` | `frappe/core/doctype/user/user.py:1041-1067` | A7 | ok: A7 |
@@ -485,7 +486,7 @@ failed. Generated: do not edit by hand.
 | ☑ | `token/refresh` | `frappe_core/api/auth.py:146` | `none, the JWT deviation (JWT_PATCH.md)` | A5 | ok: A5 |
 | ☑ | `upload_file` | `crm_app/api/upload.py:80` | `frappe/handler.py:131-244` | N9, L7, L12, O7, K5, S1, S6, D15 | ok: N9, L7, L12, O7, K5, S1, S6, D15 |
 
-81 of 101 endpoints confirmed; 8 not yet named by any row.
+84 of 102 endpoints confirmed; 9 not yet named by any row.
 
 **Excluded, integrations** (Twilio, Exotel, WhatsApp, ERPNext, lead sync, Frappe Cloud), not part of this log:
 

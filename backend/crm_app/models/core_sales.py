@@ -409,6 +409,21 @@ class OwnerAssignmentMixin(models.Model):
         """
         return None
 
+    #: The Assignment Rule engine's generic ``post_save`` hook skips this model; its
+    #: ``save`` calls :meth:`run_assignment_rules` after the owner sync instead, the
+    #: order upstream's ``after_insert`` / ``validate`` and ``on_update`` give
+    #: (``crm_app/assignment_rules.py``, FINDINGS.md 80).
+    RUNS_ASSIGNMENT_RULES_AFTER_OWNER_SYNC = True
+
+    def run_assignment_rules(self, save_kwargs: dict) -> None:
+        """``on_update``'s rule hooks, once the owner is assigned. A partial save
+        (``update_fields``) is upstream's ``db_set``, which runs no hook."""
+        if save_kwargs.get("update_fields"):
+            return
+        from crm_app.assignment_rules import run_after_save
+
+        run_after_save(self)
+
     def sync_owner_assignment(self, *, created: bool) -> None:
         """Run the owner-change side effects. Call *after* the row exists.
 
@@ -638,6 +653,7 @@ class CRMLead(StatusLifecycleMixin, OwnerAssignmentMixin, SLAFieldsMixin, BaseDo
         # After the insert, because assignment references self.name.
         self.sync_owner_assignment(created=creating)
         self._loaded_owner = self._owner_value()
+        self.run_assignment_rules(kwargs)
         return result
 
     def convert_to_deal(self, deal: dict | None = None, **kwargs):
@@ -968,6 +984,7 @@ class CRMDeal(
         self._loaded_status = self.status_id
         self.sync_owner_assignment(created=creating)
         self._loaded_owner = self._owner_value()
+        self.run_assignment_rules(kwargs)
         return result
 
     def sync_contact_fields(self) -> None:

@@ -842,7 +842,11 @@ def test_exactly_the_intended_doctypes_have_row_rules():
     # writes, upstream's own role tables reproduced (permissions/platform_docs.py).
     # System Settings is System Manager's alone, reading included.
     added_by_the_browser_passes = {
-        "Address", "Country", "Language", "Salutation", "Gender", "Currency", "System Settings"
+        "Address", "Country", "Language", "Salutation", "Gender", "Currency", "System Settings",
+        # FINDINGS.md 80: version-15's role table is System Manager only for every
+        # operation, reading included. Sales Manager's visible-but-refused screen is
+        # deliberately reproduced (UPSTREAM_BUGS.md 53).
+        "Assignment Rule",
     }
     # The role passes (FINDINGS.md 86, 87): upstream's role tables reproduced. Contact -
     # every role reads, writes and creates; the creator or a System Manager deletes.

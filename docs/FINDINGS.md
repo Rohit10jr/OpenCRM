@@ -89,7 +89,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 77 | frontend: the Deals list would not open | high | Clicking a deal's Annual Revenue cell filed the cell's display string, "$ 500,000.00", as the filter (upstream bug 46), and the standard view saved it. Upstream's database casts the string to 0 and shows an empty list; the port's filter builder refused it with 417, and since the saved filter is replayed on every load the page never opened again, with no way to remove the chip. Filter values for numeric columns are now read for the number in them, so the click filters on the amount shown; a deliberate divergence, recorded with bug 46 | **fixed** 6 Oct 2026 |
 | 78 | frontend: Settings → Home Actions, a standard row | low | The grid lets a standard entry's Type be changed to Separator although the doctype marks it read-only for standard rows; done to Settings, the entry vanishes and nothing in the app can bring it back, since the grid lives in Settings. Upstream bug 47, seen on the demo. The port reproduces it (the frontend is upstream's) and gives `seed_defaults --force` the job of restoring the standard rows, where upstream needs Desk | open, upstream bug 47; recovery added |
 | 79 | Settings → Invite User (and every system mail: invitations, password resets) | medium | The invitation went to the Celery worker's console instead of the inbox. System mail was sent with Django's `EMAIL_BACKEND` from `DEFAULT_FROM_EMAIL` (`crm@example.com`), which `.env` leaves at the console backend locally, while a mail written on a lead went through the Email Account's own SMTP; and a site with no Email Account could not send a lead's mail at all, where upstream falls through to the account `site_config.json` describes. Seen 6 Oct 2026 (S8). Both now run upstream's four-step lookup, with Django's `EMAIL_*` settings as the port's `site_config.json` - the config account; `EMAIL_HOST=localhost` with the console backend for development | **fixed** 13 Oct 2026 |
-| 80 | Settings → Assignment Rules → Save | high | Save does nothing. The screen posts `frappe.client.insert` for doctype `Assignment Rule`, a framework doctype the port does not model (`crm_app/api/assignment_rule.py`, a phase-3 decision: outside the nine platform doctypes), so the insert answers 404; the screen's error handler only clears its spinner, so nothing is shown. The list endpoint returns `[]` by the same decision. Upstream's engine is `frappe/automation/doctype/assignment_rule` (436 lines: round robin, load balancing, based on field, assign and unassign conditions, assignment days, applied on insert and update of leads and deals) plus the CRM's own JSON condition fields. Seen 6 Oct 2026 (S12). Decision wanted: port it, or defer with Currency and System Settings | open, decision |
+| 80 | Settings → Assignment Rules → Save | high | Save does nothing. The screen posts `frappe.client.insert` for doctype `Assignment Rule`, a framework doctype the port does not model (`crm_app/api/assignment_rule.py`, a phase-3 decision: outside the nine platform doctypes), so the insert answers 404; the screen's error handler only clears its spinner, so nothing is shown. The list endpoint returns `[]` by the same decision. Upstream's engine is `frappe/automation/doctype/assignment_rule` (436 lines: round robin, load balancing, based on field, assign and unassign conditions, assignment days, applied on insert and update of leads and deals) plus the CRM's own JSON condition fields. Seen 6 Oct 2026 (S12). Decision wanted: port it, or defer with Currency and System Settings | **fixed** 16 Oct 2026 |
 | 81 | Settings → SLA Policies → Assignment conditions | low | Add a custom condition, leave its fields empty, and try to remove it: the empty condition stays. Seen 6 Oct 2026 (S13); the same on the upstream demo, checked 7 Oct 2026, so it is upstream's (the condition builder is its frontend) and belongs with the upstream bugs once traced | open, upstream too, not traced |
 | 82 | Settings → SLA Policies → Duplicate | medium | Duplicate did nothing. The screen fetches the policy with `frappe.client.get` and posts the whole document back into `frappe.client.insert` with the new name; upstream's documents always carry a `doctype` key (`as_dict`), the port's did not, so the insert answered 417 "doctype is required" and the screen, with no error handler, showed nothing. Every document the port serialises now carries `doctype`, child rows included | **fixed** 7 Oct 2026 |
 | 83 | frontend: a wrong URL with a second segment, `/crm/leadsdss/CRM-LEAD-…` | low | A blank page where `/crm/leaderssf` shows "Invalid page or not permitted to access": upstream's catch-all route `/:invalidpath` matches one segment only, so a two-segment typo matches nothing. The same on the hosted demo (upstream bug 48). Patched here by decision: `/:invalidpath(.*)*`, the router's real catch-all, noted in `frontend/JWT_PATCH.md` | **fixed** 7 Oct 2026, by patch |
@@ -100,6 +100,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 88 | Dashboard → "Deals by territory" and "Deals by salesperson", found reading the code for 63 | low | Upstream plots two series on each, the number of deals and their value in the dashboard currency (`dashboard.py:1029-1147`), with upstream's titles and subtitles. The port plots the count alone, under different subtitles | **fixed** 15 Oct 2026: both charts return upstream's two series, the value in the dashboard currency |
 | 89 | Dashboard → the three average deal value cards, found in the review of 63 and 64 | medium | "Avg. deal value" counted lost deals, which upstream leaves out (`dashboard.py:387`); all three cards had their own titles and tooltips, and a percentage delta where upstream sends the difference of the averages | **fixed** 15 Oct 2026; the `%` upstream puts after that difference is `UPSTREAM_BUGS.md` 51, reproduced |
 | 90 | the country and currency reference data, found in the review of 63 and 64 | low | `crm_app/data/country_info.json` was the framework's `develop` copy, not version-15's: Turkey was "Türkiye" and Turkmenistan's currency TMT, where version-15 has "Turkey" and TMM. The framework checkout this port reads is on `develop`, not the `version-15` CLAUDE.md names | **fixed** 15 Oct 2026: the version-15 file; a database seeded earlier keeps its two extra rows |
+| 91 | every lead and deal: no SLA is ever applied, found comparing finding 80 | high | Upstream picks an SLA for each lead and deal on save and keeps its response deadline, first response and SLA status up to date (`set_sla` and `apply_sla`, about 420 lines in `crm_service_level_agreement`). The port's `apply_sla` is still the empty phase-1 placeholder, so the SLA Policies screen saves policies that nothing applies | open, recorded 15 Oct 2026 |
 
 ---
 
@@ -2737,6 +2738,166 @@ with the config account present, since an invitation with nothing to send throug
 fails its task. `config/settings/test.py` pins `EMAIL_HOST` empty so a developer's
 `.env` cannot vary what "no account" means under test.
 
+## 80. Assignment Rules: the screen is there, the feature is not
+
+**Block:** Settings → Assignment Rules (S12), 6 Oct 2026: Save did nothing. Compared in
+full with upstream on 15 Oct 2026, to decide whether to port it.
+
+**Why Save did nothing.** The screen posts `frappe.client.insert` for doctype `Assignment
+Rule`, a framework doctype the port never modelled (a phase-3 decision: outside the nine
+platform doctypes), so the insert answers 404, and the screen's error handler only
+clears its spinner. `crm_app/api/assignment_rule.py` answers the list with `[]` and
+refuses Duplicate, by the same decision.
+
+**What upstream has** (framework `frappe/automation/doctype/assignment_rule` at
+version-15, read with `git show version-15:`, plus CRM's additions):
+
+| Piece | Upstream | Port |
+|---|---|---|
+| `Assignment Rule` doctype | 15 fields, named by prompt, System Manager only (`assignment_rule.json`) | missing |
+| CRM's two fields | `assign_condition_json`, `unassign_condition_json`, custom fields from `install.py:600-627` | missing |
+| Child tables | `Assignment Rule User` (user, weight), `Assignment Rule Day` (Monday to Sunday) | missing |
+| `ToDo.assignment_rule` | the rule that made an assignment; un-assigning reads it | missing: the port's ToDo has no such column |
+| The engine, `apply` | on every `on_update` (`hooks.py:172`), synchronous; rules by priority, skipping days not listed; un-assign, then assign only if nothing is left, then close or reopen (`assignment_rule.py:276-370`) | missing |
+| Who is assigned | Round Robin and Load Balancing (the CRM screen offers these two, `AssigneeRules.vue:141-145`); Based on Field and Weighted Distribution in the engine only | missing |
+| Conditions | Python expressions run with `frappe.safe_eval` against the document; a failure shows "Auto assignment failed: {0}" and the save goes on (`:200-209`) | missing |
+| On assignment | clears existing assignees, assigns one user with the description rendered as a template and `notify=True`, records `last_user` for round robin (`:79-104`) | the parts exist: `frappe_core.assignment`, the assignee notification, the lead and deal owner sync from a ToDo |
+| Due dates | `due_date_based_on` and `update_due_date` (`:373-420`); no control for it on the CRM screen | missing |
+| Validation | refuses ToDo as the document type; names any day listed twice (`:44-68`) | missing |
+| `bulk_apply` | whitelisted; nothing in the CRM frontend calls it | missing |
+| `get_assignment_rules_list` | rules on leads and deals, with whether each has users (`crm/api/assignment_rule.py:4-23`); reads with `get_all`, which checks no permission | stub: `[]` |
+| `duplicate_assignment_rule` | copies a rule under a new name (`:26-32`) | stub: refuses |
+| The screens | `components/Settings/AssignmentRules/`, about 1,660 lines: the two endpoints plus `insert`, `get`, `set_value`, `rename_doc`, `delete` | present, nothing behind them |
+
+**How conditions are stored.** The screen saves each condition twice: as JSON the screen
+redraws from, and as a Python expression built from it by `convertToConditions`
+(`frontend/src/utils/index.js:599`). Only the Python is evaluated. The screen falls back
+to a raw-Python editor only for a rule with Python and no JSON
+(`AssignmentRuleView.vue:548-557`), which only a rule made outside the CRM has. The
+expression's meaning is what the converter writes, and a port must match it: "like" is
+a case-sensitive contains, with no wildcards; "between" compares as text; "Yes" and "No"
+are true and false; "is set" and "is not set" test for an empty value. The converter
+does not escape a quote inside a "like", "in" or "between" value, so such a rule never
+fires (`UPSTREAM_BUGS.md` 52). The screen is offered to a Sales Manager who cannot save
+a rule (`UPSTREAM_BUGS.md` 53).
+
+**How upstream evaluates a condition, and why it needs a sandbox.** The engine is the
+framework's and predates the CRM's screen. In Frappe's Desk an administrator types the
+condition as one Python expression, the same idea Frappe uses for other conditions,
+because one expression can say almost anything. The CRM screen came later and, rather
+than change the engine, converts its dropdown choices into that same expression. So the
+engine holds a piece of text, and the only way to get a yes or no from text that is
+Python is to run it. Running text someone else wrote is dangerous (an expression can
+reach the operating system), so it is run through `frappe.safe_eval`
+(`frappe/utils/safe_exec.py:132-158`, version-15), a sandbox:
+
+* the text is normalised (NFKC) and parsed, and `lambda` and the walrus operator are
+  refused outright;
+* it is compiled with RestrictedPython's `compile_restricted` under Frappe's policy, which
+  rewrites attribute and item access through guard functions, refuses names starting
+  with an underscore, and blocks a list of attributes that reach the interpreter's
+  internals (`UNSAFE_ATTRIBUTES`, `:773-797`: frame, code and traceback attributes,
+  `format`, `format_map`);
+* it runs with no built-ins at all, and only `int`, `float`, `round` and the guards as
+  globals (`WHITELISTED_SAFE_EVAL_GLOBALS`, `:986-997`), with the document's fields as
+  the local names.
+
+Pros of upstream's way: anything expressible in Python can be a condition; one mechanism
+for every doctype, SLA conditions included; the framework does the work. Cons: it runs
+text that arrived from a browser, and a sandbox around a full language is a blocklist,
+safe only while its rules are complete, which for Python sandboxes has repeatedly not
+held; writing is limited to System Manager, which narrows the risk without removing it.
+The two stored forms can drift apart, since only the expression is read. The expression
+is built as a string, so it breaks on a quote (bug 52). A failing rule is silent: it
+assigns nobody and says nothing on the rule. And the converter's meanings are odd: "like"
+is a case-sensitive contains, "between" compares text, and a value the screen stores as
+text compared with a date or a number raises in Python, so that condition never matches.
+
+**How the port will evaluate a condition (decision 1, agreed 15 Oct 2026).** It reads the
+JSON form, the list the screen saves before converting, for example
+`[["status", "equals", "New"], "and", ["territory", "in", "EU, US"]]`, and checks it
+with its own code. The user's input is data to compare against, never code to run:
+
+* **Each condition is three things.** A field name, used only to read that field from
+  the lead or deal; an operator, which must be one of the converter's list (equals,
+  not equals, `<`, `<=`, `>`, `>=`, in, not in, like, not like, is, is not, between) or
+  the condition is refused; and a value, only ever compared.
+* **The same answer as the expression would give.** Each operator does what the
+  converter's Python does, on the same values with the same types: "like" a
+  case-sensitive contains, "between" a text comparison, "Yes" and "No" true and false,
+  "is set" and "is not set" a test for an empty value, "in" a list split on commas.
+  Where upstream's expression raises, a text value against a date or a number, or a
+  field the document does not have, the condition does not match and the rule reports
+  "Auto assignment failed", as upstream's does.
+* **The same grouping.** The converter joins the parts with spaces, so Python's
+  precedence applies: "and" before "or". A nested list is a bracketed group.
+* **The expression is stored and never read.** The screen sends it and shows it, so it
+  is kept; the engine ignores it.
+* **A rule with an expression and no JSON is refused on save**, with a message saying
+  the port evaluates only conditions built on the screen. Only a rule written by hand in
+  Frappe's Desk has that shape, and the port has no Desk; it matters for data imported
+  from a real Frappe site, where such rules must be rebuilt on the screen.
+* **One evaluator for both features**: SLA conditions (finding 91) are stored the same
+  way and will use it.
+
+What this buys: nothing from a browser is ever executed, so there is no sandbox to
+escape; a malicious condition sent straight to the API can at worst fail to match. Bug
+52 cannot happen, since a quote is just a character in a value. Only one stored form is
+read, so drift between the two cannot change an answer. What it costs: hand-written
+Python rules are not supported, and the evaluator must follow the converter if upstream
+changes it, which a test per operator, checked against the converter's output, will
+catch. Whether to keep upstream's failing date and number comparisons or fix them as a
+recorded divergence is still open; faithful is the default.
+
+**Decisions, taken 15 Oct 2026** with the owner:
+
+1. **Conditions:** evaluate the JSON as above, executing nothing; refuse a rule that has
+   only Python. The conditions upstream cannot meet are fixed, not reproduced: a date is
+   compared as a date and "between" takes its two bounds from the list the editor
+   stores (`UPSTREAM_BUGS.md` 54, diverge). Correction to the discussion: number
+   comparisons do work upstream, since the editor stores a number as a number
+   (`CFCondition.vue:281`); dates and "between" are what fail.
+2. **Rule types:** all four in the engine (Round Robin, Load Balancing, Based on Field,
+   Weighted Distribution), though the screen offers two.
+3. **Due dates and the close condition:** ported, though no CRM screen sets them.
+4. **The list endpoint:** as upstream, no permission check, recorded as
+   `UPSTREAM_BUGS.md` 55. An upstream pull request will propose the fix, and the port
+   follows the outcome; a recorded exception to the security rule until then.
+5. **Bug 53:** reproduced, as 50 was.
+6. **The SLA engine (finding 91):** built too, sharing the condition evaluator.
+
+**Building decisions, 15 Oct 2026:**
+
+* **Where the engine runs:** after every save of every registered doctype, as upstream's
+  `"*"` `on_update` hook does (`hooks.py:172`, version-15), behind the same cached check
+  for which doctypes have an enabled rule, so a save with none costs one cache read. A
+  rule for another doctype can only come through the API here, and it works rather than
+  being stored and ignored.
+* **Who builds it:** Codex, from one brief per commit; Claude plans, reviews and commits
+  (CLAUDE.md, "Codex builds, Claude plans and reviews").
+* **Two pull requests:** Assignment Rules first, on `assignment-rules`; the SLA engine
+  (finding 91) second, on its own branch, reusing the condition evaluator.
+
+**Fix (16 Oct 2026):** the feature is built in four parts. `crm_app.conditions` evaluates
+the editor's JSON data without running code; `frappe_platform.models.AssignmentRule` and
+its two child doctypes publish the saved document behind a System Manager-only rule;
+`crm_app.assignment_rules` applies all four rule types, assignment days, unassignment,
+close/reopen and due dates on document saves; and `crm_app/api/assignment_rule.py` serves
+the CRM list and Duplicate endpoints. Coverage lives in `test_conditions.py`,
+`test_assignment_rule_doctype.py`, `test_assignment_engine.py` and
+`test_assignment_rule_endpoints.py`, with the permission and route-surface suites guarding
+the published doctype and deliberate list exception.
+
+The deliberate divergences are the decisions above: conditions come from JSON and no
+stored code runs; bug 54's date and `between` conditions work; code-only rules and close
+conditions are refused because the CRM editor cannot build them safely; and an engine
+failure is logged as `Auto assignment failed` rather than shown because this port has no
+success-message channel. Bug 53 is reproduced (a Sales Manager cannot duplicate), as is
+bug 55 for now (any signed-in user receives the list).
+
+**Status:** fixed 16 Oct 2026. The SLA engine remains finding 91 and is not part of this
+branch.
+
 ## 82. Duplicate on an SLA policy did nothing: the document had no `doctype`
 
 **Block:** none in the http suite; seen 7 Oct 2026 in the Settings pass
@@ -2934,3 +3095,52 @@ Two other things the review found came from reading `develop`, and are corrected
 same change: the Currency rule cited a `Desk User` `select` row that version-15's
 `currency.json` does not have, so reading is now for the roles that table names; and
 `add_currencies` noted an escaping of `number_format` that only `develop` does.
+
+## 91. No SLA is ever applied to a lead or deal
+
+**Block:** none on a screen. Found 15 Oct 2026 while comparing Assignment Rules with
+upstream (finding 80), whose conditions share the SLA's format. Not recorded anywhere
+before.
+
+**Expected:** `crm_lead.py:84-85,106-107,387-410` and `crm_deal.py:86-87,110-111,202-220`.
+`before_validate` runs `set_sla`, which picks the first enabled SLA whose condition the
+document meets (`crm_service_level_agreement/utils.py:get_sla`, the condition run with
+`frappe.safe_eval`), and `before_save` runs `apply_sla`, which hands the document to the
+SLA's `apply` (`crm_service_level_agreement.py:74-359`): the response deadline from the
+priority's response time within working hours and outside the holiday list, the first
+response and its time, rolling responses, and the SLA status (First Response Due,
+Rolling Response Due, Fulfilled, Failed). All of it is computed on write; there is no
+scheduled job (`PHASE_5_ASYNC.md` §4).
+
+**Actual:** `apply_sla` in `crm_app/models/core_sales.py` is the phase-1 placeholder
+("PHASE 5 seam ... Phase 5 fills this in") and returns `None`, and there is no `set_sla`.
+Phase 5 settled the design and asserted that no SLA job is scheduled, but never filled
+the seam. So no lead or deal ever gets an SLA, a response deadline or an SLA status,
+whatever the SLA Policies screen saves.
+
+**Reach:** the SLA columns on lists and the SLA panel on a lead or deal stay empty.
+Lead conversion sets the communication status to Replied only on a lead with an SLA,
+so that branch never runs. The communication status from finding 60 is written, but the
+page shows it only beside an SLA, so the S20 check needs this, or a look at the database.
+
+**Decisions, 15 Oct 2026, with the owner:**
+
+* **Conditions** are evaluated from the JSON form with no code run, by the evaluator
+  built for finding 80; an SLA whose condition exists only as code is refused on save,
+  saying only conditions built on the screen are supported. An SLA with no condition,
+  the default one included, is unaffected. Upstream's save-time check ("The Condition
+  '{0}' is invalid: {1}") still applies to the JSON form. The dev database's one SLA has
+  no condition, so nothing stored breaks.
+* **Time zone:** upstream counts "now", working hours and holidays in System Settings'
+  `time_zone`, set by Frappe's setup wizard (`get_system_timezone`,
+  `frappe/utils/data.py:324-326`, version-15, "Asia/Kolkata" only when unset). The port
+  has no wizard and no such field, so the site's `TIME_ZONE` setting is the time zone, not
+  a fallback: made readable from `.env`, added to `.env.example`, `UTC` when unset as
+  today, and listed under "before you deploy", since working hours meant as local time
+  are wrong by the zone's offset under `UTC`. Deadlines are stored in UTC and computed
+  in that zone. The boot call already reports the same setting as the system zone.
+* **Its own pull request**, after finding 80's, on its own branch.
+
+**Status:** open; decided 15 Oct 2026 to build it after finding 80: SLA conditions are
+stored in the same two forms as assignment conditions, and one evaluator serves both.
+Upstream's engine is about 420 lines; an estimate like finding 80's, one to two days.

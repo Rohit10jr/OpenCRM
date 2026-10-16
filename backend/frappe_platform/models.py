@@ -538,6 +538,176 @@ class ContactPhone(BaseDocument):
         name_strategy = Hash()
 
 
+ASSIGNMENT_RULE_TYPES = (
+    "Round Robin",
+    "Load Balancing",
+    "Based on Field",
+    "Weighted Distribution",
+)
+ASSIGNMENT_DAYS = (
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+)
+
+
+@register_doctype("Assignment Rule User", is_child_table=True)
+class AssignmentRuleUser(BaseDocument):
+    """A user and weight embedded by an Assignment Rule.
+
+    The parent has two tables of this doctype (``users`` and ``weighted_users``), so the
+    Frappe's string parent pointers are intentional rather than a real foreign key.
+    """
+
+    parent = models.CharField(max_length=140, blank=True, default="", db_index=True)
+    parenttype = models.CharField(max_length=140, blank=True, default="", db_index=True)
+    parentfield = models.CharField(max_length=140, blank=True, default="", db_index=True)
+    user = models.ForeignKey(User, on_delete=models.PROTECT, verbose_name="User")
+    weight = models.IntegerField("Weight", default=1)
+
+    class Meta:
+        ordering = ["idx"]
+        name_strategy = Hash()
+
+
+@register_doctype("Assignment Rule Day", is_child_table=True)
+class AssignmentRuleDay(BaseDocument):
+    """One weekday on which an Assignment Rule may run."""
+
+    parent = models.CharField(max_length=140, blank=True, default="", db_index=True)
+    parenttype = models.CharField(max_length=140, blank=True, default="", db_index=True)
+    parentfield = models.CharField(max_length=140, blank=True, default="", db_index=True)
+    day = models.CharField(
+        "Day",
+        max_length=20,
+        blank=True,
+        default="",
+        choices=[(day, day) for day in ASSIGNMENT_DAYS],
+    )
+
+    class Meta:
+        ordering = ["idx"]
+        name_strategy = Hash()
+
+
+@register_doctype("Assignment Rule")
+class AssignmentRule(BaseDocument):
+    """Frappe's Assignment Rule definition; the execution engine lands separately.
+
+    Fields and validation follow version-15 ``assignment_rule.json`` and
+    ``assignment_rule.py:38-68``.  CRM adds the two JSON copies used by its condition
+    editor (``crm/install.py:600-627``); only those data structures will be evaluated.
+    """
+
+    document_type = models.CharField("Document Type", max_length=140)
+    due_date_based_on = models.CharField(
+        "Due Date Based On", max_length=140, blank=True, default=""
+    )
+    priority = models.IntegerField("Priority", default=0)
+    disabled = models.BooleanField("Disabled", default=False)
+    description = models.TextField("Description", default="Automatic Assignment")
+    assign_condition = models.TextField("Assign Condition")
+    assign_condition_json = models.TextField("Assign Condition JSON", blank=True, default="")
+    unassign_condition = models.TextField("Unassign Condition", blank=True, default="")
+    unassign_condition_json = models.TextField(
+        "Unassign Condition JSON", blank=True, default=""
+    )
+    close_condition = models.TextField("Close Condition", blank=True, default="")
+    rule = models.CharField(
+        "Rule", max_length=50, choices=[(rule, rule) for rule in ASSIGNMENT_RULE_TYPES]
+    )
+    field = models.CharField("Field", max_length=140, blank=True, default="")
+    last_user = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="last_assignment_rules",
+        verbose_name="Last User",
+    )
+    current_index = models.IntegerField("Current Index", default=0)
+
+    POLYMORPHIC_CHILD_TABLES = {
+        "assignment_days": "Assignment Rule Day",
+        "users": "Assignment Rule User",
+        "weighted_users": "Assignment Rule User",
+    }
+    LINK_FIELDS = {"document_type": "DocType"}
+    READONLY_FIELDS = ("last_user", "current_index")
+
+    _CODE_ONLY_MESSAGE = (
+        "This condition was written as code. Build it with the condition editor in "
+        "Settings → Assignment Rules; conditions written as code are not evaluated here."
+    )
+
+    class Meta:
+        ordering = ["-modified"]
+        name_strategy = Prompt()
+
+    def _assignment_days(self) -> list[str]:
+        from frappe_core import children
+
+        table = children.discover_child_tables(type(self))["assignment_days"]
+        return [row.day for row in children.read_children(self, table)] if self.pk else []
+
+    def _validate_assignment_days(self) -> None:
+        seen: set[str] = set()
+        repeated: list[str] = []
+        for day in self._assignment_days():
+            if day in seen and day not in repeated:
+                repeated.append(day)
+            seen.add(day)
+        if repeated:
+            if len(repeated) == 1:
+                joined = repeated[0]
+            else:
+                joined = f"{', '.join(repeated[:-1])} and {repeated[-1]}"
+            raise ValidationError(
+                f"The following Assignment Days have been repeated: {joined}"
+            )
+
+    def _validate_conditions(self) -> None:
+        from crm_app.conditions import ConditionError, is_empty, validate
+
+        for code_field, json_field in (
+            ("assign_condition", "assign_condition_json"),
+            ("unassign_condition", "unassign_condition_json"),
+        ):
+            json_value = getattr(self, json_field)
+            try:
+                validate(json_value)
+                empty = is_empty(json_value)
+            except ConditionError as exc:
+                raise ValidationError(str(exc)) from exc
+            if getattr(self, code_field).strip() and empty:
+                raise ValidationError(self._CODE_ONLY_MESSAGE)
+        if self.close_condition.strip():
+            raise ValidationError(self._CODE_ONLY_MESSAGE)
+
+    def save(self, *args, **kwargs):
+        if self.document_type == "ToDo":
+            raise ValidationError(
+                "Assignment Rule is not allowed on document type <strong>ToDo</strong>"
+            )
+        self._validate_assignment_days()
+        self._validate_conditions()
+        self._validate_days_are_given()
+        return super().save(*args, **kwargs)
+
+    def _validate_days_are_given(self) -> None:
+        """``assignment_days`` is ``reqd`` in version-15's JSON, so a rule with none is
+        refused with ``base_document.py:742-745``'s table message. Not on the first save
+        of an insert: the serializer writes the child rows after it and saves the parent
+        again (``frappe_core/serializers.py``), which is when this runs."""
+        if self._state.adding or self._assignment_days():
+            return
+        raise MandatoryError(messages=["Error: Data missing in table: Assignment Days"])
+
+
 # Unrouted deliberately. `org_hierarchy` grants access to a record when a ToDo row says
 # you are assigned to it, so a writable /api/resource/ToDo let any user create that row
 # for any document and read it - the permission check then *passes*, on data the caller
@@ -566,6 +736,11 @@ class ToDo(BaseDocument):
         ("Cancelled", "Cancelled"),
     ]
     PRIORITY_CHOICES = [("High", "High"), ("Medium", "Medium"), ("Low", "Low")]
+    LINK_FIELDS = {"assignment_rule": "Assignment Rule"}
+    # Assignment Rule is in Frappe's ``ignore_links_on_delete`` list. Its ToDos keep
+    # the rule name as audit data after deletion and must still be closable/cancellable.
+    ALLOW_DANGLING_LINK_FIELDS = ("assignment_rule",)
+    READONLY_FIELDS = ("assignment_rule",)
 
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default="Open", db_index=True)
     priority = models.CharField(max_length=50, choices=PRIORITY_CHOICES, default="Medium")
@@ -579,6 +754,9 @@ class ToDo(BaseDocument):
     description = models.TextField(blank=True, default="")
     reference_type = models.CharField(max_length=140, blank=True, default="", db_index=True)
     reference_name = models.CharField(max_length=140, blank=True, default="", db_index=True)
+    assignment_rule = models.CharField(
+        "Assignment Rule", max_length=140, null=True, blank=True
+    )
 
     class Meta:
         ordering = ["-modified"]

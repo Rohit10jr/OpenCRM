@@ -1377,6 +1377,96 @@ count cards do.
 
 ---
 
+## 52. An assignment condition with a quote in its value never fires
+
+**Where:** `frontend/src/utils/index.js:599-700` (`convertToConditions`), used by the
+Assignment Rules and SLA Policies screens. Found 15 Oct 2026 comparing Assignment Rules
+with upstream (FINDINGS.md 80); read, not run.
+
+The screen turns each condition into a Python expression the server evaluates with
+`frappe.safe_eval`. A plain comparison escapes a `"` in its value, but "like", "not
+like", "in", "not in" and "between" put the value between double quotes as typed:
+`(title and "5" screen" in title)`. That is not valid Python. `AssignmentRule.safe_eval`
+catches the error, shows "Auto assignment failed" and returns false
+(`assignment_rule.py:200-209`, version-15), so the rule never assigns anyone, on every
+save, with nothing on the rule itself to say why.
+
+**Us:** *Diverge*, by construction. Decided 15 Oct 2026 (FINDINGS.md 80, decision 1): the
+port evaluates the JSON form, not the expression, so the quote is just a character and
+the rule works. Nothing can rely on a rule silently never firing. The fix upstream is to
+escape the value in those five branches as the plain comparison already does.
+
+---
+
+## 53. Assignment Rules is offered to a Sales Manager who cannot save a rule
+
+**Where:** `frontend/src/components/Settings/Settings.vue:186-205`, against the framework's
+`assignment_rule.json` (version-15). Found 15 Oct 2026 with bug 52; the same shape as 50.
+
+The Automation & Rules group (Assignment Rules, SLA Policies, Forms) shows when
+`isManager()` holds, which a Sales Manager passes. `Assignment Rule` has one role row,
+System Manager. A Sales Manager therefore sees the list, because
+`get_assignment_rules_list` reads with `frappe.get_all`, which checks no permission, and
+is refused on New, on an edit, on Duplicate and on delete.
+
+**Us:** *Reproduce*, decided 15 Oct 2026 (FINDINGS.md 80, decision 5), as 50 was. The
+fix upstream is to show the item to `isAdmin()` only, or to read the list with
+`frappe.get_list`, so a Sales Manager gets a consistent "not permitted".
+
+---
+
+## 54. Date conditions and "between" in assignment and SLA conditions do not work
+
+**Where:** `frontend/src/components/ConditionsFilter/CFCondition.vue:256-282` (what the
+condition editor stores) against `frontend/src/utils/index.js:599-700`
+(`convertToConditions`, the expression built from it), evaluated by `frappe.safe_eval`
+against `doc.as_dict()` (`assignment_rule.py:200-209`, version-15). Found 15 Oct 2026 in
+the discussion of FINDINGS.md 80; read, not run.
+
+The editor stores a value as a number when it parses as one (`updateValue`, `:281`), so
+number comparisons work. Two kinds do not:
+
+* **"between" never works.** For a date field the editor stores the range as a list,
+  `[start, end]` (`:279`). The converter's "between" branch only handles a string with a
+  comma, so the list falls through to the generic branch and becomes
+  `close_date between "2026-01-01,2026-01-31"`. `between` is not Python, so the
+  expression does not compile; `safe_eval` raises, the rule reports "Auto assignment
+  failed" and never matches, on every save.
+* **A date compared with a date depends on how the document was loaded.** The editor
+  stores the date as text, `"2026-10-20"`. A document loaded from the database holds a
+  date field as a `datetime.date`, so `expected_closure_date == "2026-10-20"` is false
+  and `>` or `<` raises. A document built from a client's request, an insert, holds the
+  text and compares as text. So the same rule matches a deal when it is created and not
+  when it is edited, with nothing to say why.
+
+**Us:** *Diverge*, decided 15 Oct 2026 (FINDINGS.md 80, decision 1). The port's evaluator
+reads the JSON form, compares a date field's value as a date with the condition's value
+parsed as one, and takes "between" from the list as inclusive bounds. A condition that
+upstream can never meet, or meets only by accident of loading, does what the screen
+says. The fix upstream is a "between" branch for a list value, and comparing dates as
+dates (or both as ISO text) in the converter.
+
+---
+
+## 55. Any signed-in user can list the assignment rules
+
+**Where:** `crm/api/assignment_rule.py:4-23` (`get_assignment_rules_list`). Found 15 Oct
+2026 comparing Assignment Rules with upstream (FINDINGS.md 80).
+
+The endpoint is a bare `@frappe.whitelist()` and reads with `frappe.get_all`, which
+applies no permission. `Assignment Rule` is System Manager's alone
+(`assignment_rule.json`), yet any signed-in user, a Sales User included, can call it and
+read every rule's name, description, priority and whether it has users. Low sensitivity,
+but past the role table.
+
+**Us:** *Reproduce for now*, decided 15 Oct 2026 (FINDINGS.md 80, decision 4): the port
+answers as upstream does, and an upstream pull request will propose `frappe.get_list`
+(or a System Manager check); the port follows whatever upstream decides. The security
+rule would normally restrict it; this is a recorded exception, held open until that pull
+request is answered.
+
+---
+
 ## Faithful behaviours we chose to keep (not bugs — decisions)
 
 Recorded here so they are not later mistaken for defects:

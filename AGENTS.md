@@ -59,6 +59,81 @@ the port is right or wrong.
 Django + DRF + SimpleJWT, PostgreSQL 17, Redis, Celery, Django Channels,
 django-treebeard. Python 3.13.
 
+## When building
+
+Some tasks ask you to write the code rather than review it. Claude plans the task and
+reviews what you build; the owner merges. A build task comes as a brief, one Markdown
+file in `tasks/` (git-ignored), naming the branch, the upstream files, the decisions
+already taken and the tests that must pass. **The brief's decisions are settled with the
+owner: build them, and if you think one is wrong, say so in your report rather than
+building something else.**
+
+### Reading upstream
+
+**The framework checkout is on `develop`, not `version-15`.** Read every framework file
+with `git show version-15:<path>` from `D:\02_Personal\01_OpenSource\02_FrameWorks\frappe`,
+never the working tree, and never `git checkout` there. Reading the working tree is how
+a `develop` data file, and a permission row only `develop` has, got into this port
+(`docs/FINDINGS.md` 90). The CRM app is read from its working tree (`main`).
+
+### Branch and commits: you write, Claude commits
+
+Your sandbox (`workspace-write`) cannot write `.git`, so **you do not run `git add` or
+`git commit`**, and never push. Claude checks out the branch before you start, and
+commits after reviewing.
+
+* **One brief is one commit.** Build exactly what the brief asks, with the tests that
+  cover it green, and leave the changes in the working tree. A feature is several briefs.
+* **Write the commit message** to `tasks/COMMIT_MSG` (overwrite it each time). The
+  subject says what changed; the body says **why**, citing the upstream `path:line` it
+  follows, and lists the files the commit should contain. End it with:
+
+  ```
+  Co-Authored-By: Codex <noreply@openai.com>
+  ```
+
+* Leave `frontend/auto-imports.d.ts` alone; Vite rewrites it, and it is never committed.
+* Touch only the files the brief's change needs, so the commit stays one change.
+
+### Tests
+
+* Run single test files, in `backend/`: `.venv/Scripts/python.exe -m pytest -q
+  -p no:cacheprovider tests/<file>.py`. Run the files the change touches and their
+  neighbours before each commit.
+* **The full suite is not yours to run** unless the brief asks: it takes 10 to 20 minutes
+  on a 4 GB machine. **Never run the http suite or Playwright**; they need live servers
+  and the demo passwords.
+* One heavy process at a time. Do not start a dev server.
+* A test must not reach the network. Stub the one outbound call, as
+  `tests/test_exchange_rate.py` does.
+
+### The checklists that bite
+
+* **Registering a doctype publishes it** (hard rule 6). A new doctype needs a permission
+  rule (`crm_app/permissions/`), an entry in `tests/test_permissions.py` and
+  `tests/test_route_surface.py`, a row in `specs/SECURITY_MODEL.md`, and
+  `docs/ROUTES.md` regenerated with `backend/scripts/generate_route_inventory.py`.
+  `specs/AS_BUILT.md` has the full list, and the credential checklist.
+* **A migration that writes data uses the historical model** (`apps.get_model`), not
+  the live one, so a later column cannot break a fresh `migrate`.
+* **Upstream's user-facing text is copied verbatim**, `frappe.throw` and `msgprint`
+  messages included (hard rule 4).
+* **Records.** Update the finding the brief names in `docs/FINDINGS.md` (its index row
+  and its entry), `UPSTREAM_BUGS.md` for any upstream defect you reproduce or diverge
+  from, and `specs/KNOWN_ISSUES.md` for anything you leave unfinished.
+
+### Never
+
+* Print or edit `.env` or `docs/http/.env`; they hold real credentials.
+* Send anything to an outside service, open a pull request, or delete branches.
+* Change files outside this repository.
+
+### Your report
+
+End with: the files you changed or added; that `tasks/COMMIT_MSG` is written; the test
+commands you ran and their last lines of output, quoted; every place you diverged from
+upstream and why; and anything in the brief you did not do, with the reason.
+
 ## When reviewing
 
 Reviews here are a second opinion on code another agent wrote. Prioritise, in order:
