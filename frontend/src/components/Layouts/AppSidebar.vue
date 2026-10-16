@@ -153,6 +153,7 @@
 
   <template v-if="!mobile">
     <Settings />
+    <!-- Upstream: docsLink="https://docs.frappe.io/crm" (see `helpLink` below) -->
     <HelpModal
       v-if="showHelpModal"
       v-model="showHelpModal"

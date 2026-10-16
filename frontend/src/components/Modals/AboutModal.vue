@@ -27,19 +27,15 @@
             </span>
           </a>
         </div>
-        <hr class="border-t my-3 mx-2" />
-        <p class="text-base text-ink-gray-7 px-2">
-          {{ __('A CRM for managing leads, deals, contacts and organizations, with tasks, notes, calls and email in one place.') }}
-        </p>
-        <hr class="border-t my-3 mx-2" />
         <!--
-          The copyright notice stays: the interface is Frappe CRM's, under AGPL-3.0,
-          whose notices must be kept and shown where the program shows its legal notices.
-        -->
+          Upstream's footer, hidden by the owner's decision on 16 Oct 2026. The interface
+          is Frappe CRM's under AGPL-3.0, which asks for this notice to be kept where the
+          program shows its legal notices; restore it before the app is distributed.
+        <hr class="border-t my-3 mx-2" />
         <p class="text-sm text-ink-gray-6 px-2 mt-2">
-          {{ __('Based on Frappe CRM.') }} © Frappe Technologies Pvt. Ltd. and contributors.
-          {{ __('Licensed under the GNU AGPL v3.') }}
+          © Frappe Technologies Pvt. Ltd. and contributors
         </p>
+        -->
       </div>
     </template>
   </Dialog>
