@@ -122,6 +122,20 @@ commits after reviewing.
   and its entry), `UPSTREAM_BUGS.md` for any upstream defect you reproduce or diverge
   from, and `specs/KNOWN_ISSUES.md` for anything you leave unfinished.
 
+### Keep the difference from upstream visible
+
+This port is not the final version: the owner plans a later, proper Django rewrite, and
+will need to know exactly where the port differs from upstream. So, in any file copied
+from upstream (the whole `frontend/`, and backend code that ports a named upstream
+function):
+
+* **Never delete upstream code you replace.** Keep it in a comment, prefixed
+  `Upstream:`, beside the new code, with one or two lines saying why it changed and
+  citing the finding or `UPSTREAM_BUGS.md` entry.
+* **Mark code that upstream does not have** with `Port only:` and the same reference.
+* **Record every frontend difference** in `frontend/JWT_PATCH.md`, "Other frontend
+  patches", and every behaviour difference in the finding and `UPSTREAM_BUGS.md`.
+
 ### Never
 
 * Print or edit `.env` or `docs/http/.env`; they hold real credentials.

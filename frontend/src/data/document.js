@@ -113,6 +113,8 @@ export function useDocument(doctype, docname, resourceOverrides = {}) {
         fieldPropertyOverrides: {},
       })
       // UPSTREAM_BUGS.md 45: resets wait for the initial controller setup before onLoad.
+      // Upstream: setupFormScript()  (called without keeping its promise; the port keeps
+      // it so `resetDocument` can wait for the controllers before re-running onLoad)
       formScriptSetupCache[doctype] = formScriptSetupCache[doctype] || {}
       formScriptSetupCache[doctype][''] = setupFormScript()
     }
@@ -240,6 +242,8 @@ export function useDocument(doctype, docname, resourceOverrides = {}) {
   }
 
   // UPSTREAM_BUGS.md 45: clear the shared unsaved document without breaking references.
+  // Port only: upstream has no reset. Its unsaved document is one object per doctype for
+  // the whole page session (documentsCache[doctype]['']), never cleared after a create.
   async function resetDocument() {
     if (docname) return
 

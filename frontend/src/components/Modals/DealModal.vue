@@ -97,6 +97,9 @@ const router = useRouter()
 const error = ref(null)
 
 // UPSTREAM_BUGS.md 45: every Create Deal mount starts from the shared form's defaults.
+// Upstream: const { document: deal, triggerOnBeforeCreate } = useDocument('CRM Deal')
+// Upstream never cleared the shared form, so the next deal started from the last one's
+// values; the port also takes `resetDocument`, added to data/document.js for this fix.
 const { document: deal, resetDocument, triggerOnBeforeCreate } =
   useDocument('CRM Deal')
 
@@ -181,6 +184,9 @@ async function createDeal() {
   } else deal.doc['contact'] = null
 
   // UPSTREAM_BUGS.md 45: do not send a hidden existing organization selection.
+  // Port only: upstream nulls `contact` above but not `organization`, so a pick made
+  // with the switch on stayed in the form after it was turned off, and `create_deal`
+  // preferred it to the organization details typed.
   if (!chooseExistingOrganization.value) deal.doc['organization'] = null
 
   await triggerOnBeforeCreate?.()
@@ -241,6 +247,8 @@ function openQuickEntryModal() {
 
 onMounted(async () => {
   // UPSTREAM_BUGS.md 45: reset before applying this dialog's defaults.
+  // Upstream: onMounted(() => { ... }) with no reset; the port's hook is async so the
+  // form scripts' onLoad defaults are back before this dialog's defaults are applied.
   await resetDocument()
   deal.doc.no_of_employees = '1-10'
   Object.assign(deal.doc, props.defaults)
