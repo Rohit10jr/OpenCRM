@@ -1112,12 +1112,12 @@ because CRM Organization ... is linked with CRM Deal ..."). Unlink works for wha
 written for, a lead's or deal's tasks, notes and calls, and is a no-op for an
 organization's deals. The only way through the dialog is "Delete", which removes the deal.
 
-**Us:** *Reproduce, pending the owner's decision.* `_clear_reference` blanks the same pair
-and nothing else, so the port behaves identically, and
-`tests/test_unlink_linked_docs.py` pins both halves. It is user-visible, so by the rule it
-is reproduced and recorded; diverging would mean clearing the Link field that actually
-holds the reference (FINDINGS.md 56). Owner's decision, 30 Sep 2026: keep it as upstream
-for now and open a pull request for the fix once the browser testing is finished.
+**Us:** *Diverge, by the owner's decision of 16–17 Oct 2026.* The delete dialog sends the
+doctype and name of the document being deleted, and `remove_linked_doc_reference` clears
+every direct Link field on the linked document that points at it, using the same link map
+that built the dialog. The fix to send upstream is the same: have the dialog send the
+deleted document, then make `remove_doc_link` clear the Link field pointing at it as well
+as the generic reference pair. See FINDINGS.md 56.
 
 ## 43. A notification with no lead or deal behind it breaks the notifications panel
 

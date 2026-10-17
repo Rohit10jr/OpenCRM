@@ -261,3 +261,4 @@ frontend is in one place.
 | File | Change | Why |
 |---|---|---|
 | `src/router.js` | the catch-all route is `/:invalidpath(.*)*` instead of `/:invalidpath` | Upstream's form matches one segment, so a mistyped list name in a record URL (`/crm/leadsdss/CRM-LEAD-…`) matched nothing and drew a blank page. Upstream bug 48, `docs/FINDINGS.md` 83; diverged by decision |
+| `src/components/DeleteLinkedDocModal.vue` | `remove_linked_doc_reference` also receives the doctype and name of the document being deleted | A linked deal has both `organization` and `lead` Link fields, so the server needs the deleted document to know which one “Unlink” must clear. Finding 56, upstream bug 42; diverged by the owner's decision of 16–17 Oct 2026 |

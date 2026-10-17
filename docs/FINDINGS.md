@@ -65,7 +65,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 53 | frontend: Kanban view of Tasks, Leads and Deals | medium | A task card showed its title and its id number, nothing else; upstream shows the description, the priority, the age and the linked lead or deal. The three models never declared `default_kanban_settings`, so `get_data` fell back to `["name"]`, and the frontend saved that fallback into the standard kanban view the first time a column was reordered. The models now carry upstream's defaults and migration `crm_app` 0011 repairs the saved rows | **fixed** 29 Sep 2026 |
 | 54 | frontend: the Reference Document Type field of notes, tasks and call logs | medium | A Link to `DocType`. `search_link` answered 404 because the port has no DocType doctype, so the dropdown was empty and the Reference Doc beside it had nothing to search; the Link's "Create New" fallback then tried to open and insert a `DocType`, the other 404s of the Notes pass. `search_link` now answers a DocType search from the registry, ignoring permissions as upstream does | **fixed** 29 Sep 2026 |
 | 55 | frontend: load time | medium | The app is slow to load during hand testing. Not investigated yet, by decision: to be looked at after the browser testing is finished and this branch is merged. What is known (finding 29's cold-start cost, the boot calls, the blocking boot-values request), what has never been measured (a warm reload, a production build) and the order to work in are in `specs/KNOWN_ISSUES.md` 9 | open, deferred |
-| 56 | frontend: deleting an organization that has a deal | low | "Unlink all" in the delete dialog leaves the deal linked, so the organization still cannot be deleted; only "Delete", which removes the deal, gets through. The port matches upstream here: upstream's unlink blanks the generic reference pair only, which a deal does not have (upstream bug 42). Reproduced and pinned by a test. Decision 30 Sep 2026: leave as upstream for now, open a pull request for the fix once the browser testing is finished | open, PR after testing |
+| 56 | frontend: deleting an organization that has a deal | low | "Unlink all" in the delete dialog left the deal linked, so the organization still could not be deleted. Upstream's unlink blanks only the generic reference pair, which a deal does not have (upstream bug 42). The port now sends the deleted document and clears every direct Link field that points at it | **fixed** 17 Oct 2026, diverged |
 | 57 | frontend: Settings → Profile → Email Settings → Add Email | medium | The port's `User` has no `user_emails` table (upstream's `User Email` child rows), so an outgoing account picked under "Add Email" has nowhere to be stored, and the email composer's "from" switcher, which reads the same rows, can never offer one. Separately, and the same upstream: the dropdown says "No results" until an Email Account with Enable Outgoing exists, which is an empty state, not a fault. Ported: `User Email` child rows on `User`, filled by an account that carries the user's address and by a System Manager's Add Email, as upstream's permlevel 1 has it | **fixed** 6 Oct 2026 |
 | 58 | frontend: Settings → Preferences → Language | medium | The Language dropdown was empty: it is a Link to the framework's `Language` doctype, which the port did not have, so its search answered 404. Ported the doctype, seeded from the framework's `languages.csv` by `seed_defaults`, everyone reads and System Manager writes; the picker shows the name and offers enabled languages only. The choice is stored on the user and changes nothing on screen, because the port ships no translations | **fixed** 30 Sep 2026 |
 | 59 | frontend and backend: translations | medium | Nothing is translated. The boot values carry an empty `translated_messages`, so the Vue app stays in English whatever language a user picks, and the server's messages are English literals. Upstream translates both from the PO files each app ships. Deferred by decision until the browser testing is finished; the design, including translated server messages and Frappe's meaning of `enabled`, is in `specs/KNOWN_ISSUES.md` 10 | open, deferred |
@@ -1815,7 +1815,7 @@ the machine is paging measures the paging. Both are written up in
 beside it. The `brace_expansion` warning the dev server prints at every start is
 unrelated and explained there too.
 
-## 56. "Unlink all" leaves an organization's deal linked (open, same as upstream)
+## 56. "Unlink all" leaves an organization's deal linked (fixed, diverged)
 
 **Block:** none. Seen 30 Sep 2026 in the Organizations pass of `BROWSER_TESTING.md`
 (O10): with a deal linked to the organization, Delete → "Unlink all" did not release the
@@ -1849,6 +1849,17 @@ behaviour, and `tests/test_unlink_linked_docs.py` will need its second case turn
 when the fix lands. The fix itself: in `remove_doc_link` (upstream) and `_clear_reference`
 (here), for a linked document that has no reference pair, clear the Link field that names
 the record being deleted, found the same way `get_linked_docs` found it.
+
+**Fix (17 Oct 2026, diverged):** by the owner's decision of 16–17 Oct 2026,
+`DeleteLinkedDocModal.vue` now sends the deleted document's doctype and name to
+`remove_linked_doc_reference`. `crm_app/api/doc.py` uses the same `_link_sources` map as
+the dialog and, after the existing write-permission check and reference-pair cleanup,
+clears every direct Link field on the linked document that points at that exact record.
+Child-row links remain outside this path. The cleanup is a queryset `update`, so document
+validation cannot block the unlink; bulk delete passes the target doctype and names
+through the same path. Calls without the new parameters retain the old behaviour.
+Covered by `tests/test_unlink_linked_docs.py`, with the neighboring delete-dialog,
+endpoint and queued-bulk-delete suites also exercised.
 
 ## 57. A user's outgoing email accounts cannot be stored: `User` has no `user_emails`
 
