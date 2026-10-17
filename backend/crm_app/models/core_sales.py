@@ -1206,8 +1206,8 @@ class CRMTask(AutoIncrementDocument):
     # a ToDo exists and ``_assign`` names the user; ``validate`` on a later save, when
     # ``assigned_to`` changed and is set, unassigns the previous user and assigns the new
     # one. The task board's assignee chip reads ``_assign`` and the assignee's own task
-    # list is built from ToDo (FINDINGS.md 15). Clearing ``assigned_to`` leaves the
-    # previous assignment in place, as upstream's early return does.
+    # list is built from ToDo (FINDINGS.md 15). Clearing ``assigned_to`` cancels the
+    # previous assignment, diverging from upstream's early return (UPSTREAM_BUGS.md 58).
 
     @classmethod
     def from_db(cls, db, field_names, values):
@@ -1224,6 +1224,8 @@ class CRMTask(AutoIncrementDocument):
         elif self.assigned_to_id and previous != self.assigned_to_id:
             self.unassign_from_previous_user(previous)
             self.assign_to()
+        elif not self.assigned_to_id and previous:
+            self.unassign_from_previous_user(previous)
         self._loaded_assigned_to = self.assigned_to_id
 
     def unassign_from_previous_user(self, user) -> None:
