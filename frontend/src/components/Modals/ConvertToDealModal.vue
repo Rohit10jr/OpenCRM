@@ -100,7 +100,7 @@ import { showQuickEntryModal, quickEntryProps } from '@/composables/modals'
 import { isMobileView } from '@/composables/settings'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import { Switch, Dialog, createResource, call } from 'frappe-ui'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const props = defineProps({
@@ -126,7 +126,9 @@ const error = ref('')
 const { capture } = useTelemetry()
 
 const { triggerConvertToDeal } = useDocument('CRM Lead', props.lead.name)
-const { document: deal } = useDocument('CRM Deal')
+// UPSTREAM_BUGS.md 45: reset the shared deal form before lead values are copied in.
+const { document: deal, resetDocument } = useDocument('CRM Deal')
+const dealDocumentReset = ref(false)
 
 async function convertToDeal() {
   error.value = ''
@@ -222,16 +224,22 @@ const leadFields = computed(() => leadMeta.value?.fields || [])
 
 watch(
   () => dealTabs.data,
-  (tabs) => resetDealDoc(tabs),
+  // UPSTREAM_BUGS.md 45: never prefill the cached form before its mount reset.
+  (tabs) => dealDocumentReset.value && prefillFields(tabs),
   { immediate: true },
 )
 
-watch(leadFields, () => prefillFields(dealTabs.data))
+watch(leadFields, () => {
+  // UPSTREAM_BUGS.md 45: metadata defaults also wait for the mount reset.
+  if (dealDocumentReset.value) prefillFields(dealTabs.data)
+})
 
-function resetDealDoc(tabs) {
-  deal.doc = { __newDocument: true, doctype: 'CRM Deal' }
-  prefillFields(tabs)
-}
+onMounted(async () => {
+  // UPSTREAM_BUGS.md 45: onLoad defaults run before layout-based lead defaults.
+  await resetDocument()
+  dealDocumentReset.value = true
+  prefillFields(dealTabs.data)
+})
 
 function prefillFields(tabs) {
   tabs?.forEach((tab) =>

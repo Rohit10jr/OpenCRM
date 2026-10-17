@@ -96,7 +96,9 @@ const show = defineModel({ type: Boolean })
 const router = useRouter()
 const error = ref(null)
 
-const { document: deal, triggerOnBeforeCreate } = useDocument('CRM Deal')
+// UPSTREAM_BUGS.md 45: every Create Deal mount starts from the shared form's defaults.
+const { document: deal, resetDocument, triggerOnBeforeCreate } =
+  useDocument('CRM Deal')
 
 const hasOrganizationSections = ref(true)
 const hasContactSections = ref(true)
@@ -178,6 +180,9 @@ async function createDeal() {
     deal.doc['mobile_no'] = null
   } else deal.doc['contact'] = null
 
+  // UPSTREAM_BUGS.md 45: do not send a hidden existing organization selection.
+  if (!chooseExistingOrganization.value) deal.doc['organization'] = null
+
   await triggerOnBeforeCreate?.()
 
   createResource({
@@ -234,7 +239,9 @@ function openQuickEntryModal() {
   nextTick(() => (show.value = false))
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // UPSTREAM_BUGS.md 45: reset before applying this dialog's defaults.
+  await resetDocument()
   deal.doc.no_of_employees = '1-10'
   Object.assign(deal.doc, props.defaults)
 

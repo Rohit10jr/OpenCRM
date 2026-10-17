@@ -67,7 +67,7 @@ the pairing CRM's own CI uses).
 | 42 | "Unlink" in the delete dialog does nothing for a document linked through a Link field | **Reproduce** — for the upstream PR |
 | 43 | A notification with no lead or deal behind it breaks the notifications panel | **Reproduce** — for the upstream PR |
 | 44 | The contacts list's "Phone" quick filter searches a column the contact screens never fill | **Reproduce** — for the upstream PR |
-| 45 | The Create Deal dialog keeps the last deal's form, and the Convert dialog reads the same one | **Reproduce** — reload is the workaround |
+| 45 | The Create Deal dialog keeps the last deal's form, and the Convert dialog reads the same one | **Diverge** — clean forms on every open |
 | 46 | Clicking a currency cell in a list files the formatted amount as the filter | **Diverge** — the amount is parsed |
 | 47 | Home Actions lets a standard entry be turned into a separator, and Settings is gone | **Reproduce** — `seed_defaults --force` restores |
 | 48 | A wrong URL with more than one segment draws a blank page | **Diverge** — router patched |
@@ -1200,11 +1200,12 @@ Three things follow from the one shared object.
 A page reload clears all three; the cache is in memory. Restarting the server changes
 nothing.
 
-**Us:** *Reproduce.* The frontend is upstream's, byte for byte (both files diff clean
-against the upstream checkout), and the port's `create_deal` prefers `organization` the
-same way. The fix upstream is in the frontend: reset `documentsCache[doctype]['']` when
-the dialog closes or the create succeeds, and null `organization` beside `contact`.
-Candidate for the PR with 42, 43 and 44.
+**Us:** *Diverge.* By the owner's decision of 17 Oct 2026, `useDocument` can reset the
+shared unsaved document in place and rerun form-script `onLoad`; Create Deal invokes it
+before applying defaults and nulls `organization` beside `contact`; Convert to Deal
+invokes it before applying its layout-based lead defaults. Those same three frontend
+changes are the fix to send upstream. The port's `create_deal` preference for
+`organization` remains unchanged. Candidate for the PR with 42, 43 and 44.
 
 ---
 
