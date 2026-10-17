@@ -1508,6 +1508,23 @@ refusing to save an SLA without working hours.
 
 ---
 
+## 58. Clearing a task's Assigned To leaves the assignment open
+
+**Where:** `crm/fcrm/doctype/crm_task/crm_task.py:33-39` (`validate`). Found 17 Oct
+2026 while resolving FINDINGS.md 70; reproduced on the upstream demo.
+
+`validate` returns immediately when `assigned_to` is empty. Clearing the field therefore
+does not call `unassign_from_previous_user`: the previous user's ToDo stays open, the
+assignee keeps the task in their list, and the task board's `_assign` cache still shows
+their avatar even though `assigned_to` itself is empty.
+
+**Us:** *Diverge,* by the owner's decision of 17 Oct 2026. `CRMTask.save` cancels the
+previous field assignee when `assigned_to` is cleared, while leaving any separately
+assigned users in place. The upstream fix is to make `validate` unassign the previous
+user when `assigned_to` changes from a user to empty, before returning.
+
+---
+
 ## Faithful behaviours we chose to keep (not bugs — decisions)
 
 Recorded here so they are not later mistaken for defects:

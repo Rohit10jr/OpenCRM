@@ -79,7 +79,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 67 | frontend: the Email and Mobile No dropdowns on a contact's page | high | Picking another number as primary answered "Only one Mobile No can be set as primary" and left two rows flagged, after which nothing on that contact would save. Editing or removing a number or an address from the dropdown answered 404. The flags are now written as one unit, old ones cleared first, and `frappe.client.set_value` / `delete` reach a contact's email and phone rows through the contact, as upstream's do | **fixed** 1 Oct 2026 |
 | 68 | frontend: Remove Image on an organization's logo | medium | The menu item sends `organization_logo: null`, which upstream's `set_value` stores as an empty field. The port's text columns refuse `null` ("This field may not be null."), so the logo could be changed but never removed. `null` on a text field now means empty, on both write routes | **fixed** 5 Oct 2026 |
 | 69 | frontend: the Calls tab of a lead or deal | high | A call log pointed at a lead (Reference Document Type and Reference Name) never showed on that lead's Calls tab. `get_linked_calls` found the call but returned it raw; upstream's last line runs every call through `parse_call_log`, and the call card reads `_caller` and `_receiver` off each row, so it could not be drawn. The port of that function had stopped one line short | **fixed** 5 Oct 2026 |
-| 70 | frontend: bulk Edit on the task list, emptying Assigned To | low | Tick tasks → Edit → "Assigned To" left empty → Update does not clear the assignee; setting a user the same way works. The upstream demo behaves the same. Recorded without looking for the cause, by decision on 5 Oct 2026 | open, not investigated |
+| 70 | frontend: bulk Edit on the task list, emptying Assigned To | low | Upstream's task `validate` returns early when `assigned_to` is empty, so clearing the field leaves the old ToDo open and `_assign` still names the previous user. The port copied that behaviour. By the owner's decision it now diverges: clearing the field cancels only the previous field assignee, including through bulk Edit | **fixed** 17 Oct 2026, diverged |
 | 71 | frontend: bulk actions on a list (seen on Leads) | low | After a bulk action finishes (Edit, Assign To, Clear Assignment, Convert to Deal, Delete) the ticked rows stay ticked and have to be unticked by hand. Recorded on 5 Oct 2026 without looking for the cause or comparing with upstream, by decision | open, not investigated |
 | 72 | frontend: a call log edited from a lead's Calls tab | low | Changing a call's time in its form and closing the form leaves the old value on the lead's Calls tab until the page is reloaded. Recorded on 5 Oct 2026 without looking for the cause or comparing with upstream, by decision | open, not investigated |
 | 73 | frontend: Convert to Deal on a lead's page | high | "Error converting to deal: Internal Server Error". The dialog sends the deal's fields with `doctype` and `__newDocument` among them, and the port handed them to the model: `TypeError: CRMDeal() got unexpected keyword arguments: '__newDocument', 'doctype'`. Bulk convert, which sends no deal fields, worked. The dialog's form now goes through the deal's serializer, which keeps the deal fields and drops the rest | **fixed** 5 Oct 2026 |
@@ -2388,23 +2388,26 @@ Covered by `tests/test_lead_call_tab.py`.
 **Block:** none in the http suite; seen in the browser on 5 Oct 2026
 (`BROWSER_TESTING.md` T18), signed in as Administrator.
 
-**Expected:** not settled. The task list hides the Assign To and Clear Assignment menu
-items (`TasksListView.vue`, `hideAssign: true`), so the bulk Edit dialog is the only way
-to change the assignee of several tasks at once, and emptying its value is the only way
-to clear it.
+**Expected:** the task list hides the Assign To and Clear Assignment menu items
+(`TasksListView.vue`, `hideAssign: true`), so the bulk Edit dialog is the only way to
+change the assignee of several tasks at once, and emptying its value must clear it.
 
-**Actual:** tick tasks → Edit → Field "Assigned To", no value → Update: the rows keep
-their assignee. Setting a user the same way works (T16). The upstream demo behaves the
-same.
+**Cause:** `crm/fcrm/doctype/crm_task/crm_task.py:33-39` returns from `validate` when
+`assigned_to` is empty. The cleared field is saved, but the previous user's ToDo stays
+open; `_assign` is rebuilt from that ToDo, so the rows keep showing the assignee. The
+port's `CRMTask.save` deliberately copied the early return. Setting a user works (T16)
+because the reassign branch runs. The upstream demo behaves the same
+(`UPSTREAM_BUGS.md` 58).
 
-**Not investigated,** by decision on 5 Oct 2026: recorded only, to be looked at with the
-other post-testing items. What is known comes from reading the dialog, not from tracing
-this failure: `EditValueModal.vue` sends `{assigned_to: fieldVal || null}` to
-`submit_cancel_or_update_docs` and does not show the response's `failed` list. Whether
-the request is sent at all, and what answers it, has not been checked on either side.
+**Fix 17 Oct 2026:** by the owner's decision, diverge. When an existing task's
+`assigned_to` is cleared, `CRMTask.save` cancels the previous field assignee through the
+same assignment helper used on a reassignment. That closes the ToDo, rebuilds `_assign`
+and keeps the helper's notification side effects. It removes only the previous
+`assigned_to`; a second user assigned through the Assign To menu stays assigned. Covered
+through both `frappe.client.set_value` and the two-document bulk-update endpoint in
+`tests/test_task_assignment.py`.
 
-**Status:** open. If the cause is upstream's own, it also belongs in the
-`UPSTREAM_BUGS` file and in the upstream PR with bugs 42, 43 and 44.
+**Status:** fixed 17 Oct 2026; deliberate divergence from upstream.
 
 ## 71. The ticked rows stay ticked after a bulk action
 
