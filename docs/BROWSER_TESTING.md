@@ -33,7 +33,7 @@ coverage section at the end; run it after recording results.
 <!-- coverage:start -->
 | Screens done | Rows ok | Rows failed | Rows skipped | Endpoints confirmed |
 |---|---|---|---|---|
-| 10 of 12 with rows | 151 | 7 | 0 | 84 of 102 |
+| 9 of 12 with rows | 151 | 6 | 0 | 84 of 102 |
 <!-- coverage:end -->
 
 Screens planned: Notes, Tasks, Call Logs, Leads, Deals, Contacts, Organizations,
@@ -163,7 +163,7 @@ Karnataka, India, 560001).
 | O7 | Logo | Hover the avatar → Upload → pick an image; it shows on the page and in the list | `upload_file`, `frappe.client.set_value` | ok | 49 (fixed) | |
 | O8 | List tools | Filter, sort, columns and a saved view, as T10 to T13 | `get_filterable_fields`, `sort_options`, `create_or_update_standard_view`, `get_data` | ok | | |
 | O9 | Delete | On the page → Delete → the dialog lists what links to it → "Delete" the linked items → Delete; back on the list, the row is gone | `crm.api.doc.get_linked_docs_of_document`, `frappe.client.delete` | ok | | |
-| O10 | Unlink before delete | With a deal linked to the organization: Delete → "Unlink all" → the deal should leave the list so the organization can be deleted | `crm.api.doc.remove_linked_doc_reference` | failed: the deal stays linked; the same happens upstream (upstream bug 42) | 56 | |
+| O10 | Unlink before delete | With a deal linked to the organization: Delete → "Unlink all" → the deal should leave the list so the organization can be deleted | `crm.api.doc.remove_linked_doc_reference` | | 56 | |
 | O11 | Territory | In the create dialog or the side panel → Territory → Create New → "India" as a group, then "Karnataka" with parent India → pick it; the field keeps it | `search_link` (CRM Territory), `get_fields_layout`, `frappe.client.insert`, `frappe.client.set_value` | ok | | |
 | O12 | Edit the address | Side panel → Address → Edit → change the lines → Update; reopening Edit shows the new values (the field keeps showing the record's id, which is set once at creation) | `frappe.client.get`, `frappe.client.set_value` | ok | | |
 | O13 | A deal on the organization | Deals → Create → pick this organization → Create; the deal shows on the organization's Deals tab | `crm.fcrm.doctype.crm_deal.crm_deal.create_deal`, `frappe.client.get_list` | ok | | |
@@ -397,7 +397,7 @@ failed. Generated: do not edit by hand.
 | ☑ | `crm.api.dashboard.get_dashboard` | `crm_app/api/dashboard.py:829` | `crm/api/dashboard.py:25-61` | DB1, DB2, DB3, DB4, DB5, DB9 | ok: DB1, DB2, DB3, DB4, DB5, DB9 |
 | ☑ | `crm.api.dashboard.reset_to_default` | `crm_app/api/dashboard.py:819` | `crm/api/dashboard.py:19-23` | DB9 | ok: DB9 |
 | ☑ | `crm.api.delete_attachment` | `crm_app/api/misc.py:126` | `crm/api/__init__.py:155-167` | N11 | ok: N11 |
-| ☑ | `crm.api.doc.delete_bulk_docs` | `crm_app/api/doc.py:668` | `crm/api/doc.py:795-837` | T9, C9, L22, D23 | ok: T9, C9, L22, D23 |
+| ☑ | `crm.api.doc.delete_bulk_docs` | `crm_app/api/doc.py:709` | `crm/api/doc.py:795-837` | T9, C9, L22, D23 | ok: T9, C9, L22, D23 |
 | ☑ | `crm.api.doc.get_assigned_users` | `crm_app/api/doc.py:248` | `crm/api/doc.py:607-625` | N3, L3, L6, D4, D12 | ok: N3, L3, L6, D4, D12 |
 | ☑ | `crm.api.doc.get_data` | `frappe_core/api/doc.py:211` | `crm/api/doc.py:256-271` | N1, N2, N5, N6, T1, T2, T4, T8, T10, T11, C1, C2, C10, L1, L16, L17, L23, O1, O8, K1, K6, K8, K11, D1, D19, D20, D25 | ok: N1, N2, N5, N6, T1, T2, T4, T8, T10, T11, C1, C2, C10, L1, L16, L17, L23, O1, O8, K1, K6, K8, K11, D1, D19, D20, D25 |
 | ☑ | `crm.api.doc.get_fields` | `crm_app/api/doc.py:321` | `crm/api/doc.py:639-651` | T7, C9 | ok: T7, C9 |
@@ -406,7 +406,7 @@ failed. Generated: do not edit by hand.
 | ☑ | `crm.api.doc.get_linked_docs_of_document` | `crm_app/api/doc.py:472` | `crm/api/doc.py:677-718` | L21, O9, K7, D22 | ok: L21, O9, K7, D22 |
 | ☑ | `crm.api.doc.get_quick_filters` | `crm_app/api/doc.py:146` | `crm/api/doc.py:163-204` | N1, N7, T1, C1, L1, O1, K1, K8, D1 | ok: N1, N7, T1, C1, L1, O1, K1, K8, D1 |
 | ☑ | `crm.api.doc.remove_assignments` | `crm_app/api/doc.py:263` | `crm/api/doc.py:589-604` | L6, D12 | ok: L6, D12 |
-| ⚠ | `crm.api.doc.remove_linked_doc_reference` | `crm_app/api/doc.py:557` | `crm/api/doc.py:769-792` | O10 | failed: O10 (finding 56) |
+| ☐ | `crm.api.doc.remove_linked_doc_reference` | `crm_app/api/doc.py:586` | `crm/api/doc.py:769-792` | O10 |  |
 | ☑ | `crm.api.doc.sort_options` | `crm_app/api/doc.py:74` | `crm/api/doc.py:24-51` | N1, T1, T11, C1, C10, L1, L16, O1, O8, K1, K6, D1, D19 | ok: N1, T1, T11, C1, C10, L1, L16, O1, O8, K1, K6, D1, D19 |
 | ☑ | `crm.api.doc.update_quick_filters` | `crm_app/api/doc.py:202` | `crm/api/doc.py:207-224` | N7 | ok: N7 |
 | ☐ | `crm.api.exchange_rate.get_exchange_rate` | `crm_app/api/exchange_rate.py:48` | `crm/api/exchange_rate.py:9-27` |  |  |

@@ -204,6 +204,8 @@ const unlinkLinkedDoc = (doc) => {
     items: selectedDocs,
     remove_contact: props.doctype == 'Contact',
     delete: doc.delete,
+    doctype: props.doctype,
+    docname: props.docname,
   }).then(() => {
     linkedDocsResource.reload()
     confirmDeleteInfo.value = {
