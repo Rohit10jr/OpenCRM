@@ -204,6 +204,9 @@ const unlinkLinkedDoc = (doc) => {
     items: selectedDocs,
     remove_contact: props.doctype == 'Contact',
     delete: doc.delete,
+    // Port only (docs/FINDINGS.md 56, upstream bug 42): the document being deleted, so
+    // the server can also clear the Link field that holds the reference (a deal's
+    // organization or lead). Upstream sends only items, remove_contact and delete.
     doctype: props.doctype,
     docname: props.docname,
   }).then(() => {

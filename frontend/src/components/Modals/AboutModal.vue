@@ -5,6 +5,7 @@
         <div class="flex justify-center">
           <div class="flex flex-col items-center">
             <CRMLogo class="mb-3 size-12" />
+            <!-- Upstream: Frappe CRM (renamed to Open CRM, KNOWN_ISSUES.md 12) -->
             <h3 class="text-2xl-semibold text-ink-gray-9">Open CRM</h3>
           </div>
         </div>

@@ -433,6 +433,7 @@
             <ERPNextIcon class="size-7.5 text-ink-gray-5" />
             <div class="flex flex-col items-center gap-1.5 text-center">
               <span class="text-lg-medium text-ink-gray-8">
+                <!-- Upstream: __('Connect ERPNext to Frappe CRM') (renamed to Open CRM, KNOWN_ISSUES.md 12) -->
                 {{ __('Connect ERPNext to Open CRM') }}
               </span>
               <span class="text-center text-p-base text-ink-gray-6">
