@@ -8,6 +8,7 @@
       </h1>
       <div class="border-t w-full my-[15px]" />
       <p class="text-ink-gray-4 text-p-base">
+        <!-- Upstream: 'You do not have enough permissions to access Frappe CRM. ...' (renamed to Open CRM, KNOWN_ISSUES.md 12) -->
         {{
           __(
             'You do not have enough permissions to access Open CRM. Please contact your administrator if you believe this is an error.',

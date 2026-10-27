@@ -3,6 +3,7 @@
   token pair and `stores/session.js` already stores it. This is the page that was missing.
 -->
 <template>
+  <!-- Upstream: :title="__('Sign in to Frappe CRM')" (renamed to Open CRM, KNOWN_ISSUES.md 12) -->
   <AuthLayout :title="__('Sign in to Open CRM')">
     <form class="flex flex-col gap-4" @submit.prevent="submit">
       <!--

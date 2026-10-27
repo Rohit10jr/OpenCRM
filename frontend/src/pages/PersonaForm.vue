@@ -105,6 +105,7 @@ const questions = computed(() => [
   },
   {
     key: 'team_size',
+    // Upstream: title: __('How many people will use Frappe CRM?'), (renamed to Open CRM, KNOWN_ISSUES.md 12)
     title: __('How many people will use Open CRM?'),
     options: [
       { label: __('Just me'), value: 'just_me' },
@@ -129,5 +130,6 @@ const questions = computed(() => [
   },
 ])
 
+// Upstream: usePageMeta(() => ({ title: __('Welcome to Frappe CRM') })) (renamed to Open CRM, KNOWN_ISSUES.md 12)
 usePageMeta(() => ({ title: __('Welcome to Open CRM') }))
 </script>

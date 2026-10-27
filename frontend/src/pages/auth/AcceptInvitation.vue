@@ -9,6 +9,7 @@
     logged_in    — the address already had an account. Tokens are in the response.
 -->
 <template>
+  <!-- Upstream: :title="__('Joining Frappe CRM')" (renamed to Open CRM, KNOWN_ISSUES.md 12) -->
   <AuthLayout :title="__('Joining Open CRM')" :subtitle="subtitle">
     <div class="text-center">
       <Spinner v-if="loading" class="w-6 h-6 mx-auto text-ink-gray-5" />

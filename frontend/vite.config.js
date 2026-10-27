@@ -20,6 +20,7 @@ export default defineConfig(async ({ mode }) => {
         },
         manifest: {
           display: 'standalone',
+          // Upstream: name: 'Frappe CRM', short_name: 'Frappe CRM' (renamed to Open CRM, KNOWN_ISSUES.md 12)
           name: 'Open CRM',
           short_name: 'Open CRM',
           start_url: '/crm',
