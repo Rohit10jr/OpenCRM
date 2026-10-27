@@ -852,12 +852,18 @@ def test_exactly_the_intended_doctypes_have_row_rules():
     # every role reads, writes and creates; the creator or a System Manager deletes.
     # Email Template - every role reads; System Manager creates, writes and deletes.
     added_by_the_role_passes = {"Contact", "Email Template"}
+    # The final route-surface review: SLA policies are manager-only, reads included;
+    # Tag is open for read/write/create and System Manager-only for delete. Both need a
+    # query hook even though Tag's list is open, so their reviewed decisions cover both
+    # generic list and object routes.
+    added_by_the_route_surface_review = {"CRM Service Level Agreement", "Tag"}
     assert with_rules == (
         upstream
         | added_by_phase_4
         | added_by_phase_7
         | added_by_the_browser_passes
         | added_by_the_role_passes
+        | added_by_the_route_surface_review
     )
 
 

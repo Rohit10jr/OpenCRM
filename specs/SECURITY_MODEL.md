@@ -319,6 +319,39 @@ half — that any authenticated user could read it — is closed above.
 
 ---
 
+## Final route-surface review — SLA, tags and four deliberately open doctypes
+
+Reviewed 27 Oct 2026 against the five CRM DocType JSON files and version-15's
+`frappe/desk/doctype/tag/tag.json`. None has a scripted row-level hook in
+`crm/hooks.py:135-145`; the role tables are therefore the whole upstream boundary.
+
+| Doctype | Holds | Upstream role table | This port |
+|---|---|---|---|
+| `CRM Organization` | Shared customer organisations and commercial profile data | System Manager, Sales Manager and Sales User: read, write, create, delete | **Open to every authenticated user** — match |
+| `CRM Call Log` | Shared call history, numbers and recording URLs | System Manager, Sales Manager and Sales User: read, write, create, delete | **Open to every authenticated user** — match |
+| `CRM Telephony Agent` | Colleagues' telephony numbers and routing preferences | System Manager, Sales Manager and Sales User: read, write, create, delete | **Open to every authenticated user** — match |
+| `CRM Product` | Shared product catalogue and standard rates | System Manager, Sales Manager and Sales User: read, write, create, delete | **Open to every authenticated user** — match |
+| `CRM Service Level Agreement` | Policies that select and calculate response deadlines | System Manager and Sales Manager: read, write, create, delete; no Sales User row | **Managers only, reading included** — match, through both permission hooks |
+| `Tag` | Shared tag names; document membership lives in each document's `_user_tags` | `All`: read, write, create; System Manager: read, write, create, delete | **Everyone reads, writes and creates; System Manager alone deletes** — match |
+
+The SLA engine deliberately reads applicable policies through
+`CRMServiceLevelAgreement._default_manager`, not through the request permission layer.
+That matches the separation upstream gets between server-side business logic and a
+user's DocType rights: a Sales User cannot open an SLA policy, but saving that user's
+lead or deal still selects and applies one. SLA priorities and working hours are inline
+child tables and inherit the parent document's route check.
+
+Tagging a document does not create a routable `Tag Link` row in this port. The tag helper
+updates the document's `_user_tags` storage and creates the shared `Tag` name if needed;
+removing a tag from a document does not delete the shared name. Restricting `Tag.delete`
+therefore leaves Sales User add/remove flows intact.
+
+Before this review, the SLA and Tag routes had no rules at all. SLA was consequently
+full CRUD for every authenticated user, and Tag deletion was available to Sales User and
+Sales Manager. The new rules close those gaps and reproduce the upstream role tables.
+
+---
+
 ## Where we deliberately differ, and why
 
 | # | Divergence | Direction | Reason |
@@ -362,7 +395,7 @@ Two questions settle each case, and they are cheaper than designing a rule:
 whether a doctype is safe; it makes the *absence of a decision* fail:
 
 ```
-route surface: 36 routable | 12 ruled | 10 reviewed-open | 14 awaiting review (A7)
+route surface: 50 routable | 34 ruled | 16 reviewed-open | 0 awaiting review (A7)
 ```
 
 Registering a doctype breaks the build until somebody records which of three things it is:

@@ -1,13 +1,15 @@
-"""Row-level rules for the two metadata doctypes that need them.
+"""Row-level rules for metadata and other manager-maintained CRM doctypes.
 
-Added in phase 4, after a review found both reachable through the generic
-``/api/resource/`` route. Both were "protected" only by their own endpoints — which is
-no protection at all, because the generic route does not go through those endpoints.
+The first rules were added in phase 4, after a review found the metadata doctypes
+reachable through the generic ``/api/resource/`` route. They were "protected" only by
+their own endpoints — which is no protection at all, because the generic route does not
+go through those endpoints. The final route-surface review later added SLA and Tag here
+because they use the same shared CRM-manager role helper.
 
 `AS_BUILT.md` §3 says it plainly: *"An endpoint reading through `frappe_core.query`
 cannot bypass row-level security."* The converse is what bit here — a doctype with **no
-hook** is world-readable and world-writable to any authenticated user, and both of these
-were registered as ordinary routable doctypes.
+hook** is world-readable and world-writable to any authenticated user, and these were
+registered as ordinary routable doctypes.
 
 * **CRM View Settings** holds *per-user* saved views. Without a rule, one user could
   list, read and edit everybody else's — failing `PHASE_4_METADATA.md` §4's last
@@ -128,3 +130,51 @@ def fields_layout_has_permission(doc, ptype: str = "read", user: str | None = No
     if ptype in ("read", "select"):
         return True
     return user == "Administrator" or bool(_roles(user) & ADMIN_ROLES)
+
+
+# ---------------------------------------------------------------------------
+# CRM Service Level Agreement — managers only, including reads
+# ---------------------------------------------------------------------------
+
+
+def service_level_agreement_query_conditions(doctype: str, user: str | None = None):
+    """Managers see every policy; everyone else gets an empty list.
+
+    Upstream's role table grants every operation to System Manager and Sales Manager,
+    and has no Sales User row (``crm_service_level_agreement.json:143-167``). The SLA
+    engine reads policies through the model manager, so this route rule does not stop a
+    Sales User's lead or deal save from selecting and applying a policy.
+    """
+    user = user or get_current_user()
+    if user == "Administrator" or _roles(user) & ADMIN_ROLES:
+        return None
+    return Q(pk__in=[])
+
+
+def service_level_agreement_has_permission(
+    doc, ptype: str = "read", user: str | None = None
+):
+    user = user or get_current_user()
+    return user == "Administrator" or bool(_roles(user) & ADMIN_ROLES)
+
+
+# ---------------------------------------------------------------------------
+# Tag — everyone reads/writes/creates; System Manager alone deletes
+# ---------------------------------------------------------------------------
+
+
+def tag_query_conditions(doctype: str, user: str | None = None):
+    """Tag names are shared reference data, so every authenticated user sees them."""
+    return None
+
+
+def tag_has_permission(doc, ptype: str = "read", user: str | None = None):
+    """Reproduce version-15's ``Tag`` role table.
+
+    The ``All`` row grants read, write and create. Only the System Manager row grants
+    delete. Adding or removing a tag from a document updates that document's
+    ``_user_tags`` cache; removing it does not delete the shared ``Tag`` row.
+    """
+    if ptype != "delete":
+        return True
+    return _is_admin(user or get_current_user())

@@ -66,6 +66,24 @@ def register() -> None:
         has_permission=metadata_docs.fields_layout_has_permission,
     )
 
+    # Route-surface review, 27 Oct 2026. Upstream's SLA role table has no Sales User
+    # row: System Manager and Sales Manager alone have every operation, reading
+    # included. The child tables are inline, so they follow the parent's check.
+    register_permission_hooks(
+        "CRM Service Level Agreement",
+        permission_query_conditions=metadata_docs.service_level_agreement_query_conditions,
+        has_permission=metadata_docs.service_level_agreement_has_permission,
+    )
+
+    # Version-15 Tag grants All read/write/create and reserves delete for System
+    # Manager. Document tagging writes `_user_tags`; deleting the shared Tag name is a
+    # separate operation and is the only one narrowed here.
+    register_permission_hooks(
+        "Tag",
+        permission_query_conditions=metadata_docs.tag_query_conditions,
+        has_permission=metadata_docs.tag_has_permission,
+    )
+
     # Phase 4 review, A2. `User` has been routable since phase 1 with no rule behind it,
     # so any authenticated caller could list every account, and rename or disable anyone.
     # Upstream gives `User` to System Manager alone; we are deliberately more permissive,
