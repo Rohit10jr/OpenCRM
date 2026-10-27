@@ -1,0 +1,66 @@
+# Frontend CI: ESLint, the Vitest unit tests, and a production build.
+#
+# Runs on pull requests into main and on pushes to main, only when the frontend or this
+# file changed (once per commit, as backend.yml explains). A newer push to the same pull
+# request cancels the run still going. Playwright is not here: it needs the Django
+# server with demo data and is the slowest check.
+
+name: Frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend.yml"
+
+concurrency:
+  group: frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Lint, unit tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      # Errors fail the job; warnings are reported and do not.
+      - name: ESLint
+        run: npx eslint src
+
+      - name: Unit tests (Vitest)
+        run: yarn vitest run
+
+      # `yarn build` ends with `copy-html-entry`, which copies into upstream's
+      # `../crm/www`; this repository has no such folder, so the job runs the Vite build
+      # itself. Its output lands outside frontend/ (frappe-ui's buildConfig writes to
+      # ../crm/public/frontend), which is fine on a throwaway runner: the point is that
+      # the app compiles.
+      - name: Production build
+        run: npx vite build --base=/assets/crm/frontend/
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096

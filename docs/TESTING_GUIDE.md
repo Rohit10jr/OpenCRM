@@ -347,6 +347,13 @@ The result is the check on the pull request. To run the same thing locally, from
 `backend/`: `python -m pytest -n 2` (two workers is the most a 4 GB machine manages;
 `-n auto` on a bigger one). Without `-n` it runs single-process, as before.
 
+## Frontend CI (GitHub Actions)
+
+`.github/workflows/frontend.yml` does the same for `frontend/`: ESLint (errors fail,
+warnings do not), the Vitest unit tests (`yarn vitest run`), and a production build
+(`vite build`). It runs Vite directly rather than `yarn build`, whose last step copies into
+upstream's `../crm/www`, which this repository does not have. Playwright stays local.
+
 ---
 
 ## Browser tests (Playwright)
