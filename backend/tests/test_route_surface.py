@@ -78,18 +78,27 @@ REVIEWED_OPEN = {
         "no secrets: holds only `dt`, `type` and a JSON blob. Upstream grants all three "
         "roles full CRUD (`crm_global_settings.json`), deliberately. Reproduced."
     ),
+    "CRM Organization": (
+        "upstream's role table gives every CRM role read, write, create and delete, and "
+        "upstream adds no row-level hook (hooks.py). Holds shared customer organisations."
+    ),
+    "CRM Call Log": (
+        "upstream's role table gives every CRM role read, write, create and delete, and "
+        "upstream adds no row-level hook (hooks.py). Holds shared call history and recordings."
+    ),
+    "CRM Telephony Agent": (
+        "upstream's role table gives every CRM role read, write, create and delete, and "
+        "upstream adds no row-level hook (hooks.py). Holds each agent's telephony numbers."
+    ),
+    "CRM Product": (
+        "upstream's role table gives every CRM role read, write, create and delete, and "
+        "upstream adds no row-level hook (hooks.py). Holds the shared product and price catalogue."
+    ),
 }
 
 #: Registered, routable, and **nobody has audited it**. Each entry names the question,
 #: not a guess. Emptying this list is A7.
-NOT_YET_REVIEWED = {
-    "CRM Organization": "is org data meant to be company-wide? (Contact got its rule on 14 Oct 2026)",
-    "Tag": "low risk, but writes are unconstrained",
-    "CRM Call Log": "call history references leads and deals; recording URLs are on the row",
-    "CRM Telephony Agent": "holds colleagues' phone numbers",
-    "CRM Service Level Agreement": "SLA definitions; writes change response deadlines",
-    "CRM Product": "catalogue data; writes change prices used in deal totals",
-}
+NOT_YET_REVIEWED = {}
 
 
 def _real_routable() -> set[str]:
