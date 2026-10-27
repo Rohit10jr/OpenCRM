@@ -18,9 +18,7 @@ from django.db.models.fields.related import ForeignKey, OneToOneField
 from frappe_core import registry
 from frappe_core.naming import AutoIncrement, FieldValue, Format, Hash, NamingSeries, Prompt
 
-FRAPPE_DOCTYPE_DIR = Path(
-    r"D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm\fcrm\doctype"
-)
+from tests.upstream_source import CRM_DOCTYPE_DIR as FRAPPE_DOCTYPE_DIR
 
 #: PHASE_1_MODELS.md section 2 - "SKIP, layout only, not data".
 LAYOUT_FIELDTYPES = {

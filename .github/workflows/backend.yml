@@ -1,0 +1,102 @@
+# Backend CI: Django checks, missing migrations, and the full pytest suite.
+#
+# Runs on pull requests into main and on pushes to main, only when the backend or this
+# file changed. Not on every branch push as well: a branch with an open pull request
+# would then run twice per commit (push and pull_request), doubling the private
+# repository's Actions minutes. A newer push to the same pull request cancels the run
+# still going.
+#
+# The test settings (backend/config/settings/test.py) need no secrets and no Redis:
+# Celery runs eagerly, the channel layer and cache are in memory, mail goes to
+# Django's locmem outbox, the field-encryption key is a fixed test-only value, and
+# exchange-rate calls are switched off. Only PostgreSQL is a real service.
+
+name: Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend.yml"
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Checks and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: opencrm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings.test
+      DB_NAME: opencrm
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      # Tests that compare the port with upstream read Frappe CRM's source from here
+      # (backend/tests/upstream_source.py); checked out below.
+      CRM_UPSTREAM_DIR: ${{ github.workspace }}/upstream-crm/crm
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Upstream Frappe CRM at the commit this port follows: v1.82.0, the upstream base
+      # of the owner's local checkout (its own branch adds docker docs only, nothing
+      # under crm/). Without it the upstream-comparison tests skip, about 240 of them.
+      # Bump the SHA when the port moves to a newer upstream.
+      - uses: actions/checkout@v4
+        with:
+          repository: frappe/crm
+          ref: 48cb3cccec12ef798f8faacc165fff3dc008a8fa
+          path: upstream-crm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Django system checks
+        run: python manage.py check
+
+      - name: No missing migrations
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Test suite
+        run: python -m pytest -n auto -p no:cacheprovider -rfE

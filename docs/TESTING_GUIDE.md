@@ -335,6 +335,20 @@ behind `clear_demo_data`.
 
 ---
 
+## Backend CI (GitHub Actions)
+
+`.github/workflows/backend.yml` runs on pull requests into `main` and on pushes to `main`,
+whenever `backend/` or the workflow changed: `manage.py check`, `makemigrations --check`,
+then the full pytest suite in parallel (`pytest -n auto`, pytest-xdist; each worker has
+its own test database). It brings its own PostgreSQL 17, so it does not depend on the
+local server, and needs no secrets: the test settings fake everything else.
+
+The result is the check on the pull request. To run the same thing locally, from
+`backend/`: `python -m pytest -n 2` (two workers is the most a 4 GB machine manages;
+`-n auto` on a bigger one). Without `-n` it runs single-process, as before.
+
+---
+
 ## Browser tests (Playwright)
 
 `frontend/tests/e2e/` drives the real app in a real Chromium against the two dev servers.
