@@ -10,6 +10,7 @@ import { ref, reactive, getCurrentInstance } from 'vue'
 
 const documentsCache = {}
 const controllersCache = {}
+const formScriptSetupCache = {}
 const assigneesCache = {}
 const permissionsCache = {}
 
@@ -111,7 +112,11 @@ export function useDocument(doctype, docname, resourceOverrides = {}) {
         doc: { __newDocument: true, doctype },
         fieldPropertyOverrides: {},
       })
-      setupFormScript()
+      // UPSTREAM_BUGS.md 45: resets wait for the initial controller setup before onLoad.
+      // Upstream: setupFormScript()  (called without keeping its promise; the port keeps
+      // it so `resetDocument` can wait for the controllers before re-running onLoad)
+      formScriptSetupCache[doctype] = formScriptSetupCache[doctype] || {}
+      formScriptSetupCache[doctype][''] = setupFormScript()
     }
   }
 
@@ -234,6 +239,19 @@ export function useDocument(doctype, docname, resourceOverrides = {}) {
       await (this.onLoad?.() || this.on_load?.() || this.onload?.())
     }
     await trigger(handler)
+  }
+
+  // UPSTREAM_BUGS.md 45: clear the shared unsaved document without breaking references.
+  // Port only: upstream has no reset. Its unsaved document is one object per doctype for
+  // the whole page session (documentsCache[doctype]['']), never cleared after a create.
+  async function resetDocument() {
+    if (docname) return
+
+    const doc = documentsCache[doctype][''].doc
+    Object.keys(doc).forEach((key) => delete doc[key])
+    Object.assign(doc, { __newDocument: true, doctype })
+    await formScriptSetupCache[doctype]?.['']
+    await triggerOnLoad()
   }
 
   async function triggerOnRender() {
@@ -379,6 +397,7 @@ export function useDocument(doctype, docname, resourceOverrides = {}) {
     scripts,
     error,
     getControllers,
+    resetDocument,
     triggerOnLoad,
     triggerOnRender,
     triggerOnBeforeCreate,

@@ -36,7 +36,7 @@ Read them whenever behaviour is unclear. **Never invent semantics** — match th
 or flag the ambiguity in your report. If something looks impossible, suspect a missing
 framework mechanism before suspecting your own code.
 
-**When upstream is wrong** — and it sometimes is; **57 cases** are recorded in
+**When upstream is wrong** — and it sometimes is; **58 cases** are recorded in
 `UPSTREAM_BUGS.md` — diverge only on bugs nothing can observe, and reproduce user-visible
 ones. Check whether anything
 actually reads the field before deciding, and record the choice.
@@ -65,6 +65,12 @@ per-doctype detail and the two questions that settle each case.
    writable through `/api/resource/` unless something says otherwise. Before adding one,
    read the checklist in `specs/AS_BUILT.md` — two tests will fail on you otherwise, by
    design.
+8. **Keep every difference from upstream visible.** This port is not the final version;
+   a later Django rewrite will need the full list of where and why it differs. In code
+   copied from upstream, never delete what you replace: keep it commented, prefixed
+   `Upstream:`, with a line on why and the finding or `UPSTREAM_BUGS.md` entry; mark new
+   code `Port only:`. Record frontend differences in `frontend/JWT_PATCH.md` and
+   behaviour differences in the finding and `UPSTREAM_BUGS.md`. (Owner, 17 Oct 2026.)
 
 ## Keep shell commands short
 

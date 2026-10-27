@@ -244,7 +244,13 @@ SIGNATURES = [
     ),
     (
         "crm.api.doc.remove_linked_doc_reference",
-        [("items", "REQUIRED"), ("remove_contact", False), ("delete", False)],
+        [
+            ("items", "REQUIRED"),
+            ("remove_contact", False),
+            ("delete", False),
+            ("doctype", None),
+            ("docname", None),
+        ],
     ),
     (
         "crm.api.doc.delete_bulk_docs",

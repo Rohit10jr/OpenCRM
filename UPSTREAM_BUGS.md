@@ -67,7 +67,7 @@ the pairing CRM's own CI uses).
 | 42 | "Unlink" in the delete dialog does nothing for a document linked through a Link field | **Reproduce** — for the upstream PR |
 | 43 | A notification with no lead or deal behind it breaks the notifications panel | **Reproduce** — for the upstream PR |
 | 44 | The contacts list's "Phone" quick filter searches a column the contact screens never fill | **Reproduce** — for the upstream PR |
-| 45 | The Create Deal dialog keeps the last deal's form, and the Convert dialog reads the same one | **Reproduce** — reload is the workaround |
+| 45 | The Create Deal dialog keeps the last deal's form, and the Convert dialog reads the same one | **Diverge** — clean forms on every open |
 | 46 | Clicking a currency cell in a list files the formatted amount as the filter | **Diverge** — the amount is parsed |
 | 47 | Home Actions lets a standard entry be turned into a separator, and Settings is gone | **Reproduce** — `seed_defaults --force` restores |
 | 48 | A wrong URL with more than one segment draws a blank page | **Diverge** — router patched |
@@ -1112,12 +1112,12 @@ because CRM Organization ... is linked with CRM Deal ..."). Unlink works for wha
 written for, a lead's or deal's tasks, notes and calls, and is a no-op for an
 organization's deals. The only way through the dialog is "Delete", which removes the deal.
 
-**Us:** *Reproduce, pending the owner's decision.* `_clear_reference` blanks the same pair
-and nothing else, so the port behaves identically, and
-`tests/test_unlink_linked_docs.py` pins both halves. It is user-visible, so by the rule it
-is reproduced and recorded; diverging would mean clearing the Link field that actually
-holds the reference (FINDINGS.md 56). Owner's decision, 30 Sep 2026: keep it as upstream
-for now and open a pull request for the fix once the browser testing is finished.
+**Us:** *Diverge, by the owner's decision of 16–17 Oct 2026.* The delete dialog sends the
+doctype and name of the document being deleted, and `remove_linked_doc_reference` clears
+every direct Link field on the linked document that points at it, using the same link map
+that built the dialog. The fix to send upstream is the same: have the dialog send the
+deleted document, then make `remove_doc_link` clear the Link field pointing at it as well
+as the generic reference pair. See FINDINGS.md 56.
 
 ## 43. A notification with no lead or deal behind it breaks the notifications panel
 
@@ -1200,11 +1200,12 @@ Three things follow from the one shared object.
 A page reload clears all three; the cache is in memory. Restarting the server changes
 nothing.
 
-**Us:** *Reproduce.* The frontend is upstream's, byte for byte (both files diff clean
-against the upstream checkout), and the port's `create_deal` prefers `organization` the
-same way. The fix upstream is in the frontend: reset `documentsCache[doctype]['']` when
-the dialog closes or the create succeeds, and null `organization` beside `contact`.
-Candidate for the PR with 42, 43 and 44.
+**Us:** *Diverge.* By the owner's decision of 17 Oct 2026, `useDocument` can reset the
+shared unsaved document in place and rerun form-script `onLoad`; Create Deal invokes it
+before applying defaults and nulls `organization` beside `contact`; Convert to Deal
+invokes it before applying its layout-based lead defaults. Those same three frontend
+changes are the fix to send upstream. The port's `create_deal` preference for
+`organization` remains unchanged. Candidate for the PR with 42, 43 and 44.
 
 ---
 
@@ -1505,6 +1506,23 @@ deadline when there are no working days, or after stepping over 3,660 days
 (`crm_app/sla.py`, `MAX_DAYS_SKIPPED`), and `set_response_by` already treats that as "no
 deadline". Tested in `tests/test_sla_timing.py`. The upstream fix is the same guard, or
 refusing to save an SLA without working hours.
+
+---
+
+## 58. Clearing a task's Assigned To leaves the assignment open
+
+**Where:** `crm/fcrm/doctype/crm_task/crm_task.py:33-39` (`validate`). Found 17 Oct
+2026 while resolving FINDINGS.md 70; reproduced on the upstream demo.
+
+`validate` returns immediately when `assigned_to` is empty. Clearing the field therefore
+does not call `unassign_from_previous_user`: the previous user's ToDo stays open, the
+assignee keeps the task in their list, and the task board's `_assign` cache still shows
+their avatar even though `assigned_to` itself is empty.
+
+**Us:** *Diverge,* by the owner's decision of 17 Oct 2026. `CRMTask.save` cancels the
+previous field assignee when `assigned_to` is cleared, while leaving any separately
+assigned users in place. The upstream fix is to make `validate` unassign the previous
+user when `assigned_to` changes from a user to empty, before returning.
 
 ---
 

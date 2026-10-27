@@ -33,7 +33,7 @@ coverage section at the end; run it after recording results.
 <!-- coverage:start -->
 | Screens done | Rows ok | Rows failed | Rows skipped | Endpoints confirmed |
 |---|---|---|---|---|
-| 10 of 12 with rows | 151 | 7 | 0 | 84 of 102 |
+| 7 of 12 with rows | 151 | 4 | 0 | 85 of 102 |
 <!-- coverage:end -->
 
 Screens planned: Notes, Tasks, Call Logs, Leads, Deals, Contacts, Organizations,
@@ -90,7 +90,7 @@ came from N10 (finding 54). The manifest icon 404 on every load is finding 50.
 | T14 | Default view, delete a view | Switch to Kanban → three-dots beside the view name → Set As Default; reopening Tasks lands on the kanban. Three-dots → Duplicate → a name → Create; on the copy, three-dots → Delete View → confirm; it leaves the dropdown | `crm.fcrm.doctype.crm_view_settings.crm_view_settings.set_as_default`, `crm.fcrm.doctype.crm_view_settings.crm_view_settings.create`, `crm.fcrm.doctype.crm_view_settings.crm_view_settings.delete` | ok | | |
 | T15 | Kanban column settings | In Kanban → the dot on a column header → a colour → Apply; three-dots on a header → Delete hides it; drag a header to reorder; Add Column brings the hidden one back; Reload Columns refetches them. The gear beside the view name → Kanban Settings → Title Field, Fields Order → Apply | `fetch_and_update_kanban_columns`, `create_or_update_standard_view` | ok | | |
 | T16 | Bulk assign | Tick rows → Edit → Field "Assigned To", a user → Update; the rows show the assignee. The task list hides the Assign To and Clear Assignment menu items (`TasksListView.vue`, as upstream), so those two belong to the Leads and Deals rows | `submit_cancel_or_update_docs` | ok | | |
-| T18 | Bulk unassign | Tick assigned rows → Edit → "Assigned To", leave the value empty → Update; the assignee should be gone | not traced | failed: the rows keep their assignee; the upstream demo does the same | 70 | |
+| T18 | Bulk unassign | Tick assigned rows → Edit → "Assigned To", leave the value empty → Update; the assignee should be gone | not traced |  | 70 | |
 | T17 | Reference fields | As N10 on the task dialog; the task shows on that lead's Tasks tab | `search_link` (DocType, then the chosen doctype), `frappe.client.insert` | ok (after the fix; failed before it: the Reference Document Type dropdown was empty) | 54 (fixed) | |
 
 ## Call Logs (`/crm/call-logs`)
@@ -163,7 +163,7 @@ Karnataka, India, 560001).
 | O7 | Logo | Hover the avatar → Upload → pick an image; it shows on the page and in the list | `upload_file`, `frappe.client.set_value` | ok | 49 (fixed) | |
 | O8 | List tools | Filter, sort, columns and a saved view, as T10 to T13 | `get_filterable_fields`, `sort_options`, `create_or_update_standard_view`, `get_data` | ok | | |
 | O9 | Delete | On the page → Delete → the dialog lists what links to it → "Delete" the linked items → Delete; back on the list, the row is gone | `crm.api.doc.get_linked_docs_of_document`, `frappe.client.delete` | ok | | |
-| O10 | Unlink before delete | With a deal linked to the organization: Delete → "Unlink all" → the deal should leave the list so the organization can be deleted | `crm.api.doc.remove_linked_doc_reference` | failed: the deal stays linked; the same happens upstream (upstream bug 42) | 56 | |
+| O10 | Unlink before delete | With a deal linked to the organization: Delete → "Unlink all" → the deal should leave the list so the organization can be deleted | `crm.api.doc.remove_linked_doc_reference` | | 56 | |
 | O11 | Territory | In the create dialog or the side panel → Territory → Create New → "India" as a group, then "Karnataka" with parent India → pick it; the field keeps it | `search_link` (CRM Territory), `get_fields_layout`, `frappe.client.insert`, `frappe.client.set_value` | ok | | |
 | O12 | Edit the address | Side panel → Address → Edit → change the lines → Update; reopening Edit shows the new values (the field keeps showing the record's id, which is set once at creation) | `frappe.client.get`, `frappe.client.set_value` | ok | | |
 | O13 | A deal on the organization | Deals → Create → pick this organization → Create; the deal shows on the organization's Deals tab | `crm.fcrm.doctype.crm_deal.crm_deal.create_deal`, `frappe.client.get_list` | ok | | |
@@ -288,7 +288,7 @@ dialog's form is kept for the page session and never cleared (finding 74, upstre
 | D21 | Bulk edit, assign, clear | Tick two rows → Edit → a field and a value → Update. Tick again → Assign To → a user → Update. Tick again → Clear Assignment → confirm | `submit_cancel_or_update_docs`, `frappe.desk.form.assign_to.add_multiple`, `frappe.desk.form.assign_to.remove_multiple` | ok | | |
 | D22 | Delete | On a deal's page → the bin in the side panel → the dialog lists what links to it → Delete; back on the list, the row is gone | `crm.api.doc.get_linked_docs_of_document`, `frappe.client.delete` | ok | 75 (fixed) | |
 | D23 | Bulk delete | Tick rows → Delete in the bar → confirm; the rows are gone | `crm.api.doc.delete_bulk_docs` | ok | 75 (fixed) | |
-| D24 | Create again without reloading | After D3, without reloading the page: Create → the switches off → a new organization name and contact → Create. Expected a deal on the new organization | `crm.fcrm.doctype.crm_deal.crm_deal.create_deal` | failed: the deal was made with values from the earlier deals; the dialog's form is shared for the page session and keeps the hidden organization pick, upstream and here alike (upstream bug 45) | 74 | |
+| D24 | Create again without reloading | After D3, without reloading the page: Create → the switches off → a new organization name and contact → Create. Expected a deal on the new organization | `crm.fcrm.doctype.crm_deal.crm_deal.create_deal` |  | 74 | |
 | D25 | Filter by clicking a cell | In the list, click a deal's Annual Revenue cell; the list is filtered on that amount, the chip shows it, and the page still opens on the next visit (the filter is kept with the standard view) | `get_data`, `create_or_update_standard_view` | ok (after the fix; failed before it: the filter was filed as "$ 500,000.00", the list answered 417 and the page would not open again) | 77 (fixed) | |
 | D26 | Products grid fields | Data tab → Products → the gear on the grid (Edit Grid Fields) → change the Fields Order, add or remove a column → Save; the grid keeps it after a reload. Reset only discards edits not yet saved; a saved layout stays (upstream does the same, checked 13 Oct 2026) | `frappe.model.utils.user_settings.save` | ok | 84 (version gap) | |
 
@@ -397,7 +397,7 @@ failed. Generated: do not edit by hand.
 | ☑ | `crm.api.dashboard.get_dashboard` | `crm_app/api/dashboard.py:829` | `crm/api/dashboard.py:25-61` | DB1, DB2, DB3, DB4, DB5, DB9 | ok: DB1, DB2, DB3, DB4, DB5, DB9 |
 | ☑ | `crm.api.dashboard.reset_to_default` | `crm_app/api/dashboard.py:819` | `crm/api/dashboard.py:19-23` | DB9 | ok: DB9 |
 | ☑ | `crm.api.delete_attachment` | `crm_app/api/misc.py:126` | `crm/api/__init__.py:155-167` | N11 | ok: N11 |
-| ☑ | `crm.api.doc.delete_bulk_docs` | `crm_app/api/doc.py:668` | `crm/api/doc.py:795-837` | T9, C9, L22, D23 | ok: T9, C9, L22, D23 |
+| ☑ | `crm.api.doc.delete_bulk_docs` | `crm_app/api/doc.py:709` | `crm/api/doc.py:795-837` | T9, C9, L22, D23 | ok: T9, C9, L22, D23 |
 | ☑ | `crm.api.doc.get_assigned_users` | `crm_app/api/doc.py:248` | `crm/api/doc.py:607-625` | N3, L3, L6, D4, D12 | ok: N3, L3, L6, D4, D12 |
 | ☑ | `crm.api.doc.get_data` | `frappe_core/api/doc.py:211` | `crm/api/doc.py:256-271` | N1, N2, N5, N6, T1, T2, T4, T8, T10, T11, C1, C2, C10, L1, L16, L17, L23, O1, O8, K1, K6, K8, K11, D1, D19, D20, D25 | ok: N1, N2, N5, N6, T1, T2, T4, T8, T10, T11, C1, C2, C10, L1, L16, L17, L23, O1, O8, K1, K6, K8, K11, D1, D19, D20, D25 |
 | ☑ | `crm.api.doc.get_fields` | `crm_app/api/doc.py:321` | `crm/api/doc.py:639-651` | T7, C9 | ok: T7, C9 |
@@ -406,7 +406,7 @@ failed. Generated: do not edit by hand.
 | ☑ | `crm.api.doc.get_linked_docs_of_document` | `crm_app/api/doc.py:472` | `crm/api/doc.py:677-718` | L21, O9, K7, D22 | ok: L21, O9, K7, D22 |
 | ☑ | `crm.api.doc.get_quick_filters` | `crm_app/api/doc.py:146` | `crm/api/doc.py:163-204` | N1, N7, T1, C1, L1, O1, K1, K8, D1 | ok: N1, N7, T1, C1, L1, O1, K1, K8, D1 |
 | ☑ | `crm.api.doc.remove_assignments` | `crm_app/api/doc.py:263` | `crm/api/doc.py:589-604` | L6, D12 | ok: L6, D12 |
-| ⚠ | `crm.api.doc.remove_linked_doc_reference` | `crm_app/api/doc.py:557` | `crm/api/doc.py:769-792` | O10 | failed: O10 (finding 56) |
+| ☐ | `crm.api.doc.remove_linked_doc_reference` | `crm_app/api/doc.py:586` | `crm/api/doc.py:769-792` | O10 |  |
 | ☑ | `crm.api.doc.sort_options` | `crm_app/api/doc.py:74` | `crm/api/doc.py:24-51` | N1, T1, T11, C1, C10, L1, L16, O1, O8, K1, K6, D1, D19 | ok: N1, T1, T11, C1, C10, L1, L16, O1, O8, K1, K6, D1, D19 |
 | ☑ | `crm.api.doc.update_quick_filters` | `crm_app/api/doc.py:202` | `crm/api/doc.py:207-224` | N7 | ok: N7 |
 | ☐ | `crm.api.exchange_rate.get_exchange_rate` | `crm_app/api/exchange_rate.py:48` | `crm/api/exchange_rate.py:9-27` |  |  |
@@ -432,7 +432,7 @@ failed. Generated: do not edit by hand.
 | ☑ | `crm.fcrm.doctype.crm_call_log.crm_call_log.get_call_log` | `crm_app/api/call_log.py:28` | `crm/fcrm/doctype/crm_call_log/crm_call_log.py:189-242` | C3, L11 | ok: C3, L11 |
 | ☑ | `crm.fcrm.doctype.crm_deal.api.get_deal_contacts` | `crm_app/api/deal.py:84` | `crm/fcrm/doctype/crm_deal/api.py` | D4, D9 | ok: D4, D9 |
 | ☑ | `crm.fcrm.doctype.crm_deal.crm_deal.add_contact` | `crm_app/api/deal.py:57` | `crm/fcrm/doctype/crm_deal/crm_deal.py:358-366` | D9, D10 | ok: D9, D10 |
-| ⚠ | `crm.fcrm.doctype.crm_deal.crm_deal.create_deal` | `crm_app/api/deal.py:200` | `crm/fcrm/doctype/crm_deal/crm_deal.py:456-475` | O13, D2, D3, D24 | failed: D24 (finding 74) |
+| ☑ | `crm.fcrm.doctype.crm_deal.crm_deal.create_deal` | `crm_app/api/deal.py:200` | `crm/fcrm/doctype/crm_deal/crm_deal.py:456-475` | O13, D2, D3, D24 | ok: O13, D2, D3 |
 | ☑ | `crm.fcrm.doctype.crm_deal.crm_deal.remove_contact` | `crm_app/api/deal.py:65` | `crm/fcrm/doctype/crm_deal/crm_deal.py:369-377` | D9 | ok: D9 |
 | ☑ | `crm.fcrm.doctype.crm_deal.crm_deal.set_primary_contact` | `crm_app/api/deal.py:74` | `crm/fcrm/doctype/crm_deal/crm_deal.py:380-388` | D9 | ok: D9 |
 | ☑ | `crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout` | `crm_app/api/fields_layout.py:112` | `crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.py:29-107` | N2, N8, T2, C2, L2, L14, L19, O2, O3, O11, K2, D2, D10, D17 | ok: N2, N8, T2, C2, L2, L14, L19, O2, O3, O11, K2, D2, D10, D17 |
@@ -486,7 +486,7 @@ failed. Generated: do not edit by hand.
 | ☑ | `token/refresh` | `frappe_core/api/auth.py:146` | `none, the JWT deviation (JWT_PATCH.md)` | A5 | ok: A5 |
 | ☑ | `upload_file` | `crm_app/api/upload.py:80` | `frappe/handler.py:131-244` | N9, L7, L12, O7, K5, S1, S6, D15 | ok: N9, L7, L12, O7, K5, S1, S6, D15 |
 
-84 of 102 endpoints confirmed; 9 not yet named by any row.
+85 of 102 endpoints confirmed; 9 not yet named by any row.
 
 **Excluded, integrations** (Twilio, Exotel, WhatsApp, ERPNext, lead sync, Frappe Cloud), not part of this log:
 

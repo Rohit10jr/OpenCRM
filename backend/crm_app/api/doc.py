@@ -544,6 +544,35 @@ def _clear_reference(instance) -> None:
         type(instance)._default_manager.filter(pk=instance.pk).update(**updates)
 
 
+def _clear_link_fields(instance, target_doctype: str, target_docnames: str | list[str]) -> None:
+    """Clear direct Link fields from ``instance`` to the document(s) being unlinked.
+
+    The same source map feeds the delete dialog, so this clears the direct links the
+    dialog actually showed. Links held by child rows belong to those rows, not to
+    ``instance``, and are deliberately outside this path.
+    """
+    if not target_doctype or not target_docnames:
+        return
+
+    if isinstance(target_docnames, str):
+        names = {target_docnames}
+    else:
+        names = {str(name) for name in target_docnames}
+
+    instance_doctype = type(instance).get_doctype()
+    updates = {}
+    for linked_doctype, _entry, fieldname, via_child in _link_sources(target_doctype):
+        if linked_doctype != instance_doctype or via_child:
+            continue
+        field = type(instance)._meta.get_field(fieldname)
+        value = getattr(instance, field.attname)
+        if value is not None and str(value) in names:
+            updates[fieldname] = None
+
+    if updates:
+        type(instance)._default_manager.filter(pk=instance.pk).update(**updates)
+
+
 def _clear_contact(instance) -> None:
     """``crm/api/doc.py:752-766`` - used when the deleted document is a Contact."""
     model = type(instance)
@@ -556,7 +585,11 @@ def _clear_contact(instance) -> None:
 
 @whitelist("crm.api.doc.remove_linked_doc_reference")
 def remove_linked_doc_reference(
-    items: str | list, remove_contact: bool = False, delete: bool = False
+    items: str | list,
+    remove_contact: bool = False,
+    delete: bool = False,
+    doctype: str | None = None,
+    docname: str | None = None,
 ):
     """``crm/api/doc.py:769-792``. Returns the literal string ``"success"``, as upstream does."""
     parsed = parse_json_param(items, []) or []
@@ -582,6 +615,8 @@ def remove_linked_doc_reference(
             _clear_contact(instance)
         else:
             _clear_reference(instance)
+            if doctype and docname:
+                _clear_link_fields(instance, doctype, docname)
 
         if delete:
             instance.delete()
@@ -653,7 +688,13 @@ def perform_bulk_delete(doctype: str, targets: list[str], delete_linked: bool = 
         # it per item made the query count grow ~14x per row, which is the same N+1 C9
         # is about - just in the other half of the function.
         for link in _linked_docs_for_batch(doctype, targets):
-            _clear_or_delete_link(link, remove_contact=(doctype == "Contact"), delete=delete_linked)
+            _clear_or_delete_link(
+                link,
+                remove_contact=(doctype == "Contact"),
+                delete=delete_linked,
+                target_doctype=doctype,
+                target_docnames=targets,
+            )
 
         # The reference cleanup delete_doc.py does per document (ToDo, Version, Comment,
         # File, Communication) is batched the same way: one query per reference doctype
@@ -739,7 +780,14 @@ def _linked_docs_for_batch(doctype: str, names: list[str]):
     return found
 
 
-def _clear_or_delete_link(link, *, remove_contact: bool, delete: bool) -> None:
+def _clear_or_delete_link(
+    link,
+    *,
+    remove_contact: bool,
+    delete: bool,
+    target_doctype: str | None = None,
+    target_docnames: str | list[str] | None = None,
+) -> None:
     _linked_doctype, instance = link
     if not permissions.check_object_permission(instance, "write", get_current_user()):
         return
@@ -747,5 +795,7 @@ def _clear_or_delete_link(link, *, remove_contact: bool, delete: bool) -> None:
         _clear_contact(instance)
     else:
         _clear_reference(instance)
+        if target_doctype and target_docnames:
+            _clear_link_fields(instance, target_doctype, target_docnames)
     if delete:
         instance.delete()
