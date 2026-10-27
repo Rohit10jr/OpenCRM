@@ -21,11 +21,21 @@ Run:  python scripts/generate_field_meta.py
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import sys
 
-CRM_DOCTYPE_DIR = pathlib.Path(
-    r"D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm\fcrm\doctype"
+# Upstream Frappe CRM's package: CRM_UPSTREAM_DIR when set (CI checks frappe/crm out
+# and sets it, .github/workflows/backend.yml), else the owner's local checkout.
+CRM_DOCTYPE_DIR = (
+    pathlib.Path(
+        os.environ.get(
+            "CRM_UPSTREAM_DIR",
+            r"D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm",
+        )
+    )
+    / "fcrm"
+    / "doctype"
 )
 OUTPUT = pathlib.Path(__file__).resolve().parent.parent / "crm_app" / "data" / "doctype_meta.json"
 
