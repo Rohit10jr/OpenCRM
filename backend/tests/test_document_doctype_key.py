@@ -32,6 +32,16 @@ def policy(alice):
     return sla
 
 
+@pytest.fixture
+def auth_api(api_as, make_user):
+    """A Sales Manager's client: the SLA Policies screen is a manager's, and since the
+    route-surface review a Sales User may not read a policy at all (upstream's role
+    table has no Sales User row; tests/test_route_surface_review.py). These tests are
+    about the ``doctype`` key, so they act as the role the screen is for."""
+    manager = make_user("sla.manager@example.com", roles=["Sales Manager", "Sales User"])
+    return api_as(manager)
+
+
 def test_a_document_and_its_child_rows_name_their_doctype(auth_api, policy):
     response = auth_api.post(GET, {"doctype": "CRM Service Level Agreement", "name": policy.pk}, format="json")
     assert response.status_code == 200, response.content[:300]
