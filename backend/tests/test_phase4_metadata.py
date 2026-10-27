@@ -22,9 +22,7 @@ from frappe_core.session import session_user
 
 pytestmark = pytest.mark.django_db
 
-CRM_DOCTYPE_DIR = pathlib.Path(
-    r"D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm\fcrm\doctype"
-)
+from tests.upstream_source import CRM_DOCTYPE_DIR  # noqa: E402
 
 
 def call(client, path: str, payload: dict | None = None):

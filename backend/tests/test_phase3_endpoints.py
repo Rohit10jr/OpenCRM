@@ -28,12 +28,7 @@ from frappe_core.whitelist import all_methods, get_method
 
 pytestmark = pytest.mark.django_db
 
-FRONTEND_SRC = pathlib.Path(
-    r"D:\02_Personal\01_OpenSource\03_Applications\CRM\frappe_django_crm\frontend\src"
-)
-CRM_SOURCE = pathlib.Path(
-    r"D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm"
-)
+from tests.upstream_source import CRM_SOURCE, FRONTEND_SRC  # noqa: E402
 API_DIR = pathlib.Path(__file__).resolve().parent.parent / "crm_app" / "api"
 
 

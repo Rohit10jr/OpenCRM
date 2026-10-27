@@ -60,6 +60,9 @@ jobs:
       DB_PASSWORD: postgres
       DB_HOST: localhost
       DB_PORT: "5432"
+      # Tests that compare the port with upstream read Frappe CRM's source from here
+      # (backend/tests/upstream_source.py); checked out below.
+      CRM_UPSTREAM_DIR: ${{ github.workspace }}/upstream-crm/crm
 
     defaults:
       run:
@@ -67,6 +70,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # Upstream Frappe CRM at the commit this port follows (the owner's local checkout).
+      # Without it the upstream-comparison tests skip, about 240 of them. Bump the SHA
+      # when the port moves to a newer upstream.
+      - uses: actions/checkout@v4
+        with:
+          repository: frappe/crm
+          ref: 6583bfcdc02ee52bd5a40f20c079ac3656f7f62a
+          path: upstream-crm
 
       - uses: actions/setup-python@v5
         with:

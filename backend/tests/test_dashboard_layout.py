@@ -25,10 +25,9 @@ pytestmark = pytest.mark.django_db
 
 RENDERED_TYPES = {"number_chart", "axis_chart", "donut_chart", "spacer"}
 
-UPSTREAM = pathlib.Path(
-    r"D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm\fcrm\doctype"
-    r"\crm_dashboard\crm_dashboard.py"
-)
+from tests.upstream_source import CRM_DOCTYPE_DIR  # noqa: E402
+
+UPSTREAM = CRM_DOCTYPE_DIR / "crm_dashboard" / "crm_dashboard.py"
 
 
 def _migration():
