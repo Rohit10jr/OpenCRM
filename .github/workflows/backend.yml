@@ -1,7 +1,10 @@
 # Backend CI: Django checks, missing migrations, and the full pytest suite.
 #
-# Runs on every push and on pull requests into main, only when the backend or this file
-# changed. A newer push to the same branch cancels the run still going.
+# Runs on pull requests into main and on pushes to main, only when the backend or this
+# file changed. Not on every branch push as well: a branch with an open pull request
+# would then run twice per commit (push and pull_request), doubling the private
+# repository's Actions minutes. A newer push to the same pull request cancels the run
+# still going.
 #
 # The test settings (backend/config/settings/test.py) need no secrets and no Redis:
 # Celery runs eagerly, the channel layer and cache are in memory, mail goes to
@@ -12,6 +15,7 @@ name: Backend
 
 on:
   push:
+    branches: [main]
     paths:
       - "backend/**"
       - ".github/workflows/backend.yml"
