@@ -71,13 +71,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Upstream Frappe CRM at the commit this port follows (the owner's local checkout).
-      # Without it the upstream-comparison tests skip, about 240 of them. Bump the SHA
-      # when the port moves to a newer upstream.
+      # Upstream Frappe CRM at the commit this port follows: v1.82.0, the upstream base
+      # of the owner's local checkout (its own branch adds docker docs only, nothing
+      # under crm/). Without it the upstream-comparison tests skip, about 240 of them.
+      # Bump the SHA when the port moves to a newer upstream.
       - uses: actions/checkout@v4
         with:
           repository: frappe/crm
-          ref: 6583bfcdc02ee52bd5a40f20c079ac3656f7f62a
+          ref: 48cb3cccec12ef798f8faacc165fff3dc008a8fa
           path: upstream-crm
 
       - uses: actions/setup-python@v5
