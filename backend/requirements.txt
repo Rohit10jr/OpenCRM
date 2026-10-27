@@ -44,5 +44,8 @@ Jinja2==3.1.6
 pytest==8.3.4
 pytest-django==4.9.0
 pytest-cov==6.0.0
+# Parallel test runs: `pytest -n auto` in CI (.github/workflows/backend.yml); each worker
+# gets its own test database (test_opencrm_gw0, _gw1, ...) from pytest-django.
+pytest-xdist==3.6.1
 # WebsocketCommunicator is a coroutine; without this its tests silently do not run.
 pytest-asyncio==0.25.2
