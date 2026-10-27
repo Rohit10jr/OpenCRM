@@ -27,10 +27,15 @@
             </span>
           </a>
         </div>
+        <!--
+          Upstream's footer, hidden by the owner's decision on 16 Oct 2026. The interface
+          is Frappe CRM's under AGPL-3.0, which asks for this notice to be kept where the
+          program shows its legal notices; restore it before the app is distributed.
         <hr class="border-t my-3 mx-2" />
         <p class="text-sm text-ink-gray-6 px-2 mt-2">
           © Frappe Technologies Pvt. Ltd. and contributors
         </p>
+        -->
       </div>
     </template>
   </Dialog>
@@ -38,14 +43,42 @@
 <script setup>
 import CRMLogo from '@/components/Icons/CRMLogo.vue'
 import LucideGlobe from '~icons/lucide/globe'
+import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
+import LucideBookOpen from '~icons/lucide/book-open'
+
+let show = defineModel({ type: Boolean })
+
+// Links into the app itself, like the help centre's (AppSidebar.vue, `helpLink`):
+// upstream's pointed at frappe.io, its GitHub repository, docs and support, which
+// describe Frappe CRM rather than this deployment. Kept in a comment below.
+const appLink = `${window.location.origin}/crm`
+
+let links = [
+  {
+    label: __('Home'),
+    url: appLink,
+    icon: LucideGlobe,
+  },
+  {
+    label: __('Dashboard'),
+    url: `${appLink}/dashboard`,
+    icon: LucideLayoutDashboard,
+  },
+  {
+    label: __('Leads'),
+    url: `${appLink}/leads/view/list`,
+    icon: LucideBookOpen,
+  },
+]
+
+/* Upstream's links:
+import LucideGlobe from '~icons/lucide/globe'
 import LucideGitHub from '~icons/lucide/github'
 import LucideHeadset from '~icons/lucide/headset'
 import LucideBug from '~icons/lucide/bug'
 import LucideBookOpen from '~icons/lucide/book-open'
 
-let show = defineModel({ type: Boolean })
-
-let links = [
+let upstreamLinks = [
   {
     label: __('Website'),
     url: 'https://frappe.io/crm',
@@ -72,4 +105,5 @@ let links = [
     icon: LucideHeadset,
   },
 ]
+*/
 </script>

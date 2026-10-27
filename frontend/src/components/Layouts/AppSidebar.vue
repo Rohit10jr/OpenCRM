@@ -153,6 +153,7 @@
 
   <template v-if="!mobile">
     <Settings />
+    <!-- Upstream: docsLink="https://docs.frappe.io/crm" (see `helpLink` below) -->
     <HelpModal
       v-if="showHelpModal"
       v-model="showHelpModal"
@@ -163,7 +164,7 @@
       :afterSkipAll="() => capture('onboarding_steps_skipped')"
       :afterReset="(step) => capture('onboarding_step_reset_' + step)"
       :afterResetAll="() => capture('onboarding_steps_reset')"
-      docsLink="https://docs.frappe.io/crm"
+      :docsLink="helpLink"
     />
     <IntermediateStepModal
       v-model="showIntermediateModal"
@@ -639,7 +640,57 @@ onMounted(async () => {
 })
 
 // help center
+//
+// frappe-ui's HelpCenter opens `${docsLink}/${article.name}` in a new tab; it shows no
+// text of its own. Upstream points it at docs.frappe.io/crm, Frappe's product manual,
+// which describes Frappe CRM rather than this port. Here docsLink is the app itself
+// (`helpLink` below), so each article opens that section of Open CRM, and the footer's
+// "Documentation" opens the home page. Upstream's list is kept, commented out, below.
+const helpLink = `${window.location.origin}/crm`
+
 const articles = ref([
+  {
+    title: __('Getting Started'),
+    opened: false,
+    subArticles: [
+      { name: 'dashboard', title: __('Dashboard') },
+      { name: 'notifications', title: __('Notifications') },
+    ],
+  },
+  {
+    title: __('Sales'),
+    opened: false,
+    subArticles: [
+      { name: 'leads/view/list', title: __('Leads') },
+      { name: 'deals/view/list', title: __('Deals') },
+    ],
+  },
+  {
+    title: __('People and Companies'),
+    opened: false,
+    subArticles: [
+      { name: 'contacts/view/list', title: __('Contacts') },
+      { name: 'organizations/view/list', title: __('Organizations') },
+    ],
+  },
+  {
+    title: __('Activities'),
+    opened: false,
+    subArticles: [
+      { name: 'notes/view/list', title: __('Notes') },
+      { name: 'tasks/view/list', title: __('Tasks') },
+      { name: 'call-logs/view/list', title: __('Call Logs') },
+    ],
+  },
+  {
+    title: __('Data'),
+    opened: false,
+    subArticles: [{ name: 'data-import', title: __('Import Data') }],
+  },
+])
+
+/* Upstream's articles, each a page of docs.frappe.io/crm:
+const upstreamArticles = ref([
   {
     title: __('Introduction'),
     opened: false,
@@ -727,4 +778,5 @@ const articles = ref([
     ],
   },
 ])
+*/
 </script>
