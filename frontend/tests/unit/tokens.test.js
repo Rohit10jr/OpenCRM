@@ -28,7 +28,7 @@ const far = Math.floor(Date.now() / 1000) + 3600
 
 beforeEach(() => {
   localStorage.clear()
-  document.cookie = 'user_id=; path=/; Max-Age=0'
+  document.cookie = 'user_id=; path=/; Max-Age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT'
 })
 
 describe('the user_id cookie frappe-ui reads', () => {

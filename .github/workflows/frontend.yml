@@ -1,23 +1,19 @@
 # Frontend CI: ESLint, the Vitest unit tests, and a production build.
 #
-# Runs on pull requests into main and on pushes to main, only when the frontend or this
-# file changed (once per commit, as backend.yml explains). A newer push to the same pull
-# request cancels the run still going. Playwright is not here: it needs the Django
-# server with demo data and is the slowest check.
+# Runs on pull requests into main and on pushes to main (once per commit, as
+# backend.yml explains). The workflow always starts, and the `changes` job runs the
+# checks only when the frontend or this file changed; backend.yml explains why that is
+# not a `paths:` filter on the trigger. A newer push to the same pull request cancels
+# the run still going. Playwright is not here: it needs the Django server with demo data
+# and is the slowest check.
 
 name: Frontend
 
 on:
   push:
     branches: [main]
-    paths:
-      - "frontend/**"
-      - ".github/workflows/frontend.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "frontend/**"
-      - ".github/workflows/frontend.yml"
 
 concurrency:
   group: frontend-${{ github.ref }}
@@ -25,10 +21,28 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
+  changes:
+    name: Frontend changed?
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - "frontend/**"
+              - ".github/workflows/frontend.yml"
+
   checks:
     name: Lint, unit tests and build
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 

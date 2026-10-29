@@ -1,0 +1,13 @@
+# gitleaks configuration, read by .github/workflows/secrets.yml.
+#
+# The default rules stay on. Each allowlist below names one known false positive, by
+# exact value and file, with the reason; add a real secret here never: rotate it.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "A made-up Twilio API secret the voice-token tests sign and verify with"
+condition = "AND"
+paths = ['''^backend/tests/test_twilio\.py$''']
+regexes = ['''^api-secret-0123456789abcdef0123456789ab$''']
