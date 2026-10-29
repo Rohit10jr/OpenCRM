@@ -360,6 +360,15 @@ both checks can be required in the `main` branch ruleset (`Checks and tests` and
 `Lint, unit tests and build`) without a backend-only pull request waiting forever for the
 frontend check. A `paths:` filter on the trigger would cause exactly that wait.
 
+## Secret scan (GitHub Actions)
+
+`.github/workflows/secrets.yml` runs gitleaks over the **whole git history** on every
+pull request and push to `main`, and fails on any password, key or token it finds. The
+repository is public, so a secret deleted in a later commit is still readable in an older
+one. Findings print with the secret redacted. If one is a false positive (a test fixture,
+say), add it to a `.gitleaks.toml` allowlist with a comment saying why. If it is real,
+**rotate the secret first**; removing it from history comes second.
+
 ---
 
 ## Browser tests (Playwright)
