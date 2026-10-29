@@ -387,6 +387,11 @@ Two things to know when reading it:
   sub-packages is usually fixed by refreshing that sub-package in `yarn.lock`, not by
   upgrading `frappe-ui` itself.
 
+**Dependabot** (`.github/dependabot.yml`) opens one pull request a week per ecosystem
+(Python, frontend, GitHub Actions) with the minor and patch updates grouped. It skips
+major versions, which are done by hand, and never touches `frappe-ui` or Vue. Its pull
+requests run the same checks as any other; merge one only when they pass.
+
 ---
 
 ## Browser tests (Playwright)
