@@ -1352,13 +1352,20 @@ binds `settings.doc.currency` (`:43`), reading a field of nothing throws while V
 the component, and Vue drops the component. The Sales Manager gets an empty panel, with
 the error in the browser console and no message on screen.
 
-**Us:** *Reproduce*. Security is the standing exception to "diverge on what nothing can
-observe", and the two fixes pull in opposite directions: giving Sales Manager read on
-System Settings widens access to a document upstream keeps for System Manager, which the
-port does not do on its own say. The port's `System Settings` (finding 64) keeps
-upstream's role table, so a Sales Manager sees the same blank. The fix upstream is in the
-frontend: give the Defaults item its own `condition: () => isAdmin()` (`users.js`
-already has it), or give the form a `v-if="settings.doc"` and a "not permitted" message.
+**Us:** *Diverge* (owner, 29 Oct 2026); until then *Reproduce*. Giving Sales Manager read
+on System Settings would widen access to a document upstream keeps for System Manager, so
+the server side stays as upstream's role table has it. The frontend instead gives the
+Defaults item `condition: () => isAdmin()` (`frontend/src/components/Settings/Settings.vue`,
+marked `Port only:`; `frontend/JWT_PATCH.md`), so a Sales Manager no longer sees the item.
+
+Browser check, 29 Oct 2026: under `yarn dev` the failure was worse than a blank panel.
+Vue's development build rethrows an unhandled render error
+(`@vue/runtime-core` `logError`, `throwInDev`), which stops its update queue: every other
+Settings tab went blank and the dialog could not be closed until a reload. A production
+build only logs the error, which is why the hosted demo shows just the blank panel.
+
+The other fix upstream could take is a `v-if="settings.doc"` on the form with a "not
+permitted" message.
 
 ---
 
@@ -1523,6 +1530,55 @@ their avatar even though `assigned_to` itself is empty.
 previous field assignee when `assigned_to` is cleared, while leaving any separately
 assigned users in place. The upstream fix is to make `validate` unassign the previous
 user when `assigned_to` changes from a user to empty, before returning.
+
+---
+
+## 59. "Auto update expected deal value" never fills an empty expected value
+
+**Where:** `crm/fcrm/doctype/crm_deal/crm_deal.py:240-249` (`update_expected_deal_value`).
+Found 29 Oct 2026 in browser check S4; reproduced on the upstream demo by the owner.
+The guard came in with the feature itself, `a4d3852c0` ("feat: Auto update expected deal
+value based on products value", Sep 2025), is the same at v1.82.0 (`48cb3ccc`), and is
+unchanged on upstream `main` as of `9fd505539` (29 Oct 2026). The setting is on by default
+(`fcrm_settings.json`, `"default": "1"`), and its description promises an unconditional
+update: "Automatically update "Expected Deal Value" based on the total value of
+associated products in a deal". Nothing in the frontend fills the value either.
+
+The Dashboard setting promises that a deal's products set its expected value. The guard
+reads `auto_update_expected_deal_value and (net_total or total) and expected_deal_value`,
+so the value is replaced by the product total only when it is **already** non-zero. A
+deal whose Expected Deal Value is empty, the usual case for a new one, never gets one
+from its products, however many are added. With forecasting also on, the same save is then
+refused with "Expected deal value is required." (`crm_deal.py:255-257`), the very field
+the setting was meant to fill.
+
+**Us:** *Reproduce.* The behaviour is user-visible, and the owner saw it on upstream too;
+`CRMDeal.update_expected_deal_value` (`crm_app/models/core_sales.py:938-952`) carries the
+same guard and says so. The upstream fix is to drop `and self.expected_deal_value` from the
+guard, or to fill the value when it is empty.
+
+---
+
+## 60. A notification about a task with no lead or deal breaks the notifications panel
+
+**Where:** `crm/api/todo.py:126-131` (`get_redirect_to_doc`) and
+`frontend/src/components/Notifications.vue` `getRoute`. Found 29 Oct 2026 in the browser
+checks: the panel would not open for ada (Sales User) and opened for grace and
+Administrator. Unchanged on upstream `main` as of `9fd505539`.
+
+Assigning a task notifies the assignee, and the notification's `reference_name` is the
+task's own lead or deal (`get_redirect_to_doc`). A task made on the Tasks page has neither,
+so the notification has none. `get_notifications` still sends `route_name: "Lead"`, and the
+panel turns each row into `<RouterLink :to="{name: 'Lead', params: {leadId: ''}}">`.
+Vue Router refuses that while the row renders (`Missing required param "leadId"`,
+`vue-router.mjs:513`). Under `yarn dev` Vue rethrows the render error and the panel never
+opens; a production build only logs it and drops the row, so the user silently loses those
+notifications instead. ada had 8 such rows out of 54, grace and Administrator none.
+
+**Us:** *Diverge* (owner, 29 Oct 2026). `getRoute` sends a notification with no
+`reference_name` to the Tasks list (`Port only:`; `frontend/JWT_PATCH.md`). The server's
+notifications are unchanged. The upstream fix is the same guard, or `get_notifications`
+giving such a row `route_name: "Tasks"`.
 
 ---
 

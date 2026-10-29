@@ -33,7 +33,7 @@ coverage section at the end; run it after recording results.
 <!-- coverage:start -->
 | Screens done | Rows ok | Rows failed | Rows skipped | Endpoints confirmed |
 |---|---|---|---|---|
-| 7 of 12 with rows | 151 | 4 | 0 | 85 of 102 |
+| 11 of 12 with rows | 159 | 1 | 0 | 91 of 102 |
 <!-- coverage:end -->
 
 Screens planned: Notes, Tasks, Call Logs, Leads, Deals, Contacts, Organizations,
@@ -90,7 +90,7 @@ came from N10 (finding 54). The manifest icon 404 on every load is finding 50.
 | T14 | Default view, delete a view | Switch to Kanban → three-dots beside the view name → Set As Default; reopening Tasks lands on the kanban. Three-dots → Duplicate → a name → Create; on the copy, three-dots → Delete View → confirm; it leaves the dropdown | `crm.fcrm.doctype.crm_view_settings.crm_view_settings.set_as_default`, `crm.fcrm.doctype.crm_view_settings.crm_view_settings.create`, `crm.fcrm.doctype.crm_view_settings.crm_view_settings.delete` | ok | | |
 | T15 | Kanban column settings | In Kanban → the dot on a column header → a colour → Apply; three-dots on a header → Delete hides it; drag a header to reorder; Add Column brings the hidden one back; Reload Columns refetches them. The gear beside the view name → Kanban Settings → Title Field, Fields Order → Apply | `fetch_and_update_kanban_columns`, `create_or_update_standard_view` | ok | | |
 | T16 | Bulk assign | Tick rows → Edit → Field "Assigned To", a user → Update; the rows show the assignee. The task list hides the Assign To and Clear Assignment menu items (`TasksListView.vue`, as upstream), so those two belong to the Leads and Deals rows | `submit_cancel_or_update_docs` | ok | | |
-| T18 | Bulk unassign | Tick assigned rows → Edit → "Assigned To", leave the value empty → Update; the assignee should be gone | not traced |  | 70 | |
+| T18 | Bulk unassign | Tick assigned rows → Edit → "Assigned To", leave the value empty → Update; the assignee should be gone | not traced | ok, 29 Oct 2026: the field, the avatar and the assignment are gone | 70 | |
 | T17 | Reference fields | As N10 on the task dialog; the task shows on that lead's Tasks tab | `search_link` (DocType, then the chosen doctype), `frappe.client.insert` | ok (after the fix; failed before it: the Reference Document Type dropdown was empty) | 54 (fixed) | |
 
 ## Call Logs (`/crm/call-logs`)
@@ -163,7 +163,7 @@ Karnataka, India, 560001).
 | O7 | Logo | Hover the avatar → Upload → pick an image; it shows on the page and in the list | `upload_file`, `frappe.client.set_value` | ok | 49 (fixed) | |
 | O8 | List tools | Filter, sort, columns and a saved view, as T10 to T13 | `get_filterable_fields`, `sort_options`, `create_or_update_standard_view`, `get_data` | ok | | |
 | O9 | Delete | On the page → Delete → the dialog lists what links to it → "Delete" the linked items → Delete; back on the list, the row is gone | `crm.api.doc.get_linked_docs_of_document`, `frappe.client.delete` | ok | | |
-| O10 | Unlink before delete | With a deal linked to the organization: Delete → "Unlink all" → the deal should leave the list so the organization can be deleted | `crm.api.doc.remove_linked_doc_reference` | | 56 | |
+| O10 | Unlink before delete | With a deal linked to the organization: Delete → "Unlink all" → the deal should leave the list so the organization can be deleted | `crm.api.doc.remove_linked_doc_reference` | ok, 29 Oct 2026: Unlink all cleared the deal's Organization and the organization deleted | 56 | |
 | O11 | Territory | In the create dialog or the side panel → Territory → Create New → "India" as a group, then "Karnataka" with parent India → pick it; the field keeps it | `search_link` (CRM Territory), `get_fields_layout`, `frappe.client.insert`, `frappe.client.set_value` | ok | | |
 | O12 | Edit the address | Side panel → Address → Edit → change the lines → Update; reopening Edit shows the new values (the field keeps showing the record's id, which is set once at creation) | `frappe.client.get`, `frappe.client.set_value` | ok | | |
 | O13 | A deal on the organization | Deals → Create → pick this organization → Create; the deal shows on the organization's Deals tab | `crm.fcrm.doctype.crm_deal.crm_deal.create_deal`, `frappe.client.get_list` | ok | | |
@@ -204,18 +204,18 @@ Everything below System Configuration is shown to managers only.
 | S18 | Theme | Preferences → Theme → light, dark, system; the app repaints at once and keeps the choice after a reload | none, the choice is kept in the browser | ok | | |
 | S3 | General | General → Timeline timestamp format (Relative, Exact) and Timeline sort order (Oldest First, Newest First); each saves at once; a lead's or deal's activity timeline follows | `frappe.client.get`, `frappe.client.set_value` | ok | | |
 | S19 | Update timestamp on new communication | With a Celery worker running: switch on → comment on an old lead → its Last Modified becomes "just now" and it rises in the list; switch off → a comment leaves it where it was | `frappe.client.set_value`, `crm.api.comment.add_comment` | ok (with a worker the lead's Last Modified moves; without one it does not, the job waits in the queue) | | |
-| S20 | Mark as replied, reopen on new communication | The two switches save. Upstream then sets the lead's or deal's communication status to Replied when an email is sent and to Open when one is received, where an SLA applies | `frappe.client.set_value` |  | 60 | |
-| S4 | Dashboard switches | Dashboard → Enable Forecasting on → Update → a deal without an Expected Closure Date is refused; Auto Update Expected Deal Value on → a deal's products set its expected value | `frappe.client.set_value` | failed: Update refuses with "Please select a currency before saving"; the Dashboard section needs a currency once forecasting is on, and the port has no Currency doctype to pick one from (63) | 63 | |
-| S21 | Dashboard currency and provider | Dashboard → Dashboard Currency → pick one; Exchange Rate Provider → pick one → Update | `search_link` (Currency), `frappe.client.set_value` | failed: the currency dropdown lists nothing, and the provider select stays disabled because no currency is set | 63 | |
-| S5 | Defaults | Defaults → the date, time and number formats load; change one → Update | `getdoctype`, `frappe.client.get`, `frappe.client.set_value` | failed: the section goes blank when opened | 64 | |
+| S20 | Mark as replied, reopen on new communication | The two switches save. Upstream then sets the lead's or deal's communication status to Replied when an email is sent and to Open when one is received, where an SLA applies | `frappe.client.set_value` | ok, 29 Oct 2026: with Mark as replied on response on, a sent email sets the lead's communication status to Replied; off, it stays Open. The reopen switch needs incoming mail, covered by `tests/test_communication_status.py` | 60 | |
+| S4 | Dashboard switches | Dashboard → Enable Forecasting on → Update → a deal without an Expected Closure Date is refused; Auto Update Expected Deal Value on → a deal's products set its expected value | `frappe.client.set_value` | ok, 29 Oct 2026 (after finding 63): with forecasting on, a deal without an expected value or closure date is refused; auto update only replaces an expected value already set, as upstream does (upstream bug 59) | 63 | |
+| S21 | Dashboard currency and provider | Dashboard → Dashboard Currency → pick one; Exchange Rate Provider → pick one → Update | `search_link` (Currency), `frappe.client.set_value` | ok, 29 Oct 2026 (after finding 63): currencies list, the provider can be picked and saved; the dashboard charts show the chosen currency | 63 | |
+| S5 | Defaults | Defaults → the date, time and number formats load; change one → Update | `getdoctype`, `frappe.client.get`, `frappe.client.set_value` | ok, 29 Oct 2026 (after finding 64), as Administrator: the formats load and a change saves. A Sales Manager no longer sees the item (upstream bug 50, diverged); under `yarn dev` it used to freeze the whole Settings dialog | 64 | |
 | S6 | Brand | Brand → a brand name, a logo, a favicon → Update; the sidebar header shows them, and shows them to every other account too (sign in as Ada to check) | `upload_file`, `frappe.client.set_value` | ok; retest as Ada after 85 | 85 (fixed) | |
 | S7 | Users | Users → the list shows; change one user's role; Add Existing User → pick one → Add; Remove on a user | `crm.api.session.get_users`, `crm.api.user.update_user_role`, `crm.api.user.add_existing_users`, `crm.api.user.remove_crm_roles_from_user` | ok | | |
 | S8 | Invite User | Invite User → an address, a role → Send Invites; it shows under Pending Invites; delete the invite | `crm.api.invite_by_email`, `frappe.client.get_list`, `frappe.client.delete` | ok: the invite shows and can be deleted; the mail itself went to the worker's console, not to Gmail, since system mail uses Django's EMAIL_BACKEND, the console locally | 79 | |
 | S9 | Sales Hierarchy | Sales Hierarchy → add a user under a manager; move one; the tree redraws | `frappe.client.get_list`, `frappe.client.insert`, `frappe.client.set_value` | ok | | |
 | S10 | Email accounts | Email → Accounts → Add → a service, an address, a password, Enable Outgoing ticked → Add; open it → change a field → Update. Then go back to S16: Profile → Email Settings → Add Email should now list this account | `crm.api.settings.create_email_account`, `frappe.client.set_value`, `frappe.client.rename_doc` | ok (after the fix and the key; failed before them: "invalid credentials" with a correct Gmail app password, the server had no encryption key) | 65 (fixed) | |
 | S11 | Email templates | Email → Templates → New → a name, a subject, a body → Create; open it → rename → Update; delete it | `frappe.client.get_list`, `frappe.client.insert`, `frappe.client.rename_doc`, `frappe.client.delete` | ok | | |
-| S12 | Assignment rules | Assignment Rules → New → a name, a condition, users → Create; toggle it off; Duplicate; rename; delete | `crm.api.assignment_rule.get_assignment_rules_list`, `frappe.client.insert`, `frappe.client.set_value`, `crm.api.assignment_rule.duplicate_assignment_rule`, `frappe.client.rename_doc`, `frappe.client.delete` |  | 80 | |
-| S13 | SLA policies | SLA Policies → New → a name, priorities, working hours → Create; open it → rename → Update | `frappe.client.get_list`, `frappe.client.insert`, `frappe.client.get`, `frappe.client.rename_doc` | ok | | |
+| S12 | Assignment rules | Assignment Rules → New → a name, a condition, users → Create; toggle it off; Duplicate; rename; delete | `crm.api.assignment_rule.get_assignment_rules_list`, `frappe.client.insert`, `frappe.client.set_value`, `crm.api.assignment_rule.duplicate_assignment_rule`, `frappe.client.rename_doc`, `frappe.client.delete` | ok, 29 Oct 2026: create, toggle, duplicate, rename, delete; the rule assigned a new matching lead. As a Sales Manager the list shows and saving is refused (upstream bug 53) | 80 | |
+| S13 | SLA policies | SLA Policies → New → a name, priorities, working hours → Create; open it → rename → Update | `frappe.client.get_list`, `frappe.client.insert`, `frappe.client.get`, `frappe.client.rename_doc` | ok; again 29 Oct 2026 with the SLA engine (finding 91): a new lead gets Response By and status Open, and Replied shows First Response | | |
 | S14 | Home actions | Home Actions → add an item with a label and a link → Update; it shows in the user menu | `frappe.client.set_value` | ok | | |
 | S15 | Signature | Profile → Email Settings → type a signature → Update; a new email on a lead or deal starts with it | `frappe.client.get`, `frappe.client.set_value` | ok | | |
 | S16 | Add Email in the profile | After S10: Profile → Email Settings → Add Email → pick the outgoing account → Update; reload and the row is still there; the composer's From offers it | `frappe.client.get_list`, `frappe.client.set_value` | ok (after the fix; failed before it: the pick had nowhere to be stored) | 57 (fixed) | |
@@ -288,7 +288,7 @@ dialog's form is kept for the page session and never cleared (finding 74, upstre
 | D21 | Bulk edit, assign, clear | Tick two rows → Edit → a field and a value → Update. Tick again → Assign To → a user → Update. Tick again → Clear Assignment → confirm | `submit_cancel_or_update_docs`, `frappe.desk.form.assign_to.add_multiple`, `frappe.desk.form.assign_to.remove_multiple` | ok | | |
 | D22 | Delete | On a deal's page → the bin in the side panel → the dialog lists what links to it → Delete; back on the list, the row is gone | `crm.api.doc.get_linked_docs_of_document`, `frappe.client.delete` | ok | 75 (fixed) | |
 | D23 | Bulk delete | Tick rows → Delete in the bar → confirm; the rows are gone | `crm.api.doc.delete_bulk_docs` | ok | 75 (fixed) | |
-| D24 | Create again without reloading | After D3, without reloading the page: Create → the switches off → a new organization name and contact → Create. Expected a deal on the new organization | `crm.fcrm.doctype.crm_deal.crm_deal.create_deal` |  | 74 | |
+| D24 | Create again without reloading | After D3, without reloading the page: Create → the switches off → a new organization name and contact → Create. Expected a deal on the new organization | `crm.fcrm.doctype.crm_deal.crm_deal.create_deal` | ok, 29 Oct 2026: Create opens clean after a deal was created, and the second deal lands on the new organization. Create redirects to the new deal, as upstream; returning through the sidebar is no reload | 74 | |
 | D25 | Filter by clicking a cell | In the list, click a deal's Annual Revenue cell; the list is filtered on that amount, the chip shows it, and the page still opens on the next visit (the filter is kept with the standard view) | `get_data`, `create_or_update_standard_view` | ok (after the fix; failed before it: the filter was filed as "$ 500,000.00", the list answered 417 and the page would not open again) | 77 (fixed) | |
 | D26 | Products grid fields | Data tab → Products → the gear on the grid (Edit Grid Fields) → change the Fields Order, add or remove a column → Save; the grid keeps it after a reload. Reset only discards edits not yet saved; a saved layout stays (upstream does the same, checked 13 Oct 2026) | `frappe.model.utils.user_settings.save` | ok | 84 (version gap) | |
 
@@ -383,12 +383,12 @@ failed. Generated: do not edit by hand.
 <!-- api-coverage:start -->
 | | Method | Django | Upstream | Reached from | Result |
 |---|---|---|---|---|---|
-| ☐ | `crm.api.accept_invitation` | `crm_app/api/auth_pages.py:311` | `crm/api/__init__.py:79-106` | A8 |  |
-| ☑ | `crm.api.activities.get_activities` | `crm_app/api/activities.py:461` | `crm/api/activities.py:13-20` | C12, L3, L11, D4, D14 | ok: C12, L3, L11, D4, D14 |
-| ☐ | `crm.api.assignment_rule.duplicate_assignment_rule` | `crm_app/api/assignment_rule.py:32` | `crm/api/assignment_rule.py:27-32` | S12 |  |
-| ☐ | `crm.api.assignment_rule.get_assignment_rules_list` | `crm_app/api/assignment_rule.py:16` | `crm/api/assignment_rule.py:4-24` | S12 |  |
+| ☐ | `crm.api.accept_invitation` | `crm_app/api/auth_pages.py:310` | `crm/api/__init__.py:79-106` | A8 |  |
+| ☑ | `crm.api.activities.get_activities` | `crm_app/api/activities.py:460` | `crm/api/activities.py:13-20` | C12, L3, L11, D4, D14 | ok: C12, L3, L11, D4, D14 |
+| ☑ | `crm.api.assignment_rule.duplicate_assignment_rule` | `crm_app/api/assignment_rule.py:32` | `crm/api/assignment_rule.py:27-32` | S12 | ok: S12 |
+| ☑ | `crm.api.assignment_rule.get_assignment_rules_list` | `crm_app/api/assignment_rule.py:16` | `crm/api/assignment_rule.py:4-24` | S12 | ok: S12 |
 | ☐ | `crm.api.auth.oauth_providers` | `crm_app/api/auth.py:17` | `crm/api/auth.py:4-39` |  |  |
-| ☑ | `crm.api.comment.add_comment` | `crm_app/api/comment.py:118` | `crm/api/comment.py:69-90` | L8, S19, D13 | ok: L8, S19, D13 |
+| ☑ | `crm.api.comment.add_comment` | `crm_app/api/comment.py:117` | `crm/api/comment.py:69-90` | L8, S19, D13 | ok: L8, S19, D13 |
 | ☑ | `crm.api.contact.create_new` | `crm_app/api/contact.py:75` | `crm/api/contact.py:63-80` | K9 | ok: K9 |
 | ☑ | `crm.api.contact.get_linked_deals` | `crm_app/api/contact.py:44` | `crm/api/contact.py:29-60` | K3 | ok: K3 |
 | ☑ | `crm.api.contact.search_emails` | `crm_app/api/contact.py:141` | `crm/api/contact.py:109-145` | L13, D16 | ok: L13, D16 |
@@ -406,7 +406,7 @@ failed. Generated: do not edit by hand.
 | ☑ | `crm.api.doc.get_linked_docs_of_document` | `crm_app/api/doc.py:472` | `crm/api/doc.py:677-718` | L21, O9, K7, D22 | ok: L21, O9, K7, D22 |
 | ☑ | `crm.api.doc.get_quick_filters` | `crm_app/api/doc.py:146` | `crm/api/doc.py:163-204` | N1, N7, T1, C1, L1, O1, K1, K8, D1 | ok: N1, N7, T1, C1, L1, O1, K1, K8, D1 |
 | ☑ | `crm.api.doc.remove_assignments` | `crm_app/api/doc.py:263` | `crm/api/doc.py:589-604` | L6, D12 | ok: L6, D12 |
-| ☐ | `crm.api.doc.remove_linked_doc_reference` | `crm_app/api/doc.py:586` | `crm/api/doc.py:769-792` | O10 |  |
+| ☑ | `crm.api.doc.remove_linked_doc_reference` | `crm_app/api/doc.py:586` | `crm/api/doc.py:769-792` | O10 | ok: O10 |
 | ☑ | `crm.api.doc.sort_options` | `crm_app/api/doc.py:74` | `crm/api/doc.py:24-51` | N1, T1, T11, C1, C10, L1, L16, O1, O8, K1, K6, D1, D19 | ok: N1, T1, T11, C1, C10, L1, L16, O1, O8, K1, K6, D1, D19 |
 | ☑ | `crm.api.doc.update_quick_filters` | `crm_app/api/doc.py:202` | `crm/api/doc.py:207-224` | N7 | ok: N7 |
 | ☐ | `crm.api.exchange_rate.get_exchange_rate` | `crm_app/api/exchange_rate.py:48` | `crm/api/exchange_rate.py:9-27` |  |  |
@@ -432,7 +432,7 @@ failed. Generated: do not edit by hand.
 | ☑ | `crm.fcrm.doctype.crm_call_log.crm_call_log.get_call_log` | `crm_app/api/call_log.py:28` | `crm/fcrm/doctype/crm_call_log/crm_call_log.py:189-242` | C3, L11 | ok: C3, L11 |
 | ☑ | `crm.fcrm.doctype.crm_deal.api.get_deal_contacts` | `crm_app/api/deal.py:84` | `crm/fcrm/doctype/crm_deal/api.py` | D4, D9 | ok: D4, D9 |
 | ☑ | `crm.fcrm.doctype.crm_deal.crm_deal.add_contact` | `crm_app/api/deal.py:57` | `crm/fcrm/doctype/crm_deal/crm_deal.py:358-366` | D9, D10 | ok: D9, D10 |
-| ☑ | `crm.fcrm.doctype.crm_deal.crm_deal.create_deal` | `crm_app/api/deal.py:200` | `crm/fcrm/doctype/crm_deal/crm_deal.py:456-475` | O13, D2, D3, D24 | ok: O13, D2, D3 |
+| ☑ | `crm.fcrm.doctype.crm_deal.crm_deal.create_deal` | `crm_app/api/deal.py:200` | `crm/fcrm/doctype/crm_deal/crm_deal.py:456-475` | O13, D2, D3, D24 | ok: O13, D2, D3, D24 |
 | ☑ | `crm.fcrm.doctype.crm_deal.crm_deal.remove_contact` | `crm_app/api/deal.py:65` | `crm/fcrm/doctype/crm_deal/crm_deal.py:369-377` | D9 | ok: D9 |
 | ☑ | `crm.fcrm.doctype.crm_deal.crm_deal.set_primary_contact` | `crm_app/api/deal.py:74` | `crm/fcrm/doctype/crm_deal/crm_deal.py:380-388` | D9 | ok: D9 |
 | ☑ | `crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout` | `crm_app/api/fields_layout.py:112` | `crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.py:29-107` | N2, N8, T2, C2, L2, L14, L19, O2, O3, O11, K2, D2, D10, D17 | ok: N2, N8, T2, C2, L2, L14, L19, O2, O3, O11, K2, D2, D10, D17 |
@@ -454,15 +454,15 @@ failed. Generated: do not edit by hand.
 | ☑ | `frappe.apps.get_apps` | `crm_app/api/desk.py:40` | `frappe/apps.py:17-55` | B1 | ok: B1 |
 | ☑ | `frappe.auth.get_logged_user` | `frappe_core/api/auth.py:183` | `frappe/auth.py:get_logged_user` | A4 | ok: A4 |
 | ☐ | `frappe.automation.doctype.assignment_rule.assignment_rule.bulk_apply` | `crm_app/assignment_rules.py:472` | `frappe/automation/doctype/assignment_rule/assignment_rule.py:69-420` |  |  |
-| ☑ | `frappe.client.delete` | `crm_app/api/client.py:359` | `frappe/client.py:delete` | N4, T5, C8, L9, L10, L12, L21, O9, K7, K10, S8, S11, S12, D14, D15, D22 | ok: N4, T5, C8, L9, L10, L12, L21, O9, K7, K10, S8, S11, D14, D15, D22 |
-| ⚠ | `frappe.client.get` | `crm_app/api/client.py:106` | `frappe/client.py:get` | B1, N3, T3, C4, L3, O4, O12, K3, S2, S3, S5, S13, S15, S22, D4, A9 | failed: S5 (finding 64), A9 (finding 83 (fixed, patch)) |
+| ☑ | `frappe.client.delete` | `crm_app/api/client.py:359` | `frappe/client.py:delete` | N4, T5, C8, L9, L10, L12, L21, O9, K7, K10, S8, S11, S12, D14, D15, D22 | ok: N4, T5, C8, L9, L10, L12, L21, O9, K7, K10, S8, S11, S12, D14, D15, D22 |
+| ⚠ | `frappe.client.get` | `crm_app/api/client.py:106` | `frappe/client.py:get` | B1, N3, T3, C4, L3, O4, O12, K3, S2, S3, S5, S13, S15, S22, D4, A9 | failed: A9 (finding 83 (fixed, patch)) |
 | ☑ | `frappe.client.get_doc_permissions` | `crm_app/api/client.py:496` | `frappe/client.py:get_doc_permissions` | N3, L3, D4 | ok: N3, L3, D4 |
 | ☑ | `frappe.client.get_list` | `crm_app/api/client.py:124` | `frappe/client.py:get_list` | N3, O4, O13, S8, S9, S11, S13, S16 | ok: N3, O4, O13, S8, S9, S11, S13, S16 |
 | ☑ | `frappe.client.get_single_value` | `crm_app/api/client.py:250` | `frappe/client.py:get_single_value` | B1 | ok: B1 |
 | ☐ | `frappe.client.get_value` | `crm_app/api/client.py:212` | `frappe/client.py:get_value` |  |  |
-| ☑ | `frappe.client.insert` | `crm_app/api/client.py:326` | `frappe/client.py:insert` | N2, N10, T2, T17, C2, C12, L2, L9, L10, L11, O2, O3, O11, K2, S9, S11, S12, S13, S22, D10, D14, D17 | ok: N2, N10, T2, T17, C2, C12, L2, L9, L10, L11, O2, O3, O11, K2, S9, S11, S13, S22, D10, D14, D17 |
-| ☑ | `frappe.client.rename_doc` | `crm_app/api/client.py:460` | `frappe/model/rename_doc.py:rename_doc` | O6, S10, S11, S12, S13 | ok: O6, S10, S11, S13 |
-| ⚠ | `frappe.client.set_value` | `crm_app/api/client.py:297` | `frappe/client.py:set_value` | N3, T3, T4, C4, L4, L5, L7, L9, L10, L12, L14, L17, O3, O5, O7, O11, O12, O14, K4, K5, K10, S1, S2, S17, S3, S19, S20, S4, S21, S5, S6, S9, S10, S12, S14, S15, S16, DB6, DB7, DB8, D5, D6, D7, D8, D11, D14, D15, D17, D20 | failed: S4 (finding 63), S21 (finding 63), S5 (finding 64) |
+| ☑ | `frappe.client.insert` | `crm_app/api/client.py:326` | `frappe/client.py:insert` | N2, N10, T2, T17, C2, C12, L2, L9, L10, L11, O2, O3, O11, K2, S9, S11, S12, S13, S22, D10, D14, D17 | ok: N2, N10, T2, T17, C2, C12, L2, L9, L10, L11, O2, O3, O11, K2, S9, S11, S12, S13, S22, D10, D14, D17 |
+| ☑ | `frappe.client.rename_doc` | `crm_app/api/client.py:460` | `frappe/model/rename_doc.py:rename_doc` | O6, S10, S11, S12, S13 | ok: O6, S10, S11, S12, S13 |
+| ☑ | `frappe.client.set_value` | `crm_app/api/client.py:297` | `frappe/client.py:set_value` | N3, T3, T4, C4, L4, L5, L7, L9, L10, L12, L14, L17, O3, O5, O7, O11, O12, O14, K4, K5, K10, S1, S2, S17, S3, S19, S20, S4, S21, S5, S6, S9, S10, S12, S14, S15, S16, DB6, DB7, DB8, D5, D6, D7, D8, D11, D14, D15, D17, D20 | ok: N3, T3, T4, C4, L4, L5, L7, L9, L10, L12, L14, L17, O3, O5, O7, O11, O12, O14, K4, K5, K10, S1, S2, S17, S3, S19, S20, S4, S21, S5, S6, S9, S10, S12, S14, S15, S16, DB6, DB7, DB8, D5, D6, D7, D8, D11, D14, D15, D17, D20 |
 | ☑ | `frappe.core.doctype.communication.email.make` | `crm_app/api/communication.py:76` | `frappe/core/doctype/communication/email.py:make` | L13, D16 | ok: L13, D16 |
 | ☑ | `frappe.core.doctype.user.user.get_timezones` | `crm_app/api/desk.py:111` | `frappe/core/doctype/user/user.py:783-785` | S2 | ok: S2 |
 | ☑ | `frappe.core.doctype.user.user.reset_password` | `crm_app/api/auth_pages.py:45` | `frappe/core/doctype/user/user.py:1041-1067` | A7 | ok: A7 |
@@ -471,10 +471,10 @@ failed. Generated: do not edit by hand.
 | ☑ | `frappe.desk.form.assign_to.add` | `crm_app/api/client.py:518` | `frappe/desk/form/assign_to.py:add` | L6, D12 | ok: L6, D12 |
 | ☑ | `frappe.desk.form.assign_to.add_multiple` | `crm_app/api/client.py:541` | `frappe/desk/form/assign_to.py:148-156` | L18, D21 | ok: L18, D21 |
 | ☑ | `frappe.desk.form.assign_to.remove_multiple` | `crm_app/api/client.py:584` | `frappe/desk/form/assign_to.py:191-201` | L18, D21 | ok: L18, D21 |
-| ⚠ | `frappe.desk.form.load.getdoctype` | `crm_app/api/form_load.py:151` | `frappe/desk/form/load.py:getdoctype` | N1, T1, C1, L1, O1, K1, S5, D1 | failed: S5 (finding 64) |
+| ☑ | `frappe.desk.form.load.getdoctype` | `crm_app/api/form_load.py:151` | `frappe/desk/form/load.py:getdoctype` | N1, T1, C1, L1, O1, K1, S5, D1 | ok: N1, T1, C1, L1, O1, K1, S5, D1 |
 | ☑ | `frappe.desk.like.toggle_like` | `crm_app/api/client.py:624` | `frappe/desk/like.py:toggle_like` | L23 | ok: L23 |
 | ☑ | `frappe.desk.reportview.export_query` | `crm_app/api/reportview.py:161` | `frappe/desk/reportview.py:427-575` | T6 | ok: T6 |
-| ⚠ | `frappe.desk.search.search_link` | `crm_app/api/client.py:650` | `frappe/desk/search.py:search_link` | N10, T2, T11, T17, C2, C12, L2, O2, O3, O11, K2, S17, S21, DB5, D2, D3, D7, D9, D11, D17 | failed: S21 (finding 63) |
+| ☑ | `frappe.desk.search.search_link` | `crm_app/api/client.py:650` | `frappe/desk/search.py:search_link` | N10, T2, T11, T17, C2, C12, L2, O2, O3, O11, K2, S17, S21, DB5, D2, D3, D7, D9, D11, D17 | ok: N10, T2, T11, T17, C2, C12, L2, O2, O3, O11, K2, S17, S21, DB5, D2, D3, D7, D9, D11, D17 |
 | ☑ | `frappe.email.doctype.email_template.email_template.get_email_template` | `crm_app/api/email_template.py:73` | `frappe/email/doctype/email_template/email_template.py:52-58` | L13 | ok: L13 |
 | ☐ | `frappe.model.utils.user_settings.get` | `crm_app/api/user_settings.py:113` | `frappe/model/utils/user_settings.py:get` |  |  |
 | ☑ | `frappe.model.utils.user_settings.save` | `crm_app/api/user_settings.py:100` | `frappe/model/utils/user_settings.py:save` | D26 | ok: D26 |
@@ -486,7 +486,7 @@ failed. Generated: do not edit by hand.
 | ☑ | `token/refresh` | `frappe_core/api/auth.py:146` | `none, the JWT deviation (JWT_PATCH.md)` | A5 | ok: A5 |
 | ☑ | `upload_file` | `crm_app/api/upload.py:80` | `frappe/handler.py:131-244` | N9, L7, L12, O7, K5, S1, S6, D15 | ok: N9, L7, L12, O7, K5, S1, S6, D15 |
 
-85 of 102 endpoints confirmed; 9 not yet named by any row.
+91 of 102 endpoints confirmed; 9 not yet named by any row.
 
 **Excluded, integrations** (Twilio, Exotel, WhatsApp, ERPNext, lead sync, Frappe Cloud), not part of this log:
 

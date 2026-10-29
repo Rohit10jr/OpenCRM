@@ -135,6 +135,15 @@ onMounted(() => {
 })
 
 function getRoute(notification) {
+  // Port only: a task with no lead or deal gives its assignment notification no
+  // reference_name (upstream crm/api/todo.py get_redirect_to_doc). Upstream builds a Lead
+  // route with an empty leadId, which Vue Router refuses while the row renders: the
+  // panel never opens under `yarn dev`, and a production build silently drops the row.
+  // Such a notification opens the Tasks list instead. UPSTREAM_BUGS.md 60.
+  if (!notification.reference_name) {
+    return { name: 'Tasks' }
+  }
+
   let params = {
     leadId: notification.reference_name,
   }
