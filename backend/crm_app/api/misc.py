@@ -14,7 +14,7 @@ from frappe_core import permissions, registry
 from frappe_core.exceptions import PermissionError as FrappePermissionError
 from frappe_core.exceptions import throw
 from frappe_core.query import by_name
-from frappe_core.session import GUEST_USER, get_current_user
+from frappe_core.session import get_current_user
 from frappe_core.whitelist import whitelist
 
 #: ``frappe.utils.validate_email_address`` accepts a comma/newline separated string.

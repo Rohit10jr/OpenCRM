@@ -6,7 +6,6 @@ original, so a protected document could not be renamed and a cascading one lost 
 rows. ``validate_rename``'s refusals are reproduced with its wording.
 """
 
-from urllib.parse import quote
 
 import pytest
 

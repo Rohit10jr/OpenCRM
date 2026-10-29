@@ -9,17 +9,15 @@ The most important tests here are the last three groups: list filtering and
 no combination of ``fields`` / ``order_by`` / ``group_by`` may expose a hidden row.
 """
 
-import json
 from urllib.parse import quote
 
 import pytest
-from django.db.models import Q
 
 from frappe_core import registry
 from frappe_core.permissions import check_object_permission, get_permission_query_conditions
 from frappe_core.query import fetch_rows
 from frappe_core.session import session_user
-from frappe_platform.models import ToDo, User
+from frappe_platform.models import ToDo
 from crm_app.models import (
     CRMDeal,
     CRMDealStatus,

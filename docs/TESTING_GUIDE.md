@@ -338,7 +338,8 @@ behind `clear_demo_data`.
 ## Backend CI (GitHub Actions)
 
 `.github/workflows/backend.yml` runs on pull requests into `main` and on pushes to `main`.
-When `backend/` or the workflow changed, it runs `manage.py check`, `makemigrations --check`,
+When `backend/` or the workflow changed, it runs Ruff (`ruff check .`, real mistakes
+only: rules in `backend/ruff.toml`), `manage.py check`, `makemigrations --check`,
 then the full pytest suite in parallel (`pytest -n auto`, pytest-xdist; each worker has
 its own test database). It brings its own PostgreSQL 17, so it does not depend on the
 local server, and needs no secrets: the test settings fake everything else.
@@ -368,6 +369,28 @@ repository is public, so a secret deleted in a later commit is still readable in
 one. Findings print with the secret redacted. If one is a false positive (a test fixture,
 say), add it to a `.gitleaks.toml` allowlist with a comment saying why. If it is real,
 **rotate the secret first**; removing it from history comes second.
+
+## Dependency audit (GitHub Actions)
+
+`.github/workflows/audit.yml` looks for known security holes in installed packages:
+pip-audit over `backend/requirements.txt`, and `yarn audit` over `frontend/yarn.lock`
+(`dependencies` only, failing on high or critical). It runs on pull requests, on pushes to
+`main`, and every Monday by itself, since holes are published about packages nobody
+changed. It is **not** a required check: a red audit is a to-do, not a merge blocker.
+
+Two things to know when reading it:
+
+- upstream's `package.json` lists build tools (Vite, `vite-plugin-pwa`, the Vue JSX
+  plugin) under `dependencies`, so the "dependencies only" filter still includes some code
+  that never reaches the browser. Check where a finding comes from before judging it.
+- `frappe-ui` and Vue are kept at upstream's versions. A hole in one of their own
+  sub-packages is usually fixed by refreshing that sub-package in `yarn.lock`, not by
+  upgrading `frappe-ui` itself.
+
+**Dependabot** (`.github/dependabot.yml`) opens one pull request a week per ecosystem
+(Python, frontend, GitHub Actions) with the minor and patch updates grouped. It skips
+major versions, which are done by hand, and never touches `frappe-ui` or Vue. Its pull
+requests run the same checks as any other; merge one only when they pass.
 
 ---
 

@@ -20,7 +20,7 @@ from django.db.models.fields.related import ForeignKey, OneToOneField
 from frappe_core import assignment, metadata, permissions, registry
 from frappe_core.exceptions import DoesNotExistError
 from frappe_core.exceptions import PermissionError as FrappePermissionError
-from frappe_core.exceptions import ValidationError, throw
+from frappe_core.exceptions import throw
 from frappe_core.metadata import _frappe_fieldtype, _link_target
 from frappe_core.query import by_name, parse_json_param
 from frappe_core.session import get_current_user

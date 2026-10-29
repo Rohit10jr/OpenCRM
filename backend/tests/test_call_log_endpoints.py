@@ -28,7 +28,12 @@ def lead_status(administrator):
 @pytest.fixture
 def log(alice):
     with session_user(alice.name):
+        # A fixed, provider-like id. Left blank, before_insert draws 12 random hex
+        # characters, and about one run in a hundred they read as a JSON number
+        # ("123456789012", "12e456789012"): create_lead_from_call_log then parses the
+        # name into a number and refuses it, as upstream's frappe.parse_json does.
         return CRMCallLog.objects.create(
+            id="CA-test-call-1",
             status="Completed", type="Outgoing", caller=alice, duration=65,
             recording_url="https://rec.test/1.mp3", **{"from": "+1 111", "to": "+1 222"},
         )

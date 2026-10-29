@@ -23,7 +23,6 @@ import logging
 
 from crm_app.integrations import call_log as call_log_path
 from crm_app.integrations.exotel import client
-from crm_app.integrations.phone import get_contact_lead_or_deal_from_number
 from frappe_core.exceptions import PermissionError as FrappePermissionError, throw
 from frappe_core.session import get_current_user
 from frappe_core.whitelist import whitelist

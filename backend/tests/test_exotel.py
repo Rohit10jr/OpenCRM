@@ -11,12 +11,10 @@ its requests, so a shared secret in the query string is the entire authenticatio
 
 from __future__ import annotations
 
-import json
 from unittest.mock import patch
 
 import pytest
 
-from crm_app.integrations import call_log as call_log_path
 from crm_app.integrations.exotel import client, handler
 from frappe_core.exceptions import PermissionError as FrappePermissionError
 from frappe_core.session import session_user

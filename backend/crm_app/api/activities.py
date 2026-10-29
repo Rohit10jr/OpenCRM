@@ -27,12 +27,11 @@ creates yet.
 
 from __future__ import annotations
 
-import re
 
 from frappe_core import permissions, registry
 from frappe_core.exceptions import DoesNotExistError
 from frappe_core.exceptions import PermissionError as FrappePermissionError
-from frappe_core.query import base_queryset, by_name, fetch_rows
+from frappe_core.query import by_name, fetch_rows
 from frappe_core.session import get_current_user
 from frappe_core.whitelist import whitelist
 

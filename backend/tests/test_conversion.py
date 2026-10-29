@@ -8,7 +8,6 @@ import pytest
 
 from crm_app.conversion import contact_exists, convert_to_deal
 from crm_app.models import (
-    CRMCommunicationStatus,
     CRMContacts,
     CRMDeal,
     CRMDealStatus,

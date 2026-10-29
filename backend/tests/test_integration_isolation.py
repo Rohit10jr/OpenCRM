@@ -29,7 +29,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 BACKEND = Path(__file__).resolve().parent.parent
 
@@ -94,7 +93,7 @@ def test_no_provider_sdk_is_imported_with_the_flags_off():
         timeout=180,
     )
     assert result.returncode == 0, result.stderr[-2000:]
-    line = [l for l in result.stdout.splitlines() if l.startswith("LEAKED:")]
+    line = [s for s in result.stdout.splitlines() if s.startswith("LEAKED:")]
     assert line, f"probe did not report; stdout={result.stdout[-500:]}"
     leaked = [m for m in line[0].removeprefix("LEAKED:").split(",") if m]
     assert leaked == [], (

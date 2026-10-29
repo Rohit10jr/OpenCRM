@@ -309,7 +309,7 @@ def test_a_call_can_link_to_several_documents(call, lead):
     path.link_with_reference_doc(call, "CRM Lead", lead.pk)
     path.link_with_reference_doc(call, "FCRM Note", note.pk)
 
-    assert {l["link_doctype"] for l in path.get_links(call)} == {"CRM Lead", "FCRM Note"}
+    assert {link["link_doctype"] for link in path.get_links(call)} == {"CRM Lead", "FCRM Note"}
 
 
 def test_an_empty_link_is_refused(call):

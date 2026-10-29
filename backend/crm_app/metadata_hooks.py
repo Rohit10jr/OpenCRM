@@ -19,7 +19,6 @@ Two consequences of that key worth stating, because both are load-bearing:
 
 from __future__ import annotations
 
-import json
 
 from frappe_core.query import parse_json_param
 from frappe_core.registry import register_metadata_hooks, routable_doctypes

@@ -128,7 +128,6 @@ def update_password(
     where a client that does not run our JavaScript cannot skip it.
     """
     from frappe_core.api.auth import issue_tokens
-    from frappe_platform.models import User
 
     if not new_password:
         throw("New password is required")
@@ -327,7 +326,6 @@ def accept_invitation(key: str = "", **extra):
     the pages live in the Vue app. The caller is a browser following a link from an email,
     so the response says where to go next and the page performs it.
     """
-    from django.utils import timezone
 
     from crm_app.models import CRMInvitation
 

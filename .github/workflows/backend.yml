@@ -1,4 +1,4 @@
-# Backend CI: Django checks, missing migrations, and the full pytest suite.
+# Backend CI: Ruff, Django checks, missing migrations, and the full pytest suite.
 #
 # Runs on pull requests into main and on pushes to main. Not on every branch push as
 # well: a branch with an open pull request would then run twice per commit (push and
@@ -106,6 +106,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
+      # Real mistakes only (unused imports, undefined names, syntax); backend/ruff.toml.
+      - name: Ruff
+        run: ruff check --output-format=github .
 
       - name: Django system checks
         run: python manage.py check

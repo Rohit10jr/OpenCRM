@@ -1,0 +1,51 @@
+# Dependabot version updates: a weekly pull request per ecosystem bringing packages up to
+# date, which the Backend / Frontend checks then test like any other pull request.
+#
+# - Minor and patch updates are grouped into one pull request per ecosystem, so a week's
+#   bumps arrive together instead of as a dozen pull requests.
+# - Major versions are ignored everywhere: they change behaviour and get done by hand.
+# - frappe-ui and Vue are ignored entirely. The frontend is upstream's, kept in step with
+#   the frappe-ui and Vue versions upstream pins; bumping them alone drifts the screens
+#   away from upstream. They move when the port moves to a newer upstream.
+#
+# Security alerts and security-fix pull requests are switched on separately, in the
+# repository's Settings > Code security.
+
+version: 2
+
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      python-minor-and-patch:
+        update-types: [minor, patch]
+
+  # Yarn 1 is handled by the npm ecosystem; it updates yarn.lock.
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    ignore:
+      - dependency-name: frappe-ui
+      - dependency-name: vue
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      frontend-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]

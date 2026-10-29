@@ -213,7 +213,7 @@ def test_ssl_turns_tls_off_so_the_config_account_can_connect(explicit_tls):
     )
 
     assert result.returncode == 0, result.stderr[-2000:]
-    line = [l for l in result.stdout.splitlines() if l.startswith("FLAGS:")]
+    line = [s for s in result.stdout.splitlines() if s.startswith("FLAGS:")]
     assert line, f"probe did not report; stdout={result.stdout[-500:]}"
     assert line[0] == "FLAGS:0,1,465", "use_tls, use_ssl, port: implicit TLS on 465, STARTTLS off"
 
