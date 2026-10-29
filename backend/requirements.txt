@@ -1,29 +1,29 @@
 # Frappe CRM -> Django port. Pins chosen for Python 3.13.
-Django==5.1.5
-djangorestframework==3.15.2
-djangorestframework-simplejwt==5.4.0
-psycopg[binary]==3.2.3
-django-cors-headers==4.6.0
-django-environ==0.11.2
+Django==5.2.18
+djangorestframework==3.18.3
+djangorestframework-simplejwt==5.5.1
+psycopg[binary]==3.3.6
+django-cors-headers==4.9.0
+django-environ==0.14.0
 
 # Trees (phase 2 hierarchy / territory) - declared now so the stack is fixed.
-django-treebeard==4.7.1
+django-treebeard==4.8.0
 
 # Image resizing for uploads (`optimize=1`, frappe_platform/files.py:optimize_image);
 # without it uploads still work, pictures are just stored at their original size.
-Pillow==11.1.0
+Pillow==11.3.0
 # Excel export from the list views (frappe.desk.reportview.export_query), the same
 # library upstream's xlsxutils writes with. CSV export needs nothing.
-XlsxWriter==3.2.0
+XlsxWriter==3.3.0
 
 # Async stack (phases 5-6) - declared now, unused in phases 0-4.
-celery==5.4.0
-redis==5.2.1
-channels==4.2.0
-channels-redis==4.2.1
+celery==5.6.3
+redis==5.3.1
+channels==4.3.2
+channels-redis==4.3.0
 # The ASGI server. WSGI cannot carry a WebSocket, so `runserver` and the deployed
 # process both have to speak ASGI once phase 6 is on.
-daphne==4.1.2
+daphne==4.2.3
 
 # Integrations (phase 7). Neither is a provider SDK - both are needed with every
 # integration flag OFF, so they are unconditional dependencies:
@@ -32,8 +32,8 @@ daphne==4.1.2
 #   requests     - outbound HTTP for the API clients, and the recording proxy.
 # Provider SDKs proper (twilio, facebook-business) are deliberately NOT here; see
 # tests/test_integration_isolation.py.
-phonenumbers==8.13.52
-requests==2.32.3
+phonenumbers==8.13.55
+requests==2.34.2
 
 # Email Template rendering. Frappe renders every template through a jinja2
 # SandboxedEnvironment (frappe/utils/jinja.py:get_jenv), and the sandbox is the point:
@@ -41,14 +41,14 @@ requests==2.32.3
 Jinja2==3.1.6
 
 # Testing
-pytest==8.3.4
-pytest-django==4.9.0
-pytest-cov==6.0.0
+pytest==8.4.2
+pytest-django==4.14.0
+pytest-cov==6.3.0
 # Parallel test runs: `pytest -n auto` in CI (.github/workflows/backend.yml); each worker
 # gets its own test database (test_opencrm_gw0, _gw1, ...) from pytest-django.
-pytest-xdist==3.6.1
+pytest-xdist==3.8.0
 # WebsocketCommunicator is a coroutine; without this its tests silently do not run.
-pytest-asyncio==0.25.2
+pytest-asyncio==0.26.0
 
 # Lint: `ruff check .` in backend/, rules in backend/ruff.toml; run by backend.yml.
 ruff==0.17.3
