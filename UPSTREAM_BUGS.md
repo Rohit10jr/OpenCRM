@@ -1526,6 +1526,32 @@ user when `assigned_to` changes from a user to empty, before returning.
 
 ---
 
+## 59. "Auto update expected deal value" never fills an empty expected value
+
+**Where:** `crm/fcrm/doctype/crm_deal/crm_deal.py:240-249` (`update_expected_deal_value`).
+Found 29 Oct 2026 in browser check S4; reproduced on the upstream demo by the owner.
+The guard came in with the feature itself, `a4d3852c0` ("feat: Auto update expected deal
+value based on products value", Sep 2025), is the same at v1.82.0 (`48cb3ccc`), and is
+unchanged on upstream `main` as of `9fd505539` (29 Oct 2026). The setting is on by default
+(`fcrm_settings.json`, `"default": "1"`), and its description promises an unconditional
+update: "Automatically update "Expected Deal Value" based on the total value of
+associated products in a deal". Nothing in the frontend fills the value either.
+
+The Dashboard setting promises that a deal's products set its expected value. The guard
+reads `auto_update_expected_deal_value and (net_total or total) and expected_deal_value`,
+so the value is replaced by the product total only when it is **already** non-zero. A
+deal whose Expected Deal Value is empty, the usual case for a new one, never gets one
+from its products, however many are added. With forecasting also on, the same save is then
+refused with "Expected deal value is required." (`crm_deal.py:255-257`), the very field
+the setting was meant to fill.
+
+**Us:** *Reproduce.* The behaviour is user-visible, and the owner saw it on upstream too;
+`CRMDeal.update_expected_deal_value` (`crm_app/models/core_sales.py:938-952`) carries the
+same guard and says so. The upstream fix is to drop `and self.expected_deal_value` from the
+guard, or to fill the value when it is empty.
+
+---
+
 ## Faithful behaviours we chose to keep (not bugs — decisions)
 
 Recorded here so they are not later mistaken for defects:
