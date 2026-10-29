@@ -31,10 +31,15 @@ const REFRESH_URL = '/api/method/token/refresh'
  */
 const USER_COOKIE = 'user_id'
 
+// Both cookies are cleared with a past `expires` as well as `Max-Age=0`. Browsers drop
+// the cookie on either; happy-dom, the unit tests' DOM, could keep a `Max-Age=0` cookie
+// for a read in the same millisecond, which made a sign-out test fail now and then.
+const EXPIRED = 'expires=Thu, 01 Jan 1970 00:00:00 GMT'
+
 function writeUserCookie(user) {
   document.cookie = user
     ? `${USER_COOKIE}=${encodeURIComponent(user)}; path=/; SameSite=Lax`
-    : `${USER_COOKIE}=; path=/; Max-Age=0; SameSite=Lax`
+    : `${USER_COOKIE}=; path=/; Max-Age=0; ${EXPIRED}; SameSite=Lax`
 }
 
 /**
@@ -53,7 +58,7 @@ function writeFileCookie(access) {
   const secure = window.location.protocol === 'https:' ? '; Secure' : ''
   document.cookie = access
     ? `${FILE_COOKIE}=${access}; path=${FILE_COOKIE_PATH}; SameSite=Lax${secure}`
-    : `${FILE_COOKIE}=; path=${FILE_COOKIE_PATH}; Max-Age=0; SameSite=Lax`
+    : `${FILE_COOKIE}=; path=${FILE_COOKIE_PATH}; Max-Age=0; ${EXPIRED}; SameSite=Lax`
 }
 
 export function getAccessToken() {
