@@ -1559,6 +1559,29 @@ guard, or to fill the value when it is empty.
 
 ---
 
+## 60. A notification about a task with no lead or deal breaks the notifications panel
+
+**Where:** `crm/api/todo.py:126-131` (`get_redirect_to_doc`) and
+`frontend/src/components/Notifications.vue` `getRoute`. Found 29 Oct 2026 in the browser
+checks: the panel would not open for ada (Sales User) and opened for grace and
+Administrator. Unchanged on upstream `main` as of `9fd505539`.
+
+Assigning a task notifies the assignee, and the notification's `reference_name` is the
+task's own lead or deal (`get_redirect_to_doc`). A task made on the Tasks page has neither,
+so the notification has none. `get_notifications` still sends `route_name: "Lead"`, and the
+panel turns each row into `<RouterLink :to="{name: 'Lead', params: {leadId: ''}}">`.
+Vue Router refuses that while the row renders (`Missing required param "leadId"`,
+`vue-router.mjs:513`). Under `yarn dev` Vue rethrows the render error and the panel never
+opens; a production build only logs it and drops the row, so the user silently loses those
+notifications instead. ada had 8 such rows out of 54, grace and Administrator none.
+
+**Us:** *Diverge* (owner, 29 Oct 2026). `getRoute` sends a notification with no
+`reference_name` to the Tasks list (`Port only:`; `frontend/JWT_PATCH.md`). The server's
+notifications are unchanged. The upstream fix is the same guard, or `get_notifications`
+giving such a row `route_name: "Tasks"`.
+
+---
+
 ## Faithful behaviours we chose to keep (not bugs — decisions)
 
 Recorded here so they are not later mistaken for defects:
