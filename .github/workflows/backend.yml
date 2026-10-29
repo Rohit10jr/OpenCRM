@@ -1,10 +1,13 @@
 # Backend CI: Django checks, missing migrations, and the full pytest suite.
 #
-# Runs on pull requests into main and on pushes to main, only when the backend or this
-# file changed. Not on every branch push as well: a branch with an open pull request
-# would then run twice per commit (push and pull_request), doubling the private
-# repository's Actions minutes. A newer push to the same pull request cancels the run
-# still going.
+# Runs on pull requests into main and on pushes to main. Not on every branch push as
+# well: a branch with an open pull request would then run twice per commit (push and
+# pull_request). A newer push to the same pull request cancels the run still going.
+#
+# The workflow always starts, and the `changes` job decides whether the tests run: only
+# when the backend or this file changed. A `paths:` filter on the trigger would skip
+# the whole workflow instead, and a required check that never reports leaves a pull
+# request waiting forever; a skipped job counts as passed.
 #
 # The test settings (backend/config/settings/test.py) need no secrets and no Redis:
 # Celery runs eagerly, the channel layer and cache are in memory, mail goes to
@@ -16,14 +19,8 @@ name: Backend
 on:
   push:
     branches: [main]
-    paths:
-      - "backend/**"
-      - ".github/workflows/backend.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "backend/**"
-      - ".github/workflows/backend.yml"
 
 concurrency:
   group: backend-${{ github.ref }}
@@ -31,10 +28,28 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
+  changes:
+    name: Backend changed?
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - "backend/**"
+              - ".github/workflows/backend.yml"
+
   tests:
     name: Checks and tests
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 

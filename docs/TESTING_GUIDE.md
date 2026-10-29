@@ -337,8 +337,8 @@ behind `clear_demo_data`.
 
 ## Backend CI (GitHub Actions)
 
-`.github/workflows/backend.yml` runs on pull requests into `main` and on pushes to `main`,
-whenever `backend/` or the workflow changed: `manage.py check`, `makemigrations --check`,
+`.github/workflows/backend.yml` runs on pull requests into `main` and on pushes to `main`.
+When `backend/` or the workflow changed, it runs `manage.py check`, `makemigrations --check`,
 then the full pytest suite in parallel (`pytest -n auto`, pytest-xdist; each worker has
 its own test database). It brings its own PostgreSQL 17, so it does not depend on the
 local server, and needs no secrets: the test settings fake everything else.
@@ -353,6 +353,12 @@ The result is the check on the pull request. To run the same thing locally, from
 warnings do not), the Vitest unit tests (`yarn vitest run`), and a production build
 (`vite build`). It runs Vite directly rather than `yarn build`, whose last step copies into
 upstream's `../crm/www`, which this repository does not have. Playwright stays local.
+
+**Both workflows start on every pull request.** A small first job checks whether its side
+changed, and the real job is skipped when it did not. A skipped job counts as passed, so
+both checks can be required in the `main` branch ruleset (`Checks and tests` and
+`Lint, unit tests and build`) without a backend-only pull request waiting forever for the
+frontend check. A `paths:` filter on the trigger would cause exactly that wait.
 
 ---
 
