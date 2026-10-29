@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 
 from crm_app.integrations.erpnext import client
-from frappe_core import permissions, registry
+from frappe_core import permissions
 from frappe_core.exceptions import throw
 from frappe_core.session import get_current_user
 from frappe_core.whitelist import whitelist

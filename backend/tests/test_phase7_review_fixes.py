@@ -18,9 +18,6 @@ Written after the fixes, and each was confirmed to fail before them.
 
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
 
 import pytest
 

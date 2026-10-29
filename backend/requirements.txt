@@ -49,3 +49,6 @@ pytest-cov==6.0.0
 pytest-xdist==3.6.1
 # WebsocketCommunicator is a coroutine; without this its tests silently do not run.
 pytest-asyncio==0.25.2
+
+# Lint: `ruff check .` in backend/, rules in backend/ruff.toml; run by backend.yml.
+ruff==0.17.3

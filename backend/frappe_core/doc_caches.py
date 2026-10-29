@@ -20,7 +20,6 @@ this - ``update_modified=False`` at ``tag.py:114``.
 
 from __future__ import annotations
 
-import json
 
 from django.db.models.signals import post_delete, post_save
 

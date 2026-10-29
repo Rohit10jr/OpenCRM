@@ -196,7 +196,6 @@ def main():
     runner = DiscoverRunner(verbosity=0, interactive=False)
     old_config = runner.setup_databases()
     try:
-        from django.core.management import call_command
 
         # `builtin_users` is a pytest fixture, so seed the two rows by hand here.
         from frappe_platform.models import User

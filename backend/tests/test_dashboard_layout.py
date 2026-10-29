@@ -8,7 +8,6 @@ be blank with every number in place.
 
 import importlib
 import json
-import pathlib
 
 import pytest
 from django.apps import apps

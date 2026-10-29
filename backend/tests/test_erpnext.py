@@ -16,7 +16,7 @@ from unittest.mock import patch
 
 import pytest
 
-from crm_app.integrations.erpnext import api, client, customer, reconcile
+from crm_app.integrations.erpnext import api, client, reconcile
 from frappe_core.exceptions import ValidationError
 from frappe_core.session import session_user
 

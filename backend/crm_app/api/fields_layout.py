@@ -33,7 +33,7 @@ from __future__ import annotations
 import json
 import secrets
 
-from frappe_core import field_meta, registry
+from frappe_core import field_meta
 from frappe_core.exceptions import PermissionError as FrappePermissionError
 from frappe_core.session import get_current_user
 from frappe_core.whitelist import whitelist

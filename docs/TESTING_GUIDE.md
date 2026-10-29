@@ -338,7 +338,8 @@ behind `clear_demo_data`.
 ## Backend CI (GitHub Actions)
 
 `.github/workflows/backend.yml` runs on pull requests into `main` and on pushes to `main`.
-When `backend/` or the workflow changed, it runs `manage.py check`, `makemigrations --check`,
+When `backend/` or the workflow changed, it runs Ruff (`ruff check .`, real mistakes
+only: rules in `backend/ruff.toml`), `manage.py check`, `makemigrations --check`,
 then the full pytest suite in parallel (`pytest -n auto`, pytest-xdist; each worker has
 its own test database). It brings its own PostgreSQL 17, so it does not depend on the
 local server, and needs no secrets: the test settings fake everything else.

@@ -14,7 +14,7 @@ import datetime
 import pytest
 from django.utils import timezone
 
-from crm_app.models import CRMDeal, CRMDealStatus, CRMLead, CRMLeadStatus
+from crm_app.models import CRMDeal, CRMDealStatus
 from crm_app.tasks import VERSION_CHURN_DOCTYPE, VERSION_RETENTION_DAYS, clear_old_versions
 from frappe_core.session import session_user
 from frappe_core.versions import Version, versions_for

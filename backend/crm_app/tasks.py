@@ -16,7 +16,6 @@ import smtplib
 
 from celery import shared_task
 from django.conf import settings
-from django.db import transaction
 from django.utils import timezone
 
 #: `PHASE_5_ASYNC.md` §1 — invitations expire after 3 days

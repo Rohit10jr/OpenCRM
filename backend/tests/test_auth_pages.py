@@ -358,7 +358,6 @@ def test_the_old_password_path_goes_through_the_login_lockout(api, make_user):
     endpoint that checks a password *without* that tracker is a second door past it — an
     online password oracle. This asserts the lockout engages here too.
     """
-    from frappe_core.exceptions import ValidationError
 
     account = make_user("oracle@example.com", password="Original!Pass1")
 

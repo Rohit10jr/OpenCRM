@@ -803,7 +803,6 @@ def test_a_private_saved_view_cannot_be_read_by_name(alice, bob):
 
 def test_a_public_saved_view_is_visible_to_everyone(alice, bob, make_user):
     from crm_app.api.view_settings import create, public
-    from crm_app.models import CRMViewSettings
 
     manager = make_user("mgr3@example.com", roles=["Sales Manager"])
     with session_user(alice.name):

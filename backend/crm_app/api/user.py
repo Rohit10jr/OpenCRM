@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from frappe_core.exceptions import AuthenticationError
 from frappe_core.exceptions import PermissionError as FrappePermissionError
-from frappe_core.exceptions import ValidationError, throw
+from frappe_core.exceptions import throw
 from frappe_core.query import parse_json_param
 from frappe_core.security import LoginAttemptTracker, rate_limit
 from frappe_core.session import GUEST_USER, get_current_user

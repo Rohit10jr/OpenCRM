@@ -12,7 +12,6 @@ import re
 from frappe_core import doc_caches, permissions, registry
 from frappe_core.exceptions import DoesNotExistError
 from frappe_core.exceptions import PermissionError as FrappePermissionError
-from frappe_core.exceptions import throw
 from frappe_core.query import parse_json_param
 from frappe_core.session import get_current_user
 from frappe_core.whitelist import whitelist
@@ -129,7 +128,7 @@ def add_comment(
     reproduced here - without it any authenticated user could comment on a lead they
     cannot see, and the comment would then appear in that lead's timeline.
     """
-    from frappe_platform.models import Comment, File, User
+    from frappe_platform.models import Comment, User
 
     # Upstream reaches frappe.get_doc(reference_doctype, reference_name), which raises
     # DoesNotExistError - a 404, not a validation failure (FINDINGS.md 12).

@@ -10,7 +10,6 @@ If the source is not present the schema tests skip rather than pass silently.
 """
 
 import json
-from pathlib import Path
 
 import pytest
 from django.db.models.fields.related import ForeignKey, OneToOneField
