@@ -89,7 +89,9 @@ import AssignmentRulePage from './AssignmentRules/AssignmentRulePage.vue'
 import ShieldCheck from '~icons/lucide/shield-check'
 import SlaConfig from './Sla/SlaConfig.vue'
 
-const { isManager, getUser } = usersStore()
+// Upstream: const { isManager, getUser } = usersStore()
+// Port only: isAdmin as well, for the Defaults item's condition (UPSTREAM_BUGS.md 50).
+const { isManager, isAdmin, getUser } = usersStore()
 
 const user = computed(() => getUser() || {})
 
@@ -132,6 +134,11 @@ const tabs = computed(() => {
           label: __('Defaults'),
           component: markRaw(DefaultsSettings),
           icon: MonitorCogIcon,
+          // Port only: shown to a System Manager alone (UPSTREAM_BUGS.md 50). The page edits
+          // System Settings, which only that role may read; upstream offers it to a Sales
+          // Manager too, the form then reads a field of a document that never loaded, and
+          // the render error blanks the panel (in a development build, the whole dialog).
+          condition: () => isAdmin(),
         },
         {
           label: __('Brand'),

@@ -1352,13 +1352,20 @@ binds `settings.doc.currency` (`:43`), reading a field of nothing throws while V
 the component, and Vue drops the component. The Sales Manager gets an empty panel, with
 the error in the browser console and no message on screen.
 
-**Us:** *Reproduce*. Security is the standing exception to "diverge on what nothing can
-observe", and the two fixes pull in opposite directions: giving Sales Manager read on
-System Settings widens access to a document upstream keeps for System Manager, which the
-port does not do on its own say. The port's `System Settings` (finding 64) keeps
-upstream's role table, so a Sales Manager sees the same blank. The fix upstream is in the
-frontend: give the Defaults item its own `condition: () => isAdmin()` (`users.js`
-already has it), or give the form a `v-if="settings.doc"` and a "not permitted" message.
+**Us:** *Diverge* (owner, 29 Oct 2026); until then *Reproduce*. Giving Sales Manager read
+on System Settings would widen access to a document upstream keeps for System Manager, so
+the server side stays as upstream's role table has it. The frontend instead gives the
+Defaults item `condition: () => isAdmin()` (`frontend/src/components/Settings/Settings.vue`,
+marked `Port only:`; `frontend/JWT_PATCH.md`), so a Sales Manager no longer sees the item.
+
+Browser check, 29 Oct 2026: under `yarn dev` the failure was worse than a blank panel.
+Vue's development build rethrows an unhandled render error
+(`@vue/runtime-core` `logError`, `throwInDev`), which stops its update queue: every other
+Settings tab went blank and the dialog could not be closed until a reload. A production
+build only logs the error, which is why the hosted demo shows just the blank panel.
+
+The other fix upstream could take is a `v-if="settings.doc"` on the form with a "not
+permitted" message.
 
 ---
 
