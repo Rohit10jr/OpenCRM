@@ -1,0 +1,74 @@
+# Dependency audit: known security holes in the packages this app installs.
+#
+# pip-audit checks backend/requirements.txt against the Python advisory databases;
+# `yarn audit` checks frontend/yarn.lock against npm's. Runs on pull requests into main,
+# on pushes to main, and every Monday on its own: a hole published tomorrow about a
+# package nobody touched shows up without a commit.
+#
+# Not meant to be a required check. A newly published hole would otherwise block every
+# unrelated pull request until it is fixed; the red mark is the signal. Each side runs
+# as its own job, so one side's findings do not hide the other's result.
+
+name: Audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python dependencies (pip-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install pip-audit
+        run: python -m pip install pip-audit==2.10.1
+
+      # Resolves the pinned requirements in a throwaway environment and looks each one up.
+      - name: Audit backend/requirements.txt
+        run: pip-audit -r backend/requirements.txt --progress-spinner off --desc on
+
+  javascript:
+    name: Frontend dependencies (yarn audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Only `dependencies`, not `devDependencies`, and only high or critical holes fail
+      # the job. yarn 1 sets its exit code as a bitmask of every severity it found
+      # (1 info, 2 low, 4 moderate, 8 high, 16 critical) whatever `--level` says, so the
+      # step reads the high and critical bits itself; `--level` only trims the report.
+      - name: Audit frontend/yarn.lock
+        run: |
+          code=0
+          yarn audit --groups dependencies --level high || code=$?
+          if [ $(( code & 24 )) -ne 0 ]; then
+            echo "::error::High or critical vulnerabilities in frontend dependencies (yarn audit exit $code)"
+            exit 1
+          fi

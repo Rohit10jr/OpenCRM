@@ -370,6 +370,23 @@ one. Findings print with the secret redacted. If one is a false positive (a test
 say), add it to a `.gitleaks.toml` allowlist with a comment saying why. If it is real,
 **rotate the secret first**; removing it from history comes second.
 
+## Dependency audit (GitHub Actions)
+
+`.github/workflows/audit.yml` looks for known security holes in installed packages:
+pip-audit over `backend/requirements.txt`, and `yarn audit` over `frontend/yarn.lock`
+(`dependencies` only, failing on high or critical). It runs on pull requests, on pushes to
+`main`, and every Monday by itself, since holes are published about packages nobody
+changed. It is **not** a required check: a red audit is a to-do, not a merge blocker.
+
+Two things to know when reading it:
+
+- upstream's `package.json` lists build tools (Vite, `vite-plugin-pwa`, the Vue JSX
+  plugin) under `dependencies`, so the "dependencies only" filter still includes some code
+  that never reaches the browser. Check where a finding comes from before judging it.
+- `frappe-ui` and Vue are kept at upstream's versions. A hole in one of their own
+  sub-packages is usually fixed by refreshing that sub-package in `yarn.lock`, not by
+  upgrading `frappe-ui` itself.
+
 ---
 
 ## Browser tests (Playwright)
