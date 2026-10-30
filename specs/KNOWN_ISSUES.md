@@ -418,6 +418,15 @@ That junction is a local convenience, not a committed artefact — `frontend/nod
 is gitignored. **Anyone wanting a real install should fix the layout or the link, not
 repeat this.**
 
+**Since then (corrected 30 Oct 2026):** the workaround is history. `yarn install` works:
+yarn 1 makes a `link:` whose target is missing into a dangling symlink and carries on,
+which is how CI installs (`.github/workflows/frontend.yml`, `--frozen-lockfile`) and builds.
+Nothing in `frontend/src` imports `@framework/ui`. On the owner's machine the target does
+exist, a Frappe clone at `../../frappe` next to this repository, so a local install also
+resolves that package's own dependencies into `yarn.lock`: `cropperjs`, the `@cropper/*`
+packages and a second `leaflet.locatecontrol` range. CI does not have them and the app does not use them, so `main` leaves them
+out: after a local `yarn install`, do not commit those lockfile lines.
+
 ### A2 — realtime had only ever run in-process
 
 Tests use `InMemoryChannelLayer`, which cannot demonstrate the architecture's central
