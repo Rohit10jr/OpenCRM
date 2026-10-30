@@ -1,11 +1,11 @@
 # Frappe CRM -> Django port. Pins chosen for Python 3.13.
 Django==5.2.18
 djangorestframework==3.18.3
-# Held at 5.5.0: 5.5.1 logs `user.id` when issuing a token for an inactive user, and
-# User here has no `id` (its key is `name`), so a password reset of a disabled account
-# crashes (tests/test_auth_pages.py). Fixed on simplejwt's main as `user.pk`, not yet
-# released; .github/dependabot.yml skips 5.5.1.
-djangorestframework-simplejwt==5.5.0
+# 5.5.1, not 5.5.0: 5.5.0 has PYSEC-2026-1305 and caps PyJWT below 2.10, which holds
+# PyJWT on versions with known advisories. 5.5.1's for_user logs `user.id` for an inactive
+# user, which this User lacks (its key is `name`), so no token is issued to one
+# (crm_app/api/auth_pages.py:update_password, upstream bug 61).
+djangorestframework-simplejwt==5.5.1
 psycopg[binary]==3.3.6
 django-cors-headers==4.9.0
 django-environ==0.14.0
