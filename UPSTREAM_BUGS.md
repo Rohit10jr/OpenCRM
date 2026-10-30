@@ -1582,6 +1582,31 @@ giving such a row `route_name: "Tasks"`.
 
 ---
 
+## 61. A reset link logs a disabled account in
+
+**Where:** framework `frappe/core/doctype/user/user.py` `update_password`, which ends with
+`frappe.local.login_manager.login_as(user)`, and `frappe/auth.py` `login_as` /
+`post_login`. Read from the version-15 source on 30 Oct 2026, not reproduced.
+
+`enabled` is checked in one place, the password login (`auth.py:275-278`, "User disabled
+or missing"). `login_as` does not check it, and neither does `post_login`, so redeeming a
+reset key starts a session for whoever the key belongs to. `reset_password` will not email
+a disabled account a link, but a link sent **before** the account was disabled still works
+afterwards: the user sets a password and is logged in.
+
+In this port the tokens `update_password` issued were harmless, as `JWTAuthentication`
+refuses an inactive user on every request. Issuing them is what broke on simplejwt 5.5.1,
+whose `for_user` logs a warning for an inactive user that reads `user.id`; this port's
+User has no `id`.
+
+**Us:** *Diverge* (owner, 30 Oct 2026). `update_password` sets the new password, then
+refuses a disabled account with the login's own 401, "User disabled or missing", instead of
+issuing tokens (`crm_app/api/auth_pages.py`, `Port only:`;
+`tests/test_auth_pages.py::test_a_reset_does_not_re_enable_a_disabled_account`). The
+upstream fix is the same check before `login_as`, or `login_as` checking `enabled` itself.
+
+---
+
 ## Faithful behaviours we chose to keep (not bugs — decisions)
 
 Recorded here so they are not later mistaken for defects:
