@@ -18,7 +18,7 @@ and anything a future agent would otherwise rediscover the hard way.
 | 11 | Upstream has moved on since the pin | ⏸️ **Open** — compare against the clone, not the cloud, until the pin moves |
 | 12 | The frontend still says "Frappe" in a few places after the Open CRM rename | ⏸️ **Open** — the locations are listed; to be handled later |
 | 13 | The backend carries the Frappe name in its packages, classes, settings and strings | ⏸️ **Open** — the locations are listed; the packages and models are renamed later, as decided |
-| 14 | The frontend predates the pin: upstream's Forms builder and one call-label fix are missing | ⏸️ **Open** — Forms is not ported (no backend); the label fix is small and can be taken |
+| 14 | The frontend predates the pin: upstream's Forms builder and one call-label fix are missing | ⏸️ **Open** — Forms is not ported (no backend); the label fix was taken on 30 Oct 2026 |
 | 10 | Nothing is translated: the interface and the server's messages are English only | ⏸️ **Open, deferred** — to be built after the browser testing; the design, step by step, is below |
 
 ---
@@ -936,7 +936,8 @@ Found 30 Oct 2026, while closing a hard-rule-8 gap in `Settings.vue`. `frontend/
 on 14 Aug 2026 (`04b4d44`); the pin, `6583bfcdc`, is from 11 Sep. Comparing
 `frontend/src` file by file with the pin: 375 files are in both, 8 are the port's own (the
 JWT auth and the login pages), 19 differ, and 5 are upstream's only. Upstream changed
-`frontend/src` in 42 commits between the copy and the pin, and they are two changes. Every other difference is the port's own, recorded in `frontend/JWT_PATCH.md`
+`frontend/src` in 42 commits between the copy and the pin, and they are two changes; the
+second has since been taken, so 17 files differ now. Every other difference is the port's own, recorded in `frontend/JWT_PATCH.md`
 or commented in place.
 
 **1. Forms, the web form builder: not ported.** `e69052b4e` ("feat: web form builder")
@@ -950,12 +951,12 @@ its two imports commented, marked `Upstream:`. Porting it is a feature of its ow
 Form model, the form API, guest submission into an allow-list of doctypes, and the public
 page.
 
-**2. "Missed Call" only for incoming calls: missing.** `46e013e1d` (17 Aug 2026) labels a
-call with status `No Answer` "Missed Call" only when it was incoming; an unanswered
-outgoing call keeps "No Answer". The port has the older behaviour, where every `No Answer`
-reads "Missed Call" (`frontend/src/utils/callLog.js` `statusLabelMap`, and
-`components/Activities/CallArea.vue`). Frontend only, two files, 13 lines; it can be taken
-as it is.
+**2. "Missed Call" only for incoming calls: taken 30 Oct 2026.** `46e013e1d` (17 Aug 2026)
+labels a call with status `No Answer` "Missed Call" only when it was incoming; an unanswered
+outgoing call keeps "No Answer". The port had the older behaviour, where every `No Answer`
+read "Missed Call". Upstream's patch applied unchanged to `frontend/src/utils/callLog.js`
+(`getCallStatusLabel`) and `components/Activities/CallArea.vue`, and both files now match
+the pin. The backend already sends the call's `type` (`crm_app/api/activities.py:40`).
 
 To repeat the comparison after moving the pin: list `frontend/src` at the pin
 (`git ls-tree -r --name-only <pin> frontend/src` in the clone) against `git ls-files
