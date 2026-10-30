@@ -45,7 +45,7 @@
   },
   "resolutions": {
     "dompurify": "3.4.17",
-    "brace-expansion": "2.1.0",
+    "brace-expansion": "2.1.7",
     "picomatch": "4.0.4",
     "prosemirror-model": "1.25.12",
     "prosemirror-view": "1.42.8"
