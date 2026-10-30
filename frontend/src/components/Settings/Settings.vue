@@ -50,6 +50,8 @@
 import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
 import LucideNetwork from '~icons/lucide/network'
 import MonitorCogIcon from '~icons/lucide/monitor-cog'
+// Upstream: import LucideTextCursorInput from '~icons/lucide/text-cursor-input'
+// (the Forms item's icon; not ported, see the Forms item below)
 import SlidersIcon from '@/components/Icons/SlidersIcon.vue'
 import SparkleIcon from '@/components/Icons/SparkleIcon.vue'
 import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
@@ -70,6 +72,8 @@ import LeadSyncSourcePage from '@/components/Settings/LeadSyncing/LeadSyncSource
 import DefaultsSettings from '@/components/Settings/DefaultsSettings.vue'
 import BrandSettings from '@/components/Settings/BrandSettings.vue'
 import HomeActions from '@/components/Settings/HomeActions.vue'
+// Upstream: import FormsSettings from '@/components/Settings/Forms/FormsSettings.vue'
+// (not ported, see the Forms item below)
 import GeneralSettings from '@/components/Settings/GeneralSettings.vue'
 import DashboardSettings from '@/components/Settings/DashboardSettings.vue'
 import EmailTemplatePage from '@/components/Settings/EmailTemplate/EmailTemplatePage.vue'
@@ -201,6 +205,15 @@ const tabs = computed(() => {
           icon: markRaw(h(ShieldCheck)),
           component: markRaw(SlaConfig),
         },
+        // Upstream: the Forms item, the web form builder (upstream e69052b4e and the
+        // commits after it, 25 Aug 2026). Not ported: it landed upstream after this
+        // frontend was copied, and its backend (crm/api/form.py, Frappe's Web Form doctype
+        // and the public crm/www/crm_form page) does not exist here. KNOWN_ISSUES.md 14.
+        // {
+        //   label: __('Forms'),
+        //   component: markRaw(FormsSettings),
+        //   icon: markRaw(LucideTextCursorInput),
+        // },
       ],
       condition: () => isManager(),
     },
