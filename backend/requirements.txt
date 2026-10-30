@@ -15,7 +15,7 @@ django-treebeard==4.8.0
 
 # Image resizing for uploads (`optimize=1`, frappe_platform/files.py:optimize_image);
 # without it uploads still work, pictures are just stored at their original size.
-Pillow==11.3.0
+Pillow==13.0.0
 # Excel export from the list views (frappe.desk.reportview.export_query), the same
 # library upstream's xlsxutils writes with. CSV export needs nothing.
 XlsxWriter==3.3.0
