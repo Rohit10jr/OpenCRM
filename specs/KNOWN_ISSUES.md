@@ -18,6 +18,7 @@ and anything a future agent would otherwise rediscover the hard way.
 | 11 | Upstream has moved on since the pin | ⏸️ **Open** — compare against the clone, not the cloud, until the pin moves |
 | 12 | The frontend still says "Frappe" in a few places after the Open CRM rename | ⏸️ **Open** — the locations are listed; to be handled later |
 | 13 | The backend carries the Frappe name in its packages, classes, settings and strings | ⏸️ **Open** — the locations are listed; the packages and models are renamed later, as decided |
+| 14 | The frontend predates the pin: upstream's Forms builder and one call-label fix are missing | ⏸️ **Open** — Forms is not ported (no backend); the label fix was taken on 30 Oct 2026 |
 | 10 | Nothing is translated: the interface and the server's messages are English only | ⏸️ **Open, deferred** — to be built after the browser testing; the design, step by step, is below |
 
 ---
@@ -416,6 +417,15 @@ finishing.
 That junction is a local convenience, not a committed artefact — `frontend/node_modules`
 is gitignored. **Anyone wanting a real install should fix the layout or the link, not
 repeat this.**
+
+**Since then (corrected 30 Oct 2026):** the workaround is history. `yarn install` works:
+yarn 1 makes a `link:` whose target is missing into a dangling symlink and carries on,
+which is how CI installs (`.github/workflows/frontend.yml`, `--frozen-lockfile`) and builds.
+Nothing in `frontend/src` imports `@framework/ui`. On the owner's machine the target does
+exist, a Frappe clone at `../../frappe` next to this repository, so a local install also
+resolves that package's own dependencies into `yarn.lock`: `cropperjs`, the `@cropper/*`
+packages and a second `leaflet.locatecontrol` range. CI does not have them and the app does not use them, so `main` leaves them
+out: after a local `yarn install`, do not commit those lockfile lines.
 
 ### A2 — realtime had only ever run in-process
 
@@ -817,8 +827,11 @@ call reading the row), then the six steps above on top of them.
 
 ## 11. Upstream has moved on since the pin
 
-The port's frontend, and every upstream line number cited in the specs and findings,
-come from the clone at `6583bfcdc` (11 Sep 2026). `git fetch origin main` on 7 Oct 2026
+Every upstream line number cited in the specs and findings comes from the clone at
+`6583bfcdc` (11 Sep 2026). The port's frontend is a little older: it was copied on
+14 Aug 2026 (`04b4d44`), and two upstream frontend changes made between then and the pin
+are not in it (14 below; corrected 30 Oct 2026, this line used to say the frontend came
+from the pin too). `git fetch origin main` on 7 Oct 2026
 put upstream `main` at `deedce73c` (30 Sep 2026), **514 commits ahead**. Anyone comparing
 the port with a hosted demo will see differences that are not the port's: the first one
 noticed was the Products grid's Edit Grid Fields dialog (`docs/FINDINGS.md` 84), reworked
@@ -914,4 +927,39 @@ and the models are renamed later, as decided. Paths under `backend/` unless give
 **Docstrings and comments** — 76 code files under `crm_app`, `frappe_core`, `frappe_platform`
 and `config`, 31 test files, the three scripts in `scripts/`, and `requirements.txt`, each
 citing upstream Frappe by name.
+
+---
+
+## 14. The frontend predates the pin: two upstream changes are missing
+
+Found 30 Oct 2026, while closing a hard-rule-8 gap in `Settings.vue`. `frontend/` was copied
+on 14 Aug 2026 (`04b4d44`); the pin, `6583bfcdc`, is from 11 Sep. Comparing
+`frontend/src` file by file with the pin: 375 files are in both, 8 are the port's own (the
+JWT auth and the login pages), 19 differ, and 5 are upstream's only. Upstream changed
+`frontend/src` in 42 commits between the copy and the pin, and they are two changes; the
+second has since been taken, so 17 files differ now. Every other difference is the port's own, recorded in `frontend/JWT_PATCH.md`
+or commented in place.
+
+**1. Forms, the web form builder: not ported.** `e69052b4e` ("feat: web form builder")
+and 40 follow-ups, all committed upstream on 25 Aug 2026. Settings → Automation & Rules →
+Forms builds public forms that create leads or deals, published as a page and embeddable
+in other sites. Upstream it is `frontend/src/components/Settings/Forms/` (five files),
+`crm/api/form.py`, Frappe's own **Web Form** doctype, and the guest page
+`crm/www/crm_form.*`. The port has none of that backend; `crm_app/setup.py` already skips
+the Web Form custom fields for the same reason. `Settings.vue` keeps upstream's item and
+its two imports commented, marked `Upstream:`. Porting it is a feature of its own: a Web
+Form model, the form API, guest submission into an allow-list of doctypes, and the public
+page.
+
+**2. "Missed Call" only for incoming calls: taken 30 Oct 2026.** `46e013e1d` (17 Aug 2026)
+labels a call with status `No Answer` "Missed Call" only when it was incoming; an unanswered
+outgoing call keeps "No Answer". The port had the older behaviour, where every `No Answer`
+read "Missed Call". Upstream's patch applied unchanged to `frontend/src/utils/callLog.js`
+(`getCallStatusLabel`) and `components/Activities/CallArea.vue`, and both files now match
+the pin. The backend already sends the call's `type` (`crm_app/api/activities.py:40`).
+
+To repeat the comparison after moving the pin: list `frontend/src` at the pin
+(`git ls-tree -r --name-only <pin> frontend/src` in the clone) against `git ls-files
+frontend/src` here, compare the shared files with line endings normalised, and check each
+difference against `frontend/JWT_PATCH.md`.
 
