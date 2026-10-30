@@ -45,14 +45,16 @@ requests==2.34.2
 Jinja2==3.1.6
 
 # Testing
-pytest==8.4.2
+pytest==9.2.0
 pytest-django==4.14.0
 pytest-cov==6.3.0
 # Parallel test runs: `pytest -n auto` in CI (.github/workflows/backend.yml); each worker
 # gets its own test database (test_opencrm_gw0, _gw1, ...) from pytest-django.
 pytest-xdist==3.8.0
 # WebsocketCommunicator is a coroutine; without this its tests silently do not run.
-pytest-asyncio==0.26.0
+# 1.x for pytest 9 (0.26 needs pytest<9). 1.0 removed the `event_loop` fixture, which
+# nothing here uses; the tests only carry @pytest.mark.asyncio.
+pytest-asyncio==1.4.1
 
 # Lint: `ruff check .` in backend/, rules in backend/ruff.toml; run by backend.yml.
 ruff==0.17.3
