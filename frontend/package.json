@@ -47,8 +47,8 @@
     "dompurify": "3.4.17",
     "brace-expansion": "2.1.0",
     "picomatch": "4.0.4",
-    "prosemirror-model": "1.25.9",
-    "prosemirror-view": "1.41.9"
+    "prosemirror-model": "1.25.12",
+    "prosemirror-view": "1.42.8"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
