@@ -328,7 +328,11 @@ def test_a_reset_does_not_re_enable_a_disabled_account(api, alice):
     raw = password_reset.issue_key(alice)
     User.objects.filter(pk=alice.pk).update(enabled=False)
 
-    _post(api, UPDATE, {"key": raw, "new_password": "Str0ng!Passw0rd"})
+    response = _post(api, UPDATE, {"key": raw, "new_password": "Str0ng!Passw0rd"})
+
+    # Port only (upstream bug 61): no tokens for a disabled account.
+    assert response.status_code == 401
+    assert "access" not in response.json()
 
     alice.refresh_from_db()
     assert alice.enabled is False

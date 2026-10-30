@@ -119,7 +119,7 @@ def update_password(
     `update-password.html` branches on them and a client written against Frappe will too:
 
     * **200** — done, with tokens
-    * **401** — the old password was wrong
+    * **401** — the old password was wrong, or (port only) the account is disabled
     * **410** — the link is expired, used, or invalid
 
     `test_password_strength` is **not** ported (`PHASE_8_AUTH_AND_DESK.md`): it costs a
@@ -169,6 +169,8 @@ def update_password(
     if int(logout_all_sessions or 0):
         _blacklist_outstanding_tokens(account)
 
+    # A disabled account gets its new password, then `issue_tokens` refuses it (upstream
+    # bug 61). The old-password path never gets here disabled: `authenticate` refuses it.
     return issue_tokens(account)
 
 

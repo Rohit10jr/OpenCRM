@@ -113,6 +113,13 @@ def issue_tokens(user) -> dict:
     `stores/session.js` reads `user` and `full_name` — a set-password page that landed the
     user with a subtly different payload would log them in and then show an empty header.
     """
+    # Port only: a disabled account gets no tokens, with the login's own refusal. Upstream's
+    # `login_as` (what `update_password` and invitation acceptance end with) does not check
+    # `enabled` and starts a session; upstream bug 61. The tokens would be refused on every
+    # request anyway (JWTAuthentication checks `is_active`), but simplejwt 5.5.1's
+    # inactive-user warning in `for_user` reads `user.id`, which this User does not have.
+    if not user.is_active:
+        raise AuthenticationError("User disabled or missing")
     refresh = RefreshToken.for_user(user)
     return {
         "access": str(refresh.access_token),
