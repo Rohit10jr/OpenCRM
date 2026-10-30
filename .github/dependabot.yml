@@ -22,6 +22,9 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # 5.5.1 crashes issuing a token for an inactive user (backend/requirements.txt).
+      - dependency-name: djangorestframework-simplejwt
+        versions: ["5.5.1"]
     groups:
       python-minor-and-patch:
         update-types: [minor, patch]
