@@ -2642,7 +2642,8 @@ Two consequences of following upstream that the Vue app will show:
 
 - A task an assignment notification points at (`notification_type_doc`), or a note or
   task a call log links to through its `links` rows, cannot be deleted from its own
-  page until the reference goes, as upstream refuses it.
+  page until the reference goes, as upstream refuses it. The notification half is
+  recorded as upstream bug 62 (`UPSTREAM_BUGS.md`).
 - A call log linked to a lead or deal only through a `links` row now refuses the
   record's delete, and the dialog does not list it (the gap recorded in 75); the
   message names the call log.
