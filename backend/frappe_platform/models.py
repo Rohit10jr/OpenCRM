@@ -161,6 +161,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     #: clearing one without the other leaves an expiry test with nothing to test.
     last_reset_password_key_generated_on = models.DateTimeField(null=True, blank=True)
 
+    #: Port only: KNOWN_ISSUES §6. Every token carries the version it was issued at, and one
+    #: that no longer matches is refused (`frappe_core/authentication.py`). Bumped when all
+    #: sessions are dropped. Only ever changed by `bump_token_version`; writing it back to an
+    #: old value would revive revoked tokens, so it is in `SENSITIVE_FIELDS`.
+    token_version = models.PositiveIntegerField(default=0)
+
     # Django admin plumbing.
     is_staff = models.BooleanField(default=False)
 
@@ -195,6 +201,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     #: accounts have a live reset link and when it was issued — which is the window an
     #: attacker with mailbox access wants, and nobody else's business. Nothing on the wire
     #: needs it; the expiry check reads it server-side.
+    #:
+    #: `token_version` (port only): writable, it would let a revoked token holder set the
+    #: version back and revive their tokens; filterable, it would tell any colleague who
+    #: has recently changed their password. Nothing on the wire needs it.
     SENSITIVE_FIELDS = (
         "groups",
         "user_permissions",
@@ -202,6 +212,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         "is_staff",
         "reset_password_key",
         "last_reset_password_key_generated_on",
+        "token_version",
     )
 
     #: Readable, never writable through the generic route.

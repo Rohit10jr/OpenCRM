@@ -168,6 +168,14 @@ def update_password(
 
     if int(logout_all_sessions or 0):
         _blacklist_outstanding_tokens(account)
+    else:
+        # Port only: KNOWN_ISSUES §6 — a password change or reset revokes every token issued
+        # before it, ticked or not. Upstream keeps other sessions unless
+        # `logout_all_sessions` is set (`frappe/utils/password.py:update_password`). The
+        # caller keeps working: the pair returned below is issued at the new version.
+        from frappe_core.authentication import bump_token_version
+
+        bump_token_version(account)
 
     # A disabled account gets its new password, then `issue_tokens` refuses it (upstream
     # bug 61). The old-password path never gets here disabled: `authenticate` refuses it.
@@ -277,18 +285,23 @@ def _blacklist_outstanding_tokens(account) -> None:
 
     Upstream drops the user's server-side sessions. This port has none, so the equivalent
     is blacklisting every outstanding **refresh** token — which is what `logout` already
-    does for one.
+    does for one — and bumping the account's `token_version`.
 
-    **An access token issued before this call stays valid until it expires** (five minutes,
-    `SIMPLE_JWT.ACCESS_TOKEN_LIFETIME`), because verifying one consults no state. That is
-    the same window `logout` has, and it is accepted rather than closed —
-    `specs/KNOWN_ISSUES.md` **§6** states the trade and costs the three ways out.
+    The bump is what reaches tokens already issued (port only, `specs/KNOWN_ISSUES.md`
+    **§6**, option 3): an access token is checked by signature plus that version, so every
+    one issued before this call is refused from the next request. It also catches the
+    refresh tokens the blacklist cannot: the refresh endpoint rotates without recording
+    the new token in `OutstandingToken`, so the loop below never sees them.
 
-    (This docstring said "§4" and phase 8's progress file said the same. Neither was true:
-    the entry did not exist until it was written for real. Cited correctly now.)
+    (Until 31 Oct 2026 this docstring said issued access tokens stayed valid until expiry,
+    and before that cited "§4" for it, which was the async smoke test.)
     """
     from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
     from rest_framework_simplejwt.tokens import RefreshToken
+
+    from frappe_core.authentication import bump_token_version
+
+    bump_token_version(account)
 
     for token in OutstandingToken.objects.filter(user=account):
         try:
