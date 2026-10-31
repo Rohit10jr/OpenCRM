@@ -168,14 +168,6 @@ def update_password(
 
     if int(logout_all_sessions or 0):
         _blacklist_outstanding_tokens(account)
-    else:
-        # Port only: KNOWN_ISSUES §6 — a password change or reset revokes every token issued
-        # before it, ticked or not. Upstream keeps other sessions unless
-        # `logout_all_sessions` is set (`frappe/utils/password.py:update_password`). The
-        # caller keeps working: the pair returned below is issued at the new version.
-        from frappe_core.authentication import bump_token_version
-
-        bump_token_version(account)
 
     # A disabled account gets its new password, then `issue_tokens` refuses it (upstream
     # bug 61). The old-password path never gets here disabled: `authenticate` refuses it.

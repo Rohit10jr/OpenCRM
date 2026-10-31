@@ -482,9 +482,11 @@ each of which could be wrong independently of whether Redis relays bytes.
   endpoint checks it too, alongside the blacklist; that costs one query, on refresh only.
   A stale token gets the same 401 and `AuthenticationError` as an expired one, so the
   frontend's refresh-then-login path handles it unchanged.
-* **Bumped** (atomically, `F() + 1`) by `logout_all_sessions` and by every password set
-  through `update_password` — reset by key or change by old password. That endpoint returns
-  a fresh pair issued at the new version, so the device making the change stays signed in.
+* **Bumped** (atomically, `F() + 1`) by `logout_all_sessions`: `update_password` with the
+  box ticked, reset by key or change by old password. That endpoint returns a fresh pair
+  issued at the new version, so the device making the change stays signed in. Unticked,
+  other sessions are kept, as upstream keeps them (`frappe/utils/password.py:150`; owner's
+  decision, 31 Oct 2026).
 * **Not bumped by a plain `logout`**, deliberately: it blacklists its own refresh token and
   must not sign the user out of their other devices. That one access token keeps the
   five-minute window below, and the two points under *"If option 1 stands"* still apply to

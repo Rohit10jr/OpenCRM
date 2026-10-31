@@ -90,23 +90,28 @@ def test_logout_all_sessions_reaches_a_refresh_token_that_has_been_rotated(alice
     assert _whoami(rotated["access"]).status_code == 401
 
 
-def test_a_password_reset_revokes_the_old_access_token(alice):
+def test_a_password_set_without_the_box_ticked_keeps_other_sessions(alice):
+    """As upstream: `update_password` clears sessions only when `logout_all_sessions` is set
+    (`frappe/utils/password.py:150`)."""
     before = _login(alice)
 
     response = _update_password(key=password_reset.issue_key(alice), new_password=NEW_PASSWORD)
     assert response.status_code == 200, response.json()
 
-    assert _whoami(before["access"]).status_code == 401
+    assert _whoami(before["access"]).status_code == 200
     assert _whoami(response.json()["message"]["access"]).status_code == 200
 
 
-def test_a_password_change_revokes_the_old_access_token(alice):
+def test_a_password_change_with_the_box_ticked_revokes_the_old_access_token(alice):
     """The old-password path of `update_password`. Its response is a fresh token pair, and
     that pair must carry the new version or the user is signed out by their own change."""
     before = _login(alice)
 
     response = _update_password(
-        usr=alice.name, old_password="secret123", new_password=NEW_PASSWORD
+        usr=alice.name,
+        old_password="secret123",
+        new_password=NEW_PASSWORD,
+        logout_all_sessions=1,
     )
     assert response.status_code == 200, response.json()
 
