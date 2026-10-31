@@ -154,6 +154,10 @@ def test_delete_in_the_dialog_removes_the_deal_and_frees_the_organization(api_as
     with session_user(administrator.name):
         organization = CRMOrganization.objects.create(organization_name="ZZ Freed Org")
         status = CRMDealStatus.objects.create(deal_status="Qualification", type="Open")
+    # Made by alice herself: a deal assigned to her by someone else carries her
+    # assignment notification, which refuses the deal's delete as upstream's
+    # delete_doc does (FINDINGS.md 76), and the dialog would skip it.
+    with session_user(alice.name):
         deal = CRMDeal.objects.create(status=status, deal_owner=alice, organization=organization)
     client = api_as(administrator)
 

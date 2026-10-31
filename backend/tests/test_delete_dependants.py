@@ -51,9 +51,24 @@ def lead_with_dependants(alice, bob):
     return lead, other
 
 
+def _unlink_notifications(client, name):
+    """bob's ToDo notified him, and that notification names the lead. Upstream refuses
+    the delete while it does (FINDINGS.md 76), so unlink it first, as the delete dialog
+    would."""
+    items = [
+        {"doctype": "CRM Notification", "docname": n.pk}
+        for n in CRMNotification.objects.filter(reference_doctype="CRM Lead", reference_name=name)
+    ]
+    response = client.post(
+        "/api/method/crm.api.doc.remove_linked_doc_reference", {"items": items}, format="json"
+    )
+    assert response.status_code == 200, response.content[:300]
+
+
 def test_deleting_a_lead_removes_its_references(admin_api, lead_with_dependants):
     lead, other = lead_with_dependants
     name = lead.name
+    _unlink_notifications(admin_api, name)
 
     response = admin_api.delete("/api/resource/" + quote("CRM Lead") + "/" + quote(name))
     assert response.status_code == 200, response.content[:300]
@@ -79,8 +94,15 @@ def test_the_orm_delete_path_cleans_up_too(alice, lead_with_dependants):
 
 def test_notifications_are_left_alone_as_upstream_leaves_them(admin_api, lead_with_dependants, bob):
     """Upstream registers no delete hook for CRM Notification, so the bell keeps the row;
-    only what delete_dynamic_links names goes."""
+    only what delete_dynamic_links names goes. While it still names the lead it refuses
+    the delete (FINDINGS.md 76); once unlinked, the delete leaves it in place."""
     lead, other = lead_with_dependants
     before = CRMNotification.objects.filter(to_user=bob).count()
-    admin_api.delete("/api/resource/" + quote("CRM Lead") + "/" + quote(lead.name))
+    assert before
+    url = "/api/resource/" + quote("CRM Lead") + "/" + quote(lead.name)
+    response = admin_api.delete(url)
+    assert response.status_code == 417 and response.json()["exc_type"] == "LinkExistsError"
+
+    _unlink_notifications(admin_api, lead.name)
+    assert admin_api.delete(url).status_code == 200
     assert CRMNotification.objects.filter(to_user=bob).count() == before

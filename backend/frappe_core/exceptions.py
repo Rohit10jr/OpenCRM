@@ -297,6 +297,14 @@ def link_exists_error(exc: ProtectedError | RestrictedError) -> LinkExistsError:
         reference_doctype = str(getattr(row, "parenttype", "") or reference_doctype)
         reference_name = _child_parent_name(row) or reference_name
 
+    return LinkExistsError(link_exists_message(doctype, name, reference_doctype, reference_name))
+
+
+def link_exists_message(
+    doctype: str, name: str, reference_doctype: str, reference_name: str, row: str = ""
+) -> str:
+    """``delete_doc.py:443-456`` (``raise_link_exists_exception``), as plain text: the two
+    documents are named, not wrapped in ``get_link_to_form`` anchors (FINDINGS.md 3)."""
     parts = (
         "Cannot delete or cancel because",
         doctype,
@@ -304,8 +312,9 @@ def link_exists_error(exc: ProtectedError | RestrictedError) -> LinkExistsError:
         "is linked with",
         reference_doctype,
         reference_name,
+        row,
     )
-    return LinkExistsError(" ".join(part for part in parts if part))
+    return " ".join(str(part) for part in parts if part)
 
 
 def frappe_exception_handler(exc, context):

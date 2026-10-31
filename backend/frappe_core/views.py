@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from frappe_core import permissions, registry
+from frappe_core.delete_doc import check_dynamic_links
 from frappe_core.exceptions import DoesNotExistError, PermissionError as FrappePermissionError
 from frappe_core.query import (
     by_name,
@@ -233,5 +234,6 @@ class ResourceDetailView(FrappeAPIView):
     def delete(self, request, doctype: str, name: str):
         _entry, instance = self._get_object(doctype, name, "delete")
         with transaction.atomic():
+            check_dynamic_links(doctype, [instance.pk])  # FINDINGS.md 76
             instance.delete()
         return self.envelope(None)

@@ -18,7 +18,11 @@ from django.db import transaction
 from django.db.models.fields.related import ForeignKey, OneToOneField
 
 from frappe_core import assignment, metadata, permissions, registry
-from frappe_core.exceptions import DoesNotExistError
+
+# The ``ignore_links_on_delete`` hook (FINDINGS.md 75) lives with the delete link check
+# (FINDINGS.md 76), so the dialog's list and the check skip the same doctypes.
+from frappe_core.delete_doc import IGNORE_LINKS_ON_DELETE, check_dynamic_links
+from frappe_core.exceptions import DoesNotExistError, LinkExistsError
 from frappe_core.exceptions import PermissionError as FrappePermissionError
 from frappe_core.exceptions import throw
 from frappe_core.metadata import _frappe_fieldtype, _link_target
@@ -347,31 +351,6 @@ def get_fields(doctype: str, allow_all_fieldtypes: bool = False):
     ]
 
 
-#: Doctypes whose rows go with the document instead of standing in the way of its
-#: deletion: the framework's ``ignore_links_on_delete`` hook (``frappe/hooks.py:455-470``)
-#: plus the CRM's own (``crm/hooks.py:260``). A comment, a file or an assignment is
-#: deleted with its document (``frappe_core/children.py:delete_references``); listing it
-#: as a "linked document" asked the user to unlink it first, and unlinking orphaned it
-#: (FINDINGS.md 75). Only the names this port registers matter.
-IGNORE_LINKS_ON_DELETE = frozenset(
-    {
-        "Activity Log",
-        "Comment",
-        "Communication",
-        "DocShare",
-        "Document Follow",
-        "Email Unsubscribe",
-        "Failed Lead Sync Log",
-        "File",
-        "Notification Log",
-        "Tag Link",
-        "ToDo",
-        "Version",
-        "View Log",
-    }
-)
-
-
 def _parent_fk_name(model) -> str | None:
     """The FK a child row reaches its parent through: the one whose reverse name is the
     row's ``parentfield`` (``crm_app/api/client.py:_child_row_and_parent`` walks the
@@ -619,6 +598,13 @@ def remove_linked_doc_reference(
                 _clear_link_fields(instance, doctype, docname)
 
         if delete:
+            # Upstream deletes with frappe.delete_doc and skips an item that raises a
+            # ValidationError (crm/api/doc.py:780-790), LinkExistsError among them: the
+            # item stays, unlinked. FINDINGS.md 76.
+            try:
+                check_dynamic_links(item_doctype, [instance.pk])
+            except LinkExistsError:
+                continue
             instance.delete()
 
     return "success"
@@ -695,6 +681,13 @@ def perform_bulk_delete(doctype: str, targets: list[str], delete_linked: bool = 
                 target_doctype=doctype,
                 target_docnames=targets,
             )
+
+        # delete_doc.py:141-153, for the whole batch: a reference the scan above could
+        # not clear - one the caller cannot see - refuses the batch, rolling back the
+        # unlinking with it. Upstream's delete_bulk skips that one document and deletes
+        # the rest; this endpoint refuses the whole batch instead (see delete_bulk_docs).
+        # FINDINGS.md 76.
+        check_dynamic_links(doctype, targets)
 
         # The reference cleanup delete_doc.py does per document (ToDo, Version, Comment,
         # File, Communication) is batched the same way: one query per reference doctype
@@ -798,4 +791,10 @@ def _clear_or_delete_link(
         if target_doctype and target_docnames:
             _clear_link_fields(instance, target_doctype, target_docnames)
     if delete:
+        # As in remove_linked_doc_reference, which upstream's bulk delete calls here: a
+        # linked document something else still names is skipped, not deleted.
+        try:
+            check_dynamic_links(_linked_doctype, [instance.pk])
+        except LinkExistsError:
+            return
         instance.delete()
