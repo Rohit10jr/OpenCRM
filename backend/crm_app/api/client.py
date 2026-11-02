@@ -21,6 +21,7 @@ from __future__ import annotations
 from django.db import transaction
 
 from frappe_core import permissions, registry
+from frappe_core.delete_doc import check_dynamic_links
 from frappe_core.exceptions import DoesNotExistError
 from frappe_core.exceptions import PermissionError as FrappePermissionError
 from frappe_core.exceptions import throw
@@ -365,6 +366,7 @@ def client_delete(doctype: str, name: str):
 
     _entry, instance = _get_checked(doctype, name, "delete")
     with transaction.atomic():
+        check_dynamic_links(doctype, [instance.pk])  # FINDINGS.md 76
         instance.delete()
     return None
 

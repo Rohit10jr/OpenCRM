@@ -73,6 +73,8 @@ the pairing CRM's own CI uses).
 | 48 | A wrong URL with more than one segment draws a blank page | **Diverge** — router patched |
 | 49 | The Getting started panel opens empty for a finished user on a browser that has not seen them | **Reproduce** — frappe-ui's code; once per browser profile |
 | 56 | SLA skips non-working days without resetting the time of day | **Reproduce** — user-visible deadlines |
+| 62 | An assignment notification blocks deleting the lead, deal or task it names | **Reproduce** — the delete check is upstream's |
+| 63 | The delete dialog's Unlink All leaves a call log's `links` rows, so it frees nothing | **Reproduce** — user-visible |
 
 ## 1. A hidden column causes the *next* column to be skipped
 
@@ -1604,6 +1606,67 @@ refuses a disabled account with the login's own 401, "User disabled or missing",
 issuing tokens (`crm_app/api/auth_pages.py`, `Port only:`;
 `tests/test_auth_pages.py::test_a_reset_does_not_re_enable_a_disabled_account`). The
 upstream fix is the same check before `login_as`, or `login_as` checking `enabled` itself.
+
+---
+
+## 62. An assignment notification blocks deleting the lead, deal or task it names
+
+**Where:** `crm/api/todo.py` `notify_assigned_user` (line 41), which calls `notify_user`
+(`crm/fcrm/doctype/crm_notification/crm_notification.py:76-79`): the assigned record goes
+into `notification_type_doc`, and the record to open (a task's lead or deal, otherwise the
+record itself) into `reference_name`. Both are Dynamic Links in `crm_notification.json`
+(lines 76 and 102). Framework `frappe/model/delete_doc.py`
+`check_if_doc_is_dynamically_linked`. Read from the source on 31 Oct 2026 while fixing
+`docs/FINDINGS.md` 76; not reproduced on a live upstream install.
+
+When one user assigns a lead, deal or task to another, upstream writes a notification that
+names the record through those Dynamic Links (an assigned task's notification names its
+lead or deal as well). Nothing removes it again: none of the three
+controllers has an `on_trash`, and `crm/hooks.py:260` lists only "Failed Lead Sync Log" in
+`ignore_links_on_delete`. So `delete_doc` refuses the record ("Cannot delete or cancel
+because … is linked with CRM Notification …") for as long as the notification exists.
+
+The delete dialog on a lead or deal hides this: it lists the notification and its "remove
+link" blanks the notification's reference first (`crm/api/doc.py` `remove_doc_link`,
+around line 727). Every other path meets the refusal, notably deleting a task, and
+`frappe.client.delete` or `DELETE /api/resource/` on any of the three. A notification is
+a message to a person, not data the record depends on, so it should not block the delete.
+
+**Us:** *Reproduce* (owner, 31 Oct 2026). The port runs upstream's dynamic-link check
+(`frappe_core/delete_doc.py`), so it refuses the same deletes;
+`tests/test_delete_dependants.py` unlinks the notification through the dialog's endpoint
+before deleting. The upstream fix is CRM Notification in `ignore_links_on_delete`, or an
+`on_trash` on the three doctypes that deletes or unlinks their notifications.
+
+---
+
+## 63. The delete dialog's Unlink All leaves a call log's `links` rows, so it frees nothing
+
+**Where:** `crm/api/doc.py` `remove_doc_link` (around line 721), which the dialog's Unlink
+All calls for each listed document. For anything but a notification it blanks
+`reference_doctype` and `reference_docname` and saves. **Reproduced by the owner on an
+upstream demo, 2 Nov 2026.**
+
+The dialog lists a call log that names the record only in its `links` table (a `Dynamic
+Link` child row, written by `CRM Call Log.link_with_reference_doc`), because
+`get_dynamic_linked_docs` reports child rows as their parent. Unlink All then blanks the
+call log's main reference, which was already empty, and leaves the `links` row. The call
+log is still listed and the record still cannot be deleted. Nothing says the unlink failed.
+
+On the demo:
+
+| Call log tied to the lead by | Listed | Unlink All | Delete All |
+|---|---|---|---|
+| a `links` row (Create Lead from a call log) | yes | does nothing; still listed | deletes the call log, then the lead |
+| `reference_docname` (Log a Call on the lead) | yes | unlinks; the lead deletes | — |
+
+**Us:** *Reproduce*, by the rule for a user-visible upstream bug. Once the port's dialog
+lists such call logs (`docs/FINDINGS.md` 93), its Unlink All behaves the same. The upstream
+fix is for `remove_doc_link` to also remove the call log's `links` rows naming the
+record, or for the dialog to say the item could not be unlinked.
+
+Locked by `tests/test_delete_dialog_links.py::test_unlink_all_leaves_a_links_row_call_log_listed_and_the_delete_refused`;
+the comment in `crm_app/api/doc.py:_clear_reference` points here.
 
 ---
 

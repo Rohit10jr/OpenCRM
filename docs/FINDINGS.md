@@ -85,7 +85,7 @@ through `backend/scripts/run_http.py` and the failing line is the reproduction.
 | 73 | frontend: Convert to Deal on a lead's page | high | "Error converting to deal: Internal Server Error". The dialog sends the deal's fields with `doctype` and `__newDocument` among them, and the port handed them to the model: `TypeError: CRMDeal() got unexpected keyword arguments: '__newDocument', 'doctype'`. Bulk convert, which sends no deal fields, worked. The dialog's form now goes through the deal's serializer, which keeps the deal fields and drops the rest | **fixed** 5 Oct 2026 |
 | 74 | frontend: the Create Deal dialog, and Convert to Deal after it | medium | The dialog's form is one object shared for the whole page session (`data/document.js`) and is never cleared after a deal is created, so the next deal starts from the last one's values. Once "Choose Existing Organization" has been used, its pick stays in the form when the switch is off and hidden, and the server prefers it to the organization details typed, upstream and here alike. The Convert to Deal dialog reads the same object. Upstream bug 45; the frontend is upstream's, so the port reproduces it. Reloading the page clears it | **fixed** 17 Oct 2026, diverged |
 | 75 | frontend: the delete dialog on a deal's page, and bulk delete | high | The dialog listed the deal's own contact row and its comments as "linked documents". Upstream lists neither: a child row is the document's own, and comments go with it. The contact row cannot be unlinked, so after "Unlink All" it was still listed and the Delete button never appeared; only "Delete All" could delete a deal that had a contact. Unlinking a comment orphaned it, in the dialog and in bulk delete. A contact's dialog listed the deal's contact row instead of the deal. The two finders now skip a child table's parent link and the framework's `ignore_links_on_delete` doctypes, and report a child row's link as its parent document | **fixed** 6 Oct 2026 |
-| 76 | API: `frappe.client.delete` and `DELETE /api/resource/` on a document that other documents still point at by reference | low | Upstream refuses with `LinkExistsError` ("Cannot delete or cancel because … is linked with …") while a task, note or call log still references the document; the port deletes it and leaves the reference dangling. Not reachable from the Vue app, whose dialog hides Delete until the list is empty, except for a linked document the caller cannot see. Links through a foreign key are refused as upstream does | open, decision deferred |
+| 76 | API: `frappe.client.delete` and `DELETE /api/resource/` on a document that other documents still point at by reference | low | Upstream refuses with `LinkExistsError` ("Cannot delete or cancel because … is linked with …") while a task, note or call log still references the document; the port deletes it and leaves the reference dangling. Not reachable from the Vue app, whose dialog hides Delete until the list is empty, except for a linked document the caller cannot see. Links through a foreign key are refused as upstream does | **fixed** 31 Oct 2026 |
 | 77 | frontend: the Deals list would not open | high | Clicking a deal's Annual Revenue cell filed the cell's display string, "$ 500,000.00", as the filter (upstream bug 46), and the standard view saved it. Upstream's database casts the string to 0 and shows an empty list; the port's filter builder refused it with 417, and since the saved filter is replayed on every load the page never opened again, with no way to remove the chip. Filter values for numeric columns are now read for the number in them, so the click filters on the amount shown; a deliberate divergence, recorded with bug 46 | **fixed** 6 Oct 2026 |
 | 78 | frontend: Settings → Home Actions, a standard row | low | The grid lets a standard entry's Type be changed to Separator although the doctype marks it read-only for standard rows; done to Settings, the entry vanishes and nothing in the app can bring it back, since the grid lives in Settings. Upstream bug 47, seen on the demo. The port reproduces it (the frontend is upstream's) and gives `seed_defaults --force` the job of restoring the standard rows, where upstream needs Desk | open, upstream bug 47; recovery added |
 | 79 | Settings → Invite User (and every system mail: invitations, password resets) | medium | The invitation went to the Celery worker's console instead of the inbox. System mail was sent with Django's `EMAIL_BACKEND` from `DEFAULT_FROM_EMAIL` (`crm@example.com`), which `.env` leaves at the console backend locally, while a mail written on a lead went through the Email Account's own SMTP; and a site with no Email Account could not send a lead's mail at all, where upstream falls through to the account `site_config.json` describes. Seen 6 Oct 2026 (S8). Both now run upstream's four-step lookup, with Django's `EMAIL_*` settings as the port's `site_config.json` - the config account; `EMAIL_HOST=localhost` with the console backend for development | **fixed** 13 Oct 2026 |
@@ -2576,7 +2576,8 @@ it off them, as upstream's `remove_contact_link` does.
 
 Not covered: a call log attached to a deal only through its `links` child table
 (`Dynamic Link` rows, written by the telephony integrations) is not listed, where
-upstream lists the call. Out of the browser log's scope with the integrations.
+upstream lists the call. Out of the browser log's scope with the integrations. Since
+finding 76 that call log blocks the delete; finding 93 records it.
 
 Covered by `tests/test_delete_dialog_links.py`.
 
@@ -2601,9 +2602,54 @@ until its list is empty. The one gap is a linked document the caller cannot see:
 port's list is permission-filtered, so a Sales User whose dialog shows nothing can
 delete a deal that a manager's private note still points at.
 
-**Status:** open, decision deferred to after the browser testing. Adding the check
-means every delete scans the dynamic link sources, and a good many tests delete
-documents that still have references; it should be decided and done as one piece.
+**Fixed 31 Oct 2026.** `frappe_core/delete_doc.py` ports the Dynamic Link half of
+upstream's check (`delete_doc.py:141-153`, `355-456`; `dynamic_links.py:get_dynamic_links`).
+The fields are read from the port's field metadata, every field whose fieldtype is
+`Dynamic Link`, with its `options` naming the doctype column: CRM Task, FCRM Note and
+CRM Call Log `reference_docname`, CRM Notification `reference_name` and
+`notification_type_doc` from the DocType JSON, and `Dynamic Link.link_name`, which the
+model now declares in `DYNAMIC_LINK_FIELDS` because a platform doctype has no JSON.
+Doctypes in `ignore_links_on_delete` are skipped, as parent and as a child row's
+parent; the constant moved from `crm_app/api/doc.py` to sit with the check, so the
+dialog and the check skip the same list. A row in a child table is reported as its
+parent, `at Row: <idx>`; cancelled rows (docstatus 2) do not count. The query reads
+every row, not the caller's, so a reference the caller cannot see still refuses, and
+the message names its doctype and name and nothing more, upstream's sentence as plain
+text (the same rendering finding 3 chose). A doctype with an `enabled` or `disabled`
+field is told "You can disable this {doctype} instead of deleting it." instead.
+
+`check_dynamic_links` runs before the delete in `DELETE /api/resource/`,
+`frappe.client.delete`, `remove_linked_doc_reference` with `delete` (an item that is
+itself still referenced is skipped and stays unlinked, as upstream's `try`/`except
+ValidationError` skips it) and the bulk delete's own linked-document delete, and once
+over the whole batch in `perform_bulk_delete`, after the batch's visible references
+are cleared.
+
+Differences from upstream, kept visible in the code:
+
+- The Link half stays the foreign keys' `on_delete=PROTECT`, refused when the row goes.
+  A document with both kinds of reference is refused for its Dynamic Link first, where
+  upstream names the Link first, and the "disable instead" message is not given for a
+  foreign-key refusal.
+- The bulk delete refuses the whole batch when one document is still referenced, and
+  rolls back the unlinking; upstream's `delete_bulk` deletes the others and reports
+  the one. This endpoint already refused whole batches for permission.
+- Which reference is named, when there are several, is the first by name per field in
+  registry order; upstream's is the database's first row, by DocType `read_only`.
+- `WhatsApp Message.reference_name` is not checked: `frappe_whatsapp` is not in the
+  repo, so its fieldtype cannot be confirmed. The dialog still lists such messages.
+
+Two consequences of following upstream that the Vue app will show:
+
+- A task an assignment notification points at (`notification_type_doc`), or a note or
+  task a call log links to through its `links` rows, cannot be deleted from its own
+  page until the reference goes, as upstream refuses it. The notification half is
+  recorded as upstream bug 62 (`UPSTREAM_BUGS.md`).
+- A call log linked to a lead or deal only through a `links` row now refuses the
+  record's delete, and the dialog does not list it (the gap recorded in 75); the
+  message names the call log.
+
+Covered by `tests/test_delete_link_check.py`.
 
 ## 77. The Deals list would not open: a saved filter the port refused
 
@@ -3202,3 +3248,67 @@ leads and deals, again only when the Link target exists. `test_sla_selection.py`
 both new rows and both migration branches.
 
 **Status:** **fixed** 16 Oct 2026.
+
+## 93. A call log linked only through its `links` rows blocks a delete the dialog cannot clear
+
+**Block:** deleting a lead or deal that a call log names only in its `links` table, once
+finding 76 is in. Found reviewing 76 on 31 Oct 2026; upstream's side checked by the owner
+on an upstream demo on 2 Nov 2026.
+
+**How such a call log arises:** upstream writes `links` rows, not `reference_docname`, in
+`CRM Call Log.link_with_reference_doc` (`crm/fcrm/doctype/crm_call_log/crm_call_log.py:135-139`).
+Its callers are Create Lead from a call log (`:292`), the Twilio and Exotel handlers, and
+adding a note or task to a call (`crm/integrations/api.py:94,134`). A call logged by hand
+with Log a Call fills `reference_doctype` / `reference_docname` instead
+(`frontend/src/components/Activities/AllModals.vue:98-106`).
+
+**Expected:** upstream's dialog builds its list with the framework's
+`get_dynamic_linked_docs` (`crm/api/doc.py:684-685`), which also searches child tables
+and reports a matching row as its parent (`frappe/model/delete_doc.py:394-420`,
+version-15). The call log is listed. Seen on the owner's demo: a lead made by Create Lead
+from a call log lists "Call from 4543234232 to 654323456" in its delete dialog.
+
+**Actual:** the port's dialog list (finding 75) reads `reference_doctype` /
+`reference_docname` only, so the call log is not listed. Finding 76's check does find it,
+so the delete is refused with "Cannot delete or cancel because … is linked with CRM Call
+Log …" and the dialog offers nothing to remove. The user has to find the call log and
+take the row off by hand.
+
+**Upstream's own half:** with the call log listed, upstream's Unlink All does nothing for
+it, and only Delete All frees the record. That is upstream bug 63; the port reproduces it.
+
+**Fix:** the dialog's list also reports `links` rows as their parent call log, as
+`get_dynamic_linked_docs` does, through the lookup finding 76 added
+(`frappe_core/delete_doc.py`).
+
+**Fixed 2 Nov 2026.** `get_linked_docs_of_document` now also asks finding 76's lookup,
+`frappe_core/delete_doc.py:get_dynamic_linked_docs`, for the Dynamic Link fields of child
+tables (a new `child_tables_only` flag), and lists each matching row as its parent: a call
+log's `links` row as the call log, titled "Call from X to Y" as upstream titles it. The
+parent is skipped when the caller cannot read it, as the rest of the list is. The list is
+deduplicated by `reference_docname` alone, as upstream's `crm/api/doc.py:688` does (it was
+by doctype and name), so a call log with both a reference pair and a `links` row is listed
+once. The bulk delete's scan (`_linked_docs_for_batch`) takes the same rows, since
+upstream's `delete_bulk_docs` clears each document's dialog list: with `delete_linked` the
+call log goes and the lead or deal deletes. Unlink All is untouched and reproduces upstream
+bug 63: the call log is still listed and the delete still refused, naming it `at Row: 1`.
+Delete All deletes the call log, whose `links` rows go with it, and the record then deletes.
+
+Where the port's list still differs from upstream's `get_linked_docs` +
+`get_dynamic_linked_docs`, left as they are because this finding does not need them:
+
+- The reference pairs are found by column name (`reference_doctype` with
+  `reference_name` or `reference_docname`), not by fieldtype, so WhatsApp Message is
+  listed (its fieldtype is unconfirmed, see 76), and CRM Notification's
+  `notification_type_doctype` / `notification_type_doc` pair is not. For a lead or deal the
+  two pairs of an assignment notification name the same record, so nothing is lost there;
+  the pair matters for a task (upstream bug 62), which has no dialog.
+- The list is permission-filtered (finding 75); upstream's is not.
+- Cancelled documents (docstatus 2) are not excluded from the reference pairs, where
+  upstream's `get_dynamic_linked_docs` excludes them; no listed doctype is submittable.
+- Order: upstream reads the dynamic links in its DocField query's order, so a `links`-row
+  call log can fall among the reference-pair rows; the port puts it last. The frontend
+  does not sort on it.
+
+Covered by `tests/test_delete_dialog_links.py`, the tests after
+`test_a_contacts_dialog_lists_the_deal_it_is_on_and_unlink_takes_it_off`.

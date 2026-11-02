@@ -1489,6 +1489,10 @@ class DynamicLink(BaseDocument):
     link_name = models.CharField(max_length=140, db_index=True)
     link_title = models.CharField(max_length=280, blank=True, default="")
 
+    #: ``link_name`` is a Dynamic Link on ``link_doctype`` in dynamic_link.json; the
+    #: delete link check finds it through this (``frappe_core/delete_doc.py``).
+    DYNAMIC_LINK_FIELDS = {"link_name": "link_doctype"}
+
     class Meta:
         ordering = ["idx"]
         name_strategy = Hash()

@@ -142,6 +142,10 @@ def _derive_from_model(doctype: str) -> list[dict]:
     # attach-on-save hook (``frappe_platform.files.attach_files_to_document``) learns that
     # the column holds a file URL (FINDINGS.md 85).
     attach_fields = getattr(model, "ATTACH_FIELDS", None) or ()
+    # And a name column that upstream declares as a Dynamic Link (``Dynamic Link.link_name``):
+    # ``DYNAMIC_LINK_FIELDS`` maps it to the doctype column named in its ``options``,
+    # which is what the delete link check reads (FINDINGS.md 76).
+    dynamic_link_fields = getattr(model, "DYNAMIC_LINK_FIELDS", None) or {}
     fields = []
     for field in model._meta.get_fields():
         if not getattr(field, "concrete", False):
@@ -151,6 +155,8 @@ def _derive_from_model(doctype: str) -> list[dict]:
             fieldtype = "Select"
         if field.name in link_fields:
             fieldtype = "Link"
+        elif field.name in dynamic_link_fields:
+            fieldtype = "Dynamic Link"
         elif field.name in attach_fields:
             fieldtype = "Attach Image"
         entry = {
@@ -158,7 +164,11 @@ def _derive_from_model(doctype: str) -> list[dict]:
             "fieldtype": fieldtype,
             "label": str(getattr(field, "verbose_name", field.name)),
         }
-        options = link_fields.get(field.name) or _link_target(field)
+        options = (
+            link_fields.get(field.name)
+            or dynamic_link_fields.get(field.name)
+            or _link_target(field)
+        )
         if options:
             entry["options"] = options
         elif fieldtype == "Select" and getattr(field, "choices", None):
