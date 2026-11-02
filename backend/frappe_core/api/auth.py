@@ -177,9 +177,9 @@ def refresh_token(refresh: str = "", **extra) -> dict:
         raise AuthenticationError(str(exc)) from None
 
     # Port only: KNOWN_ISSUES §6. A refresh token from before the user's last version bump
-    # is refused, alongside the blacklist. The blacklist alone misses a token this endpoint
-    # has rotated: rotation does not call `outstand()`, so `_blacklist_outstanding_tokens`
-    # never sees it. Rotation keeps the claim, so a current token stays current.
+    # is refused, alongside the blacklist. This is the primary check; the blacklist is the
+    # second (rotated tokens reach it through `outstand()` below). Rotation keeps the claim,
+    # so a current token stays current.
     from django.contrib.auth import get_user_model
 
     user_id = parsed.get(jwt_settings.USER_ID_CLAIM)
@@ -203,6 +203,12 @@ def refresh_token(refresh: str = "", **extra) -> dict:
         parsed.set_jti()
         parsed.set_exp()
         parsed.set_iat()
+        # Record the new token in `OutstandingToken`, as SimpleJWT's TokenRefreshSerializer
+        # does (`serializers.py:141` in 5.5.1), so `_blacklist_outstanding_tokens` can reach
+        # it. This endpoint is our own only for the Frappe path and envelope (PORT_PLAN.md
+        # §3). `outstand()` is a no-op on the base Token when the blacklist app is absent.
+        # Until 2 Nov 2026 this call was missing (KNOWN_ISSUES §6).
+        parsed.outstand()
 
     return {"access": access, "refresh": str(parsed)}
 

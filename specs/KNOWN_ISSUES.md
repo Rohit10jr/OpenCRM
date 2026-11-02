@@ -503,6 +503,9 @@ Found while building it: the hand-rolled refresh endpoint rotates the refresh to
 SimpleJWT's `outstand()`, so a rotated token is never in `OutstandingToken` and
 `_blacklist_outstanding_tokens` could not blacklist it. As the frontend refreshes every
 five minutes, that was nearly every live refresh token. The version check closes this too.
+Fixed 2 Nov 2026: the endpoint now calls `outstand()` after rotating, as SimpleJWT's
+`TokenRefreshSerializer` does, so a rotated token is blacklisted as well. The version check
+remains the primary revocation; the blacklist is the second check.
 
 What follows is the entry as it stood before the fix, kept for the reasoning.
 

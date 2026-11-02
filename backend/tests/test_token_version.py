@@ -77,9 +77,9 @@ def test_logout_all_sessions_revokes_an_access_token_issued_before_it(alice):
 
 
 def test_logout_all_sessions_reaches_a_refresh_token_that_has_been_rotated(alice):
-    """The hand-rolled refresh endpoint rotates without `outstand()`, so a rotated refresh
-    token is never in `OutstandingToken` and `_blacklist_outstanding_tokens` cannot see it.
-    The version check is what stops it."""
+    """The version check stops a rotated refresh token. Until 2 Nov 2026 it was the only
+    thing that did: the refresh endpoint rotated without `outstand()`, so the rotated token
+    was never in `OutstandingToken` for `_blacklist_outstanding_tokens` to find."""
     rotated = _refresh(_login(alice)["refresh"]).json()["message"]
 
     _update_password(
@@ -88,6 +88,27 @@ def test_logout_all_sessions_reaches_a_refresh_token_that_has_been_rotated(alice
 
     assert _refresh(rotated["refresh"]).status_code == 401
     assert _whoami(rotated["access"]).status_code == 401
+
+
+def test_a_rotated_refresh_token_is_outstanding_and_gets_blacklisted(alice):
+    """KNOWN_ISSUES §6, found while building it. The refresh endpoint now records the token
+    it rotates to, as SimpleJWT's `TokenRefreshSerializer` does, so `logout_all_sessions`
+    blacklists it as well as refusing it by version."""
+    from rest_framework_simplejwt.token_blacklist.models import (
+        BlacklistedToken,
+        OutstandingToken,
+    )
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    rotated = _refresh(_login(alice)["refresh"]).json()["message"]["refresh"]
+    jti = RefreshToken(rotated)["jti"]
+    assert OutstandingToken.objects.filter(jti=jti, user=alice).exists()
+
+    _update_password(
+        key=password_reset.issue_key(alice), new_password=NEW_PASSWORD, logout_all_sessions=1
+    )
+
+    assert BlacklistedToken.objects.filter(token__jti=jti).exists()
 
 
 def test_a_password_set_without_the_box_ticked_keeps_other_sessions(alice):

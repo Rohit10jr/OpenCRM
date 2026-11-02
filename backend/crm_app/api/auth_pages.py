@@ -281,12 +281,13 @@ def _blacklist_outstanding_tokens(account) -> None:
 
     The bump is what reaches tokens already issued (port only, `specs/KNOWN_ISSUES.md`
     **§6**, option 3): an access token is checked by signature plus that version, so every
-    one issued before this call is refused from the next request. It also catches the
-    refresh tokens the blacklist cannot: the refresh endpoint rotates without recording
-    the new token in `OutstandingToken`, so the loop below never sees them.
+    one issued before this call is refused from the next request, refresh tokens included.
+    The blacklist loop below is the second check: the refresh endpoint records each token
+    it rotates to in `OutstandingToken`, so rotated refresh tokens are blacklisted too.
 
     (Until 31 Oct 2026 this docstring said issued access tokens stayed valid until expiry,
-    and before that cited "§4" for it, which was the async smoke test.)
+    and before that cited "§4" for it, which was the async smoke test. Until 2 Nov 2026 the
+    refresh endpoint did not record rotated tokens, so the loop missed them.)
     """
     from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
     from rest_framework_simplejwt.tokens import RefreshToken
