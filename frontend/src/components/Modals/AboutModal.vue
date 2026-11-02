@@ -45,7 +45,8 @@
 <script setup>
 import CRMLogo from '@/components/Icons/CRMLogo.vue'
 import LucideGlobe from '~icons/lucide/globe'
-import LucideGitHub from '~icons/lucide/github'
+// lucide-static 1.x has no brand icons, so no `github`; `code` stands in.
+import LucideCode from '~icons/lucide/code'
 import LucideBug from '~icons/lucide/bug'
 
 let show = defineModel({ type: Boolean })
@@ -60,7 +61,7 @@ let links = [
   {
     label: __('Source Code'),
     url: repoLink,
-    icon: LucideGitHub,
+    icon: LucideCode,
   },
   {
     label: __('Report an Issue'),
