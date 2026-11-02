@@ -2576,7 +2576,8 @@ it off them, as upstream's `remove_contact_link` does.
 
 Not covered: a call log attached to a deal only through its `links` child table
 (`Dynamic Link` rows, written by the telephony integrations) is not listed, where
-upstream lists the call. Out of the browser log's scope with the integrations.
+upstream lists the call. Out of the browser log's scope with the integrations. Since
+finding 76 that call log blocks the delete; finding 93 records it.
 
 Covered by `tests/test_delete_dialog_links.py`.
 
@@ -3247,3 +3248,37 @@ leads and deals, again only when the Link target exists. `test_sla_selection.py`
 both new rows and both migration branches.
 
 **Status:** **fixed** 16 Oct 2026.
+
+## 93. A call log linked only through its `links` rows blocks a delete the dialog cannot clear
+
+**Block:** deleting a lead or deal that a call log names only in its `links` table, once
+finding 76 is in. Found reviewing 76 on 31 Oct 2026; upstream's side checked by the owner
+on an upstream demo on 2 Nov 2026.
+
+**How such a call log arises:** upstream writes `links` rows, not `reference_docname`, in
+`CRM Call Log.link_with_reference_doc` (`crm/fcrm/doctype/crm_call_log/crm_call_log.py:135-139`).
+Its callers are Create Lead from a call log (`:292`), the Twilio and Exotel handlers, and
+adding a note or task to a call (`crm/integrations/api.py:94,134`). A call logged by hand
+with Log a Call fills `reference_doctype` / `reference_docname` instead
+(`frontend/src/components/Activities/AllModals.vue:98-106`).
+
+**Expected:** upstream's dialog builds its list with the framework's
+`get_dynamic_linked_docs` (`crm/api/doc.py:684-685`), which also searches child tables
+and reports a matching row as its parent (`frappe/model/delete_doc.py:394-420`,
+version-15). The call log is listed. Seen on the owner's demo: a lead made by Create Lead
+from a call log lists "Call from 4543234232 to 654323456" in its delete dialog.
+
+**Actual:** the port's dialog list (finding 75) reads `reference_doctype` /
+`reference_docname` only, so the call log is not listed. Finding 76's check does find it,
+so the delete is refused with "Cannot delete or cancel because … is linked with CRM Call
+Log …" and the dialog offers nothing to remove. The user has to find the call log and
+take the row off by hand.
+
+**Upstream's own half:** with the call log listed, upstream's Unlink All does nothing for
+it, and only Delete All frees the record. That is upstream bug 63; the port reproduces it.
+
+**Fix:** the dialog's list also reports `links` rows as their parent call log, as
+`get_dynamic_linked_docs` does, through the lookup finding 76 added
+(`frappe_core/delete_doc.py`).
+
+**Status:** open, to be fixed on the finding-76 branch.

@@ -74,6 +74,7 @@ the pairing CRM's own CI uses).
 | 49 | The Getting started panel opens empty for a finished user on a browser that has not seen them | **Reproduce** — frappe-ui's code; once per browser profile |
 | 56 | SLA skips non-working days without resetting the time of day | **Reproduce** — user-visible deadlines |
 | 62 | An assignment notification blocks deleting the lead, deal or task it names | **Reproduce** — the delete check is upstream's |
+| 63 | The delete dialog's Unlink All leaves a call log's `links` rows, so it frees nothing | **Reproduce** — user-visible |
 
 ## 1. A hidden column causes the *next* column to be skipped
 
@@ -1636,6 +1637,33 @@ a message to a person, not data the record depends on, so it should not block th
 `tests/test_delete_dependants.py` unlinks the notification through the dialog's endpoint
 before deleting. The upstream fix is CRM Notification in `ignore_links_on_delete`, or an
 `on_trash` on the three doctypes that deletes or unlinks their notifications.
+
+---
+
+## 63. The delete dialog's Unlink All leaves a call log's `links` rows, so it frees nothing
+
+**Where:** `crm/api/doc.py` `remove_doc_link` (around line 721), which the dialog's Unlink
+All calls for each listed document. For anything but a notification it blanks
+`reference_doctype` and `reference_docname` and saves. **Reproduced by the owner on an
+upstream demo, 2 Nov 2026.**
+
+The dialog lists a call log that names the record only in its `links` table (a `Dynamic
+Link` child row, written by `CRM Call Log.link_with_reference_doc`), because
+`get_dynamic_linked_docs` reports child rows as their parent. Unlink All then blanks the
+call log's main reference, which was already empty, and leaves the `links` row. The call
+log is still listed and the record still cannot be deleted. Nothing says the unlink failed.
+
+On the demo:
+
+| Call log tied to the lead by | Listed | Unlink All | Delete All |
+|---|---|---|---|
+| a `links` row (Create Lead from a call log) | yes | does nothing; still listed | deletes the call log, then the lead |
+| `reference_docname` (Log a Call on the lead) | yes | unlinks; the lead deletes | — |
+
+**Us:** *Reproduce*, by the rule for a user-visible upstream bug. Once the port's dialog
+lists such call logs (`docs/FINDINGS.md` 93), its Unlink All behaves the same. The upstream
+fix is for `remove_doc_link` to also remove the call log's `links` rows naming the
+record, or for the dialog to say the item could not be unlinked.
 
 ---
 
