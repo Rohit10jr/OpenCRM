@@ -21,7 +21,11 @@ from frappe_core import assignment, metadata, permissions, registry
 
 # The ``ignore_links_on_delete`` hook (FINDINGS.md 75) lives with the delete link check
 # (FINDINGS.md 76), so the dialog's list and the check skip the same doctypes.
-from frappe_core.delete_doc import IGNORE_LINKS_ON_DELETE, check_dynamic_links
+from frappe_core.delete_doc import (
+    IGNORE_LINKS_ON_DELETE,
+    check_dynamic_links,
+    get_dynamic_linked_docs,
+)
 from frappe_core.exceptions import DoesNotExistError, LinkExistsError
 from frappe_core.exceptions import PermissionError as FrappePermissionError
 from frappe_core.exceptions import throw
@@ -437,6 +441,23 @@ def _dynamic_link_sources(target_doctype: str):
                 break
 
 
+def _dynamic_link_row_parents(doctype: str, names, user):
+    """Port only: the documents whose child rows name one of ``names`` through a Dynamic
+    Link field - a call log's ``links`` rows - each as its parent, from finding 76's
+    lookup (``get_dynamic_linked_docs``, delete_doc.py:394-420). ``_dynamic_link_sources``
+    walks only the reference pairs of parent doctypes, so such a call log was refused by
+    the delete check and missing from the dialog (FINDINGS.md 93). A parent the caller
+    cannot read is skipped, the rule the rest of this endpoint keeps."""
+    for link in get_dynamic_linked_docs(doctype, names, child_tables_only=True):
+        parent_doctype, parent_name = link["reference_doctype"], link["reference_docname"]
+        if not registry.has_doctype(parent_doctype):
+            continue
+        parent = by_name(registry.get_model(parent_doctype), parent_name).first()
+        if parent is None or not permissions.check_object_permission(parent, "read", user):
+            continue
+        yield parent_doctype, parent
+
+
 def _linked_doc_title(doctype: str, instance) -> str:
     """``crm/api/doc.py:700-708`` - three doctypes get a bespoke title."""
     if doctype == "CRM Call Log":
@@ -465,23 +486,20 @@ def get_linked_docs_of_document(doctype: str, docname: str):
     from frappe_core.query import base_queryset
 
     user = get_current_user()
-    seen: set[tuple[str, str]] = set()
-    results: list[dict] = []
+    # Upstream: list({doc["reference_docname"]: doc for doc in linked_docs}.values())
+    # (crm/api/doc.py:688) - keyed by name alone, first position, last value. Port: the
+    # same dict; it was keyed by (doctype, name) until FINDINGS.md 93, when a call log
+    # could first be reached twice, by its reference pair and by its links row.
+    results: dict[str, dict] = {}
 
     def collect(linked_doctype: str, linked_entry, queryset):
         for instance in queryset:
-            key = (linked_doctype, str(instance.pk))
-            if key in seen:
-                continue
-            seen.add(key)
-            results.append(
-                {
-                    "doc": linked_doctype,
-                    "title": _linked_doc_title(linked_doctype, instance),
-                    "reference_docname": str(instance.pk),
-                    "reference_doctype": linked_doctype,
-                }
-            )
+            results[str(instance.pk)] = {
+                "doc": linked_doctype,
+                "title": _linked_doc_title(linked_doctype, instance),
+                "reference_docname": str(instance.pk),
+                "reference_doctype": linked_doctype,
+            }
 
     for linked_doctype, linked_entry, fieldname, via_child in _link_sources(doctype):
         queryset = base_queryset(linked_doctype, user).filter(**{fieldname: docname})
@@ -497,7 +515,10 @@ def get_linked_docs_of_document(doctype: str, docname: str):
         )
         collect(linked_doctype, linked_entry, queryset)
 
-    return results
+    for parent_doctype, parent in _dynamic_link_row_parents(doctype, [docname], user):
+        collect(parent_doctype, None, [parent])
+
+    return list(results.values())
 
 
 def _clear_reference(instance) -> None:
@@ -512,6 +533,9 @@ def _clear_reference(instance) -> None:
         if instance.notification_type_doctype == instance.reference_doctype:
             updates.update({"notification_type_doctype": "", "notification_type_doc": ""})
     else:
+        # A call log the dialog lists for its links rows (FINDINGS.md 93) keeps them: only
+        # the reference pair is blanked, so it stays listed and the delete stays refused.
+        # Upstream bug 63, reproduced (UPSTREAM_BUGS.md 63); do not clear the rows here.
         if "reference_doctype" in names:
             updates["reference_doctype"] = ""
         if "reference_docname" in names:
@@ -770,6 +794,10 @@ def _linked_docs_for_batch(doctype: str, names: list[str]):
                 reference_doctype=doctype, **{f"{name_field}__in": names}
             ),
         )
+    # Port only: upstream clears each document's dialog list (crm/api/doc.py:815-829),
+    # so a call log linked through its links rows is part of it here too. FINDINGS.md 93.
+    for parent_doctype, parent in _dynamic_link_row_parents(doctype, names, user):
+        collect(parent_doctype, [parent])
     return found
 
 

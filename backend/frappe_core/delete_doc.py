@@ -74,13 +74,17 @@ def get_dynamic_links() -> list[tuple[str, str, str]]:
     return found
 
 
-def get_dynamic_linked_docs(doctype: str, names) -> list[dict]:
+def get_dynamic_linked_docs(doctype: str, names, child_tables_only: bool = False) -> list[dict]:
     """``delete_doc.py:355-430`` (``get_dynamic_linked_docs``, ``method="Delete"``), over
     a batch of names: one query per Dynamic Link field, whatever the batch size.
 
     Upstream first narrows the fields to those whose stored doctypes include this one
     (``get_dynamic_link_map``, a cached ``select distinct``); filtering on the doctype
     column directly gives the same rows.
+
+    Port only: ``child_tables_only`` reads just the Dynamic Link fields of child tables,
+    for the delete dialog, which finds the reference pairs on its own,
+    permission-filtered (``crm_app/api/doc.py``, FINDINGS.md 93).
     """
     names = [str(name) for name in names]
     if not names:
@@ -93,6 +97,8 @@ def get_dynamic_linked_docs(doctype: str, names) -> list[dict]:
             continue
 
         entry = registry.get_entry(parent)
+        if child_tables_only and not entry.is_child_table:
+            continue
         if entry.is_single:
             # Upstream: a Single's dynamic link is read with get_singles_dict
             # (delete_doc.py:371-391). Port only: no Single the port registers declares

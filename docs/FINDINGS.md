@@ -3281,4 +3281,34 @@ it, and only Delete All frees the record. That is upstream bug 63; the port repr
 `get_dynamic_linked_docs` does, through the lookup finding 76 added
 (`frappe_core/delete_doc.py`).
 
-**Status:** open, to be fixed on the finding-76 branch.
+**Fixed 2 Nov 2026.** `get_linked_docs_of_document` now also asks finding 76's lookup,
+`frappe_core/delete_doc.py:get_dynamic_linked_docs`, for the Dynamic Link fields of child
+tables (a new `child_tables_only` flag), and lists each matching row as its parent: a call
+log's `links` row as the call log, titled "Call from X to Y" as upstream titles it. The
+parent is skipped when the caller cannot read it, as the rest of the list is. The list is
+deduplicated by `reference_docname` alone, as upstream's `crm/api/doc.py:688` does (it was
+by doctype and name), so a call log with both a reference pair and a `links` row is listed
+once. The bulk delete's scan (`_linked_docs_for_batch`) takes the same rows, since
+upstream's `delete_bulk_docs` clears each document's dialog list: with `delete_linked` the
+call log goes and the lead or deal deletes. Unlink All is untouched and reproduces upstream
+bug 63: the call log is still listed and the delete still refused, naming it `at Row: 1`.
+Delete All deletes the call log, whose `links` rows go with it, and the record then deletes.
+
+Where the port's list still differs from upstream's `get_linked_docs` +
+`get_dynamic_linked_docs`, left as they are because this finding does not need them:
+
+- The reference pairs are found by column name (`reference_doctype` with
+  `reference_name` or `reference_docname`), not by fieldtype, so WhatsApp Message is
+  listed (its fieldtype is unconfirmed, see 76), and CRM Notification's
+  `notification_type_doctype` / `notification_type_doc` pair is not. For a lead or deal the
+  two pairs of an assignment notification name the same record, so nothing is lost there;
+  the pair matters for a task (upstream bug 62), which has no dialog.
+- The list is permission-filtered (finding 75); upstream's is not.
+- Cancelled documents (docstatus 2) are not excluded from the reference pairs, where
+  upstream's `get_dynamic_linked_docs` excludes them; no listed doctype is submittable.
+- Order: upstream reads the dynamic links in its DocField query's order, so a `links`-row
+  call log can fall among the reference-pair rows; the port puts it last. The frontend
+  does not sort on it.
+
+Covered by `tests/test_delete_dialog_links.py`, the tests after
+`test_a_contacts_dialog_lists_the_deal_it_is_on_and_unlink_takes_it_off`.

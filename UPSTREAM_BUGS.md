@@ -1665,6 +1665,9 @@ lists such call logs (`docs/FINDINGS.md` 93), its Unlink All behaves the same. T
 fix is for `remove_doc_link` to also remove the call log's `links` rows naming the
 record, or for the dialog to say the item could not be unlinked.
 
+Locked by `tests/test_delete_dialog_links.py::test_unlink_all_leaves_a_links_row_call_log_listed_and_the_delete_refused`;
+the comment in `crm_app/api/doc.py:_clear_reference` points here.
+
 ---
 
 ## Faithful behaviours we chose to keep (not bugs — decisions)
