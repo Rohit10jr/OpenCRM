@@ -18,7 +18,7 @@ django-treebeard==4.8.0
 Pillow==13.0.0
 # Excel export from the list views (frappe.desk.reportview.export_query), the same
 # library upstream's xlsxutils writes with. CSV export needs nothing.
-XlsxWriter==3.3.0
+XlsxWriter==3.3.1
 
 # Async stack (phases 5-6) - declared now, unused in phases 0-4.
 celery==5.6.3
