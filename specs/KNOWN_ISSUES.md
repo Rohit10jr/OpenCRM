@@ -13,7 +13,7 @@ and anything a future agent would otherwise rediscover the hard way.
 | 3 | `Communication`, `File` and `Comment` leak content from records the caller cannot open | ✅ **Fixed** — see below for what it took |
 | 4 | The async stack had never run against a real broker, worker or scheduler | ✅ **Smoke-tested** — passed; see below for what is still untested |
 | 5 | The frontend test suite had never been executed; the realtime layer had never run on real Redis | ✅ **Both run** — 152 frontend tests pass, cross-process delivery confirmed |
-| 6 | Logging out does not stop an access token already issued — it works for up to 5 more minutes | ⏸️ **Open, accepted** — inherent to stateless JWT; three ways out are costed below |
+| 6 | Logging out of all sessions did not stop an access token already issued — it worked for up to 5 more minutes | ✅ **Fixed 31 Oct 2026** — option 3, a `token_version` on the user; plain `logout` keeps the window by design |
 | 9 | The frontend is slow to load | ⏸️ **Open, deferred** — to be examined after the browser testing is finished and `phase-8-followup` is merged; what is known and what to measure first are below |
 | 11 | Upstream has moved on since the pin | ⏸️ **Open** — compare against the clone, not the cloud, until the pin moves |
 | 12 | The frontend still says "Frappe" in a few places after the Open CRM rename | ⏸️ **Open** — the locations are listed; to be handled later |
@@ -465,13 +465,54 @@ each of which could be wrong independently of whether Redis relays bytes.
 
 ## 6. Logging out does not revoke an access token that has already been issued
 
-**Status: open, and accepted deliberately.** Recorded so the next person meets it here
-rather than discovering it during an incident.
+**Status: fixed 31 Oct 2026, with option 3** (below). The owner chose it; what was built:
+
+* **`User.token_version`**, an integer, default 0 (`frappe_platform` migration 0021). An
+  integer and not a `password_changed_at` timestamp because `iat` has one-second
+  resolution: a token issued in the same second as the change would compare as "not
+  older" and slip through. A counter has no such tie.
+* **Both tokens carry it as a claim.** `issue_tokens` writes it into the refresh token, and
+  SimpleJWT's `RefreshToken.access_token` copies every claim outside `no_copy_claims` into
+  the access token (simplejwt 5.5.1, `tokens.py`). A token with no claim — issued before
+  this change — counts as version 0, so deploying it signed nobody out.
+* **Every place a token authenticates compares it**: the DRF default authentication class
+  (`frappe_core/authentication.py:VersionedJWTAuthentication`), the WebSocket consumer and
+  the file route, all through the class's `get_user`, against the user row it has already
+  loaded — **no extra query** (`tests/test_token_version.py` counts them). The refresh
+  endpoint checks it too, alongside the blacklist; that costs one query, on refresh only.
+  A stale token gets the same 401 and `AuthenticationError` as an expired one, so the
+  frontend's refresh-then-login path handles it unchanged.
+* **Bumped** (atomically, `F() + 1`) by `logout_all_sessions`: `update_password` with the
+  box ticked, reset by key or change by old password. That endpoint returns a fresh pair
+  issued at the new version, so the device making the change stays signed in. Unticked,
+  other sessions are kept, as upstream keeps them (`frappe/utils/password.py:150`; owner's
+  decision, 31 Oct 2026).
+* **Not bumped by a plain `logout`**, deliberately: it blacklists its own refresh token and
+  must not sign the user out of their other devices. That one access token keeps the
+  five-minute window below, and the two points under *"If option 1 stands"* still apply to
+  it.
+* **Not bumped by `crm.api.user.change_password`** (the Settings modal). It returns a bare
+  string, not tokens, so a bump there would sign the user out of the device they changed
+  it on; upstream's version keeps every session too. Revocation needs `update_password`.
+* **Not bumped by disabling a user.** No endpoint in the port disables one, and a disabled
+  user's tokens are already refused on every path by the `is_active` check. Upstream also
+  drops the sessions on disable, so re-enabling here revives unexpired tokens; bumping in
+  `User.save` when `enabled` goes false would match it.
+
+Found while building it: the hand-rolled refresh endpoint rotates the refresh token without
+SimpleJWT's `outstand()`, so a rotated token is never in `OutstandingToken` and
+`_blacklist_outstanding_tokens` could not blacklist it. As the frontend refreshes every
+five minutes, that was nearly every live refresh token. The version check closes this too.
+Fixed 2 Nov 2026: the endpoint now calls `outstand()` after rotating, as SimpleJWT's
+`TokenRefreshSerializer` does, so a rotated token is blacklisted as well. The version check
+remains the primary revocation; the blacklist is the second check.
+
+What follows is the entry as it stood before the fix, kept for the reasoning.
 
 > **A note on where this was.** `docs/internal/PROGRESS_PHASE_8.md` and the docstring on
-> `_blacklist_outstanding_tokens` both say this is *"recorded in `KNOWN_ISSUES` §4"*. It
-> was not — §4 is the async smoke test, and this entry did not exist until now. The claim
-> was written in good faith and nobody checked it. **This is that entry.**
+> `_blacklist_outstanding_tokens` both said this was *"recorded in `KNOWN_ISSUES` §4"*. It
+> was not — §4 is the async smoke test. The docstring was corrected to §6 and, with the fix,
+> rewritten to say what the function now does.
 
 ### What happens
 

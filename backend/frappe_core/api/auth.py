@@ -25,6 +25,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from frappe_core.authentication import TOKEN_VERSION_CLAIM, token_version_of
 from frappe_core.exceptions import AuthenticationError, ValidationError
 from frappe_core.session import GUEST_USER, get_current_user
 from frappe_core.security import (
@@ -121,6 +122,9 @@ def issue_tokens(user) -> dict:
     if not user.is_active:
         raise AuthenticationError("User disabled or missing")
     refresh = RefreshToken.for_user(user)
+    # Port only: KNOWN_ISSUES §6. `RefreshToken.access_token` copies every claim outside
+    # `no_copy_claims` into the access token, so both carry it.
+    refresh[TOKEN_VERSION_CLAIM] = user.token_version
     return {
         "access": str(refresh.access_token),
         "refresh": str(refresh),
@@ -172,6 +176,22 @@ def refresh_token(refresh: str = "", **extra) -> dict:
     except TokenError as exc:
         raise AuthenticationError(str(exc)) from None
 
+    # Port only: KNOWN_ISSUES §6. A refresh token from before the user's last version bump
+    # is refused, alongside the blacklist. This is the primary check; the blacklist is the
+    # second (rotated tokens reach it through `outstand()` below). Rotation keeps the claim,
+    # so a current token stays current.
+    from django.contrib.auth import get_user_model
+
+    user_id = parsed.get(jwt_settings.USER_ID_CLAIM)
+    current = (
+        get_user_model()
+        ._default_manager.filter(**{jwt_settings.USER_ID_FIELD: user_id})
+        .values_list("token_version", flat=True)
+        .first()
+    )
+    if current is None or token_version_of(parsed) != current:
+        raise AuthenticationError("Token is invalid or expired")
+
     access = str(parsed.access_token)
 
     if jwt_settings.ROTATE_REFRESH_TOKENS:
@@ -183,6 +203,12 @@ def refresh_token(refresh: str = "", **extra) -> dict:
         parsed.set_jti()
         parsed.set_exp()
         parsed.set_iat()
+        # Record the new token in `OutstandingToken`, as SimpleJWT's TokenRefreshSerializer
+        # does (`serializers.py:141` in 5.5.1), so `_blacklist_outstanding_tokens` can reach
+        # it. This endpoint is our own only for the Frappe path and envelope (PORT_PLAN.md
+        # §3). `outstand()` is a no-op on the base Token when the blacklist app is absent.
+        # Until 2 Nov 2026 this call was missing (KNOWN_ISSUES §6).
+        parsed.outstand()
 
     return {"access": access, "refresh": str(parsed)}
 

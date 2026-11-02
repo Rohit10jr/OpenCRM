@@ -50,16 +50,21 @@ def _resolve_token(raw_token: str):
     Deliberately the SimpleJWT path `frappe_core/views.py:FrappeAPIView.initial` ends up
     on, via the same ``USER_ID_CLAIM``/``USER_ID_FIELD`` settings, so a token that works
     for HTTP works here and one that has been revoked works for neither.
+
+    Port only: the same class HTTP uses, so a token revoked by a version bump
+    (KNOWN_ISSUES §6) is refused here too.
     """
     from django.conf import settings
-    from rest_framework_simplejwt.authentication import JWTAuthentication
     from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+
+    from frappe_core.authentication import VersionedJWTAuthentication
 
     if not raw_token:
         return None
     try:
-        validated = JWTAuthentication().get_validated_token(raw_token)
-        user = JWTAuthentication().get_user(validated)
+        auth = VersionedJWTAuthentication()
+        validated = auth.get_validated_token(raw_token)
+        user = auth.get_user(validated)
     except (InvalidToken, TokenError, KeyError):
         return None
     except Exception:

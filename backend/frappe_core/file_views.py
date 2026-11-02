@@ -39,11 +39,16 @@ FORBIDDEN = "You don't have permission to access this file"
 
 
 def authenticated_user(request) -> str | None:
-    """The user the request's bearer header names, else the one its cookie names."""
-    from rest_framework_simplejwt.authentication import JWTAuthentication
+    """The user the request's bearer header names, else the one its cookie names.
+
+    Port only: the class HTTP uses, so a token revoked by a version bump (KNOWN_ISSUES §6)
+    opens no file either.
+    """
     from rest_framework_simplejwt.exceptions import AuthenticationFailed, InvalidToken, TokenError
 
-    auth = JWTAuthentication()
+    from frappe_core.authentication import VersionedJWTAuthentication
+
+    auth = VersionedJWTAuthentication()
     try:
         pair = auth.authenticate(request)
     except (InvalidToken, TokenError, AuthenticationFailed):

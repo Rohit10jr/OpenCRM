@@ -58,6 +58,12 @@ REVIEWED_NOT_CREDENTIALS = {
         "caller (SECURITY_MODEL divergence #5), so a visible issue time would tell any "
         "colleague which accounts have a live reset link and when."
     ),
+    ("User", "token_version"): (
+        "A **counter**, not a secret: the version every token is issued at, bumped to "
+        "revoke them all (KNOWN_ISSUES §6). Knowing it forges nothing; tokens are signed. "
+        "Encrypting it would buy nothing a dump does not already give. It is in "
+        "SENSITIVE_FIELDS anyway: writing an old value back would revive revoked tokens."
+    ),
     ("Email Account", "ascii_encode_password"): (
         "A **boolean flag**, not a password: upstream's switch for ASCII-encoding the "
         "password before handing it to the SMTP library. Caught by the name on this "

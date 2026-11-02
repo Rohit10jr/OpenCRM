@@ -277,18 +277,24 @@ def _blacklist_outstanding_tokens(account) -> None:
 
     Upstream drops the user's server-side sessions. This port has none, so the equivalent
     is blacklisting every outstanding **refresh** token — which is what `logout` already
-    does for one.
+    does for one — and bumping the account's `token_version`.
 
-    **An access token issued before this call stays valid until it expires** (five minutes,
-    `SIMPLE_JWT.ACCESS_TOKEN_LIFETIME`), because verifying one consults no state. That is
-    the same window `logout` has, and it is accepted rather than closed —
-    `specs/KNOWN_ISSUES.md` **§6** states the trade and costs the three ways out.
+    The bump is what reaches tokens already issued (port only, `specs/KNOWN_ISSUES.md`
+    **§6**, option 3): an access token is checked by signature plus that version, so every
+    one issued before this call is refused from the next request, refresh tokens included.
+    The blacklist loop below is the second check: the refresh endpoint records each token
+    it rotates to in `OutstandingToken`, so rotated refresh tokens are blacklisted too.
 
-    (This docstring said "§4" and phase 8's progress file said the same. Neither was true:
-    the entry did not exist until it was written for real. Cited correctly now.)
+    (Until 31 Oct 2026 this docstring said issued access tokens stayed valid until expiry,
+    and before that cited "§4" for it, which was the async smoke test. Until 2 Nov 2026 the
+    refresh endpoint did not record rotated tokens, so the loop missed them.)
     """
     from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
     from rest_framework_simplejwt.tokens import RefreshToken
+
+    from frappe_core.authentication import bump_token_version
+
+    bump_token_version(account)
 
     for token in OutstandingToken.objects.filter(user=account):
         try:
