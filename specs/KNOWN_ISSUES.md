@@ -894,14 +894,22 @@ listed to be handled later. Paths under `frontend/src/` unless given in full.
 
 **Visible text**
 
-- `components/Modals/AboutModal.vue:32` — "© Frappe Technologies Pvt. Ltd. and contributors"
-- `components/Modals/AboutModal.vue:51,56,61,66,71` — the Website, GitHub Repository,
-  Documentation, Report an Issue and Contact Support links, all to frappe.io, Frappe's
-  GitHub, docs.frappe.io and support.frappe.io
-- `components/Layouts/AppSidebar.vue:166` — the help centre's `docsLink`,
-  `https://docs.frappe.io/crm`
+Handled, kept here so the history is in one place:
+
+- `components/Modals/AboutModal.vue` — the copyright line "© Frappe Technologies Pvt. Ltd.
+  and contributors" **stays, on purpose**: the interface is Frappe CRM's under AGPL-3.0
+  (`LICENSE`). Hidden on 16 Oct 2026, shown again with a line for the port by PR 44
+  (31 Oct 2026). Upstream's five links (frappe.io, Frappe's GitHub, docs.frappe.io,
+  support.frappe.io) became Source Code and Report an Issue (this repository) and Based on
+  Frappe CRM (`frappe/crm`), upstream's kept in a comment. `frontend/JWT_PATCH.md` has the row.
+- `components/Layouts/AppSidebar.vue` — the help centre's `docsLink`, upstream
+  `https://docs.frappe.io/crm`, points at the app itself (`helpLink`, 16 Oct 2026).
+
+Still open:
+
 - `components/Settings/emailConfig.js:81,156-159,173` — the "Frappe Mail" provider and
-  its "Frappe Mail Site" field
+  its "Frappe Mail Site" field. Frappe Mail is a real mail service users can connect, so
+  this names a provider rather than branding the app; leaving it is the likely answer.
 - `components/UserDropdown.vue:146-148` and `composables/frappecloud.js:17-40` — the
   "Login to Frappe Cloud" menu item and its dialog (renders only when `window.is_fc_site`)
 

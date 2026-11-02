@@ -1886,7 +1886,7 @@ composer can never offer a second sender.
 
 **Where:** `backend/frappe_platform/models.py` (`User`), a new `User Email` child table.
 
-**Status:** open. The fix is a child-table model on `User` with a migration, its place in
+**Status (before the fix, which is below):** open. The fix is a child-table model on `User` with a migration, its place in
 the user serializer, and the field-visibility review every new doctype gets
 (`specs/AS_BUILT.md`, the phase-4 checklist): upstream puts `user_emails` at permlevel 1,
 which is how it keeps a Sales User from attaching accounts to themselves.
@@ -1997,7 +1997,7 @@ once it is written.
 
 **Where:** `backend/crm_app/async_signals.py`.
 
-**Status:** open, deferred. Decision 30 Sep 2026: to be ported once the browser testing is
+**Status (before the fix, which is below):** open, deferred. Decision 30 Sep 2026: to be ported once the browser testing is
 finished. The fix is a port of `_get_communication_status` and the status write in the
 communication handler, with the latest-communication check, and a test that sends an
 email from a lead with an SLA and reads the status back.
@@ -2157,7 +2157,7 @@ built as one piece of work with finding 63 (Currency) and finding 59 (translatio
 Currency and System Settings first, the translation steps on top. `KNOWN_ISSUES.md` 10
 carries the order.
 
-**Status:** open, deferred. The fix is a `System Settings` single carrying at least those six
+**Status (before the fix, which is below):** open, deferred. The fix is a `System Settings` single carrying at least those six
 fields, seeded from the current `FRAPPE_SYSDEFAULTS` so nothing changes on the day it
 lands; the framework's JSON added to the metadata generator so the selects get their
 options; `boot.py` reading the row instead of the Django setting; and System Manager
