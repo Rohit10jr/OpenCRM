@@ -33,7 +33,7 @@ coverage section at the end; run it after recording results.
 <!-- coverage:start -->
 | Screens done | Rows ok | Rows failed | Rows skipped | Endpoints confirmed |
 |---|---|---|---|---|
-| 11 of 12 with rows | 159 | 1 | 0 | 91 of 102 |
+| 11 of 12 with rows | 160 | 0 | 0 | 92 of 102 |
 <!-- coverage:end -->
 
 Screens planned: Notes, Tasks, Call Logs, Leads, Deals, Contacts, Organizations,
@@ -311,7 +311,7 @@ it. A5 needs a short token life: set `JWT_ACCESS_TOKEN_LIFETIME_MINUTES=1` in th
 | A6 | Sign out | User menu → Log out → the login page; Back does not show the app; a reload stays on the login page | `logout` | ok | | e2e |
 | A7 | Forgot password | Login page → Forgot Password → your address → Send; the worker's console prints the link (system mail through the config account, so `EMAIL_HOST` must be set in `.env`, finding 79; with none the worker logs "Please setup default outgoing Email Account") → open it → a new password twice → Update; sign in with it | `frappe.core.doctype.user.user.reset_password`, `frappe.core.doctype.user.user.update_password`, `login` | ok | 79 | e2e (form only) |
 | A8 | Accept an invitation | The link the worker printed for S8 (same `EMAIL_HOST` need as A7; an invitation sent with no account is not retried, so send a new one after setting it) → set a password → the invited user lands in the app, with the role the invite gave | `crm.api.accept_invitation`, `login` |   | 79 | |
-| A9 | A wrong URL | Signed in, open `/crm/leaderssf` → "Invalid page or not permitted to access" (upstream's `InvalidPage.vue`, its catch-all route); open a lead URL with a wrong id → "Document not found" from the lead page | `frappe.client.get` | failed: a wrong path with a second segment (/crm/leadsdss/CRM-LEAD-...) drew a blank page, here and on the demo; the one-segment cases showed their messages. Router patched; retried 13 Oct 2026: ok, both URLs show their messages | 83 (fixed, patch) | |
+| A9 | A wrong URL | Signed in, open `/crm/leaderssf` → "Invalid page or not permitted to access" (upstream's `InvalidPage.vue`, its catch-all route); open a lead URL with a wrong id → "Document not found" from the lead page | `frappe.client.get` | ok (after the patch, retried 13 Oct 2026: both URLs show their messages; failed before it: a wrong path with a second segment (/crm/leadsdss/CRM-LEAD-...) drew a blank page, here and on the demo, while the one-segment cases showed their messages) | 83 (fixed, patch) | |
 
 ## Endpoints no screen reaches
 
@@ -383,7 +383,7 @@ failed. Generated: do not edit by hand.
 <!-- api-coverage:start -->
 | | Method | Django | Upstream | Reached from | Result |
 |---|---|---|---|---|---|
-| ☐ | `crm.api.accept_invitation` | `crm_app/api/auth_pages.py:310` | `crm/api/__init__.py:79-106` | A8 |  |
+| ☐ | `crm.api.accept_invitation` | `crm_app/api/auth_pages.py:318` | `crm/api/__init__.py:79-106` | A8 |  |
 | ☑ | `crm.api.activities.get_activities` | `crm_app/api/activities.py:460` | `crm/api/activities.py:13-20` | C12, L3, L11, D4, D14 | ok: C12, L3, L11, D4, D14 |
 | ☑ | `crm.api.assignment_rule.duplicate_assignment_rule` | `crm_app/api/assignment_rule.py:32` | `crm/api/assignment_rule.py:27-32` | S12 | ok: S12 |
 | ☑ | `crm.api.assignment_rule.get_assignment_rules_list` | `crm_app/api/assignment_rule.py:16` | `crm/api/assignment_rule.py:4-24` | S12 | ok: S12 |
@@ -397,18 +397,18 @@ failed. Generated: do not edit by hand.
 | ☑ | `crm.api.dashboard.get_dashboard` | `crm_app/api/dashboard.py:829` | `crm/api/dashboard.py:25-61` | DB1, DB2, DB3, DB4, DB5, DB9 | ok: DB1, DB2, DB3, DB4, DB5, DB9 |
 | ☑ | `crm.api.dashboard.reset_to_default` | `crm_app/api/dashboard.py:819` | `crm/api/dashboard.py:19-23` | DB9 | ok: DB9 |
 | ☑ | `crm.api.delete_attachment` | `crm_app/api/misc.py:126` | `crm/api/__init__.py:155-167` | N11 | ok: N11 |
-| ☑ | `crm.api.doc.delete_bulk_docs` | `crm_app/api/doc.py:709` | `crm/api/doc.py:795-837` | T9, C9, L22, D23 | ok: T9, C9, L22, D23 |
-| ☑ | `crm.api.doc.get_assigned_users` | `crm_app/api/doc.py:248` | `crm/api/doc.py:607-625` | N3, L3, L6, D4, D12 | ok: N3, L3, L6, D4, D12 |
+| ☑ | `crm.api.doc.delete_bulk_docs` | `crm_app/api/doc.py:726` | `crm/api/doc.py:795-837` | T9, C9, L22, D23 | ok: T9, C9, L22, D23 |
+| ☑ | `crm.api.doc.get_assigned_users` | `crm_app/api/doc.py:256` | `crm/api/doc.py:607-625` | N3, L3, L6, D4, D12 | ok: N3, L3, L6, D4, D12 |
 | ☑ | `crm.api.doc.get_data` | `frappe_core/api/doc.py:211` | `crm/api/doc.py:256-271` | N1, N2, N5, N6, T1, T2, T4, T8, T10, T11, C1, C2, C10, L1, L16, L17, L23, O1, O8, K1, K6, K8, K11, D1, D19, D20, D25 | ok: N1, N2, N5, N6, T1, T2, T4, T8, T10, T11, C1, C2, C10, L1, L16, L17, L23, O1, O8, K1, K6, K8, K11, D1, D19, D20, D25 |
-| ☑ | `crm.api.doc.get_fields` | `crm_app/api/doc.py:321` | `crm/api/doc.py:639-651` | T7, C9 | ok: T7, C9 |
-| ☑ | `crm.api.doc.get_filterable_fields` | `crm_app/api/doc.py:96` | `crm/api/doc.py:54-109` | N1, T1, T11, C1, C10, L1, L16, O1, O8, K1, K6, D1, D19 | ok: N1, T1, T11, C1, C10, L1, L16, O1, O8, K1, K6, D1, D19 |
-| ☑ | `crm.api.doc.get_group_by_fields` | `crm_app/api/doc.py:102` | `crm/api/doc.py:112-160` | L17, D20 | ok: L17, D20 |
+| ☑ | `crm.api.doc.get_fields` | `crm_app/api/doc.py:329` | `crm/api/doc.py:639-651` | T7, C9 | ok: T7, C9 |
+| ☑ | `crm.api.doc.get_filterable_fields` | `crm_app/api/doc.py:104` | `crm/api/doc.py:54-109` | N1, T1, T11, C1, C10, L1, L16, O1, O8, K1, K6, D1, D19 | ok: N1, T1, T11, C1, C10, L1, L16, O1, O8, K1, K6, D1, D19 |
+| ☑ | `crm.api.doc.get_group_by_fields` | `crm_app/api/doc.py:110` | `crm/api/doc.py:112-160` | L17, D20 | ok: L17, D20 |
 | ☑ | `crm.api.doc.get_linked_docs_of_document` | `crm_app/api/doc.py:472` | `crm/api/doc.py:677-718` | L21, O9, K7, D22 | ok: L21, O9, K7, D22 |
-| ☑ | `crm.api.doc.get_quick_filters` | `crm_app/api/doc.py:146` | `crm/api/doc.py:163-204` | N1, N7, T1, C1, L1, O1, K1, K8, D1 | ok: N1, N7, T1, C1, L1, O1, K1, K8, D1 |
-| ☑ | `crm.api.doc.remove_assignments` | `crm_app/api/doc.py:263` | `crm/api/doc.py:589-604` | L6, D12 | ok: L6, D12 |
-| ☑ | `crm.api.doc.remove_linked_doc_reference` | `crm_app/api/doc.py:586` | `crm/api/doc.py:769-792` | O10 | ok: O10 |
-| ☑ | `crm.api.doc.sort_options` | `crm_app/api/doc.py:74` | `crm/api/doc.py:24-51` | N1, T1, T11, C1, C10, L1, L16, O1, O8, K1, K6, D1, D19 | ok: N1, T1, T11, C1, C10, L1, L16, O1, O8, K1, K6, D1, D19 |
-| ☑ | `crm.api.doc.update_quick_filters` | `crm_app/api/doc.py:202` | `crm/api/doc.py:207-224` | N7 | ok: N7 |
+| ☑ | `crm.api.doc.get_quick_filters` | `crm_app/api/doc.py:154` | `crm/api/doc.py:163-204` | N1, N7, T1, C1, L1, O1, K1, K8, D1 | ok: N1, N7, T1, C1, L1, O1, K1, K8, D1 |
+| ☑ | `crm.api.doc.remove_assignments` | `crm_app/api/doc.py:271` | `crm/api/doc.py:589-604` | L6, D12 | ok: L6, D12 |
+| ☑ | `crm.api.doc.remove_linked_doc_reference` | `crm_app/api/doc.py:589` | `crm/api/doc.py:769-792` | O10 | ok: O10 |
+| ☑ | `crm.api.doc.sort_options` | `crm_app/api/doc.py:82` | `crm/api/doc.py:24-51` | N1, T1, T11, C1, C10, L1, L16, O1, O8, K1, K6, D1, D19 | ok: N1, T1, T11, C1, C10, L1, L16, O1, O8, K1, K6, D1, D19 |
+| ☑ | `crm.api.doc.update_quick_filters` | `crm_app/api/doc.py:210` | `crm/api/doc.py:207-224` | N7 | ok: N7 |
 | ☐ | `crm.api.exchange_rate.get_exchange_rate` | `crm_app/api/exchange_rate.py:48` | `crm/api/exchange_rate.py:9-27` |  |  |
 | ☑ | `crm.api.get_file_uploader_defaults` | `crm_app/api/misc.py:159` | `crm/api/__init__.py:170-180` | L12, D15 | ok: L12, D15 |
 | ☐ | `crm.api.get_translations` | `crm_app/api/misc.py:31` | `crm/api/__init__.py:12-19` |  |  |
@@ -452,41 +452,41 @@ failed. Generated: do not edit by hand.
 | ☑ | `crm.integrations.api.is_call_integration_enabled` | `crm_app/integrations/api.py:63` | `crm/integrations/api.py:36-43` | B1 | ok: B1 |
 | ☑ | `crm.www.crm.get_context_for_dev` | `crm_app/api/boot.py:39` | `crm/www/crm.py:get_boot` | B1 | ok: B1 |
 | ☑ | `frappe.apps.get_apps` | `crm_app/api/desk.py:40` | `frappe/apps.py:17-55` | B1 | ok: B1 |
-| ☑ | `frappe.auth.get_logged_user` | `frappe_core/api/auth.py:183` | `frappe/auth.py:get_logged_user` | A4 | ok: A4 |
+| ☑ | `frappe.auth.get_logged_user` | `frappe_core/api/auth.py:216` | `frappe/auth.py:get_logged_user` | A4 | ok: A4 |
 | ☐ | `frappe.automation.doctype.assignment_rule.assignment_rule.bulk_apply` | `crm_app/assignment_rules.py:472` | `frappe/automation/doctype/assignment_rule/assignment_rule.py:69-420` |  |  |
-| ☑ | `frappe.client.delete` | `crm_app/api/client.py:359` | `frappe/client.py:delete` | N4, T5, C8, L9, L10, L12, L21, O9, K7, K10, S8, S11, S12, D14, D15, D22 | ok: N4, T5, C8, L9, L10, L12, L21, O9, K7, K10, S8, S11, S12, D14, D15, D22 |
-| ⚠ | `frappe.client.get` | `crm_app/api/client.py:106` | `frappe/client.py:get` | B1, N3, T3, C4, L3, O4, O12, K3, S2, S3, S5, S13, S15, S22, D4, A9 | failed: A9 (finding 83 (fixed, patch)) |
-| ☑ | `frappe.client.get_doc_permissions` | `crm_app/api/client.py:496` | `frappe/client.py:get_doc_permissions` | N3, L3, D4 | ok: N3, L3, D4 |
-| ☑ | `frappe.client.get_list` | `crm_app/api/client.py:124` | `frappe/client.py:get_list` | N3, O4, O13, S8, S9, S11, S13, S16 | ok: N3, O4, O13, S8, S9, S11, S13, S16 |
-| ☑ | `frappe.client.get_single_value` | `crm_app/api/client.py:250` | `frappe/client.py:get_single_value` | B1 | ok: B1 |
-| ☐ | `frappe.client.get_value` | `crm_app/api/client.py:212` | `frappe/client.py:get_value` |  |  |
-| ☑ | `frappe.client.insert` | `crm_app/api/client.py:326` | `frappe/client.py:insert` | N2, N10, T2, T17, C2, C12, L2, L9, L10, L11, O2, O3, O11, K2, S9, S11, S12, S13, S22, D10, D14, D17 | ok: N2, N10, T2, T17, C2, C12, L2, L9, L10, L11, O2, O3, O11, K2, S9, S11, S12, S13, S22, D10, D14, D17 |
-| ☑ | `frappe.client.rename_doc` | `crm_app/api/client.py:460` | `frappe/model/rename_doc.py:rename_doc` | O6, S10, S11, S12, S13 | ok: O6, S10, S11, S12, S13 |
-| ☑ | `frappe.client.set_value` | `crm_app/api/client.py:297` | `frappe/client.py:set_value` | N3, T3, T4, C4, L4, L5, L7, L9, L10, L12, L14, L17, O3, O5, O7, O11, O12, O14, K4, K5, K10, S1, S2, S17, S3, S19, S20, S4, S21, S5, S6, S9, S10, S12, S14, S15, S16, DB6, DB7, DB8, D5, D6, D7, D8, D11, D14, D15, D17, D20 | ok: N3, T3, T4, C4, L4, L5, L7, L9, L10, L12, L14, L17, O3, O5, O7, O11, O12, O14, K4, K5, K10, S1, S2, S17, S3, S19, S20, S4, S21, S5, S6, S9, S10, S12, S14, S15, S16, DB6, DB7, DB8, D5, D6, D7, D8, D11, D14, D15, D17, D20 |
+| ☑ | `frappe.client.delete` | `crm_app/api/client.py:360` | `frappe/client.py:delete` | N4, T5, C8, L9, L10, L12, L21, O9, K7, K10, S8, S11, S12, D14, D15, D22 | ok: N4, T5, C8, L9, L10, L12, L21, O9, K7, K10, S8, S11, S12, D14, D15, D22 |
+| ☑ | `frappe.client.get` | `crm_app/api/client.py:107` | `frappe/client.py:get` | B1, N3, T3, C4, L3, O4, O12, K3, S2, S3, S5, S13, S15, S22, D4, A9 | ok: B1, N3, T3, C4, L3, O4, O12, K3, S2, S3, S5, S13, S15, S22, D4, A9 |
+| ☑ | `frappe.client.get_doc_permissions` | `crm_app/api/client.py:498` | `frappe/client.py:get_doc_permissions` | N3, L3, D4 | ok: N3, L3, D4 |
+| ☑ | `frappe.client.get_list` | `crm_app/api/client.py:125` | `frappe/client.py:get_list` | N3, O4, O13, S8, S9, S11, S13, S16 | ok: N3, O4, O13, S8, S9, S11, S13, S16 |
+| ☑ | `frappe.client.get_single_value` | `crm_app/api/client.py:251` | `frappe/client.py:get_single_value` | B1 | ok: B1 |
+| ☐ | `frappe.client.get_value` | `crm_app/api/client.py:213` | `frappe/client.py:get_value` |  |  |
+| ☑ | `frappe.client.insert` | `crm_app/api/client.py:327` | `frappe/client.py:insert` | N2, N10, T2, T17, C2, C12, L2, L9, L10, L11, O2, O3, O11, K2, S9, S11, S12, S13, S22, D10, D14, D17 | ok: N2, N10, T2, T17, C2, C12, L2, L9, L10, L11, O2, O3, O11, K2, S9, S11, S12, S13, S22, D10, D14, D17 |
+| ☑ | `frappe.client.rename_doc` | `crm_app/api/client.py:462` | `frappe/model/rename_doc.py:rename_doc` | O6, S10, S11, S12, S13 | ok: O6, S10, S11, S12, S13 |
+| ☑ | `frappe.client.set_value` | `crm_app/api/client.py:298` | `frappe/client.py:set_value` | N3, T3, T4, C4, L4, L5, L7, L9, L10, L12, L14, L17, O3, O5, O7, O11, O12, O14, K4, K5, K10, S1, S2, S17, S3, S19, S20, S4, S21, S5, S6, S9, S10, S12, S14, S15, S16, DB6, DB7, DB8, D5, D6, D7, D8, D11, D14, D15, D17, D20 | ok: N3, T3, T4, C4, L4, L5, L7, L9, L10, L12, L14, L17, O3, O5, O7, O11, O12, O14, K4, K5, K10, S1, S2, S17, S3, S19, S20, S4, S21, S5, S6, S9, S10, S12, S14, S15, S16, DB6, DB7, DB8, D5, D6, D7, D8, D11, D14, D15, D17, D20 |
 | ☑ | `frappe.core.doctype.communication.email.make` | `crm_app/api/communication.py:76` | `frappe/core/doctype/communication/email.py:make` | L13, D16 | ok: L13, D16 |
 | ☑ | `frappe.core.doctype.user.user.get_timezones` | `crm_app/api/desk.py:111` | `frappe/core/doctype/user/user.py:783-785` | S2 | ok: S2 |
 | ☑ | `frappe.core.doctype.user.user.reset_password` | `crm_app/api/auth_pages.py:45` | `frappe/core/doctype/user/user.py:1041-1067` | A7 | ok: A7 |
 | ☑ | `frappe.core.doctype.user.user.update_password` | `crm_app/api/auth_pages.py:99` | `frappe/core/doctype/user/user.py:826-880` | A7 | ok: A7 |
 | ☑ | `frappe.desk.doctype.bulk_update.bulk_update.submit_cancel_or_update_docs` | `crm_app/api/bulk_update.py:27` | `frappe/desk/doctype/bulk_update/bulk_update.py:54-79` | T7, T16, C9, L18, D21 | ok: T7, T16, C9, L18, D21 |
-| ☑ | `frappe.desk.form.assign_to.add` | `crm_app/api/client.py:518` | `frappe/desk/form/assign_to.py:add` | L6, D12 | ok: L6, D12 |
-| ☑ | `frappe.desk.form.assign_to.add_multiple` | `crm_app/api/client.py:541` | `frappe/desk/form/assign_to.py:148-156` | L18, D21 | ok: L18, D21 |
-| ☑ | `frappe.desk.form.assign_to.remove_multiple` | `crm_app/api/client.py:584` | `frappe/desk/form/assign_to.py:191-201` | L18, D21 | ok: L18, D21 |
+| ☑ | `frappe.desk.form.assign_to.add` | `crm_app/api/client.py:520` | `frappe/desk/form/assign_to.py:add` | L6, D12 | ok: L6, D12 |
+| ☑ | `frappe.desk.form.assign_to.add_multiple` | `crm_app/api/client.py:543` | `frappe/desk/form/assign_to.py:148-156` | L18, D21 | ok: L18, D21 |
+| ☑ | `frappe.desk.form.assign_to.remove_multiple` | `crm_app/api/client.py:586` | `frappe/desk/form/assign_to.py:191-201` | L18, D21 | ok: L18, D21 |
 | ☑ | `frappe.desk.form.load.getdoctype` | `crm_app/api/form_load.py:151` | `frappe/desk/form/load.py:getdoctype` | N1, T1, C1, L1, O1, K1, S5, D1 | ok: N1, T1, C1, L1, O1, K1, S5, D1 |
-| ☑ | `frappe.desk.like.toggle_like` | `crm_app/api/client.py:624` | `frappe/desk/like.py:toggle_like` | L23 | ok: L23 |
+| ☑ | `frappe.desk.like.toggle_like` | `crm_app/api/client.py:626` | `frappe/desk/like.py:toggle_like` | L23 | ok: L23 |
 | ☑ | `frappe.desk.reportview.export_query` | `crm_app/api/reportview.py:161` | `frappe/desk/reportview.py:427-575` | T6 | ok: T6 |
-| ☑ | `frappe.desk.search.search_link` | `crm_app/api/client.py:650` | `frappe/desk/search.py:search_link` | N10, T2, T11, T17, C2, C12, L2, O2, O3, O11, K2, S17, S21, DB5, D2, D3, D7, D9, D11, D17 | ok: N10, T2, T11, T17, C2, C12, L2, O2, O3, O11, K2, S17, S21, DB5, D2, D3, D7, D9, D11, D17 |
+| ☑ | `frappe.desk.search.search_link` | `crm_app/api/client.py:652` | `frappe/desk/search.py:search_link` | N10, T2, T11, T17, C2, C12, L2, O2, O3, O11, K2, S17, S21, DB5, D2, D3, D7, D9, D11, D17 | ok: N10, T2, T11, T17, C2, C12, L2, O2, O3, O11, K2, S17, S21, DB5, D2, D3, D7, D9, D11, D17 |
 | ☑ | `frappe.email.doctype.email_template.email_template.get_email_template` | `crm_app/api/email_template.py:73` | `frappe/email/doctype/email_template/email_template.py:52-58` | L13 | ok: L13 |
 | ☐ | `frappe.model.utils.user_settings.get` | `crm_app/api/user_settings.py:113` | `frappe/model/utils/user_settings.py:get` |  |  |
 | ☑ | `frappe.model.utils.user_settings.save` | `crm_app/api/user_settings.py:100` | `frappe/model/utils/user_settings.py:save` | D26 | ok: D26 |
 | ☐ | `frappe.onboarding.get_onboarding_status` | `crm_app/api/onboarding.py:54` | `frappe/onboarding.py:6-9` |  |  |
 | ☐ | `frappe.onboarding.update_user_onboarding_status` | `crm_app/api/onboarding.py:62` | `frappe/onboarding.py:12-25` |  |  |
 | ☑ | `frappe.utils.telemetry.pulse.client.boot_config` | `crm_app/api/desk.py:161` | `config/settings/base.py` | B1 | ok: B1 |
-| ☑ | `login` | `frappe_core/api/auth.py:39` | `frappe/auth.py:LoginManager (session login; JWT here, JWT_PATCH.md)` | A1, A2, A3, A7, A8 | ok: A1, A2, A3, A7 |
-| ☑ | `logout` | `frappe_core/api/auth.py:127` | `frappe/auth.py:LoginManager.logout (JWT here)` | A6 | ok: A6 |
-| ☑ | `token/refresh` | `frappe_core/api/auth.py:146` | `none, the JWT deviation (JWT_PATCH.md)` | A5 | ok: A5 |
+| ☑ | `login` | `frappe_core/api/auth.py:40` | `frappe/auth.py:LoginManager (session login; JWT here, JWT_PATCH.md)` | A1, A2, A3, A7, A8 | ok: A1, A2, A3, A7 |
+| ☑ | `logout` | `frappe_core/api/auth.py:138` | `frappe/auth.py:LoginManager.logout (JWT here)` | A6 | ok: A6 |
+| ☑ | `token/refresh` | `frappe_core/api/auth.py:157` | `none, the JWT deviation (JWT_PATCH.md)` | A5 | ok: A5 |
 | ☑ | `upload_file` | `crm_app/api/upload.py:80` | `frappe/handler.py:131-244` | N9, L7, L12, O7, K5, S1, S6, D15 | ok: N9, L7, L12, O7, K5, S1, S6, D15 |
 
-91 of 102 endpoints confirmed; 9 not yet named by any row.
+92 of 102 endpoints confirmed; 9 not yet named by any row.
 
 **Excluded, integrations** (Twilio, Exotel, WhatsApp, ERPNext, lead sync, Frappe Cloud), not part of this log:
 
