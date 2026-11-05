@@ -1668,6 +1668,22 @@ record, or for the dialog to say the item could not be unlinked.
 Locked by `tests/test_delete_dialog_links.py::test_unlink_all_leaves_a_links_row_call_log_listed_and_the_delete_refused`;
 the comment in `crm_app/api/doc.py:_clear_reference` points here.
 
+## 64. An edited call log keeps its old values on the record's Calls tab until a reload
+
+**Where:** `frontend/src/components/Modals/CallLogDetailModal.vue` `openCallLogModal`
+(around line 375), opened from `components/Activities/CallArea.vue:91`. **Seen by the
+owner on an upstream demo, 5 Nov 2026.**
+
+Open a call from a lead's Calls tab → edit it (say its time) → save. The change is saved,
+but the tab shows the old value until the page is reloaded. Reading the code, the edit
+form's `afterUpdate` reloads only the detail modal's own `callLog` resource; nothing
+reloads the record's activities, which is what the Calls tab draws from. Not traced
+further.
+
+**Us:** *Reproduce*: frontend only, and the port keeps upstream's frontend unchanged, so
+it behaves the same (`docs/FINDINGS.md` 72). The upstream fix is for the edit to also
+reload the activities.
+
 ---
 
 ## Faithful behaviours we chose to keep (not bugs — decisions)

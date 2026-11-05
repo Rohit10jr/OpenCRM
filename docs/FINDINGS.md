@@ -2434,7 +2434,9 @@ recorded only. What is known comes from reading `ListBulkActions.vue`, not from 
 this: each action is handed an `unselectAll` callback and calls `reload(unselectAll)`
 when it finishes, so the selection is meant to clear.
 
-**Status:** open.
+**Status:** closed, not reproduced. Retried by the owner on 5 Nov 2026 with a bulk Edit,
+on the port and on an upstream demo: on both the rows untick once the edit is done. The
+other bulk actions were not retried.
 
 ## 72. A call log edited from a lead does not refresh on the lead's Calls tab
 
@@ -2449,7 +2451,9 @@ the change is saved.
 recorded only. The tester's own guess is that the form and the tab hold the call in two
 separate pieces of state.
 
-**Status:** open.
+**Status:** closed as upstream behaviour (`UPSTREAM_BUGS.md` 64). The owner saw the same on
+an upstream demo on 5 Nov 2026: the edited call log shows its old value on the Calls tab
+until the page is reloaded. The port keeps upstream's frontend here, so it matches.
 
 ## 73. Convert to Deal on a lead's page answered 500
 
