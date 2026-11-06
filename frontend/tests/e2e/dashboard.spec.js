@@ -7,8 +7,10 @@ const NUMBER_TITLES = [
   'Total leads',
   'Ongoing deals',
   'Won deals',
-  'Average won deal value',
-  'Average deal value',
+  // Upstream's titles (crm/api/dashboard.py:364, 418), which the port took in the review
+  // of findings 63 and 64; this list still had the port's older "Average ..." wording.
+  'Avg. won deal value',
+  'Avg. deal value',
   'Avg. time to close a lead',
   'Avg. time to close a deal',
 ]

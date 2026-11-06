@@ -23,7 +23,7 @@ test('Settings opens on the profile page and switches to General', async ({ page
   await expect(dialog.getByText('Manage your profile & login information.')).toBeVisible()
 
   await dialog.getByRole('button', { name: 'General', exact: true }).click()
-  await expect(dialog.getByText('General Settings')).toBeVisible()
+  await expect(dialog.getByRole('heading', { name: 'General Settings' })).toBeVisible()
   await expect(dialog.getByText('Timeline timestamp format')).toBeVisible()
 
   await page.keyboard.press('Escape')

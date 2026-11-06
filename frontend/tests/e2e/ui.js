@@ -14,7 +14,12 @@ export function recordLinks(page, base) {
 
 // Each list page: its sidebar label, path, and how a row shows up once loaded.
 // Leads, deals, contacts and organizations render rows as links to the record; tasks and
-// call logs render rows as buttons that open a dialog; notes are cards.
+// call logs render rows as buttons that open a dialog; notes are cards. A row button is
+// the one holding a selection checkbox: the sidebar also sits in a scrolling div, and
+// on an empty list its Notifications button was taken for a row.
+const buttonRows = (page) =>
+  page.locator('div.overflow-y-auto button').filter({ has: page.getByRole('checkbox') })
+
 export const LISTS = [
   { label: 'Leads', path: '/crm/leads', rows: (page) => recordLinks(page, '/crm/leads') },
   { label: 'Deals', path: '/crm/deals', rows: (page) => recordLinks(page, '/crm/deals') },
@@ -25,10 +30,6 @@ export const LISTS = [
     rows: (page) => recordLinks(page, '/crm/organizations'),
   },
   { label: 'Notes', path: '/crm/notes', rows: (page) => page.locator('div.h-56.cursor-pointer') },
-  { label: 'Tasks', path: '/crm/tasks', rows: (page) => page.locator('div.overflow-y-auto button') },
-  {
-    label: 'Call Logs',
-    path: '/crm/call-logs',
-    rows: (page) => page.locator('div.overflow-y-auto button'),
-  },
+  { label: 'Tasks', path: '/crm/tasks', rows: buttonRows },
+  { label: 'Call Logs', path: '/crm/call-logs', rows: buttonRows },
 ]

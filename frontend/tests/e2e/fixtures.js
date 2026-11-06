@@ -18,6 +18,20 @@ import { users } from './users.js'
 // (Finding 45, the Address search, lived here until Address was built.)
 const KNOWN_OPEN = []
 
+// Page errors thrown inside a library, each tied to an UPSTREAM_BUGS.md entry and matched
+// by message and by the file it is thrown from, so the same message from our own code
+// still fails. Nothing on screen goes wrong for these; only the console shows them.
+const KNOWN_LIBRARY_ERRORS = [
+  // Upstream bug 67: frappe-ui's chart starts observing its element 500 ms after mount
+  // without checking the element is still there, so a dashboard reloaded within half a
+  // second of loading (a new period) throws once per chart.
+  {
+    bug: 67,
+    message: /Failed to execute 'observe' on 'ResizeObserver'/,
+    from: 'frappe-ui/src/components/Charts/ECharts.vue',
+  },
+]
+
 function parseBody(request) {
   try {
     return JSON.parse(request.postData() || '{}')
@@ -49,6 +63,10 @@ export const test = base.extend({
       // An error is dropped only when a tolerated request explains it and no
       // unexplained request of the same kind could be behind it instead.
       const remaining = errors.filter((error) => {
+        const library = KNOWN_LIBRARY_ERRORS.some(
+          (k) => k.message.test(error.message) && (error.stack || '').includes(k.from),
+        )
+        if (library) return false
         const known = KNOWN_OPEN.find((k) => k.pageError.test(error.message))
         if (!known) return true
         const explained = tolerated.some((t) => t.finding === known.finding)

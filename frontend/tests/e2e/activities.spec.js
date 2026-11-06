@@ -55,6 +55,9 @@ test('a call log opens its details from the list', async ({ page, api }) => {
     caller: 'Administrator',
   })
   await page.goto('/crm/call-logs')
-  await page.getByText(to).first().click()
+  // Click the row's first column, the caller. A click on any later cell applies that
+  // value as a filter instead of opening the row (ViewControls.vue applyFilter, idx > 0).
+  const row = page.locator('div.overflow-y-auto button').filter({ hasText: to })
+  await row.getByText('Administrator').click()
   await expect(page.getByRole('dialog').getByRole('heading', { name: 'Call Details' })).toBeVisible()
 })
