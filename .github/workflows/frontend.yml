@@ -4,8 +4,8 @@
 # backend.yml explains). The workflow always starts, and the `changes` job runs the
 # checks only when the frontend or this file changed; backend.yml explains why that is
 # not a `paths:` filter on the trigger. A newer push to the same pull request cancels
-# the run still going. Playwright is not here: it needs the Django server with demo data
-# and is the slowest check.
+# the run still going. Playwright is not here: it needs the Django server and is the
+# slowest check, so it runs on its own, manually and nightly (e2e.yml).
 
 name: Frontend
 
