@@ -75,6 +75,9 @@ the pairing CRM's own CI uses).
 | 56 | SLA skips non-working days without resetting the time of day | **Reproduce** — user-visible deadlines |
 | 62 | An assignment notification blocks deleting the lead, deal or task it names | **Reproduce** — the delete check is upstream's |
 | 63 | The delete dialog's Unlink All leaves a call log's `links` rows, so it frees nothing | **Reproduce** — user-visible |
+| 64 | An edited call log keeps its old values on the record's Calls tab until a reload | **Reproduce** — upstream's frontend |
+| 65 | The delete dialog's Unlink and Delete skip, without a word, items the user cannot write | **Reproduce** — user-visible |
+| 66 | A refused delete from the delete dialog shows no message | **Reproduce** — upstream's frontend |
 
 ## 1. A hidden column causes the *next* column to be skipped
 
@@ -1683,6 +1686,44 @@ further.
 **Us:** *Reproduce*: frontend only, and the port keeps upstream's frontend unchanged, so
 it behaves the same (`docs/FINDINGS.md` 72). The upstream fix is for the edit to also
 reload the activities.
+
+## 65. The delete dialog's Unlink and Delete skip, without a word, items the user cannot write
+
+**Where:** `crm/api/doc.py` `remove_linked_doc_reference`, line 778: `if not
+frappe.has_permission(item["doctype"], "write", item["docname"]): continue`. The function
+returns `"success"` whatever it skipped. **Seen by the owner on an upstream demo,
+5 Nov 2026** (`docs/FINDINGS.md` 94).
+
+The dialog lists every linked document whether or not the user can read it
+(`get_linked_docs_of_document` loads each with `frappe.get_doc`, `doc.py:696`, and the
+framework's `get_dynamic_linked_docs` queries without a permission filter,
+`frappe/model/delete_doc.py:398` on version-15). Unlink All and Delete All send the whole
+list, and any item the user cannot write is skipped. The usual case is an assignment
+notification addressed to someone else: only its recipient, Administrator or a System
+Manager may write it (`crm_notification.py:45-58`). By the code, the dialog then reloads
+with the item still listed and nothing says why, and that user cannot delete the record
+at all. The demo confirmed the refused delete; whether the item stayed listed is the open
+question in finding 94.
+
+**Us:** *Reproduce*: the port's `remove_linked_doc_reference` skips the same items
+(`crm_app/api/doc.py`, the comment citing line 778). The upstream fix is to report the
+skipped items, or to leave out of the list what the user cannot clear.
+
+## 66. A refused delete from the delete dialog shows no message
+
+**Where:** `frontend/src/components/DeleteLinkedDocModal.vue` `deleteDoc` (line 251):
+`await call('frappe.client.delete', …)` with no `catch`, and nothing else handles the
+rejection. **Seen by the owner on an upstream demo, 5 Nov 2026** (`docs/FINDINGS.md` 94).
+
+When `frappe.client.delete` refuses, for example with `LinkExistsError` ("Cannot delete or
+cancel because CRM Lead … is linked with CRM Notification …"), the promise rejects, the
+dialog stays open, and the user sees nothing; the message is only in the network
+response. The redirect and reload after the `await` do not run, so the record is
+untouched, which is correct, but the user is not told.
+
+**Us:** *Reproduce*: the port keeps upstream's `deleteDoc` unchanged (its only change to
+this file, finding 56, is in `unlinkLinkedDoc`). The upstream fix is a `catch` that shows
+the server's message.
 
 ---
 

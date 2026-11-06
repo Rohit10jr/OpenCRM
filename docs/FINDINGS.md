@@ -3316,3 +3316,59 @@ Where the port's list still differs from upstream's `get_linked_docs` +
 
 Covered by `tests/test_delete_dialog_links.py`, the tests after
 `test_a_contacts_dialog_lists_the_deal_it_is_on_and_unlink_takes_it_off`.
+
+## 94. The delete dialog hides linked documents the user cannot read, then the delete is refused
+
+**Block:** deleting a lead or deal that a document the user cannot read still points at,
+since finding 76. The usual case is an assignment notification addressed to another user
+(upstream bug 62). Upstream's side checked by the owner on an upstream demo,
+5 Nov 2026.
+
+**Upstream:** the dialog lists every linked document, readable or not
+(`crm/api/doc.py:677-718` loads each with `frappe.get_doc`; the framework's
+`get_dynamic_linked_docs` queries without a permission filter, `delete_doc.py:398`).
+Unlink All and Delete All skip what the user cannot write (upstream bug 65), and the
+delete is then refused with `LinkExistsError`, which the dialog does not show (upstream
+bug 66). On the demo the lead was not deleted and another Sales User still saw it.
+
+**Port:** the list is permission-filtered (`crm_app/api/doc.py`
+`get_linked_docs_of_document`, the docstring calls listing them "a leak with no upside").
+So the dialog can come up empty and offer Delete, and the delete is refused naming a
+document the user was never shown. Same outcome, but the user gets no hint of what is in
+the way.
+
+**Decision (owner, 6 Nov 2026):** match upstream; list them. Both upstream bugs are
+reproduced, not fixed.
+
+**Plan:**
+
+1. `get_linked_docs_of_document` reads the linked documents with the model's default
+   manager instead of `base_queryset(linked_doctype, user)`, in the three loops (FK
+   sources, reference-pair sources, `links`-row parents). The filtered line stays,
+   commented `Upstream:`-style as the port's earlier choice, with this finding. The read
+   check on the record itself (`_require_readable`) stays: the user is on its page, and
+   upstream's `frappe.get_doc` of the record is no looser for a user who can open it.
+2. `_parents_of_rows` and `_dynamic_link_row_parents` take the same change for the
+   parent documents of child rows, since upstream reports those parents unfiltered.
+3. `_linked_docs_for_batch` (the bulk delete's scan, upstream `doc.py:815-829`, which
+   calls `get_linked_docs_of_document`) follows, so the bulk path skips and refuses the
+   same way.
+4. `remove_linked_doc_reference` is unchanged: its write check already skips as
+   upstream's line 778 does.
+5. Frontend unchanged (bug 66 reproduced).
+6. Tests in `tests/test_delete_dialog_links.py`: a Sales User's dialog on a lead with
+   another user's assignment notification lists it; Unlink All leaves it listed; the
+   delete is refused with `LinkExistsError`; Administrator's Unlink All clears it and
+   the delete goes through. Any existing test asserting the filter is rewritten to the
+   new expectation, not kept.
+7. Records: this finding's fix note, the docstring, `specs/SECURITY_MODEL.md` if it
+   records the filter.
+
+**Open question before building:** upstream shows its Delete button only when the
+list is empty (`DeleteLinkedDocModal.vue:89`), yet the demo reached
+`frappe.client.delete`. So after Unlink the demo's list was empty while notification
+`avc1smnsjh` still linked the lead. Either the listed notification was a different one
+that Unlink cleared, or the demo's upstream version filters the list after all. The
+notification's To User, and whether there were two, settle it.
+
+**Status:** open.
