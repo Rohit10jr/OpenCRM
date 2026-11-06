@@ -3316,3 +3316,34 @@ Where the port's list still differs from upstream's `get_linked_docs` +
 
 Covered by `tests/test_delete_dialog_links.py`, the tests after
 `test_a_contacts_dialog_lists_the_deal_it_is_on_and_unlink_takes_it_off`.
+
+## 94. The delete dialog hides another user's notification, then the delete is refused
+
+**Block:** deleting a lead or deal assigned to more than one user, since finding 76. Each
+assignee has a notification naming the record (upstream bug 62).
+
+**Seen on an upstream demo by the owner, 5–6 Nov 2026:** a lead assigned to Sales Users A
+and B. As A, the dialog listed only A's notification. Unlink All cleared it, the list was
+empty and the dialog offered Delete. The delete was refused with `LinkExistsError`
+naming B's notification, and the dialog showed nothing (upstream bugs 65 and 66); the
+lead stayed for everyone. As B, the dialog listed B's notification; once B unlinked it,
+the lead deleted.
+
+**Port:** the same. Its list is permission-filtered (`crm_app/api/doc.py`
+`get_linked_docs_of_document`) under upstream's notification rule, recipient only
+(`crm_app/permissions/notification.py:37,73`), and its delete check reads every row
+(`frappe_core/delete_doc.py`), so A meets the same refusal; the dialog's `deleteDoc` is
+upstream's, so nothing is shown either.
+
+**Unresolved:** by our upstream checkout (`main`, 11 Sep 2026) the list is not filtered
+(`crm/api/doc.py:696` uses `frappe.get_doc`; version-15 `get_dynamic_linked_docs` has no
+permission filter), so A would have seen both notifications. The demo did not, so it
+presumably runs a later version. The port matches the demo.
+
+**Decision (owner, 6 Nov 2026):** match upstream. As the port already does, no code
+changes.
+
+**Status:** closed, matches upstream (bugs 65 and 66 reproduced). No test was added for
+this case; the filter and the delete check are each covered by
+`tests/test_delete_dialog_links.py` and `tests/test_delete_link_check.py`.
+
