@@ -67,6 +67,9 @@ jobs:
       # minutes its access token would expire part-way and send later tests to login.
       JWT_ACCESS_TOKEN_LIFETIME_MINUTES: "120"
       CI: "true"
+      # Without it Python buffers runserver's output in a file, and the uploaded
+      # django.log of the first run came out empty.
+      PYTHONUNBUFFERED: "1"
 
     steps:
       - uses: actions/checkout@v7
