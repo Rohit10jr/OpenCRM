@@ -100,6 +100,11 @@ export default defineConfig(async ({ mode }) => {
         'prosemirror-view',
         'lowlight',
         'interactjs',
+        // Port only: imported by the app's own AttachmentItem.vue, but Vite's start-up scan
+        // did not find it. It was discovered on the first visit to a deal's page, and Vite
+        // re-optimized and reloaded the page mid-test, which blanked it in the first CI
+        // Playwright runs (6 Nov 2026). Listed here, it is pre-bundled at start-up.
+        'mime',
         // Reached from frappe-ui's socketio.ts: socket.io-client -> socket.io-parser,
         // whose `development` export condition picks its debug build, which imports the
         // CommonJS `debug` package. Served raw, that import has no default export and
