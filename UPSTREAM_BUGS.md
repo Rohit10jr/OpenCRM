@@ -76,7 +76,7 @@ the pairing CRM's own CI uses).
 | 62 | An assignment notification blocks deleting the lead, deal or task it names | **Reproduce** — the delete check is upstream's |
 | 63 | The delete dialog's Unlink All leaves a call log's `links` rows, so it frees nothing | **Reproduce** — user-visible |
 | 64 | An edited call log keeps its old values on the record's Calls tab until a reload | **Reproduce** — upstream's frontend |
-| 65 | The delete dialog's Unlink and Delete skip, without a word, items the user cannot write | **Reproduce** — user-visible |
+| 65 | The delete dialog hides another user's notification, then offers a delete that it blocks | **Reproduce** — user-visible |
 | 66 | A refused delete from the delete dialog shows no message | **Reproduce** — upstream's frontend |
 
 ## 1. A hidden column causes the *next* column to be skipped
@@ -1687,27 +1687,33 @@ further.
 it behaves the same (`docs/FINDINGS.md` 72). The upstream fix is for the edit to also
 reload the activities.
 
-## 65. The delete dialog's Unlink and Delete skip, without a word, items the user cannot write
+## 65. The delete dialog hides another user's notification, then offers a delete that it blocks
 
-**Where:** `crm/api/doc.py` `remove_linked_doc_reference`, line 778: `if not
-frappe.has_permission(item["doctype"], "write", item["docname"]): continue`. The function
-returns `"success"` whatever it skipped. **Seen by the owner on an upstream demo,
-5 Nov 2026** (`docs/FINDINGS.md` 94).
+**Where:** the delete dialog's list (`crm/api/doc.py` `get_linked_docs_of_document`) and
+the framework's dynamic-link check (`frappe/model/delete_doc.py`
+`check_if_doc_is_dynamically_linked`). **Reproduced by the owner on an upstream demo,
+6 Nov 2026** (`docs/FINDINGS.md` 94).
 
-The dialog lists every linked document whether or not the user can read it
-(`get_linked_docs_of_document` loads each with `frappe.get_doc`, `doc.py:696`, and the
-framework's `get_dynamic_linked_docs` queries without a permission filter,
-`frappe/model/delete_doc.py:398` on version-15). Unlink All and Delete All send the whole
-list, and any item the user cannot write is skipped. The usual case is an assignment
-notification addressed to someone else: only its recipient, Administrator or a System
-Manager may write it (`crm_notification.py:45-58`). By the code, the dialog then reloads
-with the item still listed and nothing says why, and that user cannot delete the record
-at all. The demo confirmed the refused delete; whether the item stayed listed is the open
-question in finding 94.
+Assign a lead to Sales Users A and B, so each gets an assignment notification naming it
+(bug 62). As A, Delete on the lead lists only A's notification. Unlink All clears it, the
+list is empty, and the dialog offers Delete. The delete is refused, because B's
+notification still links the lead and the check reads every row, not the user's
+(`LinkExistsError`, shown nowhere: bug 66). A cannot see or clear what blocks it; only B
+(or Administrator) can. On the demo, B's dialog listed B's notification; once B unlinked
+it, the lead deleted.
 
-**Us:** *Reproduce*: the port's `remove_linked_doc_reference` skips the same items
-(`crm_app/api/doc.py`, the comment citing line 778). The upstream fix is to report the
-skipped items, or to leave out of the list what the user cannot clear.
+Only a notification's recipient, Administrator or a System Manager may read or write it
+(`crm/fcrm/doctype/crm_notification/crm_notification.py:35-58`). **Unresolved:** our
+upstream checkout (`main`, 11 Sep 2026) loads each listed document with `frappe.get_doc`
+(`doc.py:696`) and the version-15 framework's `get_dynamic_linked_docs` has no
+permission filter (`delete_doc.py:398`), so by that code A's dialog would list both
+notifications. The demo did not, so it presumably runs a later version; not checked.
+
+**Us:** *Reproduce*, matching the demo. The port's list is permission-filtered
+(`crm_app/api/doc.py` `get_linked_docs_of_document`) under the same notification rule
+(`crm_app/permissions/notification.py:37,73`), and its delete check reads every row
+(`frappe_core/delete_doc.py`), so A meets the same refusal. The upstream fix is bug 62's:
+a notification should not block the delete.
 
 ## 66. A refused delete from the delete dialog shows no message
 
