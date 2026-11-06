@@ -1,8 +1,9 @@
 # Browser tests: the Playwright suite (frontend/tests/e2e/) against a fresh database.
 #
 # Not on every pull request: it is the slowest check, and the owner chose a manual and
-# nightly run (6 Nov 2026). It also runs on a pull request that changes this file, so a
-# change to the workflow is tried before it merges. GitHub runs a scheduled workflow
+# nightly run (6 Nov 2026). It also runs on a pull request that changes this file, the
+# tests, the Playwright config or the Vite config the dev server runs on, so a change to
+# the suite or to how it is served is tried before it merges. GitHub runs a scheduled workflow
 # from main only, and turns the schedule off after 60 days without a commit to the
 # repository.
 #
@@ -27,6 +28,9 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/e2e.yml"
+      - "frontend/tests/e2e/**"
+      - "frontend/playwright.config.js"
+      - "frontend/vite.config.js"
 
 concurrency:
   group: e2e-${{ github.ref }}
