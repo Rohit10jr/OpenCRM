@@ -55,7 +55,8 @@ per-doctype detail and the two questions that settle each case.
 2. Phases 0 and 2 are single-agent. Everything else fans out by cluster/module.
 3. No two concurrent agents edit the same file.
 4. Preserve `frappe.throw` message text verbatim — it is user-facing copy.
-5. Work on a branch, never directly on `main`.
+5. Work on a branch, not directly on `main`, unless the owner asks for `main` for that
+   change. (Owner, 7 Nov 2026.)
 6. **One commit per meaningful change, never one per phase.** An earlier run was told
    "one commit per phase" and produced single commits of 25,000 lines — unreviewable,
    unbisectable, unrevertable. Commit when a coherent piece of work is done and the suite

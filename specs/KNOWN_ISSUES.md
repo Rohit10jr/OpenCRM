@@ -582,16 +582,17 @@ then use the access token issued before it, and require a 401.
 send button; each is a case the port answers differently from upstream, or not at all,
 and the next person to touch mail should meet them here.
 
-### A subject with a line break is a 500 on the inline path
+### A subject with a line break was a 500 on the inline path (fixed 7 Nov 2026)
 
-Django refuses a header containing CR or LF (`BadHeaderError`, a `ValueError`) when the
-message is built, which is the right security answer - it is header injection - but the
-inline send (`now: 1`) catches only `SMTPException` / `OSError`, so the caller gets a
-500 rather than a 417. Queued, the task fails without retry, since the exception is not
-on its retry list, and the row stays claimed (see below). Upstream does not validate
-the subject either. Left as is because choosing a sentence would be inventing copy
-upstream does not have; if it is picked up, catch `BadHeaderError` in
-`crm_app/api/communication.py:_send` and `throw` a 417, and clear the claim in the task.
+Django refuses a header containing CR or LF (`BadHeaderError`) when the message is
+built, and the inline send (`now: 1`) caught only `SMTPException` / `OSError`, so the
+caller got a 500. This entry used to say upstream does not validate the subject either;
+it does not refuse it, but it does clean it: `"Subject": strip(self.subject)` goes
+through `set_header`, which applies `sanitize_email_header`, `"".join(header.splitlines())`
+(`frappe/email/email_body.py:343, 376, 659`, version-15). `crm_app/communication.py`
+`build_message` now does the same, so the mail goes out with the lines joined and the
+Communication row keeps the subject as saved. Covered by
+`tests/test_email_make.py::test_a_subject_with_line_breaks_is_sent_with_them_removed`.
 
 ### A worker killed between the claim and the send leaves the mail unsent
 

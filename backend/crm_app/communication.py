@@ -549,8 +549,13 @@ def build_message(communication, account, copy_to: str | None = None):
             headers["In-Reply-To"] = f"<{parent}>"
 
     html = communication.content or ""
+    # Upstream: "Subject": strip(self.subject), then set_header() runs it through
+    # sanitize_email_header, "".join(header.splitlines()) (frappe/email/email_body.py:343,
+    # 376, 659). Django refuses a header holding a line break (BadHeaderError), so without
+    # this a subject with one was a 500 (specs/KNOWN_ISSUES.md 7).
+    subject = "".join((communication.subject or "").strip().splitlines())
     message = EmailMultiAlternatives(
-        subject=communication.subject or "",
+        subject=subject,
         body=strip_tags(html),
         from_email=sender_with_displayname(communication, account),
         to=to,

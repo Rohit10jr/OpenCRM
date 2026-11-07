@@ -140,6 +140,22 @@ def test_a_sales_user_emails_a_lead_she_can_read(auth_api, alice_lead, outgoing_
     assert "400k" in message.body and "<b>" not in message.body
 
 
+def test_a_subject_with_line_breaks_is_sent_with_them_removed(
+    auth_api, alice_lead, outgoing_account
+):
+    """Frappe's ``sanitize_email_header`` joins the subject's lines (email_body.py:659);
+    Django would otherwise refuse the header and the inline send was a 500. Only the
+    header is cleaned: the row keeps the line break."""
+    response = auth_api.post(
+        MAKE, _payload(alice_lead, subject=" Your quote\r\nfor Q3\n"), format="json"
+    )
+    assert response.status_code == 200
+
+    assert mail.outbox[0].subject == "Your quotefor Q3"
+    row = Communication.objects.get(pk=response.json()["message"]["name"])
+    assert "\n" in row.subject
+
+
 def test_the_send_stamps_the_row_so_a_redelivery_cannot_double_send(
     auth_api, alice_lead, outgoing_account
 ):
