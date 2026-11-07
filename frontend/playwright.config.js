@@ -73,7 +73,9 @@ export default defineConfig({
     url: `${BASE_URL}/crm/login`,
     reuseExistingServer: true,
     timeout: 300_000,
-    stdout: 'ignore',
+    // In CI, Vite's own output (a dependency re-optimization, a full reload) goes into
+    // the job log beside the test results; locally it stays quiet.
+    stdout: process.env.CI ? 'pipe' : 'ignore',
     stderr: 'pipe',
   },
 })

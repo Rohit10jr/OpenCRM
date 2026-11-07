@@ -78,6 +78,7 @@ the pairing CRM's own CI uses).
 | 64 | An edited call log keeps its old values on the record's Calls tab until a reload | **Reproduce** — upstream's frontend |
 | 65 | The delete dialog hides another user's notification, then offers a delete that it blocks | **Reproduce** — user-visible |
 | 66 | A refused delete from the delete dialog shows no message | **Reproduce** — upstream's frontend |
+| 67 | A dashboard chart unmounted within half a second of mounting throws in the console | **Reproduce** — frappe-ui's code; console only |
 
 ## 1. A hidden column causes the *next* column to be skipped
 
@@ -1730,6 +1731,25 @@ untouched, which is correct, but the user is not told.
 **Us:** *Reproduce*: the port keeps upstream's `deleteDoc` unchanged (its only change to
 this file, finding 56, is in `unlinkLinkedDoc`). The upstream fix is a `catch` that shows
 the server's message.
+
+## 67. A dashboard chart unmounted within half a second of mounting throws in the console
+
+**Where:** frappe-ui `src/components/Charts/ECharts.vue` (1.0.0-beta.29, the version
+upstream's `frontend/package.json` pins), `onMounted`:
+`setTimeout(() => resizeObserver.observe(chartDiv.value!), 500)`. **Seen in the port's
+Playwright run in CI, 6 Nov 2026**; upstream ships the same file.
+
+If the chart is unmounted before the 500 ms are up, `chartDiv.value` is gone and
+`observe` throws "Failed to execute 'observe' on 'ResizeObserver': parameter 1 is not of
+type 'Element'", once per chart. On the dashboard this happened when the period was
+changed right after the page loaded (`dashboard.spec.js`, "choosing another period"),
+which on a fast machine is well inside half a second. Nothing on screen goes wrong; the
+errors are only in the console.
+
+**Us:** *Reproduce*: library code, untouched. The Playwright suite fails a test on any
+uncaught page error, so `frontend/tests/e2e/fixtures.js` tolerates exactly this message
+when it is thrown from that file (`KNOWN_LIBRARY_ERRORS`). The fix belongs in frappe-ui:
+check the element inside the timeout, and clear the timeout on unmount.
 
 ---
 

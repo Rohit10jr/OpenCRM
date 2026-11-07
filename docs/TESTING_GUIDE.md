@@ -442,6 +442,18 @@ A cold `yarn dev` makes the first test slow (the setup step allows minutes for i
 warm server runs the suite in a few minutes. The `Tested` column of `ROUTES.md` §5 is
 the place to record what a green run covers.
 
+**In CI.** `.github/workflows/e2e.yml` runs the suite every night, when started by hand
+(Actions → E2E → Run workflow), and on a pull request that changes the workflow, the
+tests, `playwright.config.js` or `vite.config.js`; not on other pull requests, as it is
+the slowest check. It needs no demo data: a fresh
+database gets `migrate`, `seed_defaults`, and `python manage.py seed_e2e_users`, which
+gives Administrator the password in `ADMIN_PWD` and creates `ada@example.com` as a Sales
+User with `SALES_PWD`; the workflow generates both for each run and masks them. Django
+runs with `config.settings.test` (no Redis), with a two-hour access token so the one
+saved sign-in lasts the run. A failed run keeps the HTML report, the traces and Django's
+log as the `playwright-report` artifact. `seed_e2e_users` replaces Administrator's
+password, so run it locally only against a database where that is what you want.
+
 ## Two practices that save the most time
 
 - **Use the frontend as a guide, not just a target.** Open the Leads page with the

@@ -31,8 +31,10 @@ test('Create Deal through the dialog, with a new organization and contact', asyn
   const first = uniqueName('E2E')
   const email = `${first.replace(/\W+/g, '.').toLowerCase()}@example.com`
   await dialog.getByRole('textbox', { name: 'Organization Name', exact: true }).fill(orgName)
-  await dialog.getByRole('textbox', { name: 'First Name', exact: true }).fill(first)
-  await dialog.getByRole('textbox', { name: 'Email', exact: true }).fill(email)
+  // CRM Deal's own labels (crm_deal.json: "First name", "Primary email"), which the Quick
+  // Entry layout seed_defaults writes shows; the lead dialog's are "First Name" and "Email".
+  await dialog.getByRole('textbox', { name: 'First name', exact: true }).fill(first)
+  await dialog.getByRole('textbox', { name: 'Primary email', exact: true }).fill(email)
   await dialog.getByRole('button', { name: 'Create' }).click()
 
   await page.waitForURL(/\/crm\/deals\/CRM-DEAL-/)
