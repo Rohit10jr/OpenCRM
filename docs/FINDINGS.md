@@ -2640,8 +2640,9 @@ Differences from upstream, kept visible in the code:
   the one. This endpoint already refused whole batches for permission.
 - Which reference is named, when there are several, is the first by name per field in
   registry order; upstream's is the database's first row, by DocType `read_only`.
-- `WhatsApp Message.reference_name` is not checked: `frappe_whatsapp` is not in the
-  repo, so its fieldtype cannot be confirmed. The dialog still lists such messages.
+- `WhatsApp Message.reference_name` was not checked at first, as `frappe_whatsapp` is not
+  in the repo. Its JSON was read on 8 Nov 2026 (`shridarpatil/frappe_whatsapp`, the app
+  upstream's README names): a Dynamic Link, so it now blocks the delete like the others.
 
 Two consequences of following upstream that the Vue app will show:
 
