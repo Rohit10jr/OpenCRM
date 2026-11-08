@@ -79,6 +79,14 @@ the pairing CRM's own CI uses).
 | 65 | The delete dialog hides another user's notification, then offers a delete that it blocks | **Reproduce** — user-visible |
 | 66 | A refused delete from the delete dialog shows no message | **Reproduce** — upstream's frontend |
 | 67 | A dashboard chart unmounted within half a second of mounting throws in the console | **Reproduce** — frappe-ui's code; console only |
+| 68 | No CRM role has the target-doctype `import` permission Data Import requires | **Diverge** — System Manager is the authority |
+| 69 | A UTF-8 BOM becomes part of the first import header | **Diverge** — stripped |
+| 70 | A short import row warns, then crashes while building payloads | **Diverge** — warning remains blocking |
+| 71 | Imported Contact child rows can leave all primary values blank | **Diverge** — first rows promoted when none is selected |
+| 72 | Contact email and phone columns target derived parent fields | **Diverge** — mapped to child tables |
+| 73 | Insert import accepts a name/ID column it cannot faithfully honor | **Diverge** — skipped with an info warning |
+| 74 | Equally common date formats are selected nondeterministically | **Diverge** — first observed wins |
+| 75 | An invalid import Duration warns, then throws while parsing | **Diverge** — warning remains blocking |
 
 ## 1. A hidden column causes the *next* column to be skipped
 
@@ -1761,6 +1769,109 @@ permission for the six doctypes this port imports.
 **Us:** *Diverge.* Data Import and Data Import Log are Administrator/System Manager-only
 through both permission hooks, and that role is the import authority instead of a
 permission type this port does not model.
+
+---
+
+## 69. A UTF-8 BOM becomes part of the first import header
+
+**Where:** version-15 `frappe/utils/csvutils.py:71-101` (`read_csv_content`).
+
+The decoder passes a leading `U+FEFF` directly to `csv.reader`. With an ordinary first
+header it becomes part of that value, so column matching fails; before a quoted header it
+also prevents the quote from being recognized as the start of the field.
+
+**Us:** *Diverge.* The in-memory CSV reader removes one leading BOM before splitting and
+tokenizing, preserving both plain and quoted first headers.
+
+---
+
+## 70. A short import row warns, then crashes while building payloads
+
+**Where:** version-15 `frappe/core/doctype/data_import/importer.py:617-812`, especially
+`Row.__init__` and `Row.get_values`.
+
+`Row.__init__` records `Row has less values than columns`, but `get_values` subsequently
+indexes every header position. Payload construction therefore raises `IndexError` instead
+of returning the warning that was already prepared.
+
+**Us:** *Diverge.* Missing positions read as blank. The verbatim warning remains a
+blocking warning, so the malformed row is not saved.
+
+---
+
+## 71. Imported Contact child rows can leave all primary values blank
+
+**Where:** version-15 `frappe/core/doctype/data_import/importer.py:489-548`
+(`parse_next_row_for_import`) and `frappe/contacts/doctype/contact/contact.py:175-219`.
+
+The importer groups email and phone child rows but does not choose a primary. Contact's
+email validation promotes a sole row only, and its phone validation promotes none, so a
+multi-row import with no flags can leave the Contact's derived email, phone and mobile
+values blank.
+
+**Us:** *Diverge.* When the file selects no primary, its first email is primary and its
+first phone is primary for both phone and mobile. Any primary flags supplied by the file
+remain authoritative.
+
+---
+
+## 72. Contact email and phone columns target derived parent fields
+
+**Where:** version-15 `frappe/core/doctype/data_import/importer.py:868-922` (`Column.parse`)
+and `1078-1225` (`build_fields_dict_for_column_matching`).
+
+Whether matched from a header label or fieldname, or stored as a bare fieldname in
+`column_to_field_map`, Contact's `email_id`, `phone` and `mobile_no` resolve to derived
+parent cache fields rather than the `email_ids` and `phone_nos` child tables. The values
+are lost when Contact rebuilds those caches from its children.
+
+**Us:** *Diverge.* Every such `email_id` maps to `email_ids.email_id`; `phone` and
+`mobile_no` map to `phone_nos.phone`. Distinct phone and mobile values in one CSV row
+become distinct child rows with their corresponding primary flags; an identical value
+becomes one row carrying both flags.
+
+---
+
+## 73. Insert import accepts a name/ID column it cannot faithfully honor
+
+**Where:** version-15 `frappe/core/doctype/data_import/importer.py:1078-1218`
+(`build_fields_dict_for_column_matching`) and `importer.py:213-229` (`insert_record`).
+
+The header map accepts `name` and `ID`, including aliases to a field-based autoname. On
+insert, however, the framework clears a directly supplied name unless the doctype uses
+prompt naming. The preview therefore presents the column as importable even when its
+value will not become the document ID.
+
+**Us:** *Diverge.* This insert-only importer skips `name` and `ID` with the existing
+`Skipping column {0}` info warning. The upstream aliases remain in the comparison map.
+
+---
+
+## 74. Equally common date formats are selected nondeterministically
+
+**Where:** version-15 `frappe/core/doctype/data_import/importer.py:960-996`
+(`Column.guess_date_format_for_column`).
+
+The most-common calculation takes candidates from a set. When two formats have equal
+counts, `max` returns whichever the process-random set order supplies, so the same mixed
+column can acquire a different default format in another process.
+
+**Us:** *Diverge.* Candidates retain their first-observed order; an exact frequency tie
+chooses the first format seen in the file.
+
+---
+
+## 75. An invalid import Duration warns, then throws while parsing
+
+**Where:** version-15 `frappe/core/doctype/data_import/importer.py:748-787`
+(`Row.validate_value` and `Row.parse_value`).
+
+The row validator records `Value {0} must be in the valid duration format: d h m s` but
+returns the invalid value. Payload parsing then passes it to `duration_to_seconds`, whose
+second validation throws instead of leaving the prepared blocking warning for preview.
+
+**Us:** *Diverge.* The verbatim warning remains blocking and the invalid cell is omitted
+from the payload, like the port's handling of malformed short rows.
 
 ---
 
