@@ -269,7 +269,17 @@ class User(AbstractBaseUser, PermissionsMixin):
             if self.email:
                 self.email = str(self.email).strip().lower()
 
-        return super().save(*args, **kwargs)
+        super().save(*args, **kwargs)
+
+        # Upstream: `check_enable_disable` logs the user out on every save while disabled
+        # (`frappe/core/doctype/user/user.py:272-274`).
+        # Port only: there are no sessions to delete, so the tokens are revoked instead.
+        # `is_active` already refuses them while disabled; this is what stops them working
+        # again if the account is re-enabled (KNOWN_ISSUES §6).
+        if not self.enabled:
+            from frappe_core.authentication import bump_token_version
+
+            bump_token_version(self)
 
     @property
     def is_active(self) -> bool:

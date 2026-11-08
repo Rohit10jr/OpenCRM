@@ -48,6 +48,11 @@ STATUS_CHOICES = [
 class WhatsAppMessage(BaseDocument):
     """One message, inbound or outbound."""
 
+    #: Dynamic Link upstream (`whatsapp_message.json` in `shridarpatil/frappe_whatsapp`), so
+    #: a lead, deal or contact with messages is refused deletion until they are unlinked or
+    #: deleted (FINDINGS.md 76).
+    DYNAMIC_LINK_FIELDS = {"reference_name": "reference_doctype"}
+
     #: `whatsapp.py:37` — the direction decides which number is the contact's.
     type = models.CharField(max_length=20, choices=DIRECTION_CHOICES, default="Outgoing")
 

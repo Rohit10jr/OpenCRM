@@ -14,7 +14,15 @@ from urllib.parse import quote
 import pytest
 
 from crm_app.integrations.call_log import link_with_reference_doc
-from crm_app.models import CRMCallLog, CRMDeal, CRMDealStatus, CRMNotification, CRMTask, FCRMNote
+from crm_app.models import (
+    CRMCallLog,
+    CRMDeal,
+    CRMDealStatus,
+    CRMNotification,
+    CRMTask,
+    FCRMNote,
+    WhatsAppMessage,
+)
 from frappe_core.session import session_user
 from frappe_platform.models import Comment
 
@@ -76,6 +84,38 @@ def test_resource_delete_is_refused_while_a_reference_remains(api_as, administra
     response = _delete_resource(api_as(administrator), "CRM Deal", deal.pk)
     _refusal(response, f"Cannot delete or cancel because CRM Deal {deal.pk} is linked with {kind} {referrer.pk}")
     assert CRMDeal.objects.filter(pk=deal.pk).exists()
+
+
+def _whatsapp_message(deal, alice):
+    with session_user(alice.name):
+        return WhatsAppMessage.objects.create(
+            type="Outgoing", message="hi", reference_doctype="CRM Deal", reference_name=deal.pk,
+            **{"to": "+1 222"},
+        )
+
+
+def test_a_whatsapp_message_blocks_the_delete(api_as, administrator, alice, deal):
+    message = _whatsapp_message(deal, alice)
+    response = api_as(administrator).post(DELETE, {"doctype": "CRM Deal", "name": deal.pk}, format="json")
+    _refusal(response, f"Cannot delete or cancel because CRM Deal {deal.pk} is linked with WhatsApp Message {message.pk}")
+    assert CRMDeal.objects.filter(pk=deal.pk).exists()
+
+
+def test_the_dialogs_unlink_clears_a_whatsapp_message_so_the_delete_works(api_as, alice, deal):
+    message = _whatsapp_message(deal, alice)
+    client = api_as(alice)
+    response = client.post(LINKED, {"doctype": "CRM Deal", "docname": deal.pk}, format="json")
+    items = [
+        {"doctype": row["reference_doctype"], "docname": row["reference_docname"]}
+        for row in response.json()["message"]
+    ]
+    assert items == [{"doctype": "WhatsApp Message", "docname": str(message.pk)}]
+    response = client.post(UNLINK, {"items": items, "remove_contact": False, "delete": False}, format="json")
+    assert response.status_code == 200
+
+    response = client.post(DELETE, {"doctype": "CRM Deal", "name": deal.pk}, format="json")
+    assert response.status_code == 200, response.content[:300]
+    assert WhatsAppMessage.objects.get(pk=message.pk).reference_name == ""
 
 
 def test_a_reference_in_a_child_table_names_the_parent_and_the_row(api_as, administrator, alice, deal):
