@@ -8,8 +8,8 @@
               <h3 class="text-3xl-semibold leading-6 text-ink-gray-9">
                 {{
                   editMode
-                    ? __('Edit ', [doctypeTitle || doctype])
-                    : __('Create ', [doctypeTitle || doctype])
+                    ? __('Edit {0}', [__(doctypeTitle || doctype)])
+                    : __('Create {0}', [__(doctypeTitle || doctype)])
                 }}
               </h3>
             </Dialog.Title>
