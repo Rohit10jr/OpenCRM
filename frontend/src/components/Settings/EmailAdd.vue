@@ -11,8 +11,9 @@
     </div>
     <!-- email service provider selection -->
     <div class="flex flex-wrap items-center">
+      <!-- Upstream: v-for="s in services". Port only: leaves out Frappe Mail (emailConfig.js). -->
       <div
-        v-for="s in services"
+        v-for="s in addableServices"
         :key="s.name"
         class="flex flex-col items-center gap-1 mt-4 w-[70px]"
         @click="handleSelect(s)"
@@ -100,7 +101,7 @@ import CircleAlert from '~icons/lucide/circle-alert'
 import {
   customProviderFields,
   popularProviderFields,
-  services,
+  addableServices,
   validateInputs,
   incomingOutgoingFields,
 } from './emailConfig'

@@ -160,8 +160,15 @@ export const services = [
     ),
     link: 'https://github.com/frappe/mail',
     custom: true,
+    // Port only: the backend saves these credentials but has no Frappe Mail client, so an
+    // account set up this way could not send. Frappe version-15 has none either.
+    unavailable: true,
   },
 ]
+
+// Port only: what Add Email Account offers. `services` stays whole so that an account
+// already saved with a hidden provider still opens with the right form.
+export const addableServices = services.filter((s) => !s.unavailable)
 
 export const emailIcon = {
   GMail: LogoGmail,
