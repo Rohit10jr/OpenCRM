@@ -1734,8 +1734,8 @@ the server's message.
 
 ## 67. A dashboard chart unmounted within half a second of mounting throws in the console
 
-**Where:** frappe-ui `src/components/Charts/ECharts.vue` (1.0.0-beta.29, the version
-upstream's `frontend/package.json` pins), `onMounted`:
+**Where:** frappe-ui `experimental/Charts/ECharts.vue` (1.0.0-rc.2; `src/components/Charts/`
+in 1.0.0-beta.29, the version this entry was written against), `onMounted`:
 `setTimeout(() => resizeObserver.observe(chartDiv.value!), 500)`. **Seen in the port's
 Playwright run in CI, 6 Nov 2026**; upstream ships the same file.
 

@@ -26,7 +26,7 @@
     :is="filter.fieldtype === 'Date' ? DatePicker : DateTimePicker"
     v-else-if="['Date', 'Datetime'].includes(filter.fieldtype)"
     class="border-none"
-    :value="filter.value"
+    :model-value="filter.value"
     :placeholder="filter.label"
     @change="(v) => updateFilter(filter, v)"
   />

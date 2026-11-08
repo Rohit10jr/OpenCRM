@@ -1,7 +1,7 @@
 /**
  * Token storage — the JWT patch's second half, docs/FINDINGS.md 38.
  *
- * frappe-ui has its own "who is signed in" helper, `frappe-ui/frappe/session.js`, which
+ * @framework/ui has its own "who is signed in" helper, `frappe/ui/src/utils/session.ts`, which
  * reads the `user_id` cookie Frappe sets at login. This app never had one, so
  * `useOnboarding()` in the sidebar saw nobody and the layout failed to render. The
  * cookie is now written and cleared beside the tokens; these tests read it back the way
@@ -12,7 +12,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearTokens, getTokenUser, setTokens } from '@/auth/tokens'
 
-// `frappe-ui/frappe/session.js:2-3`.
+// `frappe/ui/src/utils/session.ts:6-7`.
 function libraryReadsUser() {
   let cookies = new URLSearchParams(document.cookie.split('; ').join('&'))
   return cookies.get('user_id')

@@ -21,7 +21,7 @@
         </p>
       </div>
 
-      <div class="bg-surface-white rounded-lg border p-6 shadow-sm">
+      <div class="bg-surface-white rounded-6 border p-6 shadow-sm">
         <slot />
       </div>
 

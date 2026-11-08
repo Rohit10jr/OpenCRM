@@ -13,7 +13,7 @@
 </template>
 
 <script setup>
-import { TextEditor } from 'frappe-ui'
+import { TextEditor } from 'frappe-ui/experimental'
 import { computed, ref } from 'vue'
 
 const props = defineProps({
@@ -42,11 +42,11 @@ const editorClasses = computed(() => {
 
   const variantMap = {
     outline: props.disabled
-      ? 'border border-t rounded-lg bg-surface-base'
-      : 'border border-t-0 rounded-b-lg bg-surface-base',
+      ? 'border border-t rounded-6 bg-surface-base'
+      : 'border border-t-0 rounded-b-6 bg-surface-base',
     subtle: props.disabled
-      ? 'border border-t rounded-lg bg-surface-gray-2'
-      : 'border border-t-0 rounded-b-lg bg-surface-gray-2',
+      ? 'border border-t rounded-6 bg-surface-gray-2'
+      : 'border border-t-0 rounded-b-6 bg-surface-gray-2',
     ghost: 'bg-transparent',
   }
   const variantClass = variantMap[props.variant]

@@ -18,8 +18,9 @@ const REFRESH_KEY = 'crm:refresh_token'
 const REFRESH_URL = '/api/method/token/refresh'
 
 /**
- * Frappe sets a `user_id` cookie at login, and frappe-ui has its own copy of the
- * "who is signed in" helper that reads it (`frappe-ui/frappe/session.js`). Phase 0
+ * Frappe sets a `user_id` cookie at login, and @framework/ui has its own copy of the
+ * "who is signed in" helper that reads it (`frappe/ui/src/utils/session.ts`; it lived
+ * in `frappe-ui/frappe/session.js` before frappe-ui 1.0). Phase 0
  * patched this app's session store to read the token instead, but the library's copy
  * was missed: `useOnboarding()` in the sidebar asked it, got nobody, returned nothing,
  * and the whole layout failed to render (docs/FINDINGS.md 38).

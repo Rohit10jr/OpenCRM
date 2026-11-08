@@ -33,7 +33,7 @@
         <div
           v-for="template in filteredTemplates"
           :key="template.name"
-          class="flex h-56 cursor-pointer flex-col gap-2 rounded-lg border p-3 hover:bg-surface-gray-2"
+          class="flex h-56 cursor-pointer flex-col gap-2 rounded-6 border p-3 hover:bg-surface-gray-2"
           @click="emit('send', template.name)"
         >
           <div
@@ -53,7 +53,7 @@
       </div>
       <div v-else class="mt-2">
         <div class="flex h-56 flex-col items-center justify-center">
-          <div class="text-lg text-ink-gray-4">
+          <div class="text-md text-ink-gray-4">
             {{ __('No Templates Found') }}
           </div>
           <Button
@@ -68,7 +68,8 @@
 </template>
 
 <script setup>
-import { TextEditor, createListResource } from 'frappe-ui'
+import { createListResource } from 'frappe-ui'
+import { TextEditor } from 'frappe-ui/experimental'
 import { ref, computed, nextTick, watch, onMounted } from 'vue'
 
 const props = defineProps({

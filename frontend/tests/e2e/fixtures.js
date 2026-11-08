@@ -28,7 +28,7 @@ const KNOWN_LIBRARY_ERRORS = [
   {
     bug: 67,
     message: /Failed to execute 'observe' on 'ResizeObserver'/,
-    from: 'frappe-ui/src/components/Charts/ECharts.vue',
+    from: 'frappe-ui/experimental/Charts/ECharts.vue',
   },
 ]
 

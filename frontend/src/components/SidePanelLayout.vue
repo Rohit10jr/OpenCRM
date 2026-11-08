@@ -44,7 +44,7 @@
                     <Tooltip
                       v-if="!['Button', 'HTML'].includes(field.fieldtype)"
                       :text="__(field.label)"
-                      :hoverDelay="1"
+                      :hoverDelay="1000"
                     >
                       <div
                         class="w-[35%] min-w-20 shrink-0 flex items-center gap-0.5"
@@ -59,7 +59,7 @@
                             (field.mandatory_depends_on &&
                               field.mandatory_via_depends_on)
                           "
-                          class="text-ink-red-5"
+                          class="text-ink-red-4"
                         >
                           *
                         </div>
@@ -201,7 +201,7 @@
                           class="form-control"
                         >
                           <TimePicker
-                            :value="doc[field.fieldname]"
+                            :model-value="doc[field.fieldname]"
                             :format="getFormat('', '', false, true, false)"
                             :placeholder="field.placeholder"
                             @change="(v) => fieldChange(v, field)"
@@ -212,10 +212,11 @@
                           class="form-control"
                         >
                           <DateTimePicker
-                            :value="doc[field.fieldname]"
+                            :model-value="doc[field.fieldname]"
                             :format="getFormat('', '', true, true, false)"
                             :placeholder="field.placeholder"
-                            placement="left-start"
+                            side="left"
+                            align="start"
                             @change="(v) => fieldChange(v, field)"
                           />
                         </div>
@@ -224,10 +225,11 @@
                           class="form-control"
                         >
                           <DatePicker
-                            :value="doc[field.fieldname]"
+                            :model-value="doc[field.fieldname]"
                             :format="getFormat('', '', true, false, false)"
                             :placeholder="field.placeholder"
-                            placement="left-start"
+                            side="left"
+                            align="start"
                             @change="(v) => fieldChange(v, field)"
                           />
                         </div>
@@ -303,6 +305,7 @@
                         <Rating
                           v-else-if="field.fieldtype === 'Rating'"
                           class="pl-[10px]"
+                          size="md"
                           :step="0.5"
                           :modelValue="
                             (doc[field.fieldname] || 0) * ratingMax(field)
@@ -379,7 +382,7 @@
                             field.link &&
                             doc[field.fieldname]
                           "
-                          class="h-4 w-4 shrink-0 cursor-pointer text-ink-gray-5 hover:text-ink-gray-8"
+                          class="relative -left-[13px] h-4 w-4 shrink-0 cursor-pointer text-ink-gray-5 hover:text-ink-gray-8"
                           @click.stop="field.link(doc[field.fieldname])"
                         />
                         <EditIcon
@@ -694,7 +697,7 @@ function checkChange(value, df) {
   background-color: var(--surface-gray-1);
 }
 
-:deep(input.checkbox-control) {
+:deep(.checkbox-control [data-slot='control']) {
   margin-left: 9px;
   cursor: pointer;
 }
@@ -716,6 +719,17 @@ function checkChange(value, df) {
 :deep(.dropdown-button) {
   padding-left: 9px !important;
   padding-right: 9px !important;
+}
+
+/* Link fields sit 4px right of the inputs; pull them back without moving the chevron. */
+:deep(.select-text button) {
+  margin-left: -4px;
+  width: calc(100% + 4px);
+}
+
+/* Link chevrons line up with the Select chevrons. */
+:deep(.form-control .lucide-chevron-down.absolute) {
+  right: 3px;
 }
 
 .sections .section .column {
