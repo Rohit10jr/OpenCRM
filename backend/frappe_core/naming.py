@@ -135,6 +135,17 @@ class NameStrategy:
         return f"{type(self).__name__}()"
 
 
+class DataImportTimestamp(NameStrategy):
+    """Name a Data Import with its reference doctype and generation time."""
+
+    def generate(self, instance) -> str:
+        generated_at = datetime.now(timezone.utc)
+        return (
+            f"{instance.reference_doctype} Import on "
+            f"{generated_at.strftime('%Y-%m-%d %H:%M:%S.%f')}"
+        )
+
+
 class NamingSeries(NameStrategy):
     """``naming_series:`` - e.g. ``CRM-LEAD-.YYYY.-`` -> ``CRM-LEAD-2026-00001``.
 

@@ -20,7 +20,7 @@ from urllib.parse import quote, unquote
 
 from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
-from django.db import models
+from django.db import models, transaction
 from django.db.models.signals import post_delete, post_save, pre_delete
 from django.utils import timezone
 
@@ -28,7 +28,13 @@ from frappe_core.assignment import register_todo_model
 from frappe_core.exceptions import MandatoryError, ValidationError, throw
 from frappe_core.models import BaseDocument
 from frappe_platform import files as file_store
-from frappe_core.naming import FieldValue, Hash, Prompt, append_number_if_name_exists
+from frappe_core.naming import (
+    DataImportTimestamp,
+    FieldValue,
+    Hash,
+    Prompt,
+    append_number_if_name_exists,
+)
 from frappe_core.registry import register_doctype
 from frappe_core.secrets import EncryptedFieldsMixin
 
@@ -353,6 +359,13 @@ class Contact(BaseDocument):
     image = models.CharField("Image", max_length=500, blank=True, default="")
     #: ``Attach Image`` upstream (``contact.json``); see ``User.ATTACH_FIELDS``.
     ATTACH_FIELDS = ("image",)
+    #: Port only: platform doctypes have no generated DocType JSON here. These labels let
+    #: ``field_meta`` expose the two real child tables without inventing Contact's
+    #: unrelated ``links`` table.
+    TABLE_FIELD_LABELS = {
+        "email_ids": "Email IDs",
+        "phone_nos": "Contact Numbers",
+    }
     #: ``contact.json``: a Select, default Passive, and a standard filter. It is the
     #: first of the three quick filters the contacts list is installed with
     #: (``crm/install.py:514``), which had been silently dropped for want of the column.
@@ -727,6 +740,79 @@ class AssignmentRule(BaseDocument):
         if self._state.adding or self._assignment_days():
             return
         raise MandatoryError(messages=["Error: Data missing in table: Assignment Days"])
+
+
+DATA_IMPORT_STATUSES = (
+    "Pending",
+    "Success",
+    "Partial Success",
+    "Error",
+    "Timed Out",
+)
+
+
+@register_doctype("Data Import")
+class DataImport(BaseDocument):
+    """A CSV import definition from version-15's ``data_import.json``."""
+
+    reference_doctype = models.CharField("Document Type", max_length=140)
+    import_type = models.CharField("Import Type", max_length=50, blank=True, default="")
+    import_file = models.CharField("Import File", max_length=500, blank=True, default="")
+    template_options = models.TextField("Template Options", blank=True, default="")
+    status = models.CharField(
+        "Status",
+        max_length=20,
+        choices=[(status, status) for status in DATA_IMPORT_STATUSES],
+        default="Pending",
+    )
+    template_warnings = models.TextField("Template Warnings", blank=True, default="")
+    mute_emails = models.BooleanField("Don't Send Emails", default=True)
+    google_sheets_url = models.CharField(
+        "Import from Google Sheets", max_length=500, blank=True, default=""
+    )
+    payload_count = models.IntegerField("Payload Count", default=0)
+    submit_after_import = models.BooleanField("Submit After Import", default=False)
+    show_failed_logs = models.BooleanField("Show Only Failed Logs", default=False)
+    # Port only: this atomic worker claim stops an import running twice. It is internal
+    # state, not part of the document API.
+    job_claimed_at = models.DateTimeField(null=True, blank=True)
+
+    ATTACH_FIELDS = ("import_file",)
+    LINK_FIELDS = {"reference_doctype": "DocType"}
+    READONLY_FIELDS = ("status", "template_warnings", "payload_count")
+    SENSITIVE_FIELDS = ("job_claimed_at",)
+
+    class Meta:
+        ordering = ["-modified"]
+        # Upstream: format:{reference_doctype} Import on {creation}
+        # Port only: ``creation`` is stamped after naming, so use the generation time
+        # (`specs/AS_BUILT.md`, CSV Data Import).
+        name_strategy = DataImportTimestamp()
+
+    def delete(self, *args, **kwargs):
+        """Port of ``DataImport.on_trash``: remove its standalone log rows."""
+        with transaction.atomic():
+            DataImportLog._default_manager.filter(data_import=str(self.pk)).delete()
+            return super().delete(*args, **kwargs)
+
+
+@register_doctype("Data Import Log", routable=False)
+class DataImportLog(BaseDocument):
+    """One row result from a Data Import; served only by import-specific methods."""
+
+    data_import = models.CharField("Data Import", max_length=140, db_index=True)
+    log_index = models.IntegerField("Log Index", default=0)
+    success = models.BooleanField("Success", default=False)
+    row_indexes = models.TextField("Row Indexes", blank=True, default="")
+    docname = models.CharField("Reference Name", max_length=140, blank=True, default="")
+    messages = models.TextField("Messages", null=True, blank=True)
+    exception = models.TextField("Exception", blank=True, default="")
+
+    LINK_FIELDS = {"data_import": "Data Import"}
+
+    class Meta:
+        ordering = ["log_index"]
+        name_strategy = Hash()
 
 
 # Unrouted deliberately. `org_hierarchy` grants access to a record when a ToDo row says

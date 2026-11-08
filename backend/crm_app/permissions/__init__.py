@@ -14,6 +14,7 @@ from frappe_core.registry import register_permission_hooks
 from crm_app.permissions import (
     assignment_rule,
     attachments,
+    data_import,
     metadata_docs,
     notification,
     org_hierarchy,
@@ -208,6 +209,15 @@ def register() -> None:
         permission_query_conditions=assignment_rule.assignment_rule_query_conditions,
         has_permission=assignment_rule.assignment_rule_has_permission,
     )
+    # Data Import and its standalone log share version-15's System Manager-only role
+    # table. The log is unrouted, but frappe.client.* ignores that flag, so both hooks
+    # remain required.
+    for doctype in ("Data Import", "Data Import Log"):
+        register_permission_hooks(
+            doctype,
+            permission_query_conditions=data_import.data_import_query_conditions,
+            has_permission=data_import.data_import_has_permission,
+        )
     # Salutation and Gender (FINDINGS.md 66): the two lookups behind the contact, lead
     # and deal forms. Everyone reads, System Manager maintains.
     for doctype in ("Salutation", "Gender"):

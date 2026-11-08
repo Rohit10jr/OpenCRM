@@ -1751,6 +1751,17 @@ uncaught page error, so `frontend/tests/e2e/fixtures.js` tolerates exactly this 
 when it is thrown from that file (`KNOWN_LIBRARY_ERRORS`). The fix belongs in frappe-ui:
 check the element inside the timeout, and clear the timeout on unmount.
 
+## 68. No CRM role has the target-doctype `import` permission Data Import requires
+
+**Where:** version-15 `frappe/core/doctype/data_import/data_import.py:72-76` checks
+`frappe.has_permission(self.reference_doctype, "import")` after the Data Import doctype's
+own System Manager role check. The Frappe CRM role tables grant no CRM role that import
+permission for the six doctypes this port imports.
+
+**Us:** *Diverge.* Data Import and Data Import Log are Administrator/System Manager-only
+through both permission hooks, and that role is the import authority instead of a
+permission type this port does not model.
+
 ---
 
 ## Faithful behaviours we chose to keep (not bugs — decisions)

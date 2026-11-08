@@ -146,6 +146,10 @@ def _derive_from_model(doctype: str) -> list[dict]:
     # ``DYNAMIC_LINK_FIELDS`` maps it to the doctype column named in its ``options``,
     # which is what the delete link check reads (FINDINGS.md 76).
     dynamic_link_fields = getattr(model, "DYNAMIC_LINK_FIELDS", None) or {}
+    # Port only: a platform model can opt its discovered child tables into Frappe
+    # metadata by declaring their upstream labels. No declaration means no synthetic
+    # Table fields, which keeps unrelated platform doctypes unchanged.
+    table_field_labels = getattr(model, "TABLE_FIELD_LABELS", None) or {}
     fields = []
     for field in model._meta.get_fields():
         if not getattr(field, "concrete", False):
@@ -174,6 +178,21 @@ def _derive_from_model(doctype: str) -> list[dict]:
         elif fieldtype == "Select" and getattr(field, "choices", None):
             entry["options"] = "\n".join(str(c[0]) for c in field.choices)
         fields.append(entry)
+    if table_field_labels:
+        from frappe_core import children
+
+        child_tables = children.discover_child_tables(model)
+        for fieldname, label in table_field_labels.items():
+            spec = child_tables.get(fieldname)
+            if spec:
+                fields.append(
+                    {
+                        "fieldname": fieldname,
+                        "fieldtype": "Table",
+                        "label": label,
+                        "options": spec["doctype"],
+                    }
+                )
     return fields
 
 

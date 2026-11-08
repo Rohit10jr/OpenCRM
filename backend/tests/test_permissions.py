@@ -845,6 +845,11 @@ def test_exactly_the_intended_doctypes_have_row_rules():
         # operation, reading included. Sales Manager's visible-but-refused screen is
         # deliberately reproduced (UPSTREAM_BUGS.md 53).
         "Assignment Rule",
+        # Data Import and its standalone logs have the same System Manager-only role
+        # table upstream. The log remains ruled because frappe.client.* ignores its
+        # unrouted flag.
+        "Data Import",
+        "Data Import Log",
     }
     # The role passes (FINDINGS.md 86, 87): upstream's role tables reproduced. Contact -
     # every role reads, writes and creates; the creator or a System Manager deletes.
