@@ -494,10 +494,12 @@ each of which could be wrong independently of whether Redis relays bytes.
 * **Not bumped by `crm.api.user.change_password`** (the Settings modal). It returns a bare
   string, not tokens, so a bump there would sign the user out of the device they changed
   it on; upstream's version keeps every session too. Revocation needs `update_password`.
-* **Not bumped by disabling a user.** No endpoint in the port disables one, and a disabled
-  user's tokens are already refused on every path by the `is_active` check. Upstream also
-  drops the sessions on disable, so re-enabling here revives unexpired tokens; bumping in
-  `User.save` when `enabled` goes false would match it.
+* **Bumped by disabling a user** (8 Nov 2026): `User.save` bumps on every save while
+  `enabled` is false, as upstream logs the user out on every such save
+  (`frappe/core/doctype/user/user.py:272-274`). A disabled user's tokens were already
+  refused by the `is_active` check; the bump stops them working again on re-enable. Django
+  admin is the place to disable someone (`frappe_platform/admin.py`), and only `enabled`
+  can change there. A `QuerySet.update` skips `User.save`, and so skips the bump.
 
 Found while building it: the hand-rolled refresh endpoint rotates the refresh token without
 SimpleJWT's `outstand()`, so a rotated token is never in `OutstandingToken` and
@@ -909,8 +911,9 @@ Handled, kept here so the history is in one place:
 Still open:
 
 - `components/Settings/emailConfig.js:81,156-159,173` — the "Frappe Mail" provider and
-  its "Frappe Mail Site" field. Frappe Mail is a real mail service users can connect, so
-  this names a provider rather than branding the app; leaving it is the likely answer.
+  its "Frappe Mail Site" field. It names a provider rather than branding the app, but
+  the backend has no Frappe Mail client, so since 8 Nov 2026 Add Email Account no longer
+  offers it (`addableServices`). The text stays for an account already saved.
 - `components/UserDropdown.vue:146-148` and `composables/frappecloud.js:17-40` — the
   "Login to Frappe Cloud" menu item and its dialog (renders only when `window.is_fc_site`)
 
