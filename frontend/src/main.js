@@ -11,7 +11,6 @@ import App from './App.vue'
 import {
   FrappeUI,
   Button,
-  Input,
   TextInput,
   FormControl,
   ErrorMessage,
@@ -19,26 +18,23 @@ import {
   Alert,
   Badge,
   setConfig,
-  FeatherIcon,
 } from 'frappe-ui'
 
 import { jwtRequest } from '@/auth/jwtRequest'
 import { installAuthInterceptor } from '@/auth/interceptor'
-import { telemetryPlugin } from 'frappe-ui/frappe'
+import { telemetryPlugin } from '@framework/ui/telemetry'
 // injects the lucide SVG sprite into the DOM so the IconPicker and lucide Icons
 // (used for view icons) can render from it
-import { spritePlugin } from 'frappe-ui/icons'
+import { spritePlugin } from 'frappe-ui/experimental'
 
 let globalComponents = {
   Button,
   TextInput,
-  Input,
   FormControl,
   ErrorMessage,
   Dialog,
   Alert,
   Badge,
-  FeatherIcon,
 }
 
 // create a pinia instance
@@ -55,11 +51,10 @@ setConfig('resourceFetcher', jwtRequest)
 // resourceFetcher, so the header is attached at fetch / XMLHttpRequest for same-origin
 // /api/ URLs (src/auth/interceptor.js, docs/FINDINGS.md 30).
 installAuthInterceptor()
-// `socketio: false`: the plugin would otherwise start upstream's socket.io client
-// against port 9000, which nothing here listens on, and retry forever. The port's
-// realtime client is ./socket.js, installed on $socket in mount() below (JWT_PATCH.md,
-// the realtime patch; docs/FINDINGS.md 31).
-app.use(FrappeUI, { socketio: false })
+// The port's realtime client is ./socket.js, installed on $socket in mount() below
+// (JWT_PATCH.md, the realtime patch; docs/FINDINGS.md 31). frappe-ui 1.0 no longer
+// opens a socket itself, so the `socketio: false` this call used to pass is gone.
+app.use(FrappeUI)
 app.use(spritePlugin)
 app.use(pinia)
 app.use(router)

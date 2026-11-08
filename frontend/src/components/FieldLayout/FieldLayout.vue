@@ -2,12 +2,12 @@
   <div
     class="flex flex-col"
     :class="{
-      'border border-outline-gray-1 rounded-lg': hasTabs,
+      'border border-outline-gray-1 rounded-6': hasTabs,
       'border-outline-elevation-2': hasTabs,
     }"
   >
     <Tabs
-      v-model="tabIndex"
+      v-model="selectedTab"
       as="div"
       :tabs="processedTabs"
       :class="[
@@ -78,6 +78,7 @@ const processedTabs = computed(() => {
       }
     })
     .filter((tab) => !tab.hidden)
+    .map((tab, i) => ({ ...tab, value: tab.name || String(i) }))
 })
 
 const hasTabs = computed(() => {
@@ -85,6 +86,17 @@ const hasTabs = computed(() => {
     processedTabs.value.length > 1 ||
     (processedTabs.value.length == 1 && processedTabs.value[0].label)
   )
+})
+
+// Port only: upstream's selectedTab (frappe-ui rc Tabs bind the tab's value, not its
+// index), without the tabName tracking added upstream after this frontend was copied.
+const selectedTab = computed({
+  get() {
+    return processedTabs.value[tabIndex.value]?.value
+  },
+  set(value) {
+    tabIndex.value = processedTabs.value.findIndex((tab) => tab.value === value)
+  },
 })
 
 provide(

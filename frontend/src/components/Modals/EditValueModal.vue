@@ -37,15 +37,15 @@
 
 <script setup>
 import Link from '@/components/Controls/Link.vue'
-import { useTelemetry } from 'frappe-ui/frappe'
+import { useTelemetry } from '@framework/ui/telemetry'
 import {
   Combobox,
   FormControl,
   call,
   createResource,
-  TextEditor,
   DatePicker,
 } from 'frappe-ui'
+import { TextEditor } from 'frappe-ui/experimental'
 import { ref, computed, onMounted, h } from 'vue'
 
 const typeCheck = ['Check']
@@ -168,12 +168,12 @@ function getValueComponent(f) {
   } else if (typeNumber.includes(fieldtype)) {
     return h(FormControl, { type: 'number' })
   } else if (typeDate.includes(fieldtype)) {
-    return h(DatePicker)
+    return h(DatePicker, { modelValue: newValue.value })
   } else if (typeEditor.includes(fieldtype)) {
     return h(TextEditor, {
       variant: 'outline',
       editorClass:
-        '!prose-sm overflow-auto min-h-[80px] max-h-80 py-1.5 px-2 rounded border border-outline-gray-2 bg-surface-base hover:border-outline-gray-3 hover:shadow-sm focus:bg-surface-base focus:border-outline-gray-4 focus:ring-0 focus-visible:ring-2 focus-visible:ring-outline-gray-3 text-ink-gray-8 transition-colors',
+        '!prose-sm overflow-auto min-h-[80px] max-h-80 py-1.5 px-2 rounded-4 border border-outline-gray-2 bg-surface-base hover:border-outline-gray-3 hover:shadow-sm focus:bg-surface-base focus:border-outline-gray-4 focus:ring-0 focus-visible:ring-2 focus-visible:ring-outline-gray-3 text-ink-gray-8 transition-colors',
       bubbleMenu: true,
       content: newValue.value,
     })

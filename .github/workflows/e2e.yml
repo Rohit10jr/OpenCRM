@@ -113,6 +113,13 @@ jobs:
           nohup python manage.py runserver --ipv6 "[::]:8000" --noreload > "$RUNNER_TEMP/django.log" 2>&1 &
           curl --silent --output /dev/null --retry 30 --retry-delay 2 --retry-connrefused http://127.0.0.1:8000/
 
+      # Same step and tag as frontend.yml; see the comment there.
+      - name: Clone Frappe's ui folder for @framework/ui
+        run: |
+          git clone --depth 1 --branch v15.126.0 --filter=blob:none --sparse \
+            https://github.com/frappe/frappe "$GITHUB_WORKSPACE/../frappe"
+          git -C "$GITHUB_WORKSPACE/../frappe" sparse-checkout set ui
+
       - uses: actions/setup-node@v7
         with:
           node-version: "22"

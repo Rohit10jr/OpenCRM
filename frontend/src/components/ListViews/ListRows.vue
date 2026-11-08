@@ -46,7 +46,12 @@
 
 <script setup>
 import { useStorage } from '@vueuse/core'
-import { ListRows, ListRow, ListGroupHeader, ListGroupRows } from 'frappe-ui'
+import {
+  ListRows,
+  ListRow,
+  ListGroupHeader,
+  ListGroupRows,
+} from 'frappe-ui/experimental'
 import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
 
 const props = defineProps({

@@ -99,11 +99,11 @@
         <div v-else>
           <div class="mb-1.5 text-base text-ink-gray-5">
             {{ __('Content') }}
-            <span class="text-ink-red-6">*</span>
+            <span class="text-ink-red-5">*</span>
           </div>
           <TextEditor
             ref="content"
-            editor-class="!prose-sm max-w-full overflow-auto min-h-[180px] max-h-80 py-1.5 px-2 rounded border border-[--surface-gray-2] bg-surface-gray-2 placeholder-ink-gray-4 hover:border-outline-elevation-2 hover:bg-surface-gray-3 hover:shadow-sm focus:bg-surface-base focus:border-outline-gray-4 focus:ring-0 focus-visible:ring-2 focus-visible:ring-outline-gray-3 text-ink-gray-8 transition-colors"
+            editor-class="!prose-sm max-w-full overflow-auto min-h-[180px] max-h-80 py-1.5 px-2 rounded-4 border border-[--surface-gray-2] bg-surface-gray-2 placeholder-ink-gray-4 hover:border-outline-elevation-2 hover:bg-surface-gray-3 hover:shadow-sm focus:bg-surface-base focus:border-outline-gray-4 focus:ring-0 focus-visible:ring-2 focus-visible:ring-outline-gray-3 text-ink-gray-8 transition-colors"
             :bubbleMenu="true"
             :content="template.response"
             :placeholder="
@@ -123,12 +123,12 @@
 </template>
 <script setup>
 import {
-  TextEditor,
   FormControl,
   Switch,
   toast,
   createResource,
 } from 'frappe-ui'
+import { TextEditor } from 'frappe-ui/experimental'
 import { computed, inject, onMounted, ref } from 'vue'
 
 const props = defineProps({
