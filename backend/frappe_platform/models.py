@@ -540,8 +540,8 @@ class ContactEmail(BaseDocument):
     #: the contact page edits and removes one address that way (FINDINGS.md 67).
     CLIENT_EDITABLE = True
 
-    email_id = models.CharField(max_length=140)
-    is_primary = models.BooleanField(default=False)
+    email_id = models.CharField("Email ID", max_length=140)
+    is_primary = models.BooleanField("Is Primary", default=False)
 
     class Meta:
         ordering = ["idx"]
@@ -563,9 +563,9 @@ class ContactPhone(BaseDocument):
     parentfield = models.CharField(max_length=140, default="phone_nos")
     #: As on ``ContactEmail``: editable and removable through the contact (FINDINGS.md 67).
     CLIENT_EDITABLE = True
-    phone = models.CharField(max_length=140)
-    is_primary_phone = models.BooleanField(default=False)
-    is_primary_mobile_no = models.BooleanField(default=False)
+    phone = models.CharField("Number", max_length=140)
+    is_primary_phone = models.BooleanField("Is Primary Phone", default=False)
+    is_primary_mobile_no = models.BooleanField("Is Primary Mobile", default=False)
 
     class Meta:
         ordering = ["idx"]

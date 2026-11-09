@@ -247,6 +247,23 @@ def test_contact_rows_group_two_emails_and_phones_and_supply_primary_flags():
     assert payload.doc["phone_nos"][0]["is_primary_mobile_no"] == 1
 
 
+def test_contact_upstream_child_headers_resolve_without_blocking_warnings():
+    imported = _docs(
+        "First Name,Email ID (Email IDs),Number (Contact Numbers)\n"
+        "Ada,ada@example.com,+111\n"
+    )
+
+    assert [
+        f"{column.df.child_table_df.fieldname}.{column.df.fieldname}"
+        for column in imported.columns[1:]
+    ] == ["email_ids.email_id", "phone_nos.phone"]
+    assert not [
+        warning
+        for warning in imported.get_warnings()
+        if warning.get("type") != "info"
+    ]
+
+
 def test_contact_primary_flags_from_the_file_are_not_replaced():
     imported = _docs(
         "First Name,email_ids.email_id,email_ids.is_primary,phone_nos.phone,"

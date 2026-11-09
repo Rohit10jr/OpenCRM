@@ -70,10 +70,10 @@ def test_child_headers_and_label_clash_fallbacks(api_as, system_manager, monkeyp
         )
     )[0]
     assert contact[1:] == [
-        "email id (Email IDs)",
-        "is primary (Email IDs)",
-        "phone (Contact Numbers)",
-        "is primary phone (Contact Numbers)",
+        "Email ID (Email IDs)",
+        "Is Primary (Email IDs)",
+        "Number (Contact Numbers)",
+        "Is Primary Phone (Contact Numbers)",
     ]
 
     # Force the child descriptor's label to match the selected parent label.  The
