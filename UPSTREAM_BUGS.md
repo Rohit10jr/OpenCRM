@@ -93,6 +93,8 @@ the pairing CRM's own CI uses).
 | 79 | A late queue redelivery can run an import concurrently | **Diverge** — advisory lock |
 | 80 | Data Import sends progress events the CRM screens never consume | **Diverge** — terminal refresh only |
 | 81 | A row-level exception handler swallows the import job timeout | **Diverge** — timeout re-raised |
+| 82 | Template download exposes every readable doctype to every reader | **Diverge** — restricted |
+| 83 | An unknown template file type downloads an empty response | **Diverge** — refused |
 
 ## 1. A hidden column causes the *next* column to be skipped
 
@@ -1965,6 +1967,35 @@ handler is never reached.
 back the interrupted row without writing a failure log, and the task handler sets
 `Timed Out`, releases the claim, and publishes the terminal refresh. A later start
 resumes after the successfully logged rows.
+
+---
+
+## 82. Template download exposes every readable doctype to every reader
+
+**Where:** version-15 `frappe/core/doctype/data_import/data_import.py:180-209` checks
+only read permission on the requested doctype before constructing an export.
+
+That is appropriate when DocType import/export permissions are available separately.
+This port does not model those permissions, so read access alone would let a Sales
+Manager use the Data Import export surface for Leads even though Data Import itself is
+reserved for System Managers.
+
+**Us:** *Diverge.* Administrator and System Manager are the only callers, and only the
+six explicitly importable doctypes are accepted. The ordinary permission-filtered list
+read still selects the rows and fields after that gate; child values use the document's
+child-read path.
+
+---
+
+## 83. An unknown template file type downloads an empty response
+
+**Where:** version-15 `frappe/core/doctype/data_import/exporter.py:255-259`
+(`Exporter.build_response`).
+
+Only `CSV` and `Excel` set response content. Any other value silently leaves the response
+empty, so a typo looks like a successful zero-byte download.
+
+**Us:** *Diverge.* Any other file type is refused with `File type must be CSV or Excel`.
 
 ---
 

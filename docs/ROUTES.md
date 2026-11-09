@@ -172,6 +172,7 @@ literal path appears under `frontend/src`.
 | 131 | `frappe.core.doctype.data_import.data_import.get_preview_from_template` | GET/POST | auth | `data_import: 'str', import_file: 'str \| None' = None, google_sheets_url: 'str \| None' = None` | 1 | `crm_app/api/data_import.py:12` |  |
 | 132 | `frappe.core.doctype.data_import.data_import.get_import_logs` | GET/POST | auth | `data_import: 'str'` | 1 | `crm_app/api/data_import.py:40` |  |
 | 133 | `frappe.core.doctype.data_import.data_import.form_start_import` | POST | auth | `data_import: 'str'` | 1 | `crm_app/api/data_import.py:51` |  |
+| 134 | `frappe.core.doctype.data_import.data_import.download_template` | GET/POST | auth | `doctype: 'str', export_fields=None, export_records: 'str \| None' = None, export_filters=None, file_type: 'str' = 'CSV', **_ignored` | 0 | `crm_app/api/data_import.py:27` |  |
 
 ---
 
