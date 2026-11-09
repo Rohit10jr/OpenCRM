@@ -89,6 +89,10 @@ the pairing CRM's own CI uses).
 | 75 | An invalid import Duration warns, then throws while parsing | **Diverge** — warning remains blocking |
 | 76 | Data Import accepts sources and modes this port cannot execute | **Diverge** — refuse them on save |
 | 77 | Preview's file argument can read a File unrelated to the Data Import | **Diverge** — argument ignored |
+| 78 | Data Import's separate queue check permits duplicate jobs | **Diverge** — atomic expiring claim |
+| 79 | A late queue redelivery can run an import concurrently | **Diverge** — advisory lock |
+| 80 | Data Import sends progress events the CRM screens never consume | **Diverge** — terminal refresh only |
+| 81 | A row-level exception handler swallows the import job timeout | **Diverge** — timeout re-raised |
 
 ## 1. A hidden column causes the *next* column to be skipped
 
@@ -1907,6 +1911,60 @@ upload if the caller knows that upload's URL.
 **Us:** *Diverge.* Preview ignores the source arguments and always reads the attachment
 persisted on the Data Import. The attachment itself is resolved with the permission-aware
 `find_file_by_url`, so Data Import ownership cannot be used to bypass File access.
+
+---
+
+## 78. Data Import's separate queue check permits duplicate jobs
+
+**Where:** version-15 `frappe/core/doctype/data_import/data_import.py:155-180` checks
+whether the job is enqueued separately from enqueueing it. Two requests can both pass
+that check before either job becomes visible, and a lost queue message can leave no
+durable state from which to recover.
+
+**Us:** *Diverge.* Starting an import conditionally updates the hidden
+`job_claimed_at` field in one query. A live claim refuses another start, while a claim
+older than three hours may be replaced. A queueing failure releases its own claim.
+
+---
+
+## 79. A late queue redelivery can run an import concurrently
+
+**Where:** version-15 `frappe/core/doctype/data_import/data_import.py:168-180` starts
+the importer without a database lock. With late acknowledgement and a broker visibility
+timeout shorter than a long import, the same task can be delivered while its first run
+is still active.
+
+**Us:** *Diverge.* The worker takes a PostgreSQL session advisory lock keyed by the Data
+Import name. A concurrent delivery returns without changing the claim, logs, records or
+status; the active worker remains responsible for finishing and releasing its claim.
+
+---
+
+## 80. Data Import sends progress events the CRM screens never consume
+
+**Where:** version-15 `frappe/core/doctype/data_import/importer.py:137-182` publishes
+`data_import_progress` while skipping and importing rows.
+
+**Us:** *Diverge.* The mounted CRM Data Import screens do not subscribe to that event,
+so the port omits it and publishes only version-15's terminal `data_import_refresh`.
+
+---
+
+## 81. A row-level exception handler swallows the import job timeout
+
+**Where:** version-15 `frappe/core/doctype/data_import/importer.py:183-213` catches every
+`Exception` around a row, while `data_import.py:160-176` expects
+`JobTimeoutException` to escape the importer so it can set the status to `Timed Out`.
+
+`JobTimeoutException` subclasses `Exception`, so a timeout during a row is recorded as
+an ordinary failed row and the loop continues. The timeout alarm fires only once; the
+rest of the import can then run without the job's limit, and the outer `Timed Out`
+handler is never reached.
+
+**Us:** *Diverge.* The row loop re-raises `SoftTimeLimitExceeded`. Its transaction rolls
+back the interrupted row without writing a failure log, and the task handler sets
+`Timed Out`, releases the claim, and publishes the terminal refresh. A later start
+resumes after the successfully logged rows.
 
 ---
 

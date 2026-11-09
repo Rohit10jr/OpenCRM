@@ -170,6 +170,8 @@ literal path appears under `frontend/src`.
 | 129 | `token/refresh` | POST | guest | `refresh: 'str' = '', **extra` | 2 | `frappe_core/api/auth.py:157` | ✅ 10 Sep — step 1, rotation and blacklist confirmed, 11 Sep — 01_auth (2 red, see FINDINGS.md), 13 Sep — 01_auth, 15 Sep — 01_auth, 22 Sep — 00_walkthrough, 22 Sep — 01_auth |
 | 130 | `upload_file` | POST | auth +request | `file=None, is_private=1, doctype: 'str \| None' = None, docname: 'str \| None' = None, fieldname: 'str \| None' = None, file_url: 'str \| None' = None, folder: 'str \| None' = None, method: 'str \| None' = None, file_name: 'str \| None' = None, optimize=None, max_width=None, max_height=None, library_file_name: 'str \| None' = None, chunk_index=None, total_chunk_count=None, chunk_byte_offset=None, total_file_size=None, **_ignored` | 1 | `crm_app/api/upload.py:80` |  |
 | 131 | `frappe.core.doctype.data_import.data_import.get_preview_from_template` | GET/POST | auth | `data_import: 'str', import_file: 'str \| None' = None, google_sheets_url: 'str \| None' = None` | 1 | `crm_app/api/data_import.py:12` |  |
+| 132 | `frappe.core.doctype.data_import.data_import.get_import_logs` | GET/POST | auth | `data_import: 'str'` | 1 | `crm_app/api/data_import.py:40` |  |
+| 133 | `frappe.core.doctype.data_import.data_import.form_start_import` | POST | auth | `data_import: 'str'` | 1 | `crm_app/api/data_import.py:51` |  |
 
 ---
 

@@ -89,12 +89,8 @@ _LIBRARY_PATH_RE = re.compile(
 #: `const NAME = 'dotted.path'` - counted only when `call(NAME)` appears in the same file.
 _LIBRARY_CONST_RE = re.compile(r"\b([A-Za-z_]\w*)\s*=\s*['\"]([a-z_]+(?:\.[a-z_]+)+)['\"]")
 
-#: The remaining Data Import job and log methods are not built yet. The preview method
-#: is registered and therefore belongs in the checked library surface above.
-LIBRARY_OUT_OF_SCOPE = {
-    "frappe.core.doctype.data_import.data_import.form_start_import",
-    "frappe.core.doctype.data_import.data_import.get_import_logs",
-}
+#: Every framework and CRM call made by the mounted library components is in scope.
+LIBRARY_OUT_OF_SCOPE = set()
 
 
 def library_called_paths() -> set[str]:
