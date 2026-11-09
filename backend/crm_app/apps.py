@@ -57,6 +57,12 @@ class CrmAppConfig(AppConfig):
         # makes each dotted path resolvable. Without this the method map is empty.
         from crm_app import api  # noqa: F401
 
+        # Version-15 runs Data Import.validate on every full save. A pre-save receiver
+        # gives the generic resource and frappe.client doors the same validation path.
+        from crm_app.data_import.validation import connect_signals as connect_data_import
+
+        connect_data_import()
+
         # Phase 4: wire get_data's saved-view seam. Registered after the api import so
         # every doctype is in the registry by the time we enumerate it.
         from crm_app import metadata_hooks

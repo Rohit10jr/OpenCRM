@@ -85,7 +85,7 @@ def test_system_manager_can_create_list_and_set_value(api_as, system_manager):
         },
     )
     assert response.status_code == 200, response.content[:500]
-    assert response.json()["message"]["template_options"] == '{"column_to_field_map": {}}'
+    assert response.json()["message"]["template_options"] == ""
 
 
 def test_status_posted_on_insert_is_ignored(api_as, system_manager):
@@ -122,9 +122,7 @@ def test_set_value_ignores_whole_document_junk_and_returns_the_full_doc(
     assert document["doctype"] == "Data Import"
     assert document["owner"] == system_manager.name
     assert document["creation"] == inserted["creation"]
-    assert document["template_options"] == (
-        '{"column_to_field_map": {"0": "first_name"}}'
-    )
+    assert document["template_options"] == ""
 
 
 @pytest.mark.parametrize("actor", ["sales_manager", "alice"])

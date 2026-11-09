@@ -24,6 +24,7 @@ from crm_app.api import (  # noqa: F401
     comment,
     communication,
     contact,
+    data_import,
     dashboard,
     deal,
     demo,

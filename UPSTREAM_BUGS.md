@@ -87,6 +87,8 @@ the pairing CRM's own CI uses).
 | 73 | Insert import accepts a name/ID column it cannot faithfully honor | **Diverge** — skipped with an info warning |
 | 74 | Equally common date formats are selected nondeterministically | **Diverge** — first observed wins |
 | 75 | An invalid import Duration warns, then throws while parsing | **Diverge** — warning remains blocking |
+| 76 | Data Import accepts sources and modes this port cannot execute | **Diverge** — refuse them on save |
+| 77 | Preview's file argument can read a File unrelated to the Data Import | **Diverge** — argument ignored |
 
 ## 1. A hidden column causes the *next* column to be skipped
 
@@ -1872,6 +1874,39 @@ second validation throws instead of leaving the prepared blocking warning for pr
 
 **Us:** *Diverge.* The verbatim warning remains blocking and the invalid cell is omitted
 from the payload, like the port's handling of malformed short rows.
+
+---
+
+## 76. Data Import accepts sources and modes this port cannot execute
+
+**Where:** version-15 `frappe/core/doctype/data_import/data_import.py:45-105` validates
+Google Sheets URLs and permits `Update Existing Records`; `importer.py:108-145` also
+decodes `.xlsx` and `.xls` attachments.
+
+Those paths rely on framework facilities this CSV-only, insert-only port deliberately
+does not implement. Accepting them at save time would leave a Data Import record that
+cannot be previewed or run.
+
+**Us:** *Diverge.* A non-blank Google Sheets URL, update mode, or non-CSV attachment is
+refused during save with a clear validation error. A blank import type is normalized to
+`Insert New Records`, matching the only supported mode.
+
+---
+
+## 77. Preview's file argument can read a File unrelated to the Data Import
+
+**Where:** version-15 `frappe/core/doctype/data_import/data_import.py:91-105,144-150`
+checks read permission on the Data Import, then replaces its `import_file` with the URL
+supplied by the caller. `importer.py:119-126` resolves that URL as a File without first
+checking that the caller may read the File.
+
+The endpoint's permission check and the file being read can therefore concern different
+objects. A caller who may read one Data Import can ask it to parse an unrelated private
+upload if the caller knows that upload's URL.
+
+**Us:** *Diverge.* Preview ignores the source arguments and always reads the attachment
+persisted on the Data Import. The attachment itself is resolved with the permission-aware
+`find_file_by_url`, so Data Import ownership cannot be used to bypass File access.
 
 ---
 
