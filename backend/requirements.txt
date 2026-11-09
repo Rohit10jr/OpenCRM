@@ -1,12 +1,12 @@
 # Frappe CRM -> Django port. Pins chosen for Python 3.13.
-Django==5.2.18
+Django==5.2.19
 djangorestframework==3.18.3
 # 5.5.1, not 5.5.0: 5.5.0 has PYSEC-2026-1305 and caps PyJWT below 2.10, which holds
 # PyJWT on versions with known advisories. 5.5.1's for_user logs `user.id` for an inactive
 # user, which this User lacks (its key is `name`), so no token is issued to one
 # (crm_app/api/auth_pages.py:update_password, upstream bug 61).
 djangorestframework-simplejwt==5.5.1
-psycopg[binary]==3.3.6
+psycopg[binary]==3.3.8
 django-cors-headers==4.9.0
 django-environ==0.14.0
 
@@ -18,10 +18,10 @@ django-treebeard==4.8.0
 Pillow==13.0.0
 # Excel export from the list views (frappe.desk.reportview.export_query), the same
 # library upstream's xlsxutils writes with. CSV export needs nothing.
-XlsxWriter==3.3.0
+XlsxWriter==3.3.1
 
 # Async stack (phases 5-6) - declared now, unused in phases 0-4.
-celery==5.6.3
+celery==5.7.0
 redis==5.3.1
 channels==4.3.2
 channels-redis==4.3.0
@@ -57,4 +57,4 @@ pytest-xdist==3.8.0
 pytest-asyncio==1.4.1
 
 # Lint: `ruff check .` in backend/, rules in backend/ruff.toml; run by backend.yml.
-ruff==0.17.3
+ruff==0.17.4
