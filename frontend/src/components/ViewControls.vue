@@ -208,8 +208,11 @@
                       params: { doctype: doctype },
                     }),
                   condition: () =>
+                    // Upstream: !options.hideColumnsButton && route.params.viewType !== 'kanban'
+                    // Port only: Data Import is limited to System Managers and Administrator.
                     !options.hideColumnsButton &&
-                    route.params.viewType !== 'kanban',
+                    route.params.viewType !== 'kanban' &&
+                    isAdmin(),
                 },
                 {
                   label: __('Export'),
@@ -357,7 +360,9 @@ const props = defineProps({
 const { brand } = getSettings()
 const { $dialog } = globalStore()
 const { reload: reloadView, getDefaultView, getView } = viewsStore()
-const { isManager } = usersStore()
+// Upstream: const { isManager } = usersStore()
+// Port only: isAdmin gates Data Import to System Managers and Administrator.
+const { isManager, isAdmin } = usersStore()
 
 const list = defineModel({ type: Object, default: () => ({}) })
 const loadMore = defineModel('loadMore', { type: Boolean })
