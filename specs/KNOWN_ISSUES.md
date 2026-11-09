@@ -630,6 +630,10 @@ scoped CSS so the shared framework screens remain unchanged; this leaves a stray
 and the sentence naming Google Sheets on the upload page. Failed rows cannot be
 downloaded.
 
+* The import preview's log filter renders as an empty radiogroup. Frappe v15.126.0's
+  `PreviewStep.vue` passes `buttons` to `TabButtons`, while frappe-ui 1.0.0-rc.2 reads
+  only `options`; all rows remain visible in the log table.
+
 The Import option is hidden from everyone except System Managers and Administrator.
 The server also refuses other users who type a Data Import URL directly.
 
