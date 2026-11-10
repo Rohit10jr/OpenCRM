@@ -79,6 +79,22 @@ the pairing CRM's own CI uses).
 | 65 | The delete dialog hides another user's notification, then offers a delete that it blocks | **Reproduce** — user-visible |
 | 66 | A refused delete from the delete dialog shows no message | **Reproduce** — upstream's frontend |
 | 67 | A dashboard chart unmounted within half a second of mounting throws in the console | **Reproduce** — frappe-ui's code; console only |
+| 68 | No CRM role has the target-doctype `import` permission Data Import requires | **Diverge** — System Manager is the authority |
+| 69 | A UTF-8 BOM becomes part of the first import header | **Diverge** — stripped |
+| 70 | A short import row warns, then crashes while building payloads | **Diverge** — warning remains blocking |
+| 71 | Imported Contact child rows can leave all primary values blank | **Diverge** — first rows promoted when none is selected |
+| 72 | Contact email and phone columns target derived parent fields | **Diverge** — mapped to child tables |
+| 73 | Insert import accepts a name/ID column it cannot faithfully honor | **Diverge** — skipped with an info warning |
+| 74 | Equally common date formats are selected nondeterministically | **Diverge** — first observed wins |
+| 75 | An invalid import Duration warns, then throws while parsing | **Diverge** — warning remains blocking |
+| 76 | Data Import accepts sources and modes this port cannot execute | **Diverge** — refuse them on save |
+| 77 | Preview's file argument can read a File unrelated to the Data Import | **Diverge** — argument ignored |
+| 78 | Data Import's separate queue check permits duplicate jobs | **Diverge** — atomic expiring claim |
+| 79 | A late queue redelivery can run an import concurrently | **Diverge** — advisory lock |
+| 80 | Data Import sends progress events the CRM screens never consume | **Diverge** — terminal refresh only |
+| 81 | A row-level exception handler swallows the import job timeout | **Diverge** — timeout re-raised |
+| 82 | Template download exposes every readable doctype to every reader | **Diverge** — restricted |
+| 83 | An unknown template file type downloads an empty response | **Diverge** — refused |
 
 ## 1. A hidden column causes the *next* column to be skipped
 
@@ -1750,6 +1766,236 @@ errors are only in the console.
 uncaught page error, so `frontend/tests/e2e/fixtures.js` tolerates exactly this message
 when it is thrown from that file (`KNOWN_LIBRARY_ERRORS`). The fix belongs in frappe-ui:
 check the element inside the timeout, and clear the timeout on unmount.
+
+## 68. No CRM role has the target-doctype `import` permission Data Import requires
+
+**Where:** version-15 `frappe/core/doctype/data_import/data_import.py:72-76` checks
+`frappe.has_permission(self.reference_doctype, "import")` after the Data Import doctype's
+own System Manager role check. The Frappe CRM role tables grant no CRM role that import
+permission for the six doctypes this port imports.
+
+**Us:** *Diverge.* Data Import and Data Import Log are Administrator/System Manager-only
+through both permission hooks, and that role is the import authority instead of a
+permission type this port does not model.
+
+---
+
+## 69. A UTF-8 BOM becomes part of the first import header
+
+**Where:** version-15 `frappe/utils/csvutils.py:71-101` (`read_csv_content`).
+
+The decoder passes a leading `U+FEFF` directly to `csv.reader`. With an ordinary first
+header it becomes part of that value, so column matching fails; before a quoted header it
+also prevents the quote from being recognized as the start of the field.
+
+**Us:** *Diverge.* The in-memory CSV reader removes one leading BOM before splitting and
+tokenizing, preserving both plain and quoted first headers.
+
+---
+
+## 70. A short import row warns, then crashes while building payloads
+
+**Where:** version-15 `frappe/core/doctype/data_import/importer.py:617-812`, especially
+`Row.__init__` and `Row.get_values`.
+
+`Row.__init__` records `Row has less values than columns`, but `get_values` subsequently
+indexes every header position. Payload construction therefore raises `IndexError` instead
+of returning the warning that was already prepared.
+
+**Us:** *Diverge.* Missing positions read as blank. The verbatim warning remains a
+blocking warning, so the malformed row is not saved.
+
+---
+
+## 71. Imported Contact child rows can leave all primary values blank
+
+**Where:** version-15 `frappe/core/doctype/data_import/importer.py:489-548`
+(`parse_next_row_for_import`) and `frappe/contacts/doctype/contact/contact.py:175-219`.
+
+The importer groups email and phone child rows but does not choose a primary. Contact's
+email validation promotes a sole row only, and its phone validation promotes none, so a
+multi-row import with no flags can leave the Contact's derived email, phone and mobile
+values blank.
+
+**Us:** *Diverge.* When the file selects no primary, its first email is primary and its
+first phone is primary for both phone and mobile. Any primary flags supplied by the file
+remain authoritative.
+
+---
+
+## 72. Contact email and phone columns target derived parent fields
+
+**Where:** version-15 `frappe/core/doctype/data_import/importer.py:868-922` (`Column.parse`)
+and `1078-1225` (`build_fields_dict_for_column_matching`).
+
+Whether matched from a header label or fieldname, or stored as a bare fieldname in
+`column_to_field_map`, Contact's `email_id`, `phone` and `mobile_no` resolve to derived
+parent cache fields rather than the `email_ids` and `phone_nos` child tables. The values
+are lost when Contact rebuilds those caches from its children.
+
+**Us:** *Diverge.* Every such `email_id` maps to `email_ids.email_id`; `phone` and
+`mobile_no` map to `phone_nos.phone`. Distinct phone and mobile values in one CSV row
+become distinct child rows with their corresponding primary flags; an identical value
+becomes one row carrying both flags.
+
+---
+
+## 73. Insert import accepts a name/ID column it cannot faithfully honor
+
+**Where:** version-15 `frappe/core/doctype/data_import/importer.py:1078-1218`
+(`build_fields_dict_for_column_matching`) and `importer.py:213-229` (`insert_record`).
+
+The header map accepts `name` and `ID`, including aliases to a field-based autoname. On
+insert, however, the framework clears a directly supplied name unless the doctype uses
+prompt naming. The preview therefore presents the column as importable even when its
+value will not become the document ID.
+
+**Us:** *Diverge.* This insert-only importer skips `name` and `ID` with the existing
+`Skipping column {0}` info warning. The upstream aliases remain in the comparison map.
+
+---
+
+## 74. Equally common date formats are selected nondeterministically
+
+**Where:** version-15 `frappe/core/doctype/data_import/importer.py:960-996`
+(`Column.guess_date_format_for_column`).
+
+The most-common calculation takes candidates from a set. When two formats have equal
+counts, `max` returns whichever the process-random set order supplies, so the same mixed
+column can acquire a different default format in another process.
+
+**Us:** *Diverge.* Candidates retain their first-observed order; an exact frequency tie
+chooses the first format seen in the file.
+
+---
+
+## 75. An invalid import Duration warns, then throws while parsing
+
+**Where:** version-15 `frappe/core/doctype/data_import/importer.py:748-787`
+(`Row.validate_value` and `Row.parse_value`).
+
+The row validator records `Value {0} must be in the valid duration format: d h m s` but
+returns the invalid value. Payload parsing then passes it to `duration_to_seconds`, whose
+second validation throws instead of leaving the prepared blocking warning for preview.
+
+**Us:** *Diverge.* The verbatim warning remains blocking and the invalid cell is omitted
+from the payload, like the port's handling of malformed short rows.
+
+---
+
+## 76. Data Import accepts sources and modes this port cannot execute
+
+**Where:** version-15 `frappe/core/doctype/data_import/data_import.py:45-105` validates
+Google Sheets URLs and permits `Update Existing Records`; `importer.py:108-145` also
+decodes `.xlsx` and `.xls` attachments.
+
+Those paths rely on framework facilities this CSV-only, insert-only port deliberately
+does not implement. Accepting them at save time would leave a Data Import record that
+cannot be previewed or run.
+
+**Us:** *Diverge.* A non-blank Google Sheets URL, update mode, or non-CSV attachment is
+refused during save with a clear validation error. A blank import type is normalized to
+`Insert New Records`, matching the only supported mode.
+
+---
+
+## 77. Preview's file argument can read a File unrelated to the Data Import
+
+**Where:** version-15 `frappe/core/doctype/data_import/data_import.py:91-105,144-150`
+checks read permission on the Data Import, then replaces its `import_file` with the URL
+supplied by the caller. `importer.py:119-126` resolves that URL as a File without first
+checking that the caller may read the File.
+
+The endpoint's permission check and the file being read can therefore concern different
+objects. A caller who may read one Data Import can ask it to parse an unrelated private
+upload if the caller knows that upload's URL.
+
+**Us:** *Diverge.* Preview ignores the source arguments and always reads the attachment
+persisted on the Data Import. The attachment itself is resolved with the permission-aware
+`find_file_by_url`, so Data Import ownership cannot be used to bypass File access.
+
+---
+
+## 78. Data Import's separate queue check permits duplicate jobs
+
+**Where:** version-15 `frappe/core/doctype/data_import/data_import.py:155-180` checks
+whether the job is enqueued separately from enqueueing it. Two requests can both pass
+that check before either job becomes visible, and a lost queue message can leave no
+durable state from which to recover.
+
+**Us:** *Diverge.* Starting an import conditionally updates the hidden
+`job_claimed_at` field in one query. A live claim refuses another start, while a claim
+older than three hours may be replaced. A queueing failure releases its own claim.
+
+---
+
+## 79. A late queue redelivery can run an import concurrently
+
+**Where:** version-15 `frappe/core/doctype/data_import/data_import.py:168-180` starts
+the importer without a database lock. With late acknowledgement and a broker visibility
+timeout shorter than a long import, the same task can be delivered while its first run
+is still active.
+
+**Us:** *Diverge.* The worker takes a PostgreSQL session advisory lock keyed by the Data
+Import name. A concurrent delivery returns without changing the claim, logs, records or
+status; the active worker remains responsible for finishing and releasing its claim.
+
+---
+
+## 80. Data Import sends progress events the CRM screens never consume
+
+**Where:** version-15 `frappe/core/doctype/data_import/importer.py:137-182` publishes
+`data_import_progress` while skipping and importing rows.
+
+**Us:** *Diverge.* The mounted CRM Data Import screens do not subscribe to that event,
+so the port omits it and publishes only version-15's terminal `data_import_refresh`.
+
+---
+
+## 81. A row-level exception handler swallows the import job timeout
+
+**Where:** version-15 `frappe/core/doctype/data_import/importer.py:183-213` catches every
+`Exception` around a row, while `data_import.py:160-176` expects
+`JobTimeoutException` to escape the importer so it can set the status to `Timed Out`.
+
+`JobTimeoutException` subclasses `Exception`, so a timeout during a row is recorded as
+an ordinary failed row and the loop continues. The timeout alarm fires only once; the
+rest of the import can then run without the job's limit, and the outer `Timed Out`
+handler is never reached.
+
+**Us:** *Diverge.* The row loop re-raises `SoftTimeLimitExceeded`. Its transaction rolls
+back the interrupted row without writing a failure log, and the task handler sets
+`Timed Out`, releases the claim, and publishes the terminal refresh. A later start
+resumes after the successfully logged rows.
+
+---
+
+## 82. Template download exposes every readable doctype to every reader
+
+**Where:** version-15 `frappe/core/doctype/data_import/data_import.py:180-209` checks
+only read permission on the requested doctype before constructing an export.
+
+That is appropriate when DocType import/export permissions are available separately.
+This port does not model those permissions, so read access alone would let a Sales
+Manager use the Data Import export surface for Leads even though Data Import itself is
+reserved for System Managers.
+
+**Us:** *Diverge.* Administrator and System Manager are the only callers, and only the
+six explicitly importable doctypes are accepted. The ordinary permission-filtered list
+read still selects the rows and fields after that gate; child values use the document's
+child-read path.
+
+---
+
+## 83. An unknown template file type downloads an empty response
+
+**Where:** version-15 `frappe/core/doctype/data_import/exporter.py:255-259`
+(`Exporter.build_response`).
+
+Only `CSV` and `Excel` set response content. Any other value silently leaves the response
+empty, so a typo looks like a successful zero-byte download.
+
+**Us:** *Diverge.* Any other file type is refused with `File type must be CSV or Excel`.
 
 ---
 

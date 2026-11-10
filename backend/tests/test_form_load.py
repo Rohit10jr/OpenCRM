@@ -301,7 +301,9 @@ def test_a_platform_doctype_answers_with_model_derived_fields(auth_api):
     """``Contact`` ships no DocType JSON, so ``field_meta`` falls back to the model."""
     body = load(auth_api, "Contact").json()
 
-    assert [doc["name"] for doc in body["docs"]] == ["Contact"]
+    # Upstream's get_meta_bundle (frappe/desk/form/load.py) follows the parent with
+    # each Table field's doctype; Contact's email and phone tables are model-derived.
+    assert [doc["name"] for doc in body["docs"]] == ["Contact", "Contact Email", "Contact Phone"]
     fields = body["docs"][0]["fields"]
     assert fields, "a registered platform doctype must still answer with its fields"
     assert {f["fieldname"] for f in fields} >= {"first_name", "email_id"}

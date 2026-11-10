@@ -132,6 +132,26 @@ generic route. No field is a credential or needs field-level hiding. `last_user`
 
 ---
 
+## `Data Import` and `Data Import Log`
+
+Version-15's role tables grant every operation on both doctypes to System Manager alone.
+The port matches that document access through `data_import_query_conditions` and
+`data_import_has_permission`: Administrator and System Manager can list and operate on
+rows; Sales Manager and Sales User get an empty list and are refused read, create, write
+and delete. The same hooks cover `/api/resource/` and every `frappe.client.*` method.
+
+`Data Import Log` is additionally unrouted because no client should CRUD log rows through
+the generic resource API. This is not its only guard: `frappe.client.*` ignores
+`routable=False`, so the permission hook remains registered for the log doctype too.
+
+The port deliberately substitutes the System Manager role for upstream's target-doctype
+`import` permission, which this permission model does not implement (`UPSTREAM_BUGS.md`
+68). `job_claimed_at` is in `SENSITIVE_FIELDS`; it is worker coordination state and is
+neither readable, selectable, filterable nor writable over the API. The three import
+result fields are `READONLY_FIELDS`, so screen-supplied `status: "Pending"` is ignored.
+
+---
+
 ## `User`
 
 | | Upstream | Before | Now |

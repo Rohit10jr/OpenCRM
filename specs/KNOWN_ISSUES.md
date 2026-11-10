@@ -623,22 +623,19 @@ check when "the email never arrived".
   background." alert on the 20-to-500 path: a success response here carries no message
   channel. The frontend reloads the list either way.
 
-## 8. Data Import is not built
+## 8. Data Import is limited
 
-The frontend ships three pages under `/crm/data-import` (`DataImport.vue`: the list,
-the new-import form and the import detail) and frappe-ui's `DataImport` components
-call three framework endpoints for them: `form_start_import`, `get_import_logs` and
-`get_preview_from_template` under `frappe.core.doctype.data_import.data_import`. None
-exists here: there is no Data Import doctype, no upload-and-map pipeline, no
-background importer. Nothing links to the pages from the sidebar, so a user reaches
-them only by typing the URL, and then sees a list that never loads.
+Data Import supports CSV upload and new records only. Google Sheets is hidden with
+scoped CSS so the shared framework screens remain unchanged; this leaves a stray “or”
+and the sentence naming Google Sheets on the upload page. Failed rows cannot be
+downloaded.
 
-Recorded 28 Sep 2026 when the guard test was extended to the calls frappe-ui makes
-from inside the package (`tests/test_phase3_endpoints.py::test_every_library_dotted_path_resolves`);
-the three paths sit in its `LIBRARY_OUT_OF_SCOPE` with a pointer here, so they cannot
-be forgotten and cannot be mistaken for a regression. Building it is a feature, not a
-fix: upstream's importer is about 1,500 lines with its own doctype, child table, file
-handling and a background job.
+* The import preview's log filter renders as an empty radiogroup. Frappe v15.126.0's
+  `PreviewStep.vue` passes `buttons` to `TabButtons`, while frappe-ui 1.0.0-rc.2 reads
+  only `options`; all rows remain visible in the log table.
+
+The Import option is hidden from everyone except System Managers and Administrator.
+The server also refuses other users who type a Data Import URL directly.
 
 ---
 

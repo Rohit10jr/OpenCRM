@@ -409,6 +409,12 @@ if none is running, the runner starts one and stops it afterwards. `@playwright/
 pinned to the release whose Chromium build is already on this machine; another machine
 runs `npx playwright install chromium` once.
 
+The frontend resolves `@framework/ui` from `../../frappe/ui`; that folder must contain
+Frappe at tag `v15.126.0` (the sparse clone of `ui` in `.github/workflows/e2e.yml:119-121`
+is enough), and a local run needs a Celery worker because imports run as a background
+job. `develop` crashes the app after login because its screens import
+`FeatherIcon`, which frappe-ui 1.0.0-rc.2 no longer exports.
+
 ```powershell
 cd frontend
 yarn test:e2e                     # the whole suite, headless, one worker
@@ -437,6 +443,7 @@ makes carries an `E2E` prefix and is deleted at the end of the test.
 | `activities.spec.js` | Create Task and reopen it, Create Note, a call log's details |
 | `settings.spec.js` | The user menu, the Settings dialog and its General page, About |
 | `roles.spec.js` | What a Sales User does not get: dashboard editing, management settings |
+| `data-import.spec.js` | Contact CSV import, retrying a duplicate row, and the Sales User's list options |
 
 A cold `yarn dev` makes the first test slow (the setup step allows minutes for it); a
 warm server runs the suite in a few minutes. The `Tested` column of `ROUTES.md` §5 is

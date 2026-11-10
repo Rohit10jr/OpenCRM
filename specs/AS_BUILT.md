@@ -410,6 +410,25 @@ and here.
 
 ---
 
+### Added by CSV Data Import (9 Nov 2026)
+
+`Data Import` and `Data Import Log` are registered platform doctypes. The parent carries
+the version-15 document fields plus the port-only, hidden `job_claimed_at` timestamp used
+as the atomic claim that stops an import running twice. Its `status`, `template_warnings` and `payload_count`
+are readable but server-owned; `import_file` is an attach field. Names have the upstream
+shape, `<reference_doctype> Import on <YYYY-MM-DD HH:MM:SS.ffffff>`, but use the instant
+the name is generated because this port stamps `creation` afterwards.
+
+Both doctypes are Administrator/System Manager-only through both permission hooks.
+`Data Import Log` is also `routable=False`: import-specific methods can resolve it through
+the registry, while `/api/resource/` does not publish a standalone log surface.
+Deleting the parent removes its log rows, matching upstream's `on_trash`.
+
+Platform metadata can now opt discovered child tables into `getdoctype` with
+`TABLE_FIELD_LABELS`. `Contact` declares only `email_ids` (`Email IDs` → `Contact Email`)
+and `phone_nos` (`Contact Numbers` → `Contact Phone`), so its bundle includes both child
+metas without inventing the unrelated `links` table.
+
 ### Added by the phase-4 security review — read this before adding any doctype
 
 Registering a doctype **publishes it**. `@register_doctype("X")` gives every authenticated

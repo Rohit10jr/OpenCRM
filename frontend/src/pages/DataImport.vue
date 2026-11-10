@@ -1,17 +1,22 @@
 <template>
-  <DataImport
-    :doctype="route.params.doctype"
-    :importName="route.params.importName"
-    :doctypeMap="doctypeMap"
-  />
+  <div class="contents">
+    <DataImport
+      :doctype="route.params.doctype"
+      :importName="route.params.importName"
+      :doctypeMap="doctypeMap"
+      :socket="$socket"
+    />
+  </div>
 </template>
 
 <script setup>
 import { usePageMeta } from 'frappe-ui'
 import { DataImport } from '@framework/ui/components/DataImport'
+import { globalStore } from '@/stores/global'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
+const { $socket } = globalStore()
 
 const doctypeMap = {
   'CRM Lead': {
@@ -50,3 +55,14 @@ usePageMeta(() => {
   }
 })
 </script>
+
+<style scoped>
+/* Port only: Data Import accepts CSV uploads only; keep the shared framework screens unchanged. */
+:deep(div.leading-5 > span.cursor-pointer + span.cursor-pointer) {
+  display: none;
+}
+
+:deep(div:has(> div > input[placeholder='Add Google Sheets Link'])) {
+  display: none;
+}
+</style>

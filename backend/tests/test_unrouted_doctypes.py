@@ -22,7 +22,7 @@ from crm_app.models import CRMDeal, CRMDealStatus
 from frappe_core import registry
 from frappe_core.session import session_user
 
-UNROUTED = ["ToDo", "Version"]
+UNROUTED = ["Data Import Log", "ToDo", "Version"]
 
 
 def _client(user):
@@ -78,7 +78,7 @@ def test_registration_still_works_for_an_unrouted_doctype():
     still has a model, and every internal caller still resolves it."""
     for doctype in UNROUTED:
         entry = registry.get_entry(doctype)
-        assert entry.model.__name__ == doctype
+        assert entry.model.__name__ == doctype.replace(" ", "")
         assert entry.model.get_doctype() == doctype
 
 

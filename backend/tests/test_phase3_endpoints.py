@@ -70,15 +70,18 @@ def frontend_called_paths() -> set[str]:
     return found
 
 
-#: frappe-ui makes a handful of calls of its own, from inside the installed package,
-#: which no scan of `frontend/src` can see: `useOnboarding` (FINDINGS.md 39), the Link
-#: search, the form-load bundle, the Frappe Cloud bridge and the Data Import page.
-#: Scanned separately over the package's two source trees. The library writes some
-#: calls with double quotes, so its regex accepts either quote; and it ships file-picker
-#: components for Frappe Drive whose `drive.api.*` calls belong to that app, which this
+#: frappe-ui and the linked Frappe UI package make calls of their own, from outside
+#: `frontend/src`: `useOnboarding` (FINDINGS.md 39), the Link search, the form-load
+#: bundle, the Frappe Cloud bridge and the Data Import page. The libraries write some
+#: calls with double quotes, so the regex accepts either quote; frappe-ui also ships
+#: Frappe Drive components whose `drive.api.*` calls belong to that app, which this
 #: frontend never mounts, so only the framework's and the CRM's namespaces count.
-LIBRARY_SRC = FRONTEND_SRC.parent / "node_modules" / "frappe-ui"
-LIBRARY_DIRS = ("frappe", "src")
+LIBRARY_SOURCES = {
+    FRONTEND_SRC.parent / "node_modules" / "frappe-ui": ("frappe", "src"),
+    FRONTEND_SRC.parent / "node_modules" / "@framework" / "ui": (
+        "src/components/DataImport",
+    ),
+}
 LIBRARY_NAMESPACES = ("frappe.", "crm.")
 _LIBRARY_PATH_RE = re.compile(
     r"(?:(?:url|method):\s*|\bcall\(\s*)['\"](?:/api/method/)?([a-z_]+(?:\.[a-z_]+)+)['\"]"
@@ -86,31 +89,26 @@ _LIBRARY_PATH_RE = re.compile(
 #: `const NAME = 'dotted.path'` - counted only when `call(NAME)` appears in the same file.
 _LIBRARY_CONST_RE = re.compile(r"\b([A-Za-z_]\w*)\s*=\s*['\"]([a-z_]+(?:\.[a-z_]+)+)['\"]")
 
-#: Data Import is a framework feature the port has not built: no doctype, no endpoints,
-#: and the three `/crm/data-import` pages are reachable only by typing the URL.
-#: `specs/KNOWN_ISSUES.md` 8 records it; these three stay here until it is built.
-LIBRARY_OUT_OF_SCOPE = {
-    "frappe.core.doctype.data_import.data_import.form_start_import",
-    "frappe.core.doctype.data_import.data_import.get_import_logs",
-    "frappe.core.doctype.data_import.data_import.get_preview_from_template",
-}
+#: Every framework and CRM call made by the mounted library components is in scope.
+LIBRARY_OUT_OF_SCOPE = set()
 
 
 def library_called_paths() -> set[str]:
-    if not LIBRARY_SRC.exists():
-        pytest.skip("frappe-ui package not installed")
+    if not all(root.exists() for root in LIBRARY_SOURCES):
+        pytest.skip("frontend library source not installed")
     found: set[str] = set()
-    for sub in LIBRARY_DIRS:
-        for path in (LIBRARY_SRC / sub).rglob("*"):
-            if path.suffix not in (".js", ".ts", ".vue"):
-                continue
-            text = path.read_text(encoding="utf-8", errors="ignore")
-            found.update(_LIBRARY_PATH_RE.findall(text))
-            # A path held in a constant and passed to call() by name, which the regex
-            # above cannot see: `const X = 'frappe.a.b'; call(X)` (pulse.ts does this).
-            for constant, dotted in _LIBRARY_CONST_RE.findall(text):
-                if re.search(r"\bcall\(\s*" + re.escape(constant) + r"\b", text):
-                    found.add(dotted)
+    for root, directories in LIBRARY_SOURCES.items():
+        for sub in directories:
+            for path in (root / sub).rglob("*"):
+                if path.suffix not in (".js", ".ts", ".vue"):
+                    continue
+                text = path.read_text(encoding="utf-8", errors="ignore")
+                found.update(_LIBRARY_PATH_RE.findall(text))
+                # A path held in a constant and passed to call() by name, which the regex
+                # above cannot see: `const X = 'frappe.a.b'; call(X)` (pulse.ts does this).
+                for constant, dotted in _LIBRARY_CONST_RE.findall(text):
+                    if re.search(r"\bcall\(\s*" + re.escape(constant) + r"\b", text):
+                        found.add(dotted)
     return {p for p in found if p.startswith(LIBRARY_NAMESPACES)}
 
 

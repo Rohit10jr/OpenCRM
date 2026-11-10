@@ -9,11 +9,28 @@ removing one.
 
 | Doctype | Since | Why | Anything call it? |
 |---|---|---|---|
+| `Data Import Log` | CSV Data Import | Worker result rows are reserved for import-specific, parent-gated methods; generic CRUD is unnecessary | Parent deletion removes its rows internally; no API method calls it |
 | `ToDo` | phase 4 review | Assignment rows grant record access; a writable route let any user grant themselves | No — frontend uses `assign_to.add` |
 | `Version` | phase 4 review | Audit rows carry old and new values, so the trail leaked the money on records the caller is refused | No — timeline uses `get_activities` |
 
 Enforced by `tests/test_unrouted_doctypes.py::test_the_unrouted_set_is_exactly_what_we_intend`,
 so the table above and the code cannot drift apart.
+
+---
+
+# `Data Import Log` — worker-owned result rows
+
+The log is a standalone doctype rather than a child table upstream, but the Data Import
+screen never needs generic CRUD for it. It is reserved for import-specific methods that
+return only rows belonging to the named, permission-checked parent. Publishing
+`/api/resource/Data Import Log` would add a second write path to worker-owned history for
+no feature benefit.
+
+The doctype still has both permission hooks. This is required because
+`frappe.client.get_list`, `insert`, `set_value` and `delete` resolve registered doctypes
+without consulting `routable`; a Sales Manager or Sales User gets an empty list and is
+refused every object operation there. Only Administrator and System Manager are admitted,
+matching the upstream doctype role table.
 
 ---
 
