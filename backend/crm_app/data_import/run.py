@@ -15,7 +15,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from frappe_core import permissions
-from frappe_core.exceptions import FrappeError, PermissionError as FrappePermissionError
+from frappe_core.exceptions import FrappeError
 from frappe_core.exceptions import _flatten_drf_detail
 from frappe_core.session import session_user
 from frappe_platform.models import DataImport, DataImportLog

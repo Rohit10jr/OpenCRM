@@ -5,7 +5,6 @@ from types import SimpleNamespace
 import pytest
 
 from crm_app.data_import.importer import (
-    Column,
     ImportFile,
     Row,
     build_fields_dict_for_column_matching,
