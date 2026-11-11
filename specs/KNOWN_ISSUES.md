@@ -14,7 +14,7 @@ and anything a future agent would otherwise rediscover the hard way.
 | 4 | The async stack had never run against a real broker, worker or scheduler | ✅ **Smoke-tested** — passed; see below for what is still untested |
 | 5 | The frontend test suite had never been executed; the realtime layer had never run on real Redis | ✅ **Both run** — 152 frontend tests pass, cross-process delivery confirmed |
 | 6 | Logging out of all sessions did not stop an access token already issued — it worked for up to 5 more minutes | ✅ **Fixed 31 Oct 2026** — option 3, a `token_version` on the user; plain `logout` keeps the window by design |
-| 9 | The frontend is slow to load | ⏸️ **Open, deferred** — to be examined after the browser testing is finished and `phase-8-followup` is merged; what is known and what to measure first are below |
+| 9 | The frontend is slow to load | ✅ **Measured 10–11 Nov 2026** — it is the dev server; a production build shows the login page in about 1 s. ⏸️ One part open: sign-in takes about 2 s on the backend |
 | 11 | Upstream has moved on since the pin | ⏸️ **Open** — compare against the clone, not the cloud, until the pin moves |
 | 12 | The frontend still says "Frappe" in a few places after the Open CRM rename | ⏸️ **Open** — the locations are listed; to be handled later |
 | 13 | The backend carries the Frappe name in its packages, classes, settings and strings | ⏸️ **Open** — the locations are listed; the packages and models are renamed later, as decided |
@@ -642,9 +642,59 @@ The server also refuses other users who type a Data Import URL directly.
 ## 9. The frontend is slow to load
 
 Recorded 30 Sep 2026, from the hand testing in the browser (`docs/BROWSER_TESTING.md`):
-the Vue app takes too long to load. **Deferred by decision**: nothing is to be changed
-until the browser testing is finished and `phase-8-followup` is merged. This entry is
-the note to come back to, and it is `docs/FINDINGS.md` 55.
+the Vue app takes too long to load. It is `docs/FINDINGS.md` 55. **Measured 10–11 Nov
+2026; the answer is the next section.** The sections after it are what was known before
+the measurement, kept for the reasoning.
+
+### Measured, 10–11 Nov 2026
+
+**The slowness is the dev server, made worse by this machine's memory.** A production
+build has none of it. The frontend side is closed and nothing in the frontend is to be
+changed for it.
+
+| Case | Login page shows | Sign-in until the list settles | Leads → Deals | Files, size | Free memory |
+|---|---|---|---|---|---|
+| Dev server, first load after a restart | 184.8 s | 41.3 s | 0.78 s | 1,364, 62.7 MB | 368 → 277 MB |
+| Dev server, three more loads | 8.3, 5.9, 5.2 s | 7.7, 6.4, 6.5 s | 0.15–0.27 s | 1,364, 62.7 MB | 487–743 MB |
+| Production build, three loads | 3.3, 1.05, 0.92 s | 5.7, 5.0, 4.8 s | 0.18–0.25 s | 128, 1.9 MB | 472–604 MB |
+
+* **Method.** A headless Playwright script (Chromium) opened `/crm/login`, signed in as
+  Administrator, waited for the sidebar and for the network to go idle on
+  `/crm/leads/view/list`, then clicked Deals. It then replayed that run's API calls one
+  by one straight to Django on 8000. Each run used a fresh browser context, so nothing
+  was cached between runs. Running: `runserver`, then either `yarn dev` (ready in 31 s,
+  `node_modules/.vite` already present) or the built bundle, and the browser. Chrome's
+  background processes held about 600 MB throughout.
+* **Production build.** `vite build --base=/assets/crm/frontend/ --outDir <dir>` took
+  202 s; `--outDir` is needed locally because frappe-ui's build-config plugin finds no
+  output folder. It was served by a small Node server that gzips files, as a real web
+  server would, answers `/crm/*` with `index.html` and passes everything else to Django.
+  WebSockets were refused, which the app tolerates.
+* **The cold dev load is the module loads.** Two calls Django answers directly in under
+  0.25 s (`boot_config`, `get_context_for_dev`) took 61 s in the browser, waiting behind
+  some 1,300 module requests.
+* **The backend is moderate, and the same in every case.** Replayed directly, the 24–34
+  calls of a run summed to 4.8–8.6 s. The login call took 1.85–2.1 s every time; the rest
+  about 0.15–0.3 s each, one `get_views` 0.9 s. Through the dev server they show as
+  about 0.8 s each, arriving together on a weak CPU.
+
+**Open: why sign-in takes about 2 seconds.** Not profiled. The likely cause is password
+hashing: local and production settings use Django's default PBKDF2, deliberately slow,
+and only `config/settings/test.py:52` switches to MD5. If that is it, it is expected and
+shrinks on a faster CPU; check it once there is a deploy target, or in the rebuild.
+
+**Found while building: the built `index.html` contains a Jinja block.**
+frappe-ui's `jinjaBootData` Vite plugin
+(`frontend/node_modules/frappe-ui/vite/jinjaBootData.js`) writes
+`{% for key in boot %} window["{{ key }}"] = ... {% endfor %}` into the page, for
+Frappe to render on the server. Served as a static file the block stays as raw text and
+the app still loaded, since `main.js` takes its boot values from its own call
+(`JWT_PATCH.md`, the third deviation). A deploy must either render it or have it removed
+from the build; to decide then.
+
+Not measured: a bigger machine (the production numbers already settle the question), and
+the deploy's real web server, whose compression and caching may differ from the
+stand-in.
 
 ### What is already known
 
@@ -687,9 +737,9 @@ the note to come back to, and it is `docs/FINDINGS.md` 55.
 * **`main.js` waits for the boot-values call before it mounts** (`JWT_PATCH.md`, the
   third deviation), so nothing is drawn until the backend has answered once.
 
-### What is not known
+### What was not known (answered 10–11 Nov 2026, above)
 
-Which of these the slowness actually is. Nobody has timed a warm reload, a page change
+Which of these the slowness actually is. Nobody had timed a warm reload, a page change
 inside the app, or a production build. A built bundle has none of the dev server's
 per-file transpile, so the cold-start cost may not exist outside development at all.
 Until that is measured, any fix is a guess.

@@ -1791,13 +1791,14 @@ honoured in either spelling, ten at a time. No permission check, as upstream. On
 first field holds `CRM Lead`, the second searches leads as it always could, and the
 insert carries the pair. Covered by `tests/test_reference_doctype_search.py`.
 
-## 55. The frontend is slow to load (open, deferred)
+## 55. The frontend is slow to load (measured; frontend closed, sign-in time open)
 
 **Block:** none. Recorded 30 Sep 2026 from the hand testing in `BROWSER_TESTING.md`: the
 Vue app takes too long to load.
 
-**Status:** open and deliberately not investigated. The decision is to finish the
-browser testing and merge `phase-8-followup` first, then see what can be done.
+**Status:** measured 10–11 Nov 2026, below. The frontend part is closed: the cost is
+the dev server's. One backend question stays open, the 2-second sign-in. (Until then it
+was deferred until the browser testing was finished and `phase-8-followup` merged.)
 
 **What is known, and where to start:** `specs/KNOWN_ISSUES.md` 9. In short: finding 29's
 cold-start cost is the one measured number (a minute or two per `yarn dev` start, bound
@@ -1814,6 +1815,31 @@ the machine is paging measures the paging. Both are written up in
 `specs/KNOWN_ISSUES.md` 9, with the rule that any measurement records free memory
 beside it. The `brace_expansion` warning the dev server prints at every start is
 unrelated and explained there too.
+
+**Measured, 10–11 Nov 2026** (plan item 12). The three cases were timed with a
+Playwright script that signs in as Administrator, waits for the Leads list to settle and
+then opens Deals, and replays the same API calls straight to Django to separate backend
+time from the rest. Only `runserver`, Vite or a static server, and the headless browser
+were running.
+
+| Case | Login page shows | Sign-in until the list settles | Leads → Deals | Files, size | Free memory |
+|---|---|---|---|---|---|
+| Dev server, first load after a restart | 184.8 s | 41.3 s | 0.78 s | 1,364, 62.7 MB | 368 → 277 MB |
+| Dev server, three more loads | 8.3, 5.9, 5.2 s | 7.7, 6.4, 6.5 s | 0.15–0.27 s | 1,364, 62.7 MB | 487–743 MB |
+| Production build, three loads | 3.3, 1.05, 0.92 s | 5.7, 5.0, 4.8 s | 0.18–0.25 s | 128, 1.9 MB | 472–604 MB |
+
+**Conclusion:** the slowness felt in the browser is the dev server, made worse by this
+machine's memory, and does not exist in a built bundle. In the cold dev load two calls
+that Django answers in under 0.25 s directly (`boot_config`, `get_context_for_dev`) took
+61 s in the browser, queued behind the module loads. The frontend half of this finding is
+closed; nothing in the frontend is to be changed for it.
+
+**Still open: sign-in takes about 2 seconds on the backend.** Measured directly, the
+login call took 1.85–2.1 s in every run; the other 24–33 calls took about 0.15–0.3 s each,
+one `get_views` 0.9 s. The likely cause is password hashing (Django's default PBKDF2;
+only `config/settings/test.py` switches to MD5) on a weak CPU, but it has not been
+profiled. Worth checking once there is a deploy target, or in the rebuild. Details and
+method: `specs/KNOWN_ISSUES.md` 9.
 
 ## 56. "Unlink all" leaves an organization's deal linked (fixed, diverged)
 
