@@ -15,7 +15,7 @@ and anything a future agent would otherwise rediscover the hard way.
 | 5 | The frontend test suite had never been executed; the realtime layer had never run on real Redis | ✅ **Both run** — 152 frontend tests pass, cross-process delivery confirmed |
 | 6 | Logging out of all sessions did not stop an access token already issued — it worked for up to 5 more minutes | ✅ **Fixed 31 Oct 2026** — option 3, a `token_version` on the user; plain `logout` keeps the window by design |
 | 9 | The frontend is slow to load | ✅ **Measured 10–11 Nov 2026** — it is the dev server; a production build shows the login page in about 1 s. ⏸️ One part open: sign-in takes about 2 s on the backend |
-| 11 | Upstream has moved on since the pin | ⏸️ **Open** — compare against the clone, not the cloud, until the pin moves |
+| 11 | Upstream has moved on since the pin | ⏸️ **Moved to the rebuild** (11 Nov 2026) — compare against the clone, not the cloud; this port is not synced |
 | 12 | The frontend still says "Frappe" in a few places after the Open CRM rename | ⏸️ **Open** — the locations are listed; to be handled later |
 | 13 | The backend carries the Frappe name in its packages, classes, settings and strings | ⏸️ **Open** — the locations are listed; the packages and models are renamed later, as decided |
 | 14 | The frontend predates the pin: upstream's Forms builder and one call-label fix are missing | ⏸️ **Open** — Forms is not ported (no backend); the label fix was taken on 30 Oct 2026 |
@@ -933,6 +933,15 @@ a piece of work of its own: re-run the frontend diff for the port's patches
 (`frontend/JWT_PATCH.md`), re-check every cited line number, and re-port whatever the
 514 commits changed on the backend side. Until then, compare against the clone, not the
 cloud, and record cloud-only differences the way 84 is recorded.
+
+**Moved to the rebuild, 11 Nov 2026 (owner).** By 3 Nov 2026 upstream `main`
+(`638bf3db2`) was 1,083 commits ahead of the pin: 227 non-merge commits in the backend
+(108 fixes, 43 features) and 617 in the frontend, the largest new features being
+Workflow Automations, guided setup, a command palette, Data Enrichment and a reworked
+Data Import. This port will not be deployed before the rebuild, so neither the fixes nor
+the features are synced here; the rebuild starts from a fresh upstream base instead.
+Upstream `main` still tests against Frappe version-15 and version-16
+(`.github/workflows/server-tests.yml`).
 
 ---
 
