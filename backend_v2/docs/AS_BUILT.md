@@ -18,6 +18,13 @@ The Django project skeleton is in place with separate base, local and test setti
 It installs the ten top-level apps in the settled order, includes each app's currently
 empty URLconf explicitly under `/api/v1/`, and exposes Django admin under `/admin/`.
 
+`core` now supplies the Frappe exception classes and error body, the DRF exception
+handler, the `{"message": ...}` / `{"data": ...}` envelope renderer, merged input
+parsing, surplus-input binding, and `FrappeAPIView` for endpoints that are not resources.
+It also supplies the default authenticated permission and the registry-free `DOCTYPE`
+and `IS_CHILD_TABLE` model metadata readers. Authentication backends are deliberately
+empty until FOUNDATION brief 04; guest views opt out of the default permission.
+
 Celery loads one explicit `BEAT_SCHEDULE` from each app and refuses duplicate schedule
 keys. Channels sends HTTP to Django and exposes `ws/realtime`; until NOTIFICATIONS adds
 the real consumer, every WebSocket connection is closed without acceptance using code
@@ -50,10 +57,20 @@ tests the guard tests will demand.
 
 ### Adding an action or an endpoint
 
-*Not written yet — FOUNDATION.* An `@action` on a resource's ViewSet, or a view on
-`core`'s base view for an endpoint that is not a resource; its route in the app's
-`urls.py`; guest access; the envelope of the old path it replaces; and its row in the
-route map.
+For an endpoint that is not a resource, subclass `core.views.FrappeAPIView`, implement
+only the allowed HTTP methods, and write its route explicitly in its app's `urls.py` and
+in the route map. `self.get_inputs(request)` merges query and body inputs, JSON-decodes
+query values when possible, lets the body win, and drops `cmd`; the view then reads only
+the keys it knows. Return `Response(payload)` or `self.envelope(payload)`: successful
+responses use `{"message": payload}` with status 200. Return `WithResponseKeys` when
+keys such as `docs` must sit beside `message`.
+
+Every view is authenticated by default. A guest endpoint declares
+`permission_classes = [AllowAny]`; authentication still runs first once FOUNDATION adds
+JWT authentication. No view binds a user into ambient state: pass `request.user` to any
+service that needs it.
+
+Resource actions and their ViewSet base are not built yet.
 
 ### Carrying a document name with slashes in a route
 
@@ -72,8 +89,46 @@ re-check for rows that point at another document.
 
 ### Raising an error
 
-*Not written yet — FOUNDATION.* The exception classes and how a message reaches the
-client verbatim.
+Raise a class from `core.exceptions`, or call `throw(message, exc=ValidationError)`.
+Messages are copied verbatim into the scalar `message`, the plain-string `messages`
+list, and the double-encoded `_server_messages` list. The available classes and statuses
+are:
+
+| Class | Status | Title |
+|---|---:|---|
+| `ValidationError` | 417 | Message |
+| `MandatoryError` | 417 | Message |
+| `InvalidEmailAddressError` | 417 | Message |
+| `OutgoingEmailError` | 417 | Message |
+| `LinkValidationError` | 417 | Message |
+| `LinkExistsError` | 417 | Message |
+| `PermissionError` | 403 | Not Permitted |
+| `SecurityException` | 403 | Message |
+| `DoesNotExistError` | 404 | Not Found |
+| `AuthenticationError` | 401 | Message |
+| `DuplicateEntryError` | 409 | Message (`Duplicate` for a database integrity error) |
+| `NameError` | 409 | Message |
+| `RateLimitExceededError` | 429 | Message |
+
+`FilterError`, a `ValueError`, is rendered as status 400, `ValidationError`, title
+`Invalid Filter`. DRF validation errors become 417 and nested field messages are
+flattened. `Http404` and missing Django objects become `DoesNotExistError`; protected
+and restricted deletes become `LinkExistsError` before the broader integrity-error
+mapping is considered. DRF response headers such as `Retry-After`, `WWW-Authenticate`
+and `Allow` are preserved. An exception the handler does not recognize remains a plain
+500.
+
+A wrong method has this body (shown for `GET`) and an `Allow` header:
+
+```json
+{"exception":"frappe.exceptions.MethodNotAllowed: Method \"GET\" not allowed.","exc_type":"MethodNotAllowed","_server_messages":"[\"{\\\"message\\\": \\\"Method \\\\\\\"GET\\\\\\\" not allowed.\\\", \\\"title\\\": \\\"Message\\\"}\"]","message":"Method \"GET\" not allowed.","messages":["Method \"GET\" not allowed."]}
+```
+
+An unknown non-admin URL, under `/api/v1/` or elsewhere, has this body:
+
+```json
+{"exception":"frappe.exceptions.DoesNotExistError: Not found.","exc_type":"DoesNotExistError","_server_messages":"[\"{\\\"message\\\": \\\"Not found.\\\", \\\"title\\\": \\\"Not Found\\\"}\"]","message":"Not found.","messages":["Not found."]}
+```
 
 ### Background work and live events
 

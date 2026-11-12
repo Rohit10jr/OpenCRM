@@ -97,7 +97,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = "accounts.User"
 
 REST_FRAMEWORK = {
-    "DEFAULT_RENDERER_CLASSES": ("rest_framework.renderers.JSONRenderer",),
+    "DEFAULT_RENDERER_CLASSES": ("core.renderers.FrappeEnvelopeRenderer",),
+    "DEFAULT_AUTHENTICATION_CLASSES": (),
+    "DEFAULT_PERMISSION_CLASSES": ("core.permissions.IsAuthenticated",),
+    "EXCEPTION_HANDLER": "core.exceptions.frappe_exception_handler",
 }
 
 FRONTEND_ORIGIN = env("FRONTEND_ORIGIN", default="http://localhost:8080")
