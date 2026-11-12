@@ -1,6 +1,6 @@
 # As built — what `backend_v2` actually contains
 
-**Status: FOUNDATION skeleton built (2026-11-13).**
+**Status: FOUNDATION skeleton and account identity built (2026-11-13).**
 
 This file describes the code that exists, not the code that is planned. **Where it and a
 spec disagree, this file wins**: specs are written before the code and go stale; this
@@ -21,7 +21,20 @@ empty URLconf explicitly under `/api/v1/`, and exposes Django admin under `/admi
 Celery loads one explicit `BEAT_SCHEDULE` from each app and refuses duplicate schedule
 keys. Channels sends HTTP to Django and exposes `ws/realtime`; until NOTIFICATIONS adds
 the real consumer, every WebSocket connection is closed without acceptance using code
-4001. No application models, API routes or migrations exist yet.
+4001.
+
+`accounts.User` is the custom `AUTH_USER_MODEL`. Its string primary key is normalized to
+a stripped, lowercased email except for the literal `Administrator` and `Guest` rows. It
+stores its own `creation` and `modified` timestamps, exposes `enabled` as Django's
+`is_active`, and derives CRM roles from Django groups; the literal Administrator always
+also has the Administrator role. `UserManager.create_superuser` grants System Manager,
+because CRM authority does not come from Django's `is_superuser` flag.
+
+The first account migrations create `User`, the four role groups, and the two built-in
+users. Both built-ins start with unusable passwords; Administrator belongs to the
+Administrator and System Manager groups. The model declares its sensitive, read-only,
+email and attachment fields, but later FOUNDATION briefs add their enforcement and email
+validation. There are no application API routes yet.
 
 ## 2. Recipes
 
@@ -84,6 +97,13 @@ Use `backend_v2/.env.example` when local overrides are needed. Do not reuse the 
 ```powershell
 .venv\Scripts\python.exe manage.py check
 .venv\Scripts\python.exe -m pytest tests/test_skeleton.py
+```
+
+Apply schema and seed migrations to the configured `opencrm_v2` database from the same
+directory with:
+
+```powershell
+.venv\Scripts\python.exe manage.py migrate
 ```
 
 Database creation, migrations, seed data, the server on port 8001, the `.http` suite and
