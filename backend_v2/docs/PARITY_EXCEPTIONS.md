@@ -76,7 +76,7 @@ comparison skips that block.
 
 ### PE-2. A tree operator on a field that is not a tree: new wording
 
-- **Status:** proposed
+- **Status:** approved — owner, 12 Nov 2026
 - **Where:** every list route; any filter using `descendants of`, `ancestors of` or their
   variants on a field whose target is not a tree. No `.http` block found
 - **Old backend:** 400 `ValidationError`, title `Invalid Filter`, message

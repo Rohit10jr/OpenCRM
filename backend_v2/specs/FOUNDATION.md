@@ -1,8 +1,7 @@
 # FOUNDATION — the project, the core layer, the base ViewSet and authentication
 
-**Status: Ready** — spec-checked and reviewed by the owner, 12 Nov 2026. Three points in
-section 6 are still open (`get` by `filters`, child-row writes, PE-2); no brief touches
-them until they are settled. Everything here is a convention every later unit copies. **Paths are from the
+**Status: Ready** — spec-checked and reviewed by the owner, 12 Nov 2026. One point in
+section 6 is still open (`get` by `filters`); no brief builds it until it is settled. Everything here is a convention every later unit copies. **Paths are from the
 repository root.**
 
 ---
@@ -347,15 +346,20 @@ answers go into the briefs and then into `AS_BUILT.md`.
 | Q10 | The "parallel work" premise | Dropped; units are built one at a time. FOUNDATION still writes the shared files once (section 1.2) |
 | Q11 | Requests with no old equivalent | A disallowed method is **405** with `Allow`; an unknown URL is **404**; both in the Frappe error shape (`API_CONTRACT.md` section 5). No client sends either; S19 moves towards DRF's shapes anyway |
 
-**Open, proposed, awaiting the owner:**
+**Settled after the first answers (owner, 12 Nov 2026):**
 
-- **`get` by `filters`** (`client.py:client_get`). No frontend caller uses it — all three
-  pass `name` (`SlaPolicyView.vue`, `SlaPolicyList.vue`, `AssignmentRuleView.vue`) — but
-  `docs/http/13_bulk_and_misc.http` 2.5–2.7 test it. **Proposed:** a collection action
-  `GET <resource>/find/?filters=…` on the base, answering like `get`, so the blocks
-  translate and a form script can still use it.
-- **`set_value` and `delete` on a child row.** Only Contact Email and Contact Phone opt
-  in (`CLIENT_EDITABLE`, `frappe_platform/models.py:541`, `565`), for the contact page
-  (`useContactFields.ts`; FINDINGS 67). **Proposed:** not on the base; CONTACTS gives
-  those two rows nested routes under their contact, and the contract's "a child row is
-  never reachable on its own" gains that exception.
+- **PE-2** (the tree-filter refusal's wording) is approved.
+- **`set_value` and `delete` on a child row** are not on the base. Only Contact Email and
+  Contact Phone opt in (`CLIENT_EDITABLE`, `frappe_platform/models.py:541`, `565`), for
+  the contact page (`useContactFields.ts`; FINDINGS 67). **CONTACTS** gives those two
+  rows nested routes under their contact, and updates `API_CONTRACT.md`'s "a child row is
+  never reachable on its own" with that exception when it builds them.
+
+**Still open:**
+
+- **`get` by `filters`** (`client.py:client_get`). The owner accepted a
+  `GET <resource>/find/?filters=…` route on condition of knowing which frontend calls use
+  it. **None does**: all three frontend callers pass `name` (`SlaPolicyView.vue`,
+  `SlaPolicyList.vue`, `AssignmentRuleView.vue`), and no seeded form script calls `get`.
+  Only `docs/http/13_bulk_and_misc.http` 2.5–2.7 test it. Recorded in
+  `tasks/OVERNIGHT_QUESTIONS.md`; not built until confirmed.
