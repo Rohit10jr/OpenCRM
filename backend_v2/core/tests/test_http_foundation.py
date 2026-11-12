@@ -4,7 +4,7 @@ from urllib.parse import urlencode
 import pytest
 from django.db import models
 from django.db.models.deletion import ProtectedError
-from django.test import override_settings
+from django.test import Client, override_settings
 from django.urls import path
 from rest_framework import exceptions as drf_exceptions
 from rest_framework.permissions import AllowAny
@@ -195,9 +195,11 @@ def test_disallowed_method_is_405_with_allow_header(api):
 
 @pytest.mark.parametrize("debug", [True, False])
 @pytest.mark.parametrize("url", ["/api/v1/no-such-route/", "/no-such-route/"])
-def test_unknown_url_is_frappe_404_everywhere(api, settings, debug, url):
+@pytest.mark.parametrize("method", ["get", "post", "patch", "delete"])
+def test_unknown_url_is_frappe_404_everywhere(settings, debug, url, method):
     settings.DEBUG = debug
-    response = api.get(url)
+    client = Client(enforce_csrf_checks=True)
+    response = getattr(client, method)(url)
 
     assert response.status_code == 404
     assert response.json() == build_error_body(

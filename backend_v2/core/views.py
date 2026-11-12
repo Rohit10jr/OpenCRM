@@ -1,6 +1,7 @@
 """Base API view for endpoints that are not document resources."""
 
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -10,6 +11,7 @@ from core.inputs import build_payload
 from core.renderers import Envelope, WithResponseKeys
 
 
+@csrf_exempt
 def frappe_not_found(request, *args, **kwargs):
     """Return the settled Frappe body for a URL with no route."""
 

@@ -129,6 +129,8 @@ final catch-all in `config.urls` makes it apply under `/api/v1/` and elsewhere e
 when `DEBUG=True`; `handler404` uses the same function for `Http404` resolution when
 `DEBUG=False`. Django admin keeps its own 404 pages. The body is:
 
+This 404 holds for every HTTP method, including unsafe requests without a CSRF token.
+
 ```json
 {"exception":"frappe.exceptions.DoesNotExistError: Not found.","exc_type":"DoesNotExistError","_server_messages":"[\"{\\\"message\\\": \\\"Not found.\\\", \\\"title\\\": \\\"Not Found\\\"}\"]","message":"Not found.","messages":["Not found."]}
 ```
