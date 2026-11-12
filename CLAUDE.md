@@ -168,8 +168,14 @@ each with its own database, Redis databases, `.env` and virtualenv (S18, REBUILD
 writes `backend_v2` from briefs in `tasks/`; Claude plans, reviews and commits, and does
 not write feature code. Codex's side is `AGENTS.md` "When building".
 
+- **Each unit starts with a spec check:** a read-only Codex brief that checks the unit's
+  spec against `backend/` and reports what is stale or wrong. Fix the spec, or settle it
+  with the owner, before the first build brief (`backend_v2/specs/README.md`).
 - A brief names the unit and its spec, the `PORT_MAP.md` rows, the old backend's files
-  and lines, the decisions already taken, the one change to make, and the tests.
+  and functions, the decisions already taken, the one change to make, and the tests.
+- **If a unit's gate fails twice, stop** and report to the owner.
+- **The unit's pull request description is its progress report**; the list of what it
+  holds is in `backend_v2/specs/README.md`.
 - Run builds with `network_access=true`, so tests can reach PostgreSQL. Codex leaves its
   commit message in `tasks/COMMIT_MSG`.
 - Review the diff against `backend/`, not against the spec: the spec and the author can

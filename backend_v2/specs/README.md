@@ -3,18 +3,18 @@
 **This table is the one home of unit status.** Per-row status (each method path and
 doctype) lives in `backend_v2/docs/PORT_MAP.md`. **Paths are from the repository root.**
 
-A **unit** is one handoff: usually one Django app, sized so an agent can finish it and
-pass its gate in one run. Units are named for what they build, never numbered — the order
-below can change without renaming anything.
+A **unit** is one piece of the rebuild with its own gate and pull request: usually one
+Django app, built as a series of Codex briefs. Units are named for what they build, never
+numbered — the order below can change without renaming anything.
 
 ## Status values
 
 | Status | Meaning |
 |---|---|
-| **Provisional** | Written before the code it depends on exists. Its scope is right; its details are guesses. **Rewrite it against `AS_BUILT.md` before running it** |
-| **Ready** | Rewritten against what exists, and reviewed by the owner. Can be handed to an agent |
-| **Running** | A run is in progress. Its runbook is in `backend_v2/docs/runs/` |
-| **Done** | Gate passed. `AS_BUILT.md` updated, `PORT_MAP.md` rows marked, progress report written |
+| **Provisional** | Written before the code it depends on exists. Its scope is right; its details are guesses. **Rewrite it against `AS_BUILT.md` before building it** |
+| **Ready** | Rewritten against what exists, spec-checked, and reviewed by the owner. Its briefs can be written |
+| **Running** | Its briefs are being built by Codex and reviewed |
+| **Done** | Gate passed. `AS_BUILT.md` updated, `PORT_MAP.md` rows marked, the unit's pull request merged with its progress report |
 
 Flip the status in this table in the same commit that changes the fact. A spec whose
 status is wrong is worse than no status at all.
@@ -26,33 +26,40 @@ status is wrong is worse than no status at all.
 | FOUNDATION | [`FOUNDATION.md`](FOUNDATION.md) | `core`, and the first part of `accounts` | — | **Provisional — awaiting owner review** |
 | ACCOUNTS | [`ACCOUNTS.md`](ACCOUNTS.md) | `accounts` | FOUNDATION | Provisional |
 | CONFIGURATION | [`CONFIGURATION.md`](CONFIGURATION.md) | `configuration` | FOUNDATION | Provisional |
-| SHARED_ACTIONS | [`SHARED_ACTIONS.md`](SHARED_ACTIONS.md) | `core` (the mixins in `core/mixins/`) | FOUNDATION | Provisional |
+| SHARED_ACTIONS | [`SHARED_ACTIONS.md`](SHARED_ACTIONS.md) | `core` (the mixins in `core/mixins/`, the conditions evaluator, the assignment engine) | FOUNDATION | Provisional |
 | CONTACTS | [`CONTACTS.md`](CONTACTS.md) | `contacts` | ACCOUNTS, SHARED_ACTIONS | Provisional |
 | NOTIFICATIONS | [`NOTIFICATIONS.md`](NOTIFICATIONS.md) | `notifications` | ACCOUNTS | Provisional |
 | SALES | [`SALES.md`](SALES.md) | `sales` | ACCOUNTS, CONFIGURATION, SHARED_ACTIONS, CONTACTS, SLA | Provisional |
-| ACTIVITIES | [`ACTIVITIES.md`](ACTIVITIES.md) | `activities` | SALES, NOTIFICATIONS | Provisional |
+| ACTIVITIES | [`ACTIVITIES.md`](ACTIVITIES.md) | `activities` | SALES, NOTIFICATIONS, SHARED_ACTIONS | Provisional |
 | DASHBOARD | [`DASHBOARD.md`](DASHBOARD.md) | `dashboard` | SALES | Provisional |
-| SLA | [`SLA.md`](SLA.md) | `sla` | FOUNDATION | Provisional |
+| SLA | [`SLA.md`](SLA.md) | `sla` | FOUNDATION, SHARED_ACTIONS | Provisional |
 | INTEGRATIONS | [`INTEGRATIONS.md`](INTEGRATIONS.md) | `integrations` | SALES, ACTIVITIES | Provisional |
+| DATA_IMPORT | [`DATA_IMPORT.md`](DATA_IMPORT.md) | `core` (`core/data_import/`) | SALES, CONTACTS, ACTIVITIES | Provisional |
 
-**Units and apps are a starting point, not final** (REBUILD_PLAN section 4). A building
-agent may merge, split or move work if it gives a proper reason — in its orientation
-before the code and its progress report after — and updates this table, `PORT_MAP.md` and
-REBUILD_PLAN section 4 with it.
+**Units and apps are a starting point, not final** (REBUILD_PLAN section 4). Work may be
+merged, split or moved with a proper reason — raised in the spec check before the code
+and recorded in the progress report after — and this table, `PORT_MAP.md` and
+REBUILD_PLAN section 4 are updated with it.
 
-### What can run at the same time
+### Build order
 
-Units in one wave depend only on earlier waves and own different apps, so they never
-edit the same file.
+One unit at a time: Codex runs one brief at a time on this machine, so nothing is built
+in parallel. Each unit depends only on units above it.
 
-| Wave | Units | Why this grouping |
+| # | Unit | Why here |
 |---|---|---|
-| 1 | FOUNDATION | **One agent.** It sets the conventions every other unit copies, and writes every shared file — splitting it produces competing designs to reconcile |
-| 2 | ACCOUNTS, CONFIGURATION, SHARED_ACTIONS | Each needs only FOUNDATION. CONFIGURATION and SHARED_ACTIONS build mixins (the list view; bulk actions, rename, search) that the resource units then opt in to |
-| 3 | CONTACTS, NOTIFICATIONS, SLA | CONTACTS and NOTIFICATIONS need `User` and the roles from ACCOUNTS; notifications come this early because comments, assignments and WhatsApp messages all create them. SLA comes before SALES because saving a lead or deal calls it |
-| 4 | SALES | The largest unit. Lead and Deal reference nearly everything before them |
-| 5 | ACTIVITIES, DASHBOARD | Each hangs off leads and deals |
-| 6 | INTEGRATIONS | Off by default, and last for that reason; the phone providers need the call logs from ACTIVITIES |
+| 1 | FOUNDATION | It sets the conventions every other unit copies, and writes every shared file |
+| 2 | SHARED_ACTIONS | The mixins every resource opts in to, and the conditions evaluator and assignment engine that SLA and SALES call |
+| 3 | ACCOUNTS | `User`'s rules, roles and the sales hierarchy, which most later rules read |
+| 4 | CONFIGURATION | The list engine and settings every screen reads |
+| 5 | CONTACTS | Needs ACCOUNTS, and opts in to the rename mixin |
+| 6 | NOTIFICATIONS | Comments, assignments and WhatsApp messages all create notifications, so it comes before them |
+| 7 | SLA | Saving a lead or deal calls it, so it comes before SALES |
+| 8 | SALES | The largest unit. Lead and Deal reference nearly everything above |
+| 9 | ACTIVITIES | Hangs off leads and deals; builds the assignment rules on the engine from 2 |
+| 10 | DASHBOARD | Counts and sums over leads and deals |
+| 11 | INTEGRATIONS | Off by default; the phone providers need the call logs from ACTIVITIES |
+| 12 | DATA_IMPORT | Writes Leads, Deals, Contacts, Organizations, Tasks and Call Logs through their normal create path, so it needs all of them |
 
 **Resource units opt in to the mixins** (REBUILD_PLAN S24): each adds the shared-action
 and list-view mixins it needs to its own ViewSets, and its gate proves those routes on
@@ -68,22 +75,40 @@ waiting on a later unit are listed in its progress report, not hidden.
 
 ```
 spec (Provisional)  ──►  rewrite against AS_BUILT, owner review (Ready)
-        ──►  RUNBOOK_<UNIT>.md    written for this run: scope, gate, fail-stop
-        ──►  ORIENTATION_<UNIT>.md  written by the agent BEFORE any code:
-                                     what it understood, what looks stale or wrong
-        ──►  work, one commit per meaningful change
+        ──►  spec check            the first brief: Codex, read-only, checks the spec
+                                   against backend/ and reports what is stale or wrong
+        ──►  briefs in tasks/      one per commit, written by Claude from the spec
+        ──►  Codex builds each brief; Claude reviews against backend/ and commits
         ──►  gate: tests, the unit's .http blocks, the body diff, review
-        ──►  PROGRESS_<UNIT>.md   written by the agent AFTER the gate
+        ──►  pull request          its description is the unit's progress report
 ```
 
-Runbooks, orientations and progress reports live in `backend_v2/docs/runs/`. They are
-records of one run, never edited afterwards, and kept apart from the living documents.
+**Codex builds and Claude reviews** (root `CLAUDE.md` and `AGENTS.md`). Briefs are
+git-ignored.
+
+**The spec check comes first because specs go stale.** In the old backend, the check
+before each phase found four or five false claims in its spec; finding none is more
+likely a sign of not looking. Each finding is fixed in the spec, or settled with the
+owner, before the first build brief.
+
+**If the gate fails twice, stop** and report to the owner. A unit with a known hole,
+honestly reported, costs less than every later unit built on one believed sound.
+
+**The progress report is the unit's pull request description:** what was built, by app;
+the tests and the commands run; each gate item with its result; the review tier, findings,
+and what was applied or declined; decisions taken without the owner; deviations from the
+spec; what is not done and the unit it now belongs to; `.http` blocks left for a later
+unit; and **concerns** — what was not checked. Concerns are read first; a thin list is a
+warning sign.
 
 ## What every spec contains
 
 1. **Scope** — the app, and the `PORT_MAP.md` rows the unit owns
 2. **Depends on** — what must exist first
-3. **Read in `backend/` first** — the old implementation and its tests
+3. **Read in `backend/` first** — the old implementation, the tests to read and write
+   again, and **the tests to port** (REBUILD_PLAN S14)
 4. **Must not be lost** — protections and behaviours with a history
-5. **Acceptance** — pytest areas, `.http` files or blocks, the body diff
-6. **Open questions** — for the owner, answered before the spec becomes Ready
+5. **Acceptance** — the ported tests passing with their expected answers unchanged, new
+   tests where none existed, `.http` files or blocks, the body diff
+6. **Questions for the owner** — answered after the spec check, before the spec becomes
+   Ready; Codex builds what is decided and decides nothing itself

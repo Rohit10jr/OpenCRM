@@ -1,8 +1,7 @@
 # NOTIFICATIONS — in-app notifications and the realtime WebSocket
 
-**Status: Provisional, 2026-09-16.** Written before FOUNDATION exists: the scope is right,
-the details are guesses. **Rewrite against `backend_v2/docs/AS_BUILT.md` before running.**
-Paths are from the repository root.
+**Status: Provisional** — the scope is right, the details are guesses. **Rewrite against
+`backend_v2/docs/AS_BUILT.md` before building.** Paths are from the repository root.
 
 ## 1. Scope
 
@@ -28,9 +27,11 @@ ACCOUNTS.
 - `crm_app/realtime.py`, `crm_app/consumers.py`, `config/routing.py`, `config/asgi.py`
 - `specs/KNOWN_ISSUES.md` §1 (a flaky subscription test whose root cause is a
   production concern) and §5 (realtime verified across processes)
-- `docs/PORT_PLAN.md` section 10 — why Channels and not polling
-- Tests: `test_phase6_realtime.py`, and the notification tests in
+- `PORT_PLAN.md` section 10 — why Channels and not polling
+- Tests to read and write again: `test_phase6_realtime.py`, and the notification tests in
   `test_assignment_notifications.py`
+- **Tests to port** (REBUILD_PLAN S14): `test_notification_scope.py`, and this unit's
+  routes in `test_phase3_endpoints.py`. The spec check confirms the list.
 
 ## 4. Must not be lost
 
@@ -47,7 +48,8 @@ ACCOUNTS.
 
 ## 5. Acceptance
 
-- pytest, including a WebSocket test that authenticates, subscribes to a readable and an
+- pytest: every test in the port list passing with its expected answers unchanged, and new
+  tests for each item in section 4 no old test covers — including a WebSocket test that authenticates, subscribes to a readable and an
   unreadable document, and receives an event — with the async test plugin actually
   running the coroutine.
 - The notification blocks of `docs/http/08_activities_comments_notifications.http`; the

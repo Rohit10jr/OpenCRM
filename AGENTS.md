@@ -86,6 +86,10 @@ rows, the old files and lines, the decisions taken, the tests that must pass. **
 decisions are settled with the owner: build them, and if you think one is wrong, say so
 rather than building something else.** Claude reviews and commits; the owner merges.
 
+* **A spec-check brief comes first in each unit.** It is read-only: compare the unit's spec
+  with `backend/` and report each claim that is stale or wrong, with the `backend/` file
+  and function that shows it. Change nothing. Finding none is more often a sign of not
+  looking than of none being there.
 * **One brief is one commit.** Build exactly what it asks, touching only the files the
   change needs, and leave the changes in the working tree. Your sandbox cannot write
   `.git`: never run `git add`, `git commit` or `git push`.

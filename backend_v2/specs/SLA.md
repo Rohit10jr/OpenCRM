@@ -1,9 +1,7 @@
 # SLA — service level agreements and response deadlines
 
-**Status: Provisional.** Written 2026-09-16; moved before SALES on 2026-09-22 (REBUILD_PLAN
-S12). Written before FOUNDATION exists: the scope is right, the details are guesses.
-**Rewrite against `backend_v2/docs/AS_BUILT.md` before running.** Paths are from the
-repository root.
+**Status: Provisional** — the scope is right, the details are guesses. **Rewrite against
+`backend_v2/docs/AS_BUILT.md` before building.** Paths are from the repository root.
 
 ## 1. Scope
 
@@ -23,15 +21,18 @@ Deal, so SALES owns them.
 
 ## 2. Depends on
 
-FOUNDATION.
+FOUNDATION, and SHARED_ACTIONS for the conditions evaluator that picks which SLA applies.
 
 ## 3. Read in `backend/` first
 
-- `crm_app/models/sla.py`
+- `crm_app/models/sla.py` (the doctypes) and `crm_app/sla.py` (the deadline calculation)
+- `crm_app/conditions.py` — how an SLA's condition is evaluated, as data (FINDINGS 80)
 - `crm_app/models/core_sales.py` — the SLA fields mixin, and where Lead and Deal call into
   the SLA on save
-- Tests: the SLA cases in `test_crm_models.py`, `test_crm_behaviour.py` and
-  `test_phase5_async.py` — `grep -il "service level\|sla" backend/tests/*.py`
+- Tests to read and write again: the SLA cases in `test_crm_models.py`,
+  `test_crm_behaviour.py` and `test_phase5_async.py` —
+  `grep -il "service level\|sla" backend/tests/*.py`. None of the old API tests is SLA's
+  alone; the spec check confirms that.
 - The upstream controller, `crm/fcrm/doctype/crm_service_level_agreement/`, where the old
   backend leaves a question open
 
@@ -43,11 +44,12 @@ FOUNDATION.
   none.
 - **SLA is computed on write, and there is no scheduled sweep.** Upstream has none, and
   adding one would make list views disagree with upstream's for the same data. The old
-  backend pins this with `test_no_sla_job_exists_in_the_beat_schedule`
-  (`backend/config/celery.py:1-11`); carry the test over.
-- **CRM Holiday List is open reference data. CRM Service Level Agreement is open to every
-  authenticated user today, and keeps that access** (REBUILD_PLAN S21): its writes change
-  response deadlines.
+  backend pins this with `test_no_sla_job_exists_in_the_beat_schedule` (the note at the
+  top of `backend/config/celery.py`); carry the test over.
+- **CRM Holiday List is open reference data. CRM Service Level Agreement has a list rule
+  and an object rule** in `backend/` (decided on `main` after this spec was written;
+  REBUILD_PLAN S21): its writes change response deadlines. Carry the rule over as
+  `PORT_MAP.md` records it.
 
 ## 5. Acceptance
 

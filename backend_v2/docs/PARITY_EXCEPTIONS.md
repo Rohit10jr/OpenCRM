@@ -13,8 +13,9 @@ testing that has no entry here is a bug in `backend_v2`, not an exception.
   is never part of the contract, but replacing it with a proper error is still a change a
   client can see.
 - **A decision the old backend deferred** and the owner has now taken.
-- **A default that differs between library versions** (Django 5.1 → 5.2, S17) where
-  matching the old output would mean fighting the framework.
+- **A default that differs between library versions** (a newer DRF, SimpleJWT or Channels
+  release than the old backend pins, S17) where matching the old output would mean
+  fighting the framework.
 
 Not an entry:
 
@@ -34,7 +35,8 @@ Not an entry:
    `proposed`.
 2. **It keeps building the parity version** — the old behaviour — in the meantime, never the
    change.
-3. **It tells the owner**: in its progress report, and in chat during a session.
+3. **The owner is told**: Codex says so in its report on the brief, and Claude raises it
+   with the owner before committing.
 4. **Only the owner approves or rejects.** The code changes only once the entry says
    `approved`.
 
@@ -63,33 +65,9 @@ comparison skips that block.
 
 ---
 
-## For after the rebuild — not exceptions
+## Candidates — not exceptions yet
 
-### The eight doctypes the old backend left "awaiting review" (REBUILD_PLAN S21)
-
-Open to every authenticated user today, each with the question the old backend recorded
-against it (`backend_v2/docs/PORT_MAP.md`, Old protection column). **Decided: `backend_v2`
-keeps the same access.** The questions below are revisited after the rebuild; until then
-nothing here is an exception.
-
-| DocType | The recorded question | Unit |
-|---|---|---|
-| Contact | Shared across leads and deals; upstream relies on role permissions | CONTACTS |
-| CRM Organization | Is organization data meant to be company-wide? | CONTACTS |
-| CRM Product | Catalogue data; writes change prices used in deal totals | SALES |
-| Email Template | Writes change the wording of mail the system sends on your behalf | ACTIVITIES |
-| Tag | Low risk, but writes are unconstrained | ACTIVITIES |
-| CRM Service Level Agreement | Writes change response deadlines | SLA |
-| CRM Call Log | Call history references leads and deals; recording URLs are on the row | ACTIVITIES |
-| CRM Telephony Agent | Holds colleagues' phone numbers | INTEGRATIONS |
-
-### Candidates from `specs/KNOWN_ISSUES.md` — check they are still open first
-
-Recorded against the old backend before the rebuild began. Some may have been fixed
-since; confirm against `backend/` before proposing an entry.
-
-| Known issue | What a `backend_v2` entry would change | Unit |
-|---|---|---|
-| §7 — an email subject containing a line break answers **500** on the inline send path | A 417 `ValidationError` instead. Needs a sentence upstream does not have, which is why the old backend left it | ACTIVITIES |
-| §7 — `assign_to.remove_multiple` clears every assignee; upstream's limit of 5 leaves the sixth | Matching upstream would reintroduce its limit; keeping it is parity with the old backend. Probably no entry | ACTIVITIES |
-| §6 — logout cannot revoke an access token already issued | A token-version check (the issue's option 3) changes no response body, only whether a stale token is accepted. Needs the owner's decision either way | ACCOUNTS |
+One candidate from `specs/KNOWN_ISSUES.md` §7, for ACTIVITIES: `assign_to.remove_multiple`
+clears every assignee, where upstream's limit of 5 leaves the sixth. Keeping it is parity
+with the old backend, and matching upstream would bring its limit back, so probably no
+entry. Confirm against `backend/` before proposing one.

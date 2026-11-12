@@ -1,16 +1,15 @@
 # ACCOUNTS — users, roles, password reset, invitations, the sales hierarchy
 
-**Status: Provisional, 2026-09-16.** Written before FOUNDATION exists: the scope is right,
-the details are guesses. **Rewrite against `backend_v2/docs/AS_BUILT.md` before running.**
-Paths are from the repository root.
+**Status: Provisional** — the scope is right, the details are guesses. **Rewrite against
+`backend_v2/docs/AS_BUILT.md` before building.** Paths are from the repository root.
 
 ## 1. Scope
 
 App `accounts`, finishing what FOUNDATION started (the `User` model and login). The
 `PORT_MAP.md` rows under **ACCOUNTS**:
 
-- **Doctypes:** CRM Invitation, CRM Sales Hierarchy — plus `User`'s access rules, which
-  FOUNDATION models but does not rule
+- **Doctypes:** CRM Invitation, CRM Sales Hierarchy; the child table User Email (a user's
+  email accounts) — plus `User`'s access rules, which FOUNDATION models but does not rule
 - **Method paths (13):** the guest trio `frappe.core.doctype.user.user.reset_password`,
   `update_password` and `crm.api.accept_invitation`; `crm.api.invite_by_email`;
   `crm.api.user.*` (add existing users, change password, remove CRM roles, update role);
@@ -32,9 +31,12 @@ FOUNDATION.
   rules, `models/metadata.py` (CRM Invitation, CRM Sales Hierarchy)
 - `specs/SECURITY_MODEL.md` — sections `User`, `CRM Sales Hierarchy`, and "Phase 8 — the
   front door"
-- `specs/PHASE_8_AUTH_AND_DESK.md` — link lifetimes and what was matched exactly
-- Tests: `test_auth_pages.py`, `test_password_reset_keys.py`, `test_invitation_access.py`,
-  `test_user_access.py`, `test_hierarchy_access.py`, `test_hierarchy_concurrency.py`
+- `docs/history/PHASE_8_AUTH_AND_DESK.md` — link lifetimes and what was matched exactly
+- Tests to read and write again: `test_auth_pages.py`, `test_password_reset_keys.py`,
+  `test_invitation_access.py`, `test_hierarchy_concurrency.py`
+- **Tests to port** (REBUILD_PLAN S14): `test_user_access.py`, `test_disable_user.py`,
+  `test_hierarchy_access.py`, `test_user_emails.py`, and this unit's routes in
+  `test_phase3_endpoints.py`. The spec check confirms the list.
 - `backend/scripts/walk_auth_flow.py` — the invite → accept → set password → log in →
   reset walk over real HTTP
 
@@ -50,7 +52,9 @@ FOUNDATION.
 - **`update_password`'s old-password path goes through the login lockout.** Before the
   phase-8 review it was a password oracle beside a protected login.
 - **`update_password` returns `login`'s exact shape**, and `logout_all_sessions`
-  blacklists every outstanding refresh token for the account.
+  blacklists every outstanding refresh token for the account and bumps its
+  `token_version`, so access tokens already issued stop working too (built in FOUNDATION;
+  KNOWN_ISSUES §6, fixed).
 - **CRM Invitation is manager-only, and its `key` never reaches the wire** (upstream bug
   #21: upstream lets any Sales User read and redeem a pending key). Acceptance reads the
   key from the email link, and the link opens the frontend page, not a JSON response.
@@ -64,7 +68,9 @@ FOUNDATION.
 
 ## 5. Acceptance
 
-- pytest for every item in section 4, each shown failing without its protection.
+- pytest: every test in the port list passing with its expected answers unchanged, and new
+  tests for each item in section 4 no old test covers — each shown failing without its
+  protection.
 - `docs/http/01_auth.http`, `09_users_and_invitations.http` (its non-ACCOUNTS blocks
   excepted until those units exist) and `99_lockout.http`, run last.
 - An equivalent of `walk_auth_flow.py` against `backend_v2`.
@@ -72,5 +78,5 @@ FOUNDATION.
 
 ## 6. Open questions
 
-- KNOWN_ISSUES §6: logout cannot revoke an access token already issued. Keep the
-  five-minute window (parity), or close it with a token version on the user?
+None. (KNOWN_ISSUES §6, the logout window, was closed in `backend/` with `token_version`;
+parity copies it.)
