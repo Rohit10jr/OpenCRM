@@ -11,10 +11,12 @@ This file is the **one home of per-row status**. Unit status lives in
 `backend_v2/specs/README.md` and nowhere else.
 
 **The rows are the old paths.** `backend_v2` serves REST routes under `/api/v1/` instead
-(REBUILD_PLAN S6), each answering like the old path it replaces. **The route map** — a
-**New route** column giving each row its method, REST path and any reshaped input
-(REBUILD_PLAN S7, S8) — is added next, following the naming rules in REBUILD_PLAN S25.
-Until then the **New app** and **Unit** columns say where a row's code will live.
+(REBUILD_PLAN S6), each answering like the old path it replaces. **The route map** is
+the **New route** column, giving each row its method, REST path and any reshaped input
+(REBUILD_PLAN S7, S8), following the naming rules in REBUILD_PLAN S25. It is written a
+unit at a time, before the unit's spec check: a method-path table without the column
+belongs to a unit whose routes are not written yet, and its **New app** and **Unit**
+columns say where the code will live.
 
 **Paths are from the repository root.** The **Old source** column is the exception: it
 is relative to `backend/`, and names the **function** (`crm_app/api/contact.py:create_new`),
@@ -94,25 +96,30 @@ on seed data from a unit the scan cannot see.
 
 ### Method paths (12)
 
-The seven `frappe.client.*` rows are the generic document calls. In `backend_v2` they
+The eight `frappe.client.*` rows are the generic document calls. In `backend_v2` they
 become the base ViewSet's CRUD, which every resource inherits, so their new routes are
 each resource's own collection and document routes. FOUNDATION builds the base; each unit
-proves it on its own resources.
+proves it on its own resources, and writes their **New route** in its own rows.
 
-| Dotted path | Verbs | Access | Old source | New app | Status |
-|---|---|---|---|---|---|
-| `frappe.auth.get_logged_user` | GET/POST | auth | `frappe_core/api/auth.py:get_logged_user` | accounts | — |
-| `frappe.client.delete` | DELETE/POST | auth | `crm_app/api/client.py:client_delete` | core | — |
-| `frappe.client.get_doc_permissions` | GET/POST | auth | `crm_app/api/client.py:client_get_doc_permissions` | core | — |
-| `frappe.client.get_list` | GET/POST | auth | `crm_app/api/client.py:client_get_list` | core | — |
-| `frappe.client.get_single_value` | GET/POST | auth | `crm_app/api/client.py:client_get_single_value` | core | — |
-| `frappe.client.get_value` | GET/POST | auth | `crm_app/api/client.py:client_get_value` | core | — |
-| `frappe.client.get` | GET/POST | auth | `crm_app/api/client.py:client_get` | core | — |
-| `frappe.client.insert` | POST | auth | `crm_app/api/client.py:client_insert` | core | — |
-| `frappe.client.set_value` | POST/PUT | auth | `crm_app/api/client.py:client_set_value` | core | — |
-| `login` | POST | guest | `frappe_core/api/auth.py:login` | accounts | — |
-| `logout` | POST/GET | auth | `frappe_core/api/auth.py:logout` | accounts | — |
-| `token/refresh` | POST | guest | `frappe_core/api/auth.py:refresh_token` | accounts | — |
+The four auth routes serve one method each (REBUILD_PLAN S25 (6)). Inputs keep their
+names: `usr`/`pwd` with the aliases `username`/`email`/`password`, and `refresh` with
+the alias `refresh_token`, all in the body. The old paths also answered a second verb
+(`logout` GET, `get_logged_user` POST); the new routes do not serve it.
+
+| Dotted path | Verbs | Access | Old source | New route | New app | Status |
+|---|---|---|---|---|---|---|
+| `frappe.auth.get_logged_user` | GET/POST | auth | `frappe_core/api/auth.py:get_logged_user` | `GET /api/v1/auth/me/` | accounts | — |
+| `frappe.client.delete` | DELETE/POST | auth | `crm_app/api/client.py:client_delete` | each resource's, in its unit | core | — |
+| `frappe.client.get_doc_permissions` | GET/POST | auth | `crm_app/api/client.py:client_get_doc_permissions` | each resource's, in its unit | core | — |
+| `frappe.client.get_list` | GET/POST | auth | `crm_app/api/client.py:client_get_list` | each resource's, in its unit | core | — |
+| `frappe.client.get_single_value` | GET/POST | auth | `crm_app/api/client.py:client_get_single_value` | each resource's, in its unit | core | — |
+| `frappe.client.get_value` | GET/POST | auth | `crm_app/api/client.py:client_get_value` | each resource's, in its unit | core | — |
+| `frappe.client.get` | GET/POST | auth | `crm_app/api/client.py:client_get` | each resource's, in its unit | core | — |
+| `frappe.client.insert` | POST | auth | `crm_app/api/client.py:client_insert` | each resource's, in its unit | core | — |
+| `frappe.client.set_value` | POST/PUT | auth | `crm_app/api/client.py:client_set_value` | each resource's, in its unit | core | — |
+| `login` | POST | guest | `frappe_core/api/auth.py:login` | `POST /api/v1/auth/login/` | accounts | — |
+| `logout` | POST/GET | auth | `frappe_core/api/auth.py:logout` | `POST /api/v1/auth/logout/` | accounts | — |
+| `token/refresh` | POST | guest | `frappe_core/api/auth.py:refresh_token` | `POST /api/v1/auth/token/refresh/` | accounts | — |
 
 ## ACCOUNTS
 
