@@ -193,15 +193,27 @@ def test_disallowed_method_is_405_with_allow_header(api):
     assert response.json()["message"] == 'Method "GET" not allowed.'
 
 
+@pytest.mark.parametrize("debug", [True, False])
 @pytest.mark.parametrize("url", ["/api/v1/no-such-route/", "/no-such-route/"])
-@override_settings(ROOT_URLCONF=__name__, DEBUG=False)
-def test_unknown_url_is_frappe_404_everywhere(api, url):
+def test_unknown_url_is_frappe_404_everywhere(api, settings, debug, url):
+    settings.DEBUG = debug
     response = api.get(url)
 
     assert response.status_code == 404
     assert response.json() == build_error_body(
         "DoesNotExistError", ["Not found."], "Not Found"
     )
+
+
+@pytest.mark.parametrize("debug", [True, False])
+def test_unknown_admin_url_keeps_djangos_response(api, settings, debug):
+    settings.DEBUG = debug
+    response = api.get("/admin/no-such-route/")
+
+    assert response.headers["Content-Type"].split(";", 1)[0] != "application/json"
+    assert response.content != json.dumps(
+        build_error_body("DoesNotExistError", ["Not found."], "Not Found")
+    ).encode()
 
 
 def test_error_body_carries_exc_type_messages_and_scalar_message():

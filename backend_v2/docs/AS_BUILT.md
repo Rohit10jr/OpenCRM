@@ -124,7 +124,10 @@ A wrong method has this body (shown for `GET`) and an `Allow` header:
 {"exception":"frappe.exceptions.MethodNotAllowed: Method \"GET\" not allowed.","exc_type":"MethodNotAllowed","_server_messages":"[\"{\\\"message\\\": \\\"Method \\\\\\\"GET\\\\\\\" not allowed.\\\", \\\"title\\\": \\\"Message\\\"}\"]","message":"Method \"GET\" not allowed.","messages":["Method \"GET\" not allowed."]}
 ```
 
-An unknown non-admin URL, under `/api/v1/` or elsewhere, has this body:
+`core.views.frappe_not_found` decides the response for an unknown non-admin URL. A
+final catch-all in `config.urls` makes it apply under `/api/v1/` and elsewhere even
+when `DEBUG=True`; `handler404` uses the same function for `Http404` resolution when
+`DEBUG=False`. Django admin keeps its own 404 pages. The body is:
 
 ```json
 {"exception":"frappe.exceptions.DoesNotExistError: Not found.","exc_type":"DoesNotExistError","_server_messages":"[\"{\\\"message\\\": \\\"Not found.\\\", \\\"title\\\": \\\"Not Found\\\"}\"]","message":"Not found.","messages":["Not found."]}
