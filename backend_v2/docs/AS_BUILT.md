@@ -1,6 +1,6 @@
 # As built — what `backend_v2` actually contains
 
-**Status: empty. Nothing has been built yet (2026-09-16).**
+**Status: FOUNDATION skeleton built (2026-11-13).**
 
 This file describes the code that exists, not the code that is planned. **Where it and a
 spec disagree, this file wins**: specs are written before the code and go stale; this
@@ -14,8 +14,14 @@ needs. **Paths are from the repository root.**
 
 ## 1. What exists
 
-*Nothing yet.* FOUNDATION writes the first entries: the project skeleton, the `core` app,
-authentication, and the base ViewSet every resource inherits.
+The Django project skeleton is in place with separate base, local and test settings.
+It installs the ten top-level apps in the settled order, includes each app's currently
+empty URLconf explicitly under `/api/v1/`, and exposes Django admin under `/admin/`.
+
+Celery loads one explicit `BEAT_SCHEDULE` from each app and refuses duplicate schedule
+keys. Channels sends HTTP to Django and exposes `ws/realtime`; until NOTIFICATIONS adds
+the real consumer, every WebSocket connection is closed without acceptance using code
+4001. No application models, API routes or migrations exist yet.
 
 ## 2. Recipes
 
@@ -63,9 +69,25 @@ recipe.*
 
 ## 3. Running it
 
-*Not written yet — FOUNDATION.* Virtualenv, `.env`, database creation, migrations, seed
-data, the server on port 8001, pytest, running a file from `backend_v2/http/`, the body
-diff.
+From the repository root on Windows, create the isolated Python 3.13 environment and
+install the exact pinned dependencies:
+
+```powershell
+py -3.13 -m venv backend_v2\.venv
+backend_v2\.venv\Scripts\python.exe -m pip install -r backend_v2\requirements.txt
+```
+
+Settings read only `backend_v2/.env`; it is optional because the skeleton has defaults.
+Use `backend_v2/.env.example` when local overrides are needed. Do not reuse the root
+`.env`. From `backend_v2/`, check the project or run one test file with:
+
+```powershell
+.venv\Scripts\python.exe manage.py check
+.venv\Scripts\python.exe -m pytest tests/test_skeleton.py
+```
+
+Database creation, migrations, seed data, the server on port 8001, the `.http` suite and
+the parity body diff are added by later FOUNDATION briefs.
 
 ### Traps — read before starting a server or running tests
 
