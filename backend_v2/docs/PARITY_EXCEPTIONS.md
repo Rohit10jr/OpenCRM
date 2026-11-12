@@ -61,7 +61,32 @@ comparison skips that block.
 
 ## Register
 
-*No entries yet.*
+### PE-1. A method a route does not allow answers 405, not 403
+
+- **Status:** approved — owner, 12 Nov 2026 (`specs/FOUNDATION.md` section 6, Q11)
+- **Where:** every route; shown by `docs/http/01_auth.http` 1.12 (`GET login`)
+- **Old backend:** 403 `PermissionError`, `Method <path> does not accept <VERB>`
+  (`backend/frappe_core/method_views.py:46-50`) — wording that belonged to its RPC
+  dispatch
+- **backend_v2:** 405 with an `Allow` header, in the Frappe error shape; the exact body
+  goes into `AS_BUILT.md` when built. An unknown URL is 404, also in the Frappe shape
+- **Why:** the old answer described a dispatch `backend_v2` does not have. No client
+  sends these requests, and S19 moves towards DRF's shapes anyway
+- **Recorded by:** FOUNDATION, 12 Nov 2026
+
+### PE-2. A tree operator on a field that is not a tree: new wording
+
+- **Status:** proposed
+- **Where:** every list route; any filter using `descendants of`, `ancestors of` or their
+  variants on a field whose target is not a tree. No `.http` block found
+- **Old backend:** 400 `ValidationError`, title `Invalid Filter`, message
+  `No tree resolver registered for '<DocType or field>'; phase 2 registers these via
+  filters.register_tree_resolver()` (`backend/frappe_core/filters.py:_tree_op`)
+- **backend_v2:** the same status, `exc_type` and title, with a message that names no
+  internals: `'<field>' is not a tree field`
+- **Why:** the old text names a registry function and a build phase; `backend_v2` has
+  neither (S11). Only the message changes
+- **Recorded by:** FOUNDATION, 12 Nov 2026
 
 ---
 

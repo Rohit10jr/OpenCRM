@@ -216,9 +216,11 @@ CRM Task) is **not found**, never a 500 (`backend/frappe_core/query.py:32-44`).
 
 **Requests with no old equivalent** have no reference to match: an unknown URL, or a
 method a route does not allow. (The old backend answered `Method <path> not found` and
-`Method <path> does not accept <VERB>`, which belonged to its RPC dispatch.) FOUNDATION
-decides these bodies — in the Frappe error shape, like every other error — and records
-them in `AS_BUILT.md`. Child tables and withheld doctypes simply have no route.
+`Method <path> does not accept <VERB>` with 403, which belonged to its RPC dispatch.)
+**Decided by the owner, 12 Nov 2026** (`specs/FOUNDATION.md` section 6, Q11), in the
+Frappe error shape like every other error: **a method a route does not allow is 405**
+with an `Allow` header, and **an unknown URL is 404**. The exact bodies go into
+`AS_BUILT.md` when built. Child tables and withheld doctypes simply have no route.
 
 ## 6. Documents on the wire
 
@@ -233,7 +235,7 @@ Every document carries these (`backend/frappe_core/models.py:113-156`):
 | `creation`, `modified` | datetime string | See "Values" below |
 | `idx` | integer | Row position |
 | `docstatus` | integer | Always 0 in this product |
-| `_assign`, `_liked_by`, `_comments` | JSON list | Caches. **Never writable** by a client |
+| `_assign`, `_liked_by`, `_comments` | string holding JSON — **not** an array, in a document and a list row alike (`backend/frappe_core/serializers.py:122-124`, FINDINGS 40) | Caches. **Never writable** by a client |
 | `_user_tags` | string | Cache. **Never writable** by a client |
 
 `owner`, `modified_by`, `creation` and `modified` are stamped by the server and are
@@ -241,11 +243,12 @@ read-only (`backend/frappe_core/serializers.py:31-40`).
 
 ### Names
 
-The name each doctype gets on create is listed in `PORT_MAP.md` (Naming column). Six
+The name each doctype gets on create is listed in `PORT_MAP.md` (Naming column). Seven
 strategies: `NamingSeries('CRM-LEAD-.YYYY.-')` → `CRM-LEAD-2026-00001` (five digits),
 `FieldValue('x')` → the field's value **verbatim** (no slugifying), `Hash(10)` → ten
 random characters, `Format('{dt}-{type}')`, `Prompt()` → the client supplies `name`,
-`AutoIncrement()` → integer. `backend/frappe_core/naming.py`.
+`AutoIncrement()` → integer, and `DataImportTimestamp()`, used only by Data Import.
+`backend/frappe_core/naming.py`.
 
 **`User`'s name is the lowercased email.** `Administrator` and `Guest` are the two
 exceptions, and keep their capitals.

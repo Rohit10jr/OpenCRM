@@ -23,7 +23,7 @@ status is wrong is worse than no status at all.
 
 | Unit | Spec | Apps | Depends on | Status |
 |---|---|---|---|---|
-| FOUNDATION | [`FOUNDATION.md`](FOUNDATION.md) | `core`, and the first part of `accounts` | — | **Provisional — awaiting owner review** |
+| FOUNDATION | [`FOUNDATION.md`](FOUNDATION.md) | `core`, and the first part of `accounts` | — | **Ready** — owner, 12 Nov 2026; three points still open in its section 6, built last |
 | ACCOUNTS | [`ACCOUNTS.md`](ACCOUNTS.md) | `accounts` | FOUNDATION | Provisional |
 | CONFIGURATION | [`CONFIGURATION.md`](CONFIGURATION.md) | `configuration` | FOUNDATION | Provisional |
 | SHARED_ACTIONS | [`SHARED_ACTIONS.md`](SHARED_ACTIONS.md) | `core` (the mixins in `core/mixins/`, the conditions evaluator, the assignment engine) | FOUNDATION | Provisional |

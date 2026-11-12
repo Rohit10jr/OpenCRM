@@ -86,11 +86,10 @@ backend_v2/
 ├── requirements.txt
 ├── .env.example
 ├── config/                 settings/{base,local,test}.py, urls.py, asgi.py, routing.py, celery.py
-├── apps/
-│   ├── core/
-│   ├── accounts/
-│   ├── ...                 one package per app below
-│   └── integrations/
+├── core/                   apps at the top level, imported as `core`, `accounts`, …
+├── accounts/               (owner, 12 Nov 2026; FOUNDATION section 6)
+├── ...                     one package per app below
+├── integrations/
 ├── scripts/                parity tooling
 ├── docs/                   this plan, the contract, the map, as-built, exceptions
 └── specs/                  one spec per unit, and the index
