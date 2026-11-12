@@ -3,43 +3,47 @@
 Porting **Frappe CRM** (Python/Frappe framework) to **Django + DRF**, keeping the
 existing Vue frontend.
 
-## Read these first
+## What to read, and when
 
-| File | What it is |
+Nothing needs reading for a question, a docs edit or a git task. Before a change, read
+the rows that match it — not the whole list. What these files record is settled;
+re-deciding it creates divergence. If you think a decision is wrong, say so instead.
+
+| Before you… | Read |
 |---|---|
-| **`specs/AS_BUILT.md`** | **What already exists. Read this first** |
-| `PORT_PLAN.md` | Source inventory, frontend contract, settled architecture decisions |
-| `docs/history/SPECS_README.md` | Index of the per-phase specs, moved to history on 7 Oct 2026 |
-| `docs/history/PHASE_<N>_*.md` | The spec of the phase that built what you are touching; the decisions in them still apply |
-| **`specs/SECURITY_MODEL.md`** | **Required before touching any permission rule or field-visibility declaration.** Per-doctype comparison with upstream, the four field tools and when each applies |
-| `specs/UNROUTED_DOCTYPES.md` | Doctypes withheld from `/api/resource/`, and why |
-| `specs/VERSION_HISTORY.md` | What change history is recorded and pruned. **Read before touching `clear_old_versions`** — its name invites a change that deletes the timeline |
-| `specs/KNOWN_ISSUES.md` | Problems that outlive a phase — flaky tests, half-built features. Check before re-diagnosing something |
+| change any backend behaviour | the section of **`specs/AS_BUILT.md`** for that area: what exists and why |
+| touch a permission rule or what fields a user can see | **`specs/SECURITY_MODEL.md`** — required |
+| add or register a doctype | the doctype checklist in `specs/AS_BUILT.md`, and `specs/UNROUTED_DOCTYPES.md` |
+| touch `clear_old_versions` or change history | `specs/VERSION_HISTORY.md` — its name invites a change that deletes the timeline |
+| change the frontend, or what it sends and receives | `PORT_PLAN.md` §3 and `frontend/JWT_PATCH.md` |
+| diagnose something that looks broken | `specs/KNOWN_ISSUES.md`, then `UPSTREAM_BUGS.md`: it may be known, or upstream's own |
+| change what a phase built, when `AS_BUILT.md` does not say why it is that way | that phase's spec, found through `docs/history/SPECS_README.md` |
+| work on an upstream bug or pull request | the entry in `UPSTREAM_BUGS.md` |
 
-**Do not start work without reading `PORT_PLAN.md` and your phase spec.** They encode
-decisions that are already settled — re-deciding them creates divergence.
+## Upstream source: which copy, and when
 
-## Source of truth
+| Copy | Path | Read | Use it to |
+|---|---|---|---|
+| **CRM, the port's base** | `D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm` | the working tree (tag `port-base`) | see what the port should do: every porting and port-bug question |
+| **Framework** | `D:\02_Personal\01_OpenSource\02_FrameWorks\frappe` | `git show version-15:<path>`, never the working tree (it is on `develop`) | explain what the CRM code does not: save, rename, delete, permissions, Data Import |
+| **CRM, the owner's fork** | `D:\02_Personal\01_OpenSource\03_Applications\CRM\frappe_crm` | `upstream/develop` | upstream bug work only: does an `UPSTREAM_BUGS.md` entry still exist, and its fix |
 
-Two repositories, both readable:
+* **The port's base is frozen.** The clone is on the owner's `docker-setup` branch; its
+  tip, `port-base` (`6583bfcdc`), is upstream v1.82.0 (`48cb3ccce`, 26 Aug 2026) plus
+  Docker docs that change no CRM code. Every upstream line number in the specs is from
+  it. Never switch its branch or pull.
+* **Do not read `develop` for port work,** in either repository: it is v16 pre-release,
+  and code read from it has got into the port before (`docs/FINDINGS.md` 90). The fork is
+  the only place `develop` is right, because that is where CRM pull requests go. Never
+  copy port code from it.
+* **Read upstream whenever behaviour is unclear. Never invent semantics** — match the
+  source, or flag the ambiguity in your report. If something looks impossible, suspect a
+  missing framework mechanism before suspecting your own code.
 
-```
-CRM app    D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm    (main)
-framework  D:\02_Personal\01_OpenSource\02_FrameWorks\frappe           (version-15)
-```
-
-That pairing is what the CRM's own CI uses — do not read `develop`, it is v16 pre-release.
-The framework was unavailable during phases 0–2, and several defects were only findable
-in it.
-
-Read them whenever behaviour is unclear. **Never invent semantics** — match the source,
-or flag the ambiguity in your report. If something looks impossible, suspect a missing
-framework mechanism before suspecting your own code.
-
-**When upstream is wrong** — and it sometimes is; **67 cases** are recorded in
+**When upstream is wrong** — and it sometimes is; **83 cases** are recorded in
 `UPSTREAM_BUGS.md` — diverge only on bugs nothing can observe, and reproduce user-visible
-ones. Check whether anything
-actually reads the field before deciding, and record the choice.
+ones. Check whether anything actually reads the field before deciding, and record the
+choice.
 
 **Security is the standing exception to that rule.** Upstream protects most doctypes with
 DocType role permissions, a layer this port does not model, so "upstream registers no
@@ -52,16 +56,16 @@ per-doctype detail and the two questions that settle each case.
 1. The frontend wire protocol (`PORT_PLAN.md` §3) is a fixed external contract. JWT
    auth, the WebSocket transport and the boot-values call (`frontend/JWT_PATCH.md`) are
    the only three sanctioned deviations.
-2. Phases 0 and 2 are single-agent. Everything else fans out by cluster/module.
+2. *Retired 12 Nov 2026* (phase fan-out: the phases are finished). Numbers are kept
+   because code and tests cite rules 4 and 7.
 3. No two concurrent agents edit the same file.
-4. Preserve `frappe.throw` message text verbatim — it is user-facing copy.
+4. Preserve `frappe.throw` and `msgprint` text verbatim — it is user-facing copy.
 5. Work on a branch, not directly on `main`, unless the owner asks for `main` for that
    change. (Owner, 7 Nov 2026.)
-6. **One commit per meaningful change, never one per phase.** An earlier run was told
-   "one commit per phase" and produced single commits of 25,000 lines — unreviewable,
-   unbisectable, unrevertable. Commit when a coherent piece of work is done and the suite
-   is green; a dozen commits in a phase is correct. Each must stand alone, with a message
-   saying what changed and **why**.
+6. **One commit per meaningful change** — never one big commit for a whole piece of work
+   (one run made 25,000-line commits that could not be reviewed or reverted). Commit when
+   a coherent piece is done and its tests are green; each commit stands alone, with a
+   message saying what changed and **why**.
 7. **Registering a doctype publishes it.** Every field is readable, filterable and
    writable through `/api/resource/` unless something says otherwise. Before adding one,
    read the checklist in `specs/AS_BUILT.md` — two tests will fail on you otherwise, by
@@ -75,172 +79,58 @@ per-doctype detail and the two questions that settle each case.
 
 ## Keep shell commands short
 
-**A long command cannot be security-scanned, so it escalates to human review — which
-stalls an unattended run indefinitely.** This has already cost a run. It is not about
-what the command does; the harness simply refuses to approve text it could not read, so
-no permission rule can pre-approve it. The only fix is to keep commands short.
+The rules are in the global `~/.claude/CLAUDE.md` ("Shell"): a command too long to be
+security-scanned waits for a human and stalls the run, so long content goes in a file
+and the command stays under ~400 characters. Here that means:
 
-Long *content* belongs in a file. The command that uses it stays tiny.
+* **Commit messages:** write `.git/COMMIT_MSG` with the Write tool, then
+  `git commit -F .git/COMMIT_MSG`. After a Codex build the message is
+  `tasks/COMMIT_MSG` instead.
+* **Scripts and probes** go in the session scratchpad, then run that file.
+* **PR bodies** go in a file, then `gh pr create --body-file <file>`.
 
-**1. Commit from a file, never inline.**
+## Long runs: the test suite, Codex and subagents
 
-```bash
-# Write the message with the Write tool, then:
-git commit -F .git/COMMIT_MSG
-```
+The backend suite (`python -m pytest -q` in `backend/`) outlasts the shell tool's
+ten-minute foreground limit, so run it in the background with its output in a log, and
+read the log. Run Codex, and any long subagent task, the same way. A single test file is
+fast and can run in the foreground. (Owner, 12 Nov 2026.)
 
-Roughly 35 characters regardless of message length. Do **not** use
-`git commit -m "$(cat <<'EOF' … EOF)"` — that puts the whole message in the command, and
-these messages run to 2,000 characters.
-
-**2. Never inline a script.** Write `scratch/patch.py`, then `python scratch/patch.py`.
-No `python - <<'PY' … PY`.
-
-**3. Never write file contents through the shell.** No `cat > file <<'EOF'`. Use the
-Write and Edit tools — that is what they are for, and nothing gets scanned.
-
-**4. Keep any single shell command under ~400 characters.** A blanket backstop for cases
-1–3 do not cover. If a command is getting long, something in it belongs in a file.
-
-Chained commands count as one command. Prefer several short calls over one long chain.
-
-## Running the test suite
-
-The backend suite (`python -m pytest -q` in `backend/`) takes longer than the shell
-tool's ten-minute foreground limit, and a subagent that waits on it in the foreground
-hands back with nothing. Run it in the background with its output going to a log file,
-then read the log: **look at it at 20 minutes, and treat 40 minutes as the limit**, the
-same budget as a Codex review. Do not kill a run before 20 minutes, and do not report a
-result the log does not contain. A single file or test is fast and can run in the
-foreground.
+* **Never stop a run abruptly**, and never on time alone.
+* **Every 15 minutes, look and decide.** Read the log or output so far, tell the owner
+  where it is, and judge whether it is still making progress: tests still passing, Codex
+  still reading the right files.
+* **45 minutes is the upper limit for that routine.** Past it, decide from the result
+  and the evidence: what the run has done, whether it is still progressing, and what
+  stopping would lose. Stop only a run that is stuck or has wandered into unrelated work,
+  and say why. A stuck Codex run is re-run once with a narrower prompt, naming the exact
+  files and claims, before escalating a tier.
+* **Do not report a result the log does not contain.**
 
 ## Stack
 
 Django + DRF + SimpleJWT, PostgreSQL 17, Redis, Celery, Django Channels,
 django-treebeard (nested-set trees). Python 3.13.
 
+The frontend loads some framework screens (Data Import among them) from `../../frappe/ui`,
+i.e. `D:\02_Personal\01_OpenSource\03_Applications\CRM\frappe`, a junction that must point
+at `02_FrameWorks\frappe_ui_v15` (v15.126.0, as CI), not the `develop` checkout:
+`develop`'s screens import `FeatherIcon`, which frappe-ui 1.0 dropped, and the app
+crashes after login. If `yarn dev` or a build reports a missing frappe-ui export, check
+the junction first. (Repointed 9 Nov 2026.)
+
 ---
 
-# Codex builds, Claude plans and reviews (from 15 Oct 2026)
+# Codex (see the codex skill)
 
-For the Assignment Rules and SLA work (`docs/FINDINGS.md` 80 and 91), and any task the
-owner hands over the same way, the roles are reversed: **Codex writes the code, Claude
-plans and reviews.** The owner has Codex capacity to spare and Claude capacity to save,
-so Claude should not write feature code itself while this holds.
+**Builder mode is in force here (owner, 15 Oct 2026):** Codex writes the code from
+briefs in `tasks/`; Claude plans, reviews and commits, and does not write feature code
+itself. Codex's side of the contract is `AGENTS.md` "When building".
 
-1. **Plan with the owner.** Settle the decisions first and record them in the finding.
-   Codex builds what was decided; it does not re-decide.
-2. **Write a brief per commit**, one Markdown file in `tasks/` (git-ignored), with the
-   Write tool: the branch, the finding, the upstream files and lines to follow
-   (framework read with `git show version-15:<path>`, as the checkout is on `develop`),
-   the decisions, the one change to make, the tests that must pass, and the records to
-   update. A feature is several briefs, run one after another.
-3. **Check out the branch, then run Codex** in the background with its output in a log,
-   the same 20-minute check and 40-minute limit as a review:
-
-   ```powershell
-   Get-Content tasks\<brief>.md -Raw | codex exec -s workspace-write -c sandbox_workspace_write.network_access=true - *> <scratchpad>\codex_build.log
-   ```
-
-   `network_access` is what lets the tests reach PostgreSQL on localhost. The exit code
-   means nothing (see below); read the log and `git status`. Probed 15 Oct 2026: under
-   this sandbox Codex runs single test files and edits the repo, but **cannot write
-   `.git`**, even with `--add-dir`, so it cannot commit. Granting that needs
-   `danger-full-access`, which is the owner's call, not ours. `AGENTS.md` "When
-   building" holds Codex's side: one brief one commit, message in `tasks/COMMIT_MSG`,
-   single test files only, the doctype checklist.
-4. **Review the working-tree diff** against upstream yourself, read-only. If it is right,
-   commit it: `git add <the files the message lists>`, then
-   `git commit -F tasks/COMMIT_MSG`, after checking the message ends with Codex's
-   attribution. If it is not, report the findings to the owner, including where you
-   disagree; **do not fix them in place**. A fix is a follow-up brief, so Codex builds that
-   too.
-5. **Before the pull request**, run the full suite in the background (the rules below),
-   then push and open it when the owner asks.
-
-**If Codex cannot run** (a sandbox error, a refused model), say so and stop for the
-owner's call: falling back to Claude writing the code spends the capacity this
-arrangement saves. The three tiers below still apply to reviews of anything Claude
-writes.
-
-# Reviewer policy — three tiers
-
-You write the code; something that does **not** share your blind spots reviews it.
-Try these in order, stop at the first that genuinely works, and always tell me which
-tier you used.
-
-| Tier | Reviewer | Notes |
-|---|---|---|
-| **1** | Codex via PowerShell 7 | Preferred — different model, reads the repo itself |
-| **2** | Codex via PowerShell 5.1 | Same reviewer, fallback shell |
-| **3** | Claude subagent | **Degraded** — same model and same spec, so correlated blind spots |
-
-This section is the whole of the procedure. The long form lived in the phase-7 runbook
-(`docs/history/RUNBOOK_PHASE_7.md` §3), removed with the other run records on 7 Oct 2026
-and still in git history.
-
-## Tier 1 — Codex (default)
-
-- codex-cli 0.153.4, model `gpt-5.6-sol`, on PATH as `codex`. Auth already configured.
-  `gpt-5.5` was refused for this ChatGPT login on 15 Oct 2026 ("not supported when using
-  Codex with a ChatGPT account"); the update fixed it. A refused model is a failed run.
-- The interactive TUI needs a live terminal, so you **cannot** drive it. Use
-  `codex exec` — headless: prompt in, report to stdout.
-- Codex reads the repo itself. Point it at paths; don't paste code in.
-
-```powershell
-codex exec -s read-only "<review request>"   # review, cannot touch files
-codex exec review                            # built-in review subcommand
-codex exec resume --last "<follow-up>"       # continue the same Codex session
-codex exec --approve-for-me "<task>"         # only if I ask Codex to make edits
-```
-
-## Never trust the exit code
-
-**`codex exec` exits 0 even when it ran nothing.** If the output contains
-`CreateProcessAsUserW failed`, `windows sandbox: runner failed`, `SpawnChild`, or Codex
-asks you to paste files — the review **did not happen**. Escalate a tier; do not accept
-it. Phases 0–2 were reviewed blind this way.
-
-**Give a run up to 40 minutes; do not kill it at 10.** A review that names files and
-claims takes anywhere from one to thirty minutes, and a run that is still reading the
-right files is not a failure. At the 20-minute mark look at its output so far and tell
-the user where it is. Only a run that passes 40 minutes, or one that has wandered off
-into unrelated files, is treated as failed: re-run once with a narrower prompt — name
-the exact files and the exact claims to check rather than asking it to go looking —
-then escalate a tier if that times out too.
-
-## Tier 3 — Claude subagent
-
-Spawn a **fresh** subagent, not a `fork`. A fresh subagent receives only the task
-prompt — no conversation history — so it is genuinely context-isolated. A `fork`
-inherits the writer's full context including the reasoning that produced the bug, which
-is the opposite of a second opinion.
-
-**Why tier 3 is still degraded — and what it is not.** The weakness is *not* shared
-context; a fresh subagent has none. It is:
-
-1. **Same model** — same priors and same failure modes. If this model misreads a Frappe
-   idiom once, a second instance reading the same code is likely to misread it the same way.
-2. **Same inputs** — writer and reviewer read the same spec. When
-   `PHASE_0_FOUNDATION.md` wrongly said `field:` PKs are "slugified", both would have
-   inherited that error. Codex caught it only by going to the Frappe source instead.
-
-Because the weakness is model correlation, **isolating context further does not help** —
-`claude -p` buys nothing over a fresh subagent here. Only a different model does. Use
-`claude -p` only if you are yourself a subagent and cannot spawn one.
-
-Tier 3 is weak at finding *different* bugs, not at finding bugs. In phase 0 the writing
-agent re-read its own work after Codex signed off and found two real defects Codex
-missed, including the most serious one in the phase. Same-model review has real value;
-it just covers less new ground.
-
-**Compensate** by pointing tier 3 at the Frappe source rather than the spec wherever
-they could disagree, and by adding: *"Assume the author was competent and the obvious
-things are right. Look for what a reader who shares the author's assumptions would skip."*
-
-## Always
-
-- Blocking, ~1-2 min per call. Batch reviews rather than pinging after every edit.
-- Each `codex exec` is fresh context — use `resume --last` for iterative rounds.
-- Report findings to me, including where you disagree. Don't auto-apply them.
+- A brief also names the finding, the upstream files and lines (framework via
+  `git show version-15:<path>`), and the records to update.
+- Run builds with `network_access=true`, which is what lets tests reach PostgreSQL.
+  Codex leaves its commit message in `tasks/COMMIT_MSG`.
+- Reviews of anything Claude writes use the skill's three tiers. For tier 3, point the
+  subagent at the Frappe source rather than the spec: a wrong spec misleads writer and
+  reviewer alike (`PHASE_0_FOUNDATION.md` once called `field:` PKs "slugified").

@@ -1,42 +1,44 @@
 # frappe_django_crm — agent brief
 
 Porting **Frappe CRM** (Python/Frappe framework) to **Django + DRF**, keeping the
-existing Vue frontend.
+existing Vue frontend. Django + DRF + SimpleJWT, PostgreSQL 17, Redis, Celery, Django
+Channels, django-treebeard. Python 3.13.
 
-This file holds standing rules only. What has shipped lives in `specs/AS_BUILT.md`, and
-the phase-by-phase record in `docs/history/SPECS_README.md` — read those rather than
-trusting anything dated in here.
+## What to read, and when
 
-## Read before working
+Your brief names what the task needs. Beyond it, read only the rows that match your
+change. What these files record is settled; if you think a decision is wrong, say so in
+your report rather than working around it. Where `specs/AS_BUILT.md` and a phase spec
+disagree, `AS_BUILT.md` wins: the specs were written before the code.
 
-| File | What it is |
+| Before you… | Read |
 |---|---|
-| **`specs/AS_BUILT.md`** | **What already exists. Read this first.** Where it and a phase spec disagree, it wins — the specs were written before the code. Its security section lists the mechanisms a doctype can use |
-| `PORT_PLAN.md` | Source inventory, frontend contract, settled architecture decisions |
-| `specs/SECURITY_MODEL.md` | Per-doctype comparison with upstream, and the 11 places we deliberately differ |
-| `docs/history/SPECS_README.md` | Index of the per-phase specs, moved to history on 7 Oct 2026 |
-| `docs/history/PHASE_<N>_*.md` | The spec of the phase that built what you are touching; the decisions in them still apply |
+| change any backend behaviour | the section of **`specs/AS_BUILT.md`** for that area |
+| touch a permission rule or what fields a user can see | **`specs/SECURITY_MODEL.md`** — required |
+| add or register a doctype | the doctype checklist in `specs/AS_BUILT.md`, and `specs/UNROUTED_DOCTYPES.md` |
+| change the frontend, or what it sends and receives | `PORT_PLAN.md` §3 and `frontend/JWT_PATCH.md` |
+| diagnose something that looks broken | `specs/KNOWN_ISSUES.md`, then `UPSTREAM_BUGS.md` |
+| change what a phase built, when `AS_BUILT.md` does not say why | that phase's spec, through `docs/history/SPECS_README.md` |
+| work on an upstream bug | its entry in `UPSTREAM_BUGS.md` |
 
-These encode decisions that are already settled. Do not re-litigate them; if you
-believe one is wrong, say so in your report rather than working around it.
+## Upstream source: which copy, and when
 
-## Source of truth
+| Copy | Path | Read | Use it to |
+|---|---|---|---|
+| **CRM, the port's base** | `D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm` | the working tree (tag `port-base`) | see what the port should do |
+| **Framework** | `D:\02_Personal\01_OpenSource\02_FrameWorks\frappe` | `git show version-15:<path>` only | explain what the CRM code does not: save, rename, delete, permissions, Data Import |
+| **CRM, the owner's fork** | `D:\02_Personal\01_OpenSource\03_Applications\CRM\frappe_crm` | `upstream/develop` | upstream bug work only, when a brief says so |
 
-Two repositories, both readable:
-
-```
-CRM app    D:\02_Personal\01_OpenSource\03_Applications\CRM\crm\crm    (main)
-framework  D:\02_Personal\01_OpenSource\02_FrameWorks\frappe           (version-15)
-```
-
-That pairing is what the CRM's own CI uses. **Do not read `develop`** — it is v16
-pre-release, and a finding checked against it can be wrong for the version this port
-follows.
-
-Read them whenever behaviour is unclear. **Never invent semantics.** Much of what a
-document does on save, rename or delete is not in the CRM app at all but in the
-framework — if the CRM source cannot explain a behaviour, look there before concluding
-the port is right or wrong.
+* **The port's base is frozen.** `port-base` (`6583bfcdc`) is upstream v1.82.0
+  (`48cb3ccce`, 26 Aug 2026) plus the owner's Docker docs, which change no CRM code.
+  Never switch its branch or pull.
+* **The framework checkout is on `develop`.** Never read its working tree and never
+  `git checkout` there: a `develop` data file and permission row got into this port that
+  way (`docs/FINDINGS.md` 90). `develop` is v16 pre-release; the fork is the only place
+  it is right, and port code is never copied from it.
+* **Never invent semantics.** Much of what a document does on save, rename or delete is
+  in the framework, not the CRM app. If the CRM source cannot explain a behaviour, look
+  there before concluding the port is right or wrong.
 
 ## Hard rules
 
@@ -46,160 +48,87 @@ the port is right or wrong.
 2. String primary keys per the six `autoname` strategies in
    `docs/history/PHASE_0_FOUNDATION.md` §2 — three doctypes are genuinely autoincrement.
 3. `_assign` is a denormalised cache of `ToDo` records. Never use it for access control.
-4. Preserve `frappe.throw` message text verbatim — it is user-facing copy.
+4. Preserve `frappe.throw` and `msgprint` text verbatim — it is user-facing copy.
 5. Postgres, not MariaDB: map Frappe's `like` to `ilike`/`icontains`.
-6. **Registering a doctype publishes it.** Every field is readable, filterable and
-   writable through the generic `/api/resource/` route unless a rule says otherwise.
-   Upstream leans on DocType role permissions, which this port does not model — so
-   "upstream registers no hook" means "upstream had a layer we lack", not "no protection
-   needed".
-
-## Stack
-
-Django + DRF + SimpleJWT, PostgreSQL 17, Redis, Celery, Django Channels,
-django-treebeard. Python 3.13.
+6. **Registering a doctype publishes it** through `/api/resource/`: every field readable,
+   filterable and writable unless a rule says otherwise. Upstream leans on DocType role
+   permissions, which this port does not model, so "upstream registers no hook" means
+   "upstream had a layer we lack". A new doctype needs a permission rule
+   (`crm_app/permissions/`), entries in `tests/test_permissions.py` and
+   `tests/test_route_surface.py`, a row in `specs/SECURITY_MODEL.md`, and `docs/ROUTES.md`
+   regenerated with `backend/scripts/generate_route_inventory.py`; `specs/AS_BUILT.md`
+   has the full list and the credential checklist.
+7. **Keep every difference from upstream visible**, in any file copied from upstream (all
+   of `frontend/`, and backend code porting a named upstream function): the owner's later
+   rewrite needs the full list. Never delete upstream code you replace — keep it in a
+   comment prefixed `Upstream:`, with a line on why and the finding or `UPSTREAM_BUGS.md`
+   entry. Mark code upstream lacks `Port only:`. Record frontend differences in
+   `frontend/JWT_PATCH.md` ("Other frontend patches") and behaviour differences in the
+   finding and `UPSTREAM_BUGS.md`.
 
 ## When building
 
-Some tasks ask you to write the code rather than review it. Claude plans the task and
-reviews what you build; the owner merges. A build task comes as a brief, one Markdown
-file in `tasks/` (git-ignored), naming the branch, the upstream files, the decisions
-already taken and the tests that must pass. **The brief's decisions are settled with the
-owner: build them, and if you think one is wrong, say so in your report rather than
-building something else.**
+A build task is a brief in `tasks/` (git-ignored): the branch, the upstream files, the
+decisions already taken, the tests that must pass. **Its decisions are settled with the
+owner: build them, and if you think one is wrong, say so rather than building something
+else.** Claude reviews and commits; the owner merges.
 
-### Reading upstream
-
-**The framework checkout is on `develop`, not `version-15`.** Read every framework file
-with `git show version-15:<path>` from `D:\02_Personal\01_OpenSource\02_FrameWorks\frappe`,
-never the working tree, and never `git checkout` there. Reading the working tree is how
-a `develop` data file, and a permission row only `develop` has, got into this port
-(`docs/FINDINGS.md` 90). The CRM app is read from its working tree (`main`).
-
-### Branch and commits: you write, Claude commits
-
-Your sandbox (`workspace-write`) cannot write `.git`, so **you do not run `git add` or
-`git commit`**, and never push. Claude checks out the branch before you start, and
-commits after reviewing.
-
-* **One brief is one commit.** Build exactly what the brief asks, with the tests that
-  cover it green, and leave the changes in the working tree. A feature is several briefs.
-* **Write the commit message** to `tasks/COMMIT_MSG` (overwrite it each time). The
-  subject says what changed; the body says **why**, citing the upstream `path:line` it
-  follows, and lists the files the commit should contain. End it with:
-
-  ```
-  Co-Authored-By: Codex <noreply@openai.com>
-  ```
-
-* Leave `frontend/auto-imports.d.ts` alone; Vite rewrites it, and it is never committed.
-* Touch only the files the brief's change needs, so the commit stays one change.
-
-### Tests
-
-* Run single test files, in `backend/`: `.venv/Scripts/python.exe -m pytest -q
-  -p no:cacheprovider tests/<file>.py`. Run the files the change touches and their
-  neighbours before each commit.
-* **The full suite is not yours to run** unless the brief asks: it takes 10 to 20 minutes
-  on a 4 GB machine. **Never run the http suite or Playwright**; they need live servers
-  and the demo passwords.
-* One heavy process at a time. Do not start a dev server.
-* A test must not reach the network. Stub the one outbound call, as
+* **One brief is one commit.** Build exactly what it asks, touching only the files the
+  change needs, and leave the changes in the working tree. Your sandbox cannot write
+  `.git`: never run `git add`, `git commit` or `git push`.
+* **Write the commit message** to `tasks/COMMIT_MSG`, overwriting it. The subject says what
+  changed; the body says **why**, cites the upstream `path:line` it follows, and lists
+  the files the commit should contain. No attribution line.
+* **Tests:** in `backend/`, run single files with `.venv/Scripts/python.exe -m pytest -q
+  -p no:cacheprovider tests/<file>.py` — the files you touched and their neighbours. Not
+  the full suite unless the brief asks, never the http suite or Playwright, never a dev
+  server. A test must not reach the network: stub the outbound call, as
   `tests/test_exchange_rate.py` does.
+* **A migration that writes data uses the historical model** (`apps.get_model`), so a
+  later column cannot break a fresh `migrate`.
+* **Records:** the finding the brief names in `docs/FINDINGS.md` (index row and entry),
+  `UPSTREAM_BUGS.md` for any upstream defect you reproduce or diverge from, and
+  `specs/KNOWN_ISSUES.md` for anything left unfinished.
+* Leave `frontend/auto-imports.d.ts` alone; it is never committed.
+* **Never** print or edit `.env` or `docs/http/.env`, send anything to an outside
+  service, open a pull request, delete branches, or change files outside this repository.
 
-### The checklists that bite
-
-* **Registering a doctype publishes it** (hard rule 6). A new doctype needs a permission
-  rule (`crm_app/permissions/`), an entry in `tests/test_permissions.py` and
-  `tests/test_route_surface.py`, a row in `specs/SECURITY_MODEL.md`, and
-  `docs/ROUTES.md` regenerated with `backend/scripts/generate_route_inventory.py`.
-  `specs/AS_BUILT.md` has the full list, and the credential checklist.
-* **A migration that writes data uses the historical model** (`apps.get_model`), not
-  the live one, so a later column cannot break a fresh `migrate`.
-* **Upstream's user-facing text is copied verbatim**, `frappe.throw` and `msgprint`
-  messages included (hard rule 4).
-* **Records.** Update the finding the brief names in `docs/FINDINGS.md` (its index row
-  and its entry), `UPSTREAM_BUGS.md` for any upstream defect you reproduce or diverge
-  from, and `specs/KNOWN_ISSUES.md` for anything you leave unfinished.
-
-### Keep the difference from upstream visible
-
-This port is not the final version: the owner plans a later, proper Django rewrite, and
-will need to know exactly where the port differs from upstream. So, in any file copied
-from upstream (the whole `frontend/`, and backend code that ports a named upstream
-function):
-
-* **Never delete upstream code you replace.** Keep it in a comment, prefixed
-  `Upstream:`, beside the new code, with one or two lines saying why it changed and
-  citing the finding or `UPSTREAM_BUGS.md` entry.
-* **Mark code that upstream does not have** with `Port only:` and the same reference.
-* **Record every frontend difference** in `frontend/JWT_PATCH.md`, "Other frontend
-  patches", and every behaviour difference in the finding and `UPSTREAM_BUGS.md`.
-
-### Never
-
-* Print or edit `.env` or `docs/http/.env`; they hold real credentials.
-* Send anything to an outside service, open a pull request, or delete branches.
-* Change files outside this repository.
-
-### Your report
-
-End with: the files you changed or added; that `tasks/COMMIT_MSG` is written; the test
-commands you ran and their last lines of output, quoted; every place you diverged from
-upstream and why; and anything in the brief you did not do, with the reason.
+**Your report:** the files changed or added; that `tasks/COMMIT_MSG` is written; the test
+commands you ran with their last lines of output, quoted; every divergence from upstream
+and why; and anything in the brief you did not do, with the reason.
 
 ## When reviewing
 
-Reviews here are a second opinion on code another agent wrote. Prioritise, in order:
-correctness against the Frappe source, permission/security correctness, and adherence to
-the spec. Be specific — cite file and line. Say plainly when something is right; do not
-manufacture findings.
+A review is a second opinion on code another agent wrote. Prioritise correctness against
+the Frappe source, then permissions and security, then the spec. Cite file and line. Say
+plainly when something is right; do not manufacture findings.
 
-### What has actually gone wrong here before
+**What has gone wrong here before** — shapes that survived the author's own tests:
 
-Worth knowing, because these are the shapes that survived the author's own tests:
+* **The endpoint was gated and the generic route was not** (five findings in four
+  phases): `/api/resource/<doctype>` does the same job beside it, unguarded.
+* **A value hidden from responses was left filterable.** A filter turns the row count into
+  an oracle, and `like` narrows a value one character per request; a real SMTP password
+  was recovered this way.
+* **Hiding and encrypting a credential are independent.** One was hidden but stored in
+  plain text; another encrypted but not hidden, so served as ciphertext and filterable.
+* **A permission check ran against the wrong object:** an empty instance on create, the
+  pre-edit instance on update, so a row could be moved onto a document the caller cannot
+  write.
+* **A rule covered one path only.** `permission_query_conditions` guards the list,
+  `has_permission` the document; set both.
+* **Public paths** — an `allow_guest` method or a webhook — are reachable from the
+  internet. A webhook must verify its signature; a guest method gets the same scrutiny,
+  however harmless it looks.
 
-* **The endpoint was gated and the generic route was not.** Five findings across four
-  phases. An agent tests the endpoint it just wrote; `/api/resource/<doctype>` does the
-  same job beside it, unguarded.
-* **A value was hidden from responses and left filterable.** Hiding output is not
-  protection — a filter turns the row count into an oracle, and `like` narrows a value one
-  character per request. A real SMTP password was recovered this way.
-* **A credential was hidden from the wire and stored in plain text**, and separately, one
-  was encrypted but not hidden — served as ciphertext and still filterable. The two
-  declarations are independent.
-* **A permission check ran against the wrong object** — an empty instance on create, and
-  the pre-edit instance on update, so a row could be *moved* onto a document the caller
-  cannot write.
-* **A rule was written against the read path only.** `permission_query_conditions` guards
-  the list; `has_permission` guards the document. Setting one and not the other leaves the
-  other route open.
+**How to report:**
 
-### Public paths get the most scrutiny
-
-An endpoint that needs no login — an `allow_guest` method, or a webhook — is reachable
-from the public internet. Treat each one as an attack surface in its own right:
-
-* **A webhook must verify its signature.** Without it, the webhook is an unauthenticated
-  write path. This is a requirement, not a nicety.
-* **A guest method gets the same scrutiny**, however harmless it looks.
-
-### How to report
-
-**If you cannot read this repository, say so and stop.** Make the first line of your
-output `REVIEW NOT PERFORMED`, followed by the reason — a sandbox error, a path you could
-not open. Do not ask for files to be pasted, and do not review from the prompt or from
-memory. Reviews that silently did not happen have been accepted here before.
-
-**Do not report test results you did not produce.** Reviews run read-only. Say a test
-passes or fails only if you ran it, and quote the output.
-
-**One block per finding, most severe first:**
-
-* **Severity** — high, medium or low
-* **Where** — `path:line` in this repo
-* **Claim** — what is wrong, in one or two sentences
-* **Evidence** — the upstream `path:line` you compared against, CRM app or framework
-* **Recorded** — if the repo's docs already write this up, where; otherwise `new`
-
-Where you are unsure, say so and name what would settle it. End with a one-line verdict.
+* **If you cannot read this repository, say so and stop.** Make the first line
+  `REVIEW NOT PERFORMED` and the reason. Do not ask for files to be pasted or review from
+  memory: reviews that silently did not happen have been accepted here before.
+* **Report only test results you produced**, with the output quoted. Reviews run
+  read-only.
+* **One block per finding, most severe first:** Severity (high, medium, low); Where
+  (`path:line`); Claim (one or two sentences); Evidence (the upstream `path:line`
+  compared against); Recorded (where the repo already writes it up, or `new`).
+* Where unsure, say so and name what would settle it. End with a one-line verdict.
