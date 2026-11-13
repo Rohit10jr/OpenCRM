@@ -18,9 +18,10 @@ The Django project skeleton is in place with separate base, local and test setti
 It installs the ten top-level apps in the settled order, includes each app's URLconf
 explicitly under `/api/v1/`, and exposes Django admin under `/admin/`.
 
-`core` now supplies the Frappe exception classes and error body, the DRF exception
-handler, the `{"message": ...}` / `{"data": ...}` envelope renderer, merged input
-parsing, surplus-input binding, and `FrappeAPIView` for endpoints that are not resources.
+`core` now supplies the legacy-compatible exception classes and error body, the DRF
+`api_exception_handler`, the `{"message": ...}` / `{"data": ...}`
+`EnvelopeRenderer`, merged input parsing, surplus-input binding, and `BaseAPIView` for
+endpoints that are not resources.
 It also supplies the default authenticated permission and the registry-free `DOCTYPE`
 and `IS_CHILD_TABLE` model metadata readers. Authentication backends are deliberately
 limited to `accounts.authentication.VersionedJWTAuthentication`; guest views opt out of
@@ -101,8 +102,25 @@ their parent foreign-key name, inherit indexed `lft`/`rgt`, rebuild all bounds a
 save or delete with siblings ordered by name, and serialize rebuilds with a
 per-model PostgreSQL transaction advisory lock taken before reading nodes. Its
 `tree_q()` classmethod is the only contract the five tree-filter operators use.
+On save, the same transaction takes that lock before checking the requested parent,
+writing the row, and rebuilding. A node whose new parent is itself or one of its
+descendants raises `NestedSetRecursionError` with upstream's `Item cannot be added to
+its own descendants`; serializing the check and write means two concurrent reparents
+cannot together form a loop. The parity rebuild walks roots only, retains the
+`depth > len(nodes)` guard, and updates only visited nodes. A rootless cycle created by
+writing around `save()` therefore keeps its old bounds, as the old backend does.
 `tests_support.TestTree` and `TreeItem` exercise that generic contract only under test
 settings.
+
+S26 renamed every application-owned identifier that formerly carried the framework
+name: `FrappeAPIView` → `BaseAPIView`, `FrappeEnvelopeRenderer` →
+`EnvelopeRenderer`, `FrappeError` → `APIError`, `frappe_exception_handler` →
+`api_exception_handler`, and `frappe_not_found` → `not_found`. Test-only aliases were
+also made descriptive: `FrappeNameError` → `DocumentNameError` and
+`FrappePermissionError` → `APIPermissionError`; the paginator test's
+`frappe_parameters` phrase became `legacy_parameters`. The settings import strings use
+the new renderer and handler names. Wire values for the concrete exception subclasses
+and every `frappe.exceptions.*` string are unchanged; the base class is not raised.
 
 `core.serializers.DocumentSerializer` is the base for document resources. It keeps each
 subclass's explicit `Meta.fields`, applies model field-access declarations, requires the
@@ -171,7 +189,7 @@ field names, `parentfield` distinguishes them. Neither kind receives its own rou
 
 ### Adding an action or an endpoint
 
-For an endpoint that is not a resource, subclass `core.views.FrappeAPIView`, implement
+For an endpoint that is not a resource, subclass `core.views.BaseAPIView`, implement
 only the allowed HTTP methods, and write its route explicitly in its app's `urls.py` and
 in the route map. `self.get_inputs(request)` merges query and body inputs, JSON-decodes
 query values when possible, lets the body win, and drops `cmd`; the view then reads only
@@ -246,6 +264,7 @@ are:
 | Class | Status | Title |
 |---|---:|---|
 | `ValidationError` | 417 | Message |
+| `NestedSetRecursionError` | 417 | Message |
 | `MandatoryError` | 417 | Message |
 | `InvalidEmailAddressError` | 417 | Message |
 | `OutgoingEmailError` | 417 | Message |
@@ -267,13 +286,24 @@ mapping is considered. DRF response headers such as `Retry-After`, `WWW-Authenti
 and `Allow` are preserved. An exception the handler does not recognize remains a plain
 500.
 
+User-facing messages use the identity marker `core.translate._`; translation is
+deliberately deferred. Write numbered templates as
+`_("DocType {0} not found").format(doctype)`. Use the upstream template verbatim when
+one exists, and preserve the old port's wording when it does not. Do not use Django's
+`gettext`: activating a Django language must not translate these messages yet. This
+recipe now covers every application module built through briefs 01–08a, including
+exception-envelope fragments, naming, links, email validation, lockout, filters,
+queries, trees, children, and serializers. Construction that is not a client message
+stays ordinary Python: identifiers and query keys, generated document names, `repr`s,
+logs, test data, and developer-only programming errors.
+
 A wrong method has this body (shown for `GET`) and an `Allow` header:
 
 ```json
 {"exception":"frappe.exceptions.MethodNotAllowed: Method \"GET\" not allowed.","exc_type":"MethodNotAllowed","_server_messages":"[\"{\\\"message\\\": \\\"Method \\\\\\\"GET\\\\\\\" not allowed.\\\", \\\"title\\\": \\\"Message\\\"}\"]","message":"Method \"GET\" not allowed.","messages":["Method \"GET\" not allowed."]}
 ```
 
-`core.views.frappe_not_found` decides the response for an unknown non-admin URL. A
+`core.views.not_found` decides the response for an unknown non-admin URL. A
 final catch-all in `config.urls` makes it apply under `/api/v1/` and elsewhere even
 when `DEBUG=True`; `handler404` uses the same function for `Http404` resolution when
 `DEBUG=False`. Django admin keeps its own 404 pages. The body is:
