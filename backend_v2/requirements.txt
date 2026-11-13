@@ -10,9 +10,6 @@ psycopg[binary]==3.3.6
 django-cors-headers==4.9.0
 django-environ==0.14.0
 
-# Trees (phase 2 hierarchy / territory) - declared now so the stack is fixed.
-django-treebeard==4.8.0
-
 # Image resizing for uploads (`optimize=1`, frappe_platform/files.py:optimize_image);
 # without it uploads still work, pictures are just stored at their original size.
 Pillow==13.0.0

@@ -88,6 +88,22 @@ comparison skips that block.
   neither (S11). Only the message changes
 - **Recorded by:** FOUNDATION, 12 Nov 2026
 
+### PE-3. `frappe.client.get` by `filters` is not served
+
+- **Status:** approved — owner, 13 Nov 2026
+- **Where:** `frappe.client.get` called with `filters` instead of `name`;
+  `docs/http/13_bulk_and_misc.http` 2.5–2.7
+- **Old backend:** the first permitted document matching the filters; 404
+  `<DocType> not found` when none matches; 417 `name or filters is required` when neither
+  is given (`backend/crm_app/api/client.py:client_get`)
+- **backend_v2:** no route. Reading by `name` is each resource's `GET <resource>/<name>/`;
+  the three blocks have no REST copy
+- **Why:** no caller. All three frontend callers pass `name` (`SlaPolicyView.vue`,
+  `SlaPolicyList.vue`, `AssignmentRuleView.vue`), and no seeded form script calls it. A
+  route nobody calls is code to read and secure for nothing (S5); it can be added if a
+  caller appears
+- **Recorded by:** FOUNDATION, 13 Nov 2026
+
 ---
 
 ## Candidates — not exceptions yet

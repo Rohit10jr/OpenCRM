@@ -1,7 +1,7 @@
 # FOUNDATION — the project, the core layer, the base ViewSet and authentication
 
-**Status: Ready** — spec-checked and reviewed by the owner, 12 Nov 2026. One point in
-section 6 is still open (`get` by `filters`); no brief builds it until it is settled. Everything here is a convention every later unit copies. **Paths are from the
+**Status: Ready** — spec-checked and reviewed by the owner, 12 Nov 2026. Section 6 is
+fully settled (13 Nov 2026). Everything here is a convention every later unit copies. **Paths are from the
 repository root.**
 
 ---
@@ -23,7 +23,7 @@ The `PORT_MAP.md` rows under **FOUNDATION**:
   |---|---|---|
   | `get_list` | rows | `GET <resource>/` |
   | `get` by `name` | one document | `GET <resource>/<name>/` |
-  | `get` by `filters` | the first permitted match; 404 if none; 417 `name or filters is required` | **open** — Q8 |
+  | `get` by `filters` | the first permitted match; 404 if none; 417 `name or filters is required` | **not served: no caller** (PE-3) |
   | `insert` | the created document | `POST <resource>/` |
   | `set_value` | the updated document; `fieldname` is a field name plus `value`, or a dict | `PATCH <resource>/<name>/` with the fields in the body |
   | `delete` | `null`, after the dynamic-link check | `DELETE <resource>/<name>/` |
@@ -33,7 +33,7 @@ The `PORT_MAP.md` rows under **FOUNDATION**:
 
   Old inputs keep their names on the three new routes (S7). `set_value` and `delete` on
   an editable child row (`CLIENT_EDITABLE`: Contact Email and Contact Phone only, edited
-  by `useContactFields.ts`) answer through the parent; this is **open** — Q8.
+  by `useContactFields.ts`) answer through the parent; CONTACTS builds them (section 6).
 - **Other models:** the naming-series counter, SimpleJWT's token blacklist
 
 Plus the things no row describes, because every row needs them:
@@ -335,13 +335,13 @@ answers go into the briefs and then into `AS_BUILT.md`.
 | # | Question | Answer |
 |---|---|---|
 | Q1 | Where field-access declarations live | **On the model**, as class attributes — sensitive, restricted, read-only, encrypted — as `backend/` has them (`field_security.py:38-176`); encryption is a model field type. The ViewSet carries only the opt-in lists of fields shown, filtered, sorted and searched (rule 10). A rule on the ViewSet would leave a second ViewSet over the same model unprotected — the "second door" defect, six times in the old backend |
-| Q2 | How a tree operator finds its tree without a registry | `core` provides an abstract `TreeDocument` base on treebeard. The filter backend follows the field to `_meta.get_field(f).related_model` and checks `issubclass(..., TreeDocument)`; otherwise 400 `Invalid Filter`. The old refusal text names old internals (`No tree resolver registered for …`, `filters.py:_tree_op`), so the new wording needs a `proposed` entry in `PARITY_EXCEPTIONS.md` before it is built |
+| Q2 | How a tree operator finds its tree without a registry | `core` provides an abstract `TreeDocument` base — **storing Frappe's `lft`/`rgt` nested set, not treebeard** (amended 13 Nov, below). The filter backend follows the field to `_meta.get_field(f).related_model` and checks `issubclass(..., TreeDocument)`; otherwise 400 `Invalid Filter`. The old refusal text names old internals (`No tree resolver registered for …`, `filters.py:_tree_op`), so the new wording needs a `proposed` entry in `PARITY_EXCEPTIONS.md` before it is built |
 | Q3 | How a route carries a name with slashes | A small `core.routers.DocumentRouter` (a `SimpleRouter` subclass): the name matches `.+?`, the trailing slash is optional, and routes are registered collection actions → record actions → record. DRF's default order puts the record before record actions, which would read `R/GA/convert/` as a record. The old route is `(?P<name>.+?)` (`frappe_core/urls.py:12-26`). S25 (8)'s known limit stands |
 | Q4 | What the body comparison ignores, and how the REST copy is generated | **Ignore:** one list of JSON paths in a file under `backend_v2/scripts/` — tokens, `creation`/`modified`, names from series, hash and autoincrement naming; an ignored value must still be present and of the same type. **Generate:** each block rewritten from the route map; a block whose verb has no new route becomes a tagged negative case, outside the comparison (section 5, item 3) |
 | Q5 | How the per-request role cache is replaced | Cached on the user instance, as Django's `ModelBackend` does with `_perm_cache`. The user lives for one request and is passed along (S16); never a cross-request cache (old: `field_security.py:178-194`) |
 | Q6 | Where an app declares its list definition for `get_data` | A small class in the app's `list_views.py`, named by the ViewSet's `list_view_class` attribute. Columns and kanban defaults are presentation, and the list-view mixin sits on the ViewSet (S24). (Old: static methods on the model, `registry.py:90-134`) |
 | Q7 | `backend_v2/apps/` or top level | **Top level**, imported as `core`, `accounts`, …; REBUILD_PLAN section 4 corrected |
-| Q8 | The `frappe.client` calls that are not CRUD | Each gets a small route on the base classes (section 1 table). **Still open:** `get` by `filters`, and `set_value`/`delete` on a child row — below |
+| Q8 | The `frappe.client` calls that are not CRUD | Each gets a small route on the base classes (section 1 table). `get` by `filters` is not served (PE-3); `set_value`/`delete` on a child row go to CONTACTS — below |
 | Q9 | Who owns `User` | FOUNDATION: model, migration, auth routes, issuing and checking `token_version`. ACCOUNTS: `/api/v1/users/`, `test_user_access.py`, and what bumps `token_version` (section 1.4) |
 | Q10 | The "parallel work" premise | Dropped; units are built one at a time. FOUNDATION still writes the shared files once (section 1.2) |
 | Q11 | Requests with no old equivalent | A disallowed method is **405** with `Allow`; an unknown URL is **404**; both in the Frappe error shape (`API_CONTRACT.md` section 5). No client sends either; S19 moves towards DRF's shapes anyway |
@@ -355,11 +355,20 @@ answers go into the briefs and then into `AS_BUILT.md`.
   rows nested routes under their contact, and updates `API_CONTRACT.md`'s "a child row is
   never reachable on its own" with that exception when it builds them.
 
-**Still open:**
+**Settled after the overnight run (owner, 13 Nov 2026):**
 
-- **`get` by `filters`** (`client.py:client_get`). The owner accepted a
-  `GET <resource>/find/?filters=…` route on condition of knowing which frontend calls use
-  it. **None does**: all three frontend callers pass `name` (`SlaPolicyView.vue`,
-  `SlaPolicyList.vue`, `AssignmentRuleView.vue`), and no seeded form script calls `get`.
-  Only `docs/http/13_bulk_and_misc.http` 2.5–2.7 test it. Recorded in
-  `tasks/OVERNIGHT_QUESTIONS.md`; not built until confirmed.
+- **`get` by `filters` is not served** (PE-3): no caller — the three frontend callers
+  pass `name`, no seeded form script calls `get`; only `docs/http/13_bulk_and_misc.http`
+  2.5–2.7 test it, and they get no REST copy.
+- **Trees keep Frappe's nested set**, not treebeard (Q2 amended). `TreeDocument` carries
+  `lft`/`rgt` and the parent link, which are on the wire, and ports the old rebuild with
+  its locking (`backend/crm_app/permissions/tree.py`). The owner compared treebeard:
+  `NS_Node` numbers every top-level node after the first wrongly, and `MP_Node` has no
+  `lft`/`rgt`. Treebeard is out of the stack and `requirements.txt`.
+- **`save()` requires the user** — no default. Seeds and background jobs pass one
+  explicitly, matching Frappe version-15: **scheduled jobs run as `Administrator`** (the
+  scheduler calls `frappe.connect()`, which sets Administrator,
+  `frappe/__init__.py:298-299`), and **an enqueued job runs as the user who enqueued
+  it** (`enqueue` captures `frappe.session.user`, `frappe/utils/background_jobs.py:145`;
+  `execute_job` sets it, `:204`). A seed runs as `Administrator`, as upstream's install
+  step does.

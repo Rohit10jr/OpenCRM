@@ -114,7 +114,7 @@ the alias `refresh_token`, all in the body. The old paths also answered a second
 | `frappe.client.get_list` | GET/POST | auth | `crm_app/api/client.py:client_get_list` | each resource's, in its unit | core | — |
 | `frappe.client.get_single_value` | GET/POST | auth | `crm_app/api/client.py:client_get_single_value` | each resource's, in its unit | core | — |
 | `frappe.client.get_value` | GET/POST | auth | `crm_app/api/client.py:client_get_value` | each resource's, in its unit | core | — |
-| `frappe.client.get` | GET/POST | auth | `crm_app/api/client.py:client_get` | each resource's, in its unit | core | — |
+| `frappe.client.get` | GET/POST | auth | `crm_app/api/client.py:client_get` | by `name`: each resource's, in its unit. By `filters`: **not served: no caller** (PE-3) | core | — |
 | `frappe.client.insert` | POST | auth | `crm_app/api/client.py:client_insert` | each resource's, in its unit | core | — |
 | `frappe.client.set_value` | POST/PUT | auth | `crm_app/api/client.py:client_set_value` | each resource's, in its unit | core | — |
 | `login` | POST | guest | `frappe_core/api/auth.py:login` | `POST /api/v1/auth/login/` | accounts | — |
