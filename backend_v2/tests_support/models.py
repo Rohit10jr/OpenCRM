@@ -4,7 +4,7 @@ from django.conf import settings
 from django.db import models
 
 from core.fields import EncryptedCharField
-from core.models import AutoIncrementDocument, BaseDocument
+from core.models import AutoIncrementDocument, BaseDocument, TreeDocument
 from core.naming import (
     DataImportTimestamp,
     FieldValue,
@@ -131,3 +131,30 @@ class TextLinkDocument(BaseDocument):
     ALLOW_DANGLING_LINK_FIELDS = ("audit_widget_name",)
     widget_name = models.CharField(max_length=140, blank=True, default="")
     audit_widget_name = models.CharField(max_length=140, blank=True, default="")
+
+
+class TestTree(TreeDocument):
+    DOCTYPE = "Foundation Test Tree"
+    NAME_STRATEGY = Prompt()
+    PARENT_FIELD = "parent_node"
+    parent_node = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        related_name="children",
+        null=True,
+        blank=True,
+    )
+
+
+class TreeItem(BaseDocument):
+    DOCTYPE = "Foundation Tree Item"
+    NAME_STRATEGY = Prompt()
+    tree = models.ForeignKey(TestTree, on_delete=models.PROTECT, related_name="items")
+    widget = models.ForeignKey(
+        Widget,
+        on_delete=models.PROTECT,
+        related_name="tree_items",
+        null=True,
+        blank=True,
+    )
+    label = models.CharField(max_length=140, blank=True, default="")

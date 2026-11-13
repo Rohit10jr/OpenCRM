@@ -1,13 +1,17 @@
 """Standard fields and lifecycle shared by document models."""
 
 import re
+import zlib
 from email.utils import parseaddr
 from html import escape
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import validate_email
-from django.db import models
+from django.db import connection, models, transaction
+from django.db.models import Q, Subquery
+from django.db.models.signals import post_delete, post_save
+from django.dispatch import receiver
 from django.utils import timezone
 
 from core import naming
@@ -176,3 +180,111 @@ class AutoIncrementDocument(BaseDocument):
 
     class Meta(BaseDocument.Meta):
         abstract = True
+
+
+class TreeDocument(BaseDocument):
+    """Frappe-compatible nested-set document rebuilt after every ordinary write."""
+
+    PARENT_FIELD = None
+
+    lft = models.IntegerField(null=True, blank=True, db_index=True)
+    rgt = models.IntegerField(null=True, blank=True, db_index=True)
+
+    class Meta(BaseDocument.Meta):
+        abstract = True
+
+    @classmethod
+    def _parent_attname(cls):
+        if not cls.PARENT_FIELD:
+            raise TypeError(f"{cls.__name__}.PARENT_FIELD must name its parent link")
+        return cls._meta.get_field(cls.PARENT_FIELD).attname
+
+    @classmethod
+    def _lock_key(cls):
+        # Stable across processes, unlike Python's hash(). Keep it in signed int32 range.
+        return zlib.crc32(cls._meta.label_lower.encode("utf-8")) & 0x7FFFFFFF
+
+    @classmethod
+    def rebuild_tree(cls):
+        """Rebuild all bounds under a transaction-scoped lock taken before the read."""
+        with transaction.atomic():
+            if connection.vendor == "postgresql":
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT pg_advisory_xact_lock(%s)", [cls._lock_key()]
+                    )
+            cls._rebuild_locked()
+
+    @classmethod
+    def _rebuild_locked(cls):
+        nodes = list(cls._default_manager.order_by("name"))
+        if not nodes:
+            return
+
+        children = {}
+        by_pk = {node.pk: node for node in nodes}
+        for node in nodes:
+            parent = getattr(node, cls._parent_attname())
+            if parent not in by_pk or parent == node.pk:
+                parent = None
+            children.setdefault(parent, []).append(node)
+
+        counter = 0
+        updated = []
+
+        def visit(node, depth=0):
+            nonlocal counter
+            if depth > len(nodes):
+                return
+            counter += 1
+            node.lft = counter
+            for child in children.get(node.pk, []):
+                visit(child, depth + 1)
+            counter += 1
+            node.rgt = counter
+            updated.append(node)
+
+        for root in children.get(None, []):
+            visit(root)
+        if updated:
+            cls._default_manager.bulk_update(updated, ["lft", "rgt"])
+
+    @classmethod
+    def tree_q(cls, path, value, inclusive, ancestors):
+        """Return a Q on a model linking through ``path`` to this tree."""
+        node = cls._default_manager.filter(pk=value).first()
+        if node is None or node.lft is None or node.rgt is None:
+            return Q(pk__in=[])
+        if ancestors:
+            bounds = (
+                {"lft__lte": node.lft, "rgt__gte": node.rgt}
+                if inclusive
+                else {"lft__lt": node.lft, "rgt__gt": node.rgt}
+            )
+        else:
+            bounds = (
+                {"lft__gte": node.lft, "rgt__lte": node.rgt}
+                if inclusive
+                else {"lft__gt": node.lft, "rgt__lt": node.rgt}
+            )
+        related = cls._default_manager.filter(**bounds).order_by().values("pk")
+        return Q(**{f"{path}__in": Subquery(related)})
+
+def _is_tree_model(sender):
+    return (
+        isinstance(sender, type)
+        and issubclass(sender, TreeDocument)
+        and not sender._meta.abstract
+    )
+
+
+@receiver(post_save, dispatch_uid="core.tree_document.save")
+def _rebuild_tree_after_save(sender, **kwargs):
+    if _is_tree_model(sender):
+        sender.rebuild_tree()
+
+
+@receiver(post_delete, dispatch_uid="core.tree_document.delete")
+def _rebuild_tree_after_delete(sender, **kwargs):
+    if _is_tree_model(sender):
+        sender.rebuild_tree()
