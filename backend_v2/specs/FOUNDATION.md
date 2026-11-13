@@ -87,9 +87,9 @@ Each item names the old implementation in `backend/` to read first.
 ### 1.4 The first part of `accounts`
 
 **Who owns `User`** (section 6, Q9): FOUNDATION builds the model, its seed migration,
-the four auth routes, and the issuing and checking of `token_version`. **ACCOUNTS** builds
-the `/api/v1/users/` routes, ports `test_user_access.py`, and owns everything that bumps
-`token_version` (password change, reset, disabling a user).
+the four auth routes, the issuing and checking of `token_version`, and revocation whenever
+a disabled user is saved. **ACCOUNTS** builds the `/api/v1/users/` routes, ports
+`test_user_access.py`, and owns the password-change and password-reset revocation triggers.
 
 - **`User`** as `AUTH_USER_MODEL` — it has to exist before the first migration. The
   primary key is the lowercased email (stripped); `Administrator` and `Guest` are real
@@ -109,8 +109,13 @@ the `/api/v1/users/` routes, ports `test_user_access.py`, and owns everything th
   the WebSocket consumer gets it too; `tests/test_token_version.py`; KNOWN_ISSUES §6,
   fixed). FOUNDATION also builds `bump_token_version` (`authentication.py:38-47`), the one
   function that revokes every token at once. **Ordinary logout does not bump it** — it
-  only blacklists the refresh token handed in (`auth.py:logout`); the callers that bump
-  are ACCOUNTS'.
+  only blacklists the refresh token handed in (`auth.py:logout`). FOUNDATION bumps it on
+  every `User.save()` while disabled (`frappe_platform/models.py:280-288`); ACCOUNTS owns
+  the password-change and password-reset callers.
+- **Restricted Django admin for `User`** — it can change only `enabled`; names, email and
+  full name are read-only, built-in users cannot be disabled, add and delete are refused,
+  and bulk actions are off so `QuerySet.update()` cannot bypass token revocation
+  (`frappe_platform/admin.py`).
 - **The login lockout:** login uses the consecutive-failure tracker on two keys, the
   client IP and the normalised account (`frappe_core/security.py`, `auth.py:login`).
   Settings `LOGIN_MAX_CONSECUTIVE_ATTEMPTS` and `LOGIN_LOCK_INTERVAL_SECONDS` are read
@@ -342,7 +347,7 @@ answers go into the briefs and then into `AS_BUILT.md`.
 | Q6 | Where an app declares its list definition for `get_data` | A small class in the app's `list_views.py`, named by the ViewSet's `list_view_class` attribute. Columns and kanban defaults are presentation, and the list-view mixin sits on the ViewSet (S24). (Old: static methods on the model, `registry.py:90-134`) |
 | Q7 | `backend_v2/apps/` or top level | **Top level**, imported as `core`, `accounts`, …; REBUILD_PLAN section 4 corrected |
 | Q8 | The `frappe.client` calls that are not CRUD | Each gets a small route on the base classes (section 1 table). `get` by `filters` is not served (PE-3); `set_value`/`delete` on a child row go to CONTACTS — below |
-| Q9 | Who owns `User` | FOUNDATION: model, migration, auth routes, issuing and checking `token_version`. ACCOUNTS: `/api/v1/users/`, `test_user_access.py`, and what bumps `token_version` (section 1.4) |
+| Q9 | Who owns `User` | FOUNDATION: model, migration, auth routes, issuing and checking `token_version`, and revocation on every save while disabled. ACCOUNTS: `/api/v1/users/`, `test_user_access.py`, and password-change and password-reset revocation (section 1.4; amended by owner, 13 Nov 2026) |
 | Q10 | The "parallel work" premise | Dropped; units are built one at a time. FOUNDATION still writes the shared files once (section 1.2) |
 | Q11 | Requests with no old equivalent | A disallowed method is **405** with `Allow`; an unknown URL is **404**; both in the Frappe error shape (`API_CONTRACT.md` section 5). No client sends either; S19 moves towards DRF's shapes anyway |
 

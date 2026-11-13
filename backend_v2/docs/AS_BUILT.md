@@ -37,7 +37,9 @@ without revoking other sessions.
 Every issued token carries the user's `token_version`. Authentication and refresh both
 refuse a stale version, while a missing claim counts as version zero for tokens issued
 before this mechanism existed. `accounts.authentication.bump_token_version()` uses an
-`F()` update and reloads the user for later ACCOUNTS password and disable-user actions.
+`F()` update and reloads the user. `User.save()` calls it on every save while the user is
+disabled, preventing old tokens from becoming valid again after re-enabling; password
+change and reset triggers remain ACCOUNTS' responsibility.
 
 `core.security` resolves the request IP from `REMOTE_ADDR`, consulting
 `X-Forwarded-For` only for the configured trusted proxy count. It stores consecutive
@@ -56,6 +58,10 @@ stores its own `creation` and `modified` timestamps, exposes `enabled` as Django
 `is_active`, and derives CRM roles from Django groups; the literal Administrator always
 also has the Administrator role. `UserManager.create_superuser` grants System Manager,
 because CRM authority does not come from Django's `is_superuser` flag.
+
+Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
+read-only, the Administrator and Guest flags are also read-only, adding and deleting are
+disabled, and there are no bulk actions.
 
 The first account migrations create `User`, the four role groups, and the two built-in
 users. Both built-ins start with unusable passwords; Administrator belongs to the
@@ -228,6 +234,9 @@ Each of these has already cost time on this machine:
 
 ## 4. Invariants that will bite you
 
-*None recorded yet.* The old backend's list, which is likely to apply here too, is
+User admin bulk actions must stay disabled: Django applies them with `QuerySet.update()`,
+which skips `User.save()` and therefore skips disabled-user token revocation.
+
+The old backend's list, which is likely to apply here too, is
 `specs/AS_BUILT.md` section 4 — `lead_owner` is the access column, names may contain
 slashes, "assigned" has two definitions, underscore caches never bump `modified`.
