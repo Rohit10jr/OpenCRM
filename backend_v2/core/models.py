@@ -68,6 +68,7 @@ class BaseDocument(models.Model):
     EMAIL_FIELDS = ()
     TEXT_LINK_FIELDS = {}
     ALLOW_DANGLING_LINK_FIELDS = ()
+    POLYMORPHIC_CHILD_TABLES = {}
 
     name = models.CharField(max_length=140, primary_key=True, editable=False)
     owner = models.ForeignKey(

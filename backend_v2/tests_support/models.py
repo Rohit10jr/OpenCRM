@@ -60,6 +60,7 @@ class DataImportDocument(BaseDocument):
 class Widget(BaseDocument):
     DOCTYPE = "Foundation Widget"
     NAME_STRATEGY = NamingSeries("WIDGET-.YYYY.-")
+    POLYMORPHIC_CHILD_TABLES = {"poly_rows": "tests_support.WidgetNote"}
     widget_name = models.CharField(max_length=140, blank=True, default="")
     status = models.CharField(max_length=50, blank=True, default="Open")
     amount = models.DecimalField(max_digits=18, decimal_places=6, null=True, blank=True)
@@ -83,6 +84,17 @@ class WidgetRow(BaseDocument):
     parent = models.ForeignKey(Widget, on_delete=models.CASCADE, related_name="rows")
     parentfield = models.CharField(max_length=140, default="rows")
     parenttype = models.CharField(max_length=140, default="Foundation Widget")
+    value = models.CharField(max_length=140)
+
+
+class WidgetNote(BaseDocument):
+    DOCTYPE = "Foundation Widget Note"
+    NAME_STRATEGY = Hash()
+    IS_CHILD_TABLE = True
+    parent = models.CharField(max_length=140)
+    parenttype = models.CharField(max_length=140)
+    parentfield = models.CharField(max_length=140)
+    value = models.CharField(max_length=140)
 
 
 class SingletonDocument(BaseDocument):
