@@ -26,6 +26,14 @@ and `IS_CHILD_TABLE` model metadata readers. Authentication backends are deliber
 limited to `accounts.authentication.VersionedJWTAuthentication`; guest views opt out of
 the default permission, while authentication still runs when they carry a token.
 
+`core.models.BaseDocument` supplies the standard document fields, server timestamps,
+user foreign keys, fetch-from, email and text-Link validation, and the create lifecycle.
+Its seven naming strategies live in `core.naming`; naming-series counters are incremented
+under a row lock. `AutoIncrementDocument` replaces the string primary key with an integer
+one. Model metadata is declared as ordinary inherited class attributes, without a
+metaclass. `tests_support`, installed only by the test settings, contains small models
+covering every naming strategy and the generic-layer cases later FOUNDATION briefs use.
+
 The four authentication routes are explicit in `accounts/urls.py`: login and refresh
 are guest POST endpoints, logout is an authenticated POST endpoint, and `auth/me` is an
 authenticated GET endpoint. Each accepts the route both with and without its trailing
@@ -78,9 +86,21 @@ Until then they are headings only; do not guess their contents from
 
 ### Adding a resource
 
-*Not written yet — FOUNDATION.* Model, serializer, ViewSet with its allowlists, its
-registration on the app's router under `/api/v1/`, the recorded access decision, and the
-tests the guard tests will demand.
+Start the model by subclassing `BaseDocument`, or `AutoIncrementDocument` for a genuine
+integer name. Declare `DOCTYPE` and `NAME_STRATEGY` as class attributes. The other
+model declarations are `IS_CHILD_TABLE`, `IS_SINGLE`, `FETCH_FROM`, `EMAIL_FIELDS`, and
+`TEXT_LINK_FIELDS`; the last maps a text column to `(app_label.Model, label)`. A field
+that deliberately keeps a deleted target's name as audit data is also named in
+`ALLOW_DANGLING_LINK_FIELDS`. Later FOUNDATION briefs add the serializer, ViewSet,
+allowlists, router registration and recorded access decision.
+
+Creating through Django's ordinary `objects.create()` is intentionally unsupported,
+because it cannot supply the required actor. Use `Model(...).save(user=user)`, or
+`Model.objects.create_for_user(user=user, ...)`. Updates likewise call
+`save(user=user)`. A request passes `request.user`; seeds and scheduled jobs pass
+`accounts.roles.ADMINISTRATOR`; an enqueued job passes the user who enqueued it.
+Passing `None` or an empty string raises `TypeError` with
+`` `user` is required to save a document ``.
 
 ### Adding an action or an endpoint
 
@@ -233,6 +253,12 @@ Each of these has already cost time on this machine:
    nothing happens — it is not a bug.
 
 ## 4. Invariants that will bite you
+
+An unsaved document always issues an INSERT (`force_insert=True`). A caller-supplied
+name that is already taken therefore raises an integrity error instead of silently
+updating the existing row. Names are stored as Frappe supplies them (trimmed where
+Frappe trims, never slugified), and only `<` and `>` are forbidden. Every document save
+requires the acting `user`; there is no ambient current-user state or Guest fallback.
 
 User admin bulk actions must stay disabled: Django applies them with `QuerySet.update()`,
 which skips `User.save()` and therefore skips disabled-user token revocation.
