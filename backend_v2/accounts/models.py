@@ -102,6 +102,13 @@ class User(AbstractBaseUser, PermissionsMixin):
 
         super().save(*args, **kwargs)
 
+        # Upstream logs the user out on every save while disabled. Revoking tokens on
+        # every such save also keeps them stale if the account is later re-enabled.
+        if not self.enabled:
+            from .authentication import bump_token_version
+
+            bump_token_version(self)
+
     @property
     def is_active(self) -> bool:
         return self.enabled
