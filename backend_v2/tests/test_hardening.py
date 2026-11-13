@@ -1,5 +1,7 @@
 import pytest
 
+import json
+
 pytestmark = pytest.mark.django_db
 
 LOGIN = "/api/v1/auth/login/"
@@ -37,3 +39,39 @@ def test_a_rotated_refresh_token_invalidates_its_predecessor(api, alice):
     assert rotated.status_code == 200
     assert rotated.json()["message"].get("refresh")
     assert api.post(REFRESH, {"refresh": first}, format="json").status_code != 200
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("_assign", ["someone@example.com"]),
+        ("_liked_by", ["someone@example.com"]),
+        ("_comments", [{"comment": "spoofed"}]),
+        ("_user_tags", "spoofed"),
+    ],
+)
+def test_underscore_fields_are_ignored_on_create(auth_api, field, value):
+    response = auth_api.post(
+        "/api/v1/test-widgets/", {"widget_name": "x", field: value}, format="json"
+    )
+    assert response.status_code == 200
+    assert response.json()["message"].get(field) != value
+
+
+def test_assign_cannot_be_spoofed_on_update(auth_api):
+    created = auth_api.post(
+        "/api/v1/test-widgets/", {"widget_name": "x"}, format="json"
+    ).json()["message"]
+    url = f"/api/v1/test-widgets/{created['name']}/"
+    auth_api.patch(url, {"_assign": ["victim@example.com"]}, format="json")
+    assert json.loads(auth_api.get(url).json()["message"]["_assign"]) != [
+        "victim@example.com"
+    ]
+
+
+def test_audit_fields_are_still_read_only(auth_api):
+    response = auth_api.post(
+        "/api/v1/test-secured/", {"audit_value": "spoofed"}, format="json"
+    )
+    assert response.status_code == 200
+    assert response.json()["message"]["audit_value"] != "spoofed"
