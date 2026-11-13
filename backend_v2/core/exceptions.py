@@ -43,6 +43,10 @@ class ValidationError(APIError):
     http_status_code = 417
 
 
+class NestedSetRecursionError(ValidationError):
+    pass
+
+
 class PermissionError(APIError):
     http_status_code = 403
     title = "Not Permitted"

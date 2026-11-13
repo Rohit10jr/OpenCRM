@@ -3,7 +3,11 @@ import threading
 import pytest
 from django.db import connections, transaction
 
-from core.exceptions import FilterError
+from core.exceptions import (
+    FilterError,
+    NestedSetRecursionError,
+    api_exception_handler,
+)
 from core.query import fetch_rows
 from tests_support.models import TestTree as TreeNode
 from tests_support.models import TreeItem
@@ -63,7 +67,7 @@ def test_delete_rebuilds_bounds(tree):
     assert bounds("Europe") == (4, 5)
 
 
-def test_a_rootless_cycle_keeps_its_old_bounds_as_backend_does(administrator):
+def test_a_rootless_cycle_keeps_its_old_bounds_when_save_is_bypassed(administrator):
     root = TreeNode(name="Root")
     root.save(user=administrator)
     child = TreeNode(name="Child", parent_node=root)
@@ -80,13 +84,64 @@ def test_a_rootless_cycle_keeps_its_old_bounds_as_backend_does(administrator):
     TreeNode.objects.filter(pk=root.pk).update(lft=201, rgt=202)
     TreeNode.objects.filter(pk=child.pk).update(lft=203, rgt=204)
 
-    # PE-4 records the proposed improvement; parity keeps rootless-cycle bounds stale.
+    # PE-4 prevents this through save(); a direct update can still make the old
+    # rootless cycle, whose bounds the parity rebuild deliberately leaves alone.
     TreeNode.rebuild_tree()
 
     assert bounds("Cycle A") == (101, 102)
     assert bounds("Cycle B") == (103, 104)
     assert bounds("Root") == (1, 4)
     assert bounds("Child") == (2, 3)
+
+
+def assert_loop_error(caught):
+    error = caught.value
+    assert error.message == "Item cannot be added to its own descendants"
+    assert error.exc_type == "NestedSetRecursionError"
+    assert error.http_status_code == 417
+    assert error.title == "Message"
+    response = api_exception_handler(error, {})
+    assert response.status_code == 417
+    assert response.data["message"] == "Item cannot be added to its own descendants"
+    assert response.data["exc_type"] == "NestedSetRecursionError"
+
+
+def test_own_parent_is_refused_with_upstream_error(tree, administrator):
+    _, europe, _, _ = tree
+    europe.parent_node = europe
+
+    with pytest.raises(NestedSetRecursionError) as caught:
+        europe.save(user=administrator)
+
+    assert_loop_error(caught)
+    europe.refresh_from_db()
+    assert europe.parent_node_id == "World"
+
+
+def test_descendant_as_parent_is_refused_with_upstream_error(tree, administrator):
+    _, europe, _, berlin = tree
+    europe.parent_node = berlin
+
+    with pytest.raises(NestedSetRecursionError) as caught:
+        europe.save(user=administrator)
+
+    assert_loop_error(caught)
+    europe.refresh_from_db()
+    assert europe.parent_node_id == "World"
+
+
+def test_sibling_and_ancestor_as_parent_are_accepted(tree, administrator):
+    world, europe, asia, berlin = tree
+    europe.parent_node = asia
+    europe.save(user=administrator)
+    berlin.parent_node = world
+    berlin.save(user=administrator)
+
+    europe.refresh_from_db()
+    berlin.refresh_from_db()
+    assert europe.parent_node_id == "Asia"
+    assert berlin.parent_node_id == "World"
+    assert valid_nested_set()
 
 
 @pytest.mark.parametrize(
@@ -166,3 +221,53 @@ def test_concurrent_inserts_leave_a_valid_nested_set(administrator):
     assert valid_nested_set()
     root.refresh_from_db()
     assert TreeNode.objects.filter(lft__gte=root.lft, rgt__lte=root.rgt).count() == 7
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_reparents_cannot_form_a_loop(administrator):
+    root = TreeNode(name="Root")
+    root.save(user=administrator)
+    left = TreeNode(name="Left", parent_node=root)
+    left.save(user=administrator)
+    right = TreeNode(name="Right", parent_node=root)
+    right.save(user=administrator)
+    barrier = threading.Barrier(2)
+    outcomes = []
+
+    def reparent(name, parent_name):
+        try:
+            node = TreeNode.objects.get(pk=name)
+            barrier.wait(timeout=10)
+            node.parent_node_id = parent_name
+            node.save(user=administrator.pk)
+        except NestedSetRecursionError as exc:
+            outcomes.append(("refused", exc.message, exc.exc_type))
+        except BaseException as exc:  # surfaced in the assertion below
+            outcomes.append(("error", repr(exc)))
+        else:
+            outcomes.append(("saved", name))
+        finally:
+            connections.close_all()
+
+    threads = [
+        threading.Thread(target=reparent, args=("Left", "Right")),
+        threading.Thread(target=reparent, args=("Right", "Left")),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+
+    assert sorted(outcome[0] for outcome in outcomes) == ["refused", "saved"]
+    refused = next(outcome for outcome in outcomes if outcome[0] == "refused")
+    assert refused[1:] == (
+        "Item cannot be added to its own descendants",
+        "NestedSetRecursionError",
+    )
+    left.refresh_from_db()
+    right.refresh_from_db()
+    assert (left.parent_node_id, right.parent_node_id) in {
+        ("Right", "Root"),
+        ("Root", "Left"),
+    }
+    assert valid_nested_set()

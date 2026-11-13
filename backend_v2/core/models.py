@@ -10,12 +10,12 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import validate_email
 from django.db import connection, models, transaction
 from django.db.models import Q, Subquery
-from django.db.models.signals import post_delete, post_save
+from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from django.utils import timezone
 
 from core import naming
-from core.exceptions import InvalidEmailAddressError
+from core.exceptions import InvalidEmailAddressError, NestedSetRecursionError
 from core.translate import _
 
 
@@ -212,12 +212,54 @@ class TreeDocument(BaseDocument):
     def rebuild_tree(cls):
         """Rebuild all bounds under a transaction-scoped lock taken before the read."""
         with transaction.atomic():
-            if connection.vendor == "postgresql":
-                with connection.cursor() as cursor:
-                    cursor.execute(
-                        "SELECT pg_advisory_xact_lock(%s)", [cls._lock_key()]
-                    )
+            cls._acquire_tree_lock()
             cls._rebuild_locked()
+
+    @classmethod
+    def _acquire_tree_lock(cls):
+        if connection.vendor == "postgresql":
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT pg_advisory_xact_lock(%s)", [cls._lock_key()])
+
+    def _validate_parent_loop(self, parent_name):
+        if parent_name == self.pk:
+            raise NestedSetRecursionError(
+                _("Item cannot be added to its own descendants")
+            )
+        parent_bounds = type(self)._default_manager.filter(pk=parent_name).values(
+            "lft", "rgt"
+        ).first()
+        if (
+            parent_bounds is None
+            or parent_bounds["lft"] is None
+            or parent_bounds["rgt"] is None
+        ):
+            return
+        ancestors = type(self)._default_manager.filter(
+            lft__lte=parent_bounds["lft"],
+            rgt__gte=parent_bounds["rgt"],
+        ).values_list("pk", flat=True)
+        if self.pk in ancestors:
+            raise NestedSetRecursionError(
+                _("Item cannot be added to its own descendants")
+            )
+
+    def save(self, *args, user, **kwargs):
+        cls = type(self)
+        parent_attname = cls._parent_attname()
+        with transaction.atomic():
+            cls._acquire_tree_lock()
+            parent_name = getattr(self, parent_attname)
+            old_parent = None
+            if not self._state.adding:
+                old_parent = cls._default_manager.filter(pk=self.pk).values_list(
+                    parent_attname, flat=True
+                ).first()
+            if parent_name and (self._state.adding or parent_name != old_parent):
+                self._validate_parent_loop(parent_name)
+            result = super().save(*args, user=user, **kwargs)
+            cls._rebuild_locked()
+            return result
 
     @classmethod
     def _rebuild_locked(cls):
@@ -280,12 +322,6 @@ def _is_tree_model(sender):
         and issubclass(sender, TreeDocument)
         and not sender._meta.abstract
     )
-
-
-@receiver(post_save, dispatch_uid="core.tree_document.save")
-def _rebuild_tree_after_save(sender, **kwargs):
-    if _is_tree_model(sender):
-        sender.rebuild_tree()
 
 
 @receiver(post_delete, dispatch_uid="core.tree_document.delete")
