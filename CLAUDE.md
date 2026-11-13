@@ -150,14 +150,15 @@ in the background with output to a log, and Claude reads the log. (Owner, 12 Nov
 
 ## Keep shell commands short
 
-The rules are in the global `~/.claude/CLAUDE.md` ("Shell"). Here: commit messages in
-`.git/COMMIT_MSG` (or `tasks/COMMIT_MSG` after a Codex build) and `git commit -F`;
+The rules are in the global `~/.claude/CLAUDE.md` ("Shell"). Here: commit messages in a
+file under `tasks/` and `git commit -F` (in a worktree `.git` is a file, so
+`.git/COMMIT_MSG` does not work);
 scripts in the session scratchpad; PR bodies through `--body-file`.
 
 ## Stack
 
-Django 5.2 LTS (S17) + DRF + SimpleJWT, PostgreSQL 17, Redis, Celery, Django Channels,
-django-treebeard. Python 3.13. `backend/` runs on port 8000 and `backend_v2/` on 8001,
+Django 5.2 LTS (S17) + DRF + SimpleJWT, PostgreSQL 17, Redis, Celery, Django Channels.
+No treebeard: trees keep Frappe's `lft`/`rgt` nested set (owner, 13 Nov 2026). Python 3.13. `backend/` runs on port 8000 and `backend_v2/` on 8001,
 each with its own database, Redis databases, `.env` and virtualenv (S18, REBUILD_PLAN §7).
 
 ---
@@ -176,7 +177,12 @@ not write feature code. Codex's side is `AGENTS.md` "When building".
 - **If a unit's gate fails twice, stop** and report to the owner.
 - **The unit's pull request description is its progress report**; the list of what it
   holds is in `backend_v2/specs/README.md`.
-- Run builds with `network_access=true`, so tests can reach PostgreSQL. Codex leaves its
-  commit message in `tasks/COMMIT_MSG`.
+- Run builds with `network_access=true`, so tests can reach PostgreSQL.
+- **Commits: one concern each, with its own tests, about 250–300 lines at most** (owner,
+  13 Nov 2026). Briefs stay feature-sized; Codex leaves a **commit plan** in
+  `tasks/COMMIT_MSG` — file groups in order, each with its message (`AGENTS.md` "When
+  building"). Review the whole diff first, then commit group by group, staging by path;
+  a file split across groups is staged by patch (`git apply --cached`). Read each subject
+  before committing. One pull request per milestone.
 - Review the diff against `backend/`, not against the spec: the spec and the author can
   share a misunderstanding. For a tier-3 review, point the subagent at `backend/` too.

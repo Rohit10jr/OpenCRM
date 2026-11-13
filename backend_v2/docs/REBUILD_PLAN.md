@@ -37,7 +37,7 @@ nothing it does with the response.
 | Every response body and status code, errors included — `backend_v2/docs/API_CONTRACT.md` | **The URLs**: REST routes under `/api/v1/` replace the RPC-style dotted paths and the generic `/api/resource/` route |
 | **Every input's name and format** — the same parameters, the same filter grammar (S7) | **The HTTP method** says what happens: `GET` reads, `POST` creates or runs an action, `PATCH` updates, `DELETE` deletes |
 | Every protection the old backend enforces — `backend_v2/docs/PORT_MAP.md` | Code layout: ten Django apps instead of `frappe_core` / `frappe_platform` / `crm_app` |
-| The stack: Django, DRF, SimpleJWT, PostgreSQL 17, Redis, Celery, Channels, treebeard, Python 3.13 | One ViewSet per resource with explicit field allowlists, registered on a DRF router |
+| The stack: Django, DRF, SimpleJWT, PostgreSQL 17, Redis, Celery, Channels, Python 3.13 (no treebeard: trees keep Frappe's `lft`/`rgt` nested set, owner 13 Nov 2026) | One ViewSet per resource with explicit field allowlists, registered on a DRF router |
 | The frontend, during this rebuild | Migrations and the test suite start fresh |
 
 ## 3. Decisions
@@ -86,11 +86,10 @@ backend_v2/
 ├── requirements.txt
 ├── .env.example
 ├── config/                 settings/{base,local,test}.py, urls.py, asgi.py, routing.py, celery.py
-├── apps/
-│   ├── core/
-│   ├── accounts/
-│   ├── ...                 one package per app below
-│   └── integrations/
+├── core/                   apps at the top level, imported as `core`, `accounts`, …
+├── accounts/               (owner, 12 Nov 2026; FOUNDATION section 6)
+├── ...                     one package per app below
+├── integrations/
 ├── scripts/                parity tooling
 ├── docs/                   this plan, the contract, the map, as-built, exceptions
 └── specs/                  one spec per unit, and the index
