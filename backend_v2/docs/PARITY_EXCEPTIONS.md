@@ -104,28 +104,29 @@ comparison skips that block.
   caller appears
 - **Recorded by:** FOUNDATION, 13 Nov 2026
 
-### PE-4. A nested-set rebuild gives nodes in a parent cycle fresh bounds
+### PE-4. A parent loop in a tree is refused on save, as upstream refuses it
 
-- **Status:** approved — owner, 13 Nov 2026
-- **Where:** every `TreeDocument` (CRM Sales Hierarchy, CRM Territory) whose parent links
-  form a cycle with no root; the `descendants of` / `ancestors of` filters and the sales
-  hierarchy's row rule read the bounds. No `.http` block found
-- **Old backend:** the rebuild walks from roots only, so nodes in a rootless cycle are
-  never visited and **keep whatever `lft`/`rgt` they had before** — possibly overlapping
-  another subtree's (`backend/crm_app/permissions/tree.py:_rebuild_locked`, `depth >
-  len(nodes)` guard). No validation refuses a cycle on save
-- **backend_v2:** after the walk from roots, every node not yet visited is treated as a
-  root, so each gets fresh, non-overlapping bounds
+- **Status:** approved — owner, 13 Nov 2026 (revised the same day: refuse the loop, as
+  upstream does, instead of repairing the bounds afterwards)
+- **Where:** every `TreeDocument` (CRM Sales Hierarchy, CRM Territory): a create or
+  update that sets a node's parent to the node itself or to one of its descendants. The
+  `descendants of` / `ancestors of` filters and the sales hierarchy's row rule read the
+  bounds such a loop would corrupt. No `.http` block found
+- **Old backend:** accepts the save. The rebuild then walks from roots only, so nodes in
+  a rootless loop are never visited and **keep whatever `lft`/`rgt` they had before** —
+  possibly overlapping another subtree's (`backend/crm_app/permissions/tree.py:
+  _rebuild_locked`, `depth > len(nodes)` guard). The missing check is the owner's
+  finding 95 in `docs/FINDINGS.md` (owner, 13 Nov 2026)
+- **backend_v2:** the save is refused with upstream's answer —
+  `NestedSetRecursionError` (a `ValidationError`, so 417, title `Message`), message
+  **`Item cannot be added to its own descendants`** — when the node is the new parent or
+  an ancestor of it (`frappe/utils/nestedset.py:validate_loop`, version-15 `:234-237`,
+  called on insert at `:78` and on move at `:114`). The rebuild itself stays the old
+  one, so no loop can form and none needs repairing
 - **Why:** `lft`/`rgt` decide which rows a user can see (`tree.py:30-40`), so stale,
-  overlapping bounds after a malformed reparent are a permission defect, not cosmetic.
-  Found in review of FOUNDATION brief 07, where the build had done this unasked; reverted
-  to the old behaviour until this entry is decided
-- **Upstream refuses the loop instead** (owner's note): Frappe's nested set never lets
-  one form — `frappe/utils/nestedset.py:validate_loop` (version-15, `:234-237`) throws
-  `NestedSetRecursionError`, "Item cannot be added to its own descendants", when a node
-  is moved under its own descendant. `backend/` does not port that check. **Refusing the
-  loop on save could be a later exception** — not part of this one, which only makes the
-  rebuild safe when a loop already exists
+  overlapping bounds after a malformed reparent are a permission defect. Refusing the
+  loop is upstream's own behaviour; repairing bounds after the fact (this entry's first
+  version, briefly built in brief 07) would have kept accepting a corrupt hierarchy
 - **Recorded by:** FOUNDATION, 13 Nov 2026
 
 ---

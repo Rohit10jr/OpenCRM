@@ -185,6 +185,7 @@ contract, not style — see the consumers listed at the top of that file.
 | `DuplicateEntryError` | 409 | **Duplicate Name** | Creating a document under a name that is taken: `<DocType> <strong><name></strong> already exists` |
 | `DuplicateEntryError` | 409 | Duplicate | Any other unique constraint — the database message is passed through |
 | `NameError` | 409 | Message | A name containing `<` or `>`, equal to the doctype, or `New <DocType>` |
+| `NestedSetRecursionError` | 417 | Message | A tree node's parent set to itself or one of its descendants: `Item cannot be added to its own descendants` — **PE-4**, not in `backend/` |
 | `RateLimitExceededError` | 429 | Message | `You hit the rate limit because of too many requests. Please try after sometime.` |
 | `ValidationError` | **400** | **Invalid Filter** | Any filter that cannot be applied (section 7) |
 
