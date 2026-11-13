@@ -2,7 +2,7 @@
 
 On this branch the work is **`backend_v2/`**: the same CRM rebuilt as a conventional
 Django **REST API under `/api/v1/`**. Django 5.2 LTS, DRF, SimpleJWT, PostgreSQL 17,
-Redis, Celery, Django Channels, django-treebeard. Python 3.13. Paths are from the
+Redis, Celery, Django Channels. Python 3.13. Paths are from the
 repository root.
 
 | Folder | What it is | Your role |
@@ -90,12 +90,18 @@ rather than building something else.** Claude reviews and commits; the owner mer
   with `backend/` and report each claim that is stale or wrong, with the `backend/` file
   and function that shows it. Change nothing. Finding none is more often a sign of not
   looking than of none being there.
-* **One brief is one commit.** Build exactly what it asks, touching only the files the
-  change needs, and leave the changes in the working tree. Your sandbox cannot write
-  `.git`: never run `git add`, `git commit` or `git push`.
-* **Write the commit message** to `tasks/COMMIT_MSG`, overwriting it. The subject says what
-  changed; the body says **why**, cites the `backend/` `path:line` it matches, and lists
-  the files the commit should contain. No attribution line.
+* **A brief is feature-sized; a commit is one concern.** Build exactly what the brief
+  asks, touching only the files the change needs, and leave the changes in the working
+  tree. Your sandbox cannot write `.git`: never run `git add`, `git commit` or `git push`.
+* **Write a commit plan** to `tasks/COMMIT_MSG`, overwriting it (owner, 13 Nov 2026).
+  Each commit is **one concern with its own tests, about 250–300 lines at most**, code
+  and tests together. The plan lists the groups in order; for each, its files, its line
+  count, and its full message — a Conventional Commit subject (`type(scope): …`), and a
+  body that says **why** and cites the `backend/` `path:line` it matches. Every file is
+  in exactly one group (say so if one must be split, and which lines go where); each
+  group stands alone — after groups 1..k, `manage.py check` is clean and their tests
+  pass. No attribution line. Claude reviews the whole diff, then commits group by group.
+  The format is in `tasks/COMMIT_PLAN_RULES.md`.
 * **Tests:** run the `backend_v2` test files you touched and their neighbours, singly —
   the command is in `backend_v2/docs/AS_BUILT.md` §3 once FOUNDATION writes it, and in
   the brief until then. Not the full suite unless the brief
