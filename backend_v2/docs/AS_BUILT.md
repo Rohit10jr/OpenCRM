@@ -150,8 +150,7 @@ integer name. Declare `DOCTYPE` and `NAME_STRATEGY` as class attributes. The oth
 model declarations are `IS_CHILD_TABLE`, `IS_SINGLE`, `FETCH_FROM`, `EMAIL_FIELDS`, and
 `TEXT_LINK_FIELDS`; the last maps a text column to `(app_label.Model, label)`. A field
 that deliberately keeps a deleted target's name as audit data is also named in
-`ALLOW_DANGLING_LINK_FIELDS`. Later FOUNDATION briefs add the serializer, ViewSet,
-allowlists, router registration and recorded access decision.
+`ALLOW_DANGLING_LINK_FIELDS`.
 
 Creating through Django's ordinary `objects.create()` is intentionally unsupported,
 because it cannot supply the required actor. Use `Model(...).save(user=user)`, or
@@ -210,12 +209,28 @@ carries a token. No view binds a user into ambient state: pass `request.user` to
 service that needs it. Write both slash forms with one explicit `re_path`, using a final
 `/?$`; do not rely on `APPEND_SLASH`, because POST bodies must not be redirected.
 
-Resource actions and their ViewSet base are not built yet.
+For a document resource, subclass `core.views.DocumentViewSet`, set its explicit
+`serializer_class`, and declare `readable_fields`, `filterable_fields`,
+`sortable_fields`, and `searchable_fields` as tuples. The first three govern list
+projection, filters, and both ordering and grouping; an empty tuple permits no fields
+for that operation. Register the class explicitly on the app's
+`core.routers.DocumentRouter` and include the app's URLconf under `/api/v1/`.
+
+The base serves list, create, retrieve, PATCH, and delete with the client-reference
+`{"message": ...}` envelope and status 200, including create. It never serves PUT.
+Every serializer receives `request.user` in its context and every save receives the
+same user explicitly. Create, PATCH, and delete are transactional; delete checks
+declared dynamic links before Django's protected-link check, while the existing
+post-delete hook removes polymorphic child rows.
 
 ### Carrying a document name with slashes in a route
 
-*Not written yet — FOUNDATION.* Names like `R/GA` are legal; how the lookup allows them
-without swallowing an action segment.
+Use `DocumentRouter`, whose document lookup is `.+?` and whose trailing slash is
+optional. It orders collection actions, document actions, and finally the catch-all
+document route. Thus `/organizations/R/GA/` reaches the `R/GA` record while
+`/organizations/R/GA/convert/` can reach a declared `convert` action. A collection
+action wins over a record with exactly the same one-segment name; that record is the
+settled S25 (8) known limit.
 
 ### Declaring field access
 
@@ -251,8 +266,23 @@ test changes group membership in place; `user.refresh_from_db()` clears it autom
 
 ### Writing a row rule
 
-*Not written yet — FOUNDATION.* The list rule, the object rule, and the destination
-re-check for rows that point at another document.
+Override `list_rule(user)` on the resource ViewSet and return a Django `Q`, or `None`
+for no narrowing. `get_queryset()` applies this rule before client filters. Record
+lookup instead starts from the model's default manager and then applies the object rule:
+list and object rules may intentionally differ, so exclusion from a list is not a 404.
+
+Override `has_object_rule(user, document, ptype)` for the record decision, returning
+`True`, `False`, or `None`; `None` means no additional restriction. The base calls it
+with `read`, `write`, `delete`, or `create`. Create receives an unsaved candidate built
+from the payload's plain concrete fields, falling back to an empty instance only when
+construction fails.
+
+For a resource whose plain fields identify a referenced destination, declare those
+names in `reference_fields`. A PATCH changing one copies the current document, applies
+the validated values, and runs the `write` object rule again. Refusal answers
+`Not permitted to move <DocType> there`. Dynamic-link models declare
+`DYNAMIC_LINK_FIELDS` as `(doctype_field, name_field)` pairs so deletion can find them
+without a registry.
 
 ### Raising an error
 
@@ -403,6 +433,13 @@ render decimals as strings padded to the model column's decimal places; list pro
 leave decimals numeric. `_assign`, `_liked_by`, and `_comments` are JSON strings in both
 shapes. Child table input replaces the table wholesale: update writes children before
 the parent save, while create saves parent, children, then parent in one transaction.
+
+Every document list starts from its row-rule-narrowed queryset and its one explicit
+field policy. Record routes look up the name on the default manager: a missing record is
+404, while a found record whose object rule returns `False` is 403. Create permissions
+inspect payload fields, and a declared destination is checked against the post-PATCH
+candidate before writing. A lookup key the model primary key cannot hold is an ordinary
+not-found response.
 
 The old backend's list, which is likely to apply here too, is
 `specs/AS_BUILT.md` section 4 — `lead_owner` is the access column, names may contain
