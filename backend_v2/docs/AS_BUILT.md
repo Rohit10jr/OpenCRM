@@ -84,6 +84,26 @@ database write and remain ciphertext on the instance; `core.secrets` retains the
 prefix, pass-through migration behavior, key failures and changed-key wording. The
 authentication routes above are the only application API routes built so far.
 
+`core.filters` and `core.query` now supply the one registry-free list-query layer used
+by later resources. It accepts Frappe's filter shapes and operators, recursively resolves
+`@me` from the explicitly supplied user, validates all field-naming parameters against
+model field access and optional ViewSet allowlists, and projects `.values()` rows with
+the three underscore caches converted back to JSON strings. Callers provide an already
+row-rule-narrowed queryset; these functions never start from a model manager.
+
+`core.filter_backends.FilterBackend` adapts that layer to DRF and records the
+validated projection on the ViewSet for brief 08. `core.pagination.LimitStartPagination`
+uses `limit_start` and `limit_page_length`, caps positive lengths at 500, treats zero as
+unlimited, and returns a bare list for the envelope renderer.
+
+`core.models.TreeDocument` is the abstract Frappe nested-set base. Concrete trees declare
+their parent foreign-key name, inherit indexed `lft`/`rgt`, rebuild all bounds after each
+save or delete with siblings ordered by name, and serialize rebuilds with a
+per-model PostgreSQL transaction advisory lock taken before reading nodes. Its
+`tree_q()` classmethod is the only contract the five tree-filter operators use.
+`tests_support.TestTree` and `TreeItem` exercise that generic contract only under test
+settings.
+
 ## 2. Recipes
 
 These are the sections FOUNDATION must write, because every later unit follows them.
@@ -156,8 +176,16 @@ Declare stored credentials with `core.fields.EncryptedCharField` or
 `FIELD_ENCRYPTION_KEY`; a missing key refuses the write. Read plaintext explicitly with
 `document.get_password("fieldname")`. `core.field_access.encrypted_fields(model)` derives
 the encrypted names from field types for the credential guard—there is no second list to
-maintain. ViewSet allowlists for fields shown, filtered, sorted and searched arrive in
-brief 08 and may narrow these declarations, never widen them.
+maintain.
+
+Each resource ViewSet declares `selectable_fields`, `filterable_fields`, and
+`sortable_fields` as explicit tuples; brief 08 supplies the resource-specific values and
+adds `searchable_fields`. The first three are passed to `FilterBackend` and the
+plain query functions. `sortable_fields` also governs `group_by`. Omitting an allowlist
+means every non-hidden concrete field is available to the corresponding operation;
+supplying one only narrows access and never widens model field access. A real column
+outside an allowlist receives the same refusal as a hidden field, so the response does
+not disclose that it exists.
 
 `User.get_roles()` memoises on that instance. Call `user.clear_roles_cache()` after a
 test changes group membership in place; `user.refresh_from_db()` clears it automatically.
@@ -291,6 +319,13 @@ which skips `User.save()` and therefore skips disabled-user token revocation.
 The attribute of an encrypted field is ciphertext after save and after load. Code that
 needs the credential must call `get_password()`; direct attribute access is deliberately
 not useful.
+
+List-query callers apply the row rule first and pass that base queryset to
+`build_list_queryset()`, `fetch_rows()`, or `count_rows()`; client filters can only
+narrow it. Hidden fields are refused, not dropped, in all five field-naming parameters:
+`fields`, `filters`, `or_filters`, `order_by`, and `group_by`. A list row comes from
+`.values()`, so a decimal remains numeric for DRF's JSON encoder, while `_assign`,
+`_liked_by`, and `_comments` are JSON strings on the wire.
 
 The old backend's list, which is likely to apply here too, is
 `specs/AS_BUILT.md` section 4 — `lead_owner` is the access column, names may contain
