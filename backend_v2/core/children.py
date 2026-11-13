@@ -1,0 +1,234 @@
+"""Declared child tables, read inline and replaced wholesale on write."""
+
+from __future__ import annotations
+
+import contextvars
+from collections import Counter
+
+from django.apps import apps
+from django.db import models, transaction
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
+from django.utils.translation import gettext as _
+
+from core.doctypes import doctype_of, is_child_table
+from core.exceptions import LinkValidationError, MandatoryError
+
+
+def _model(label: str):
+    try:
+        model = apps.get_model(label)
+    except (LookupError, ValueError):
+        model = None
+    if model is None:
+        raise TypeError(_("Unknown child model {0}").format(label))
+    if not is_child_table(model):
+        raise TypeError(_("{0} is not declared as a child table").format(label))
+    return model
+
+
+def child_table_specs(parent_model, declared: dict[str, str] | None = None) -> dict:
+    """Resolve the serializer's FK children and the model's polymorphic children."""
+    specs = {}
+    for fieldname, label in (declared or {}).items():
+        child_model = _model(label)
+        links = [
+            field
+            for field in child_model._meta.get_fields()
+            if isinstance(field, models.ForeignKey)
+            and field.related_model is parent_model
+        ]
+        if len(links) != 1:
+            raise TypeError(
+                _("Child table {0} must have exactly one link to {1}").format(
+                    label, parent_model._meta.label
+                )
+            )
+        specs[fieldname] = {
+            "model": child_model,
+            "fk": links[0].name,
+            "polymorphic": False,
+        }
+
+    polymorphic = getattr(parent_model, "POLYMORPHIC_CHILD_TABLES", {}) or {}
+    for fieldname, label in polymorphic.items():
+        specs[fieldname] = {
+            "model": _model(label),
+            "fk": None,
+            "polymorphic": True,
+        }
+
+    counts = Counter(spec["model"] for spec in specs.values())
+    for fieldname, spec in specs.items():
+        if counts[spec["model"]] > 1:
+            spec["distinguish_parentfield"] = True
+            spec["fieldname"] = fieldname
+    return specs
+
+
+def read_children(instance, spec: dict) -> list:
+    if spec["polymorphic"]:
+        filters = {
+            "parent": str(instance.pk),
+            "parenttype": doctype_of(type(instance)),
+        }
+        if spec.get("distinguish_parentfield"):
+            filters["parentfield"] = spec["fieldname"]
+    else:
+        filters = {spec["fk"]: instance}
+    return list(spec["model"]._default_manager.filter(**filters).order_by("idx"))
+
+
+_STAMPS = frozenset(
+    {
+        "name",
+        "owner",
+        "modified_by",
+        "creation",
+        "modified",
+        "idx",
+        "docstatus",
+        "_assign",
+        "_liked_by",
+        "_comments",
+        "_user_tags",
+        "parent",
+        "parenttype",
+        "parentfield",
+    }
+)
+
+
+def _label(field) -> str:
+    label = str(field.verbose_name)
+    return label.title() if label == field.name.replace("_", " ") else label
+
+
+def _is_mandatory(field) -> bool:
+    return not (
+        field.name in _STAMPS
+        or field.primary_key
+        or not field.editable
+        or field.null
+        or field.blank
+        or field.has_default()
+    )
+
+
+def _is_link(field) -> bool:
+    return field.is_relation and (field.many_to_one or field.one_to_one)
+
+
+def prepare_rows(
+    child_model, rows: list[dict], *, fieldname: str, parent_field: str | None = None
+) -> list[dict]:
+    """Validate links and mandatory values, then return model-ready row payloads."""
+    fields = [
+        field
+        for field in child_model._meta.get_fields()
+        if getattr(field, "concrete", False)
+    ]
+    accepted = {field.name for field in fields} | {field.attname for field in fields}
+    missing_links = []
+    missing_values = []
+    payloads = []
+
+    for index, row in enumerate(rows or [], start=1):
+        payload = {
+            key: value
+            for key, value in (row or {}).items()
+            if key in accepted and key != "name"
+        }
+        if parent_field:
+            payload.pop(parent_field, None)
+            payload.pop(f"{parent_field}_id", None)
+
+        for field in fields:
+            if not _is_link(field) or field.name not in payload:
+                continue
+            value = payload.pop(field.name)
+            if value is None or value == "":
+                payload[field.attname] = None
+            elif hasattr(value, "pk"):
+                payload[field.attname] = value.pk
+            elif field.related_model._default_manager.filter(pk=value).exists():
+                payload[field.attname] = value
+            else:
+                missing_links.append(
+                    _("Row #{0}: {1}: {2}").format(index, _label(field), value)
+                )
+
+        for field in fields:
+            if field.name == parent_field or not _is_mandatory(field):
+                continue
+            value = payload.get(field.attname if _is_link(field) else field.name)
+            if value is None or value == "":
+                missing_values.append(
+                    _(
+                        "Error: <strong>{0}</strong> Row #{1}: "
+                        "Value missing for: {2}"
+                    ).format(doctype_of(child_model), index, _label(field))
+                )
+        payload["idx"] = index
+        payload.setdefault("parentfield", fieldname)
+        payloads.append(payload)
+
+    if missing_links:
+        raise LinkValidationError(
+            _("Could not find {0}").format(", ".join(missing_links))
+        )
+    if missing_values:
+        raise MandatoryError(messages=missing_values)
+    return payloads
+
+
+_REPLACING = contextvars.ContextVar("core.children.replacing", default=False)
+
+
+def replacing_children() -> bool:
+    return _REPLACING.get()
+
+
+@transaction.atomic
+def replace_children(
+    instance, fieldname: str, spec: dict, rows: list[dict], *, user
+) -> None:
+    child_model = spec["model"]
+    parent_doctype = doctype_of(type(instance))
+    if spec["polymorphic"]:
+        base_filter = {"parent": str(instance.pk), "parenttype": parent_doctype}
+    else:
+        base_filter = {spec["fk"]: instance}
+    if spec.get("distinguish_parentfield"):
+        base_filter["parentfield"] = fieldname
+
+    payloads = prepare_rows(
+        child_model, rows, fieldname=fieldname, parent_field=spec["fk"]
+    )
+    token = _REPLACING.set(True)
+    try:
+        child_model._default_manager.filter(**base_filter).delete()
+        for payload in payloads:
+            payload.update(base_filter)
+            payload.setdefault("parenttype", parent_doctype)
+            row = child_model(**payload)
+            row.save(user=user)
+    finally:
+        _REPLACING.reset(token)
+
+
+def delete_polymorphic_children(instance) -> int:
+    removed = 0
+    declarations = getattr(type(instance), "POLYMORPHIC_CHILD_TABLES", {}) or {}
+    for child_model in {_model(label) for label in declarations.values()}:
+        count, _ = child_model._default_manager.filter(
+            parent=str(instance.pk), parenttype=doctype_of(type(instance))
+        ).delete()
+        removed += count
+    return removed
+
+
+@receiver(post_delete, dispatch_uid="core.children.polymorphic_cascade")
+def _delete_polymorphic_children(sender, instance, **kwargs):
+    if getattr(sender, "POLYMORPHIC_CHILD_TABLES", None):
+        delete_polymorphic_children(instance)
