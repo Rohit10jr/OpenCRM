@@ -59,7 +59,7 @@ def test_settings_read_backend_v2_env_only():
 
 def test_drf_uses_json_renderer_only():
     assert settings.REST_FRAMEWORK["DEFAULT_RENDERER_CLASSES"] == (
-        "core.renderers.FrappeEnvelopeRenderer",
+        "core.renderers.EnvelopeRenderer",
     )
 
 

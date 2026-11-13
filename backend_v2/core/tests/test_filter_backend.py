@@ -40,7 +40,7 @@ def test_filter_backend_passes_user_filters_and_view_allowlists(alice):
         ("limit_page_length=501", list(range(25))),
     ],
 )
-def test_paginator_uses_frappe_parameters(alice, query, expected):
+def test_paginator_uses_legacy_parameters(alice, query, expected):
     paginator = LimitStartPagination()
     assert paginator.paginate_queryset(range(25), request_for(alice, query)) == expected
 

@@ -17,7 +17,7 @@ from core.exceptions import (
     AuthenticationError,
     DoesNotExistError,
     DuplicateEntryError,
-    FrappeError,
+    APIError,
     InvalidEmailAddressError,
     LinkExistsError,
     LinkValidationError,
@@ -27,45 +27,45 @@ from core.exceptions import (
     SecurityException,
     ValidationError,
     build_error_body,
-    frappe_exception_handler,
+    api_exception_handler,
     throw,
 )
-from core.exceptions import NameError as FrappeNameError
-from core.exceptions import PermissionError as FrappePermissionError
+from core.exceptions import NameError as DocumentNameError
+from core.exceptions import PermissionError as APIPermissionError
 from core.inputs import bind_arguments
-from core.renderers import WithResponseKeys
-from core.views import FrappeAPIView
+from core.renderers import EnvelopeRenderer, WithResponseKeys
+from core.views import BaseAPIView
 
 handler404 = config_urls.handler404
 
 
-class OpenEchoView(FrappeAPIView):
+class OpenEchoView(BaseAPIView):
     permission_classes = (AllowAny,)
 
     def post(self, request):
         return Response(self.get_inputs(request))
 
 
-class OpenPostOnlyView(FrappeAPIView):
+class OpenPostOnlyView(BaseAPIView):
     permission_classes = (AllowAny,)
 
     def post(self, request):
         return Response("ok")
 
 
-class ProtectedView(FrappeAPIView):
+class ProtectedView(BaseAPIView):
     def get(self, request):
         return Response("secret")
 
 
-class ThrowingView(FrappeAPIView):
+class ThrowingView(BaseAPIView):
     permission_classes = (AllowAny,)
 
     def get(self, request):
         throw("Organization is required to convert a Lead to a Deal")
 
 
-class SiblingsView(FrappeAPIView):
+class SiblingsView(BaseAPIView):
     permission_classes = (AllowAny,)
 
     def get(self, request):
@@ -76,6 +76,10 @@ class SiblingsView(FrappeAPIView):
                 user_settings={"compact": True},
             )
         )
+
+
+class CustomAPIError(APIError):
+    pass
 
 
 urlpatterns = [
@@ -196,7 +200,7 @@ def test_disallowed_method_is_405_with_allow_header(api):
 @pytest.mark.parametrize("debug", [True, False])
 @pytest.mark.parametrize("url", ["/api/v1/no-such-route/", "/no-such-route/"])
 @pytest.mark.parametrize("method", ["get", "post", "patch", "delete"])
-def test_unknown_url_is_frappe_404_everywhere(settings, debug, url, method):
+def test_unknown_url_uses_the_legacy_404_body_everywhere(settings, debug, url, method):
     settings.DEBUG = debug
     client = Client(enforce_csrf_checks=True)
     response = getattr(client, method)(url)
@@ -235,16 +239,14 @@ def test_server_messages_is_double_encoded():
     assert json.loads(outer[0]) == {"message": "first", "title": "Message"}
 
 
-def test_exception_string_matches_frappes_format():
+def test_exception_string_matches_the_legacy_format():
     body = build_error_body("DoesNotExistError", ["not found"])
     assert body["exception"] == "frappe.exceptions.DoesNotExistError: not found"
 
 
 def test_error_body_is_not_wrapped_by_the_renderer(api):
-    response = frappe_exception_handler(DoesNotExistError("missing"), {})
-    response.accepted_renderer = __import__(
-        "core.renderers", fromlist=["FrappeEnvelopeRenderer"]
-    ).FrappeEnvelopeRenderer()
+    response = api_exception_handler(DoesNotExistError("missing"), {})
+    response.accepted_renderer = EnvelopeRenderer()
     response.accepted_media_type = "application/json"
     response.renderer_context = {}
 
@@ -256,8 +258,9 @@ def test_error_body_is_not_wrapped_by_the_renderer(api):
 @pytest.mark.parametrize(
     "exception_class,status_code,exc_type,title",
     [
+        (CustomAPIError, 417, "CustomAPIError", "Message"),
         (ValidationError, 417, "ValidationError", "Message"),
-        (FrappePermissionError, 403, "PermissionError", "Not Permitted"),
+        (APIPermissionError, 403, "PermissionError", "Not Permitted"),
         (DoesNotExistError, 404, "DoesNotExistError", "Not Found"),
         (MandatoryError, 417, "MandatoryError", "Message"),
         (InvalidEmailAddressError, 417, "InvalidEmailAddressError", "Message"),
@@ -265,19 +268,22 @@ def test_error_body_is_not_wrapped_by_the_renderer(api):
         (LinkValidationError, 417, "LinkValidationError", "Message"),
         (AuthenticationError, 401, "AuthenticationError", "Message"),
         (DuplicateEntryError, 409, "DuplicateEntryError", "Message"),
-        (FrappeNameError, 409, "NameError", "Message"),
+        (DocumentNameError, 409, "NameError", "Message"),
         (LinkExistsError, 417, "LinkExistsError", "Message"),
         (RateLimitExceededError, 429, "RateLimitExceededError", "Message"),
         (SecurityException, 403, "SecurityException", "Message"),
     ],
 )
-def test_status_codes_match_frappe(
+def test_api_errors_keep_status_and_wire_names(
     exception_class, status_code, exc_type, title
 ):
     error = exception_class("x")
     assert error.http_status_code == status_code
     assert error.exc_type == exc_type
     assert error.title == title
+    response = api_exception_handler(error, {})
+    assert response.data["exc_type"] == exc_type
+    assert response.data["exception"] == f"frappe.exceptions.{exc_type}: x"
 
 
 def test_throw_preserves_the_message_verbatim():
@@ -305,7 +311,7 @@ def test_validation_errors_from_a_serializer_are_flattened():
             "non_field_errors": ["Combination is invalid."],
         }
     )
-    response = frappe_exception_handler(error, {})
+    response = api_exception_handler(error, {})
 
     assert response.status_code == 417
     assert response.data["exc_type"] == "ValidationError"
@@ -322,7 +328,7 @@ def test_empty_message_list_never_reaches_the_client():
 
 
 def test_drf_response_headers_survive_the_envelope():
-    response = frappe_exception_handler(drf_exceptions.Throttled(wait=7), {})
+    response = api_exception_handler(drf_exceptions.Throttled(wait=7), {})
 
     assert response.status_code == 429
     assert response["Retry-After"] == "7"
@@ -338,7 +344,7 @@ def test_protected_error_is_mapped_before_integrity_error():
         {source},
     )
 
-    response = frappe_exception_handler(refusal, {})
+    response = api_exception_handler(refusal, {})
 
     assert response.status_code == 417
     assert response.data["exc_type"] == "LinkExistsError"
@@ -362,9 +368,9 @@ def test_doctype_metadata_uses_class_attributes_with_settled_defaults():
     assert is_child_table(ChildModel)
 
 
-def test_frappe_error_keeps_multiple_messages_and_first_scalar():
-    error = FrappeError("first", messages=["first", "second"])
-    response = frappe_exception_handler(error, {})
+def test_api_error_keeps_multiple_messages_and_first_scalar():
+    error = APIError("first", messages=["first", "second"])
+    response = api_exception_handler(error, {})
 
     assert response.data["message"] == "first"
     assert response.data["messages"] == ["first", "second"]

@@ -5,10 +5,10 @@ from rest_framework.response import Response
 
 from accounts import services
 from core.security import resolve_ip
-from core.views import FrappeAPIView
+from core.views import BaseAPIView
 
 
-class LoginView(FrappeAPIView):
+class LoginView(BaseAPIView):
     permission_classes = (AllowAny,)
 
     def post(self, request):
@@ -18,7 +18,7 @@ class LoginView(FrappeAPIView):
         return Response(services.login(username, password, resolve_ip(request)))
 
 
-class RefreshTokenView(FrappeAPIView):
+class RefreshTokenView(BaseAPIView):
     permission_classes = (AllowAny,)
 
     def post(self, request):
@@ -27,13 +27,13 @@ class RefreshTokenView(FrappeAPIView):
         return Response(services.refresh_token(token))
 
 
-class LogoutView(FrappeAPIView):
+class LogoutView(BaseAPIView):
     def post(self, request):
         inputs = self.get_inputs(request)
         token = inputs.get("refresh") or inputs.get("refresh_token") or ""
         return Response(services.logout(token))
 
 
-class LoggedUserView(FrappeAPIView):
+class LoggedUserView(BaseAPIView):
     def get(self, request):
         return Response(request.user.name)

@@ -4,7 +4,7 @@ from django.db.models.deletion import ProtectedError
 from core.exceptions import (
     InvalidEmailAddressError,
     LinkValidationError,
-    frappe_exception_handler,
+    api_exception_handler,
     link_exists_error,
 )
 from tests_support.models import (
@@ -114,7 +114,7 @@ def test_protected_delete_becomes_link_exists_error(administrator):
         f"Cannot delete or cancel because Foundation Widget {widget.name} "
         f"is linked with Foundation Pointing {pointer.name}"
     )
-    response = frappe_exception_handler(caught.value, {})
+    response = api_exception_handler(caught.value, {})
     assert response.status_code == 417
     assert response.data["exc_type"] == "LinkExistsError"
     assert response.data["message"] == error.message

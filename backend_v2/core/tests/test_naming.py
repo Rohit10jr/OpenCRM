@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import pytest
 from django.db import IntegrityError, transaction
 
-from core.exceptions import NameError as FrappeNameError
+from core.exceptions import NameError as DocumentNameError
 from core.exceptions import ValidationError
 from core.models import NamingSeriesCounter
 from core.naming import NamingSeries, append_number_if_name_exists, validate_name
@@ -120,13 +120,13 @@ def test_data_import_timestamp(administrator):
 
 @pytest.mark.parametrize("name", ["<script>", "a>b"])
 def test_angle_brackets_are_rejected(name):
-    with pytest.raises(FrappeNameError) as caught:
+    with pytest.raises(DocumentNameError) as caught:
         validate_name("Widget", name)
     assert str(caught.value) == "Name cannot contain special characters like '<', '>'"
 
 
 def test_new_doctype_marker_is_rejected():
-    with pytest.raises(FrappeNameError) as caught:
+    with pytest.raises(DocumentNameError) as caught:
         validate_name("Widget", "New Widget 1")
     assert str(caught.value) == (
         "There were some errors setting the name, please contact the administrator"
@@ -134,7 +134,7 @@ def test_new_doctype_marker_is_rejected():
 
 
 def test_doctype_name_is_rejected_except_for_singletons():
-    with pytest.raises(FrappeNameError, match="Name of Widget cannot be Widget"):
+    with pytest.raises(DocumentNameError, match="Name of Widget cannot be Widget"):
         validate_name("Widget", "Widget")
     assert validate_name("Widget", "Widget", is_single=True) == "Widget"
 

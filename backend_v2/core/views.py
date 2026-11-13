@@ -12,7 +12,7 @@ from core.renderers import Envelope, WithResponseKeys
 
 
 @csrf_exempt
-def frappe_not_found(request, *args, **kwargs):
+def not_found(request, *args, **kwargs):
     """Return the settled Frappe body for a URL with no route."""
 
     return JsonResponse(
@@ -25,7 +25,7 @@ def frappe_not_found(request, *args, **kwargs):
     )
 
 
-class FrappeAPIView(APIView):
+class BaseAPIView(APIView):
     """Use Frappe inputs and the method-path ``message`` success envelope."""
 
     envelope_key = "message"
