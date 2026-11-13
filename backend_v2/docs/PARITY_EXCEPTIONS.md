@@ -106,7 +106,7 @@ comparison skips that block.
 
 ### PE-4. A nested-set rebuild gives nodes in a parent cycle fresh bounds
 
-- **Status:** proposed
+- **Status:** approved — owner, 13 Nov 2026
 - **Where:** every `TreeDocument` (CRM Sales Hierarchy, CRM Territory) whose parent links
   form a cycle with no root; the `descendants of` / `ancestors of` filters and the sales
   hierarchy's row rule read the bounds. No `.http` block found
@@ -120,6 +120,12 @@ comparison skips that block.
   overlapping bounds after a malformed reparent are a permission defect, not cosmetic.
   Found in review of FOUNDATION brief 07, where the build had done this unasked; reverted
   to the old behaviour until this entry is decided
+- **Upstream refuses the loop instead** (owner's note): Frappe's nested set never lets
+  one form — `frappe/utils/nestedset.py:validate_loop` (version-15, `:234-237`) throws
+  `NestedSetRecursionError`, "Item cannot be added to its own descendants", when a node
+  is moved under its own descendant. `backend/` does not port that check. **Refusing the
+  loop on save could be a later exception** — not part of this one, which only makes the
+  rebuild safe when a loop already exists
 - **Recorded by:** FOUNDATION, 13 Nov 2026
 
 ---
