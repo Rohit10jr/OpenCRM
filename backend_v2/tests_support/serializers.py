@@ -2,6 +2,7 @@
 
 from core.serializers import DocumentSerializer
 from tests_support.models import (
+    AutoIncrementDocumentFixture,
     FieldDocument,
     PromptDocument,
     SecuredDocument,
@@ -80,4 +81,10 @@ class FieldDocumentSerializer(DocumentSerializer):
 class PromptDocumentSerializer(DocumentSerializer):
     class Meta:
         model = PromptDocument
+        fields = (*STANDARD_FIELDS, "label")
+
+
+class AutoIncrementDocumentSerializer(DocumentSerializer):
+    class Meta:
+        model = AutoIncrementDocumentFixture
         fields = (*STANDARD_FIELDS, "label")

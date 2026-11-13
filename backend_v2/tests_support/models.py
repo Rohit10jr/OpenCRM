@@ -170,3 +170,11 @@ class TreeItem(BaseDocument):
         blank=True,
     )
     label = models.CharField(max_length=140, blank=True, default="")
+
+
+class DynamicReference(BaseDocument):
+    DOCTYPE = "Foundation Dynamic Reference"
+    NAME_STRATEGY = Hash()
+    DYNAMIC_LINK_FIELDS = (("reference_doctype", "reference_name"),)
+    reference_doctype = models.CharField(max_length=140)
+    reference_name = models.CharField(max_length=140)

@@ -4,6 +4,7 @@ from .base import *  # noqa: F401,F403
 from .base import INSTALLED_APPS
 
 INSTALLED_APPS = [*INSTALLED_APPS, "tests_support"]
+ROOT_URLCONF = "config.test_urls"
 
 DEBUG = False
 

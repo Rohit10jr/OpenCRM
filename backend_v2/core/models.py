@@ -70,6 +70,7 @@ class BaseDocument(models.Model):
     TEXT_LINK_FIELDS = {}
     ALLOW_DANGLING_LINK_FIELDS = ()
     POLYMORPHIC_CHILD_TABLES = {}
+    DYNAMIC_LINK_FIELDS = ()
 
     name = models.CharField(max_length=140, primary_key=True, editable=False)
     owner = models.ForeignKey(
