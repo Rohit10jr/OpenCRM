@@ -3,6 +3,8 @@ import threading
 import pytest
 from django.db import connections, transaction
 
+from core.exceptions import FilterError
+from core.query import fetch_rows
 from tests_support.models import TestTree as TreeNode
 from tests_support.models import TreeItem
 
@@ -86,6 +88,43 @@ def test_a_rootless_cycle_keeps_its_old_bounds_as_backend_does(administrator):
     assert bounds("Root") == (1, 4)
     assert bounds("Child") == (2, 3)
 
+
+@pytest.mark.parametrize(
+    "operator,value,expected",
+    [
+        ("descendants of", "World", ["asia", "berlin", "europe"]),
+        ("descendants of (inclusive)", "Europe", ["berlin", "europe"]),
+        ("not descendants of (inclusive)", "Europe", ["asia", "world"]),
+        ("ancestors of", "Berlin", ["europe", "world"]),
+        ("not ancestors of (inclusive)", "Berlin", ["asia"]),
+    ],
+)
+def test_tree_operators(tree, administrator, operator, value, expected):
+    rows = fetch_rows(
+        TreeItem.objects.all(),
+        user=administrator,
+        fields=["label"],
+        filters={"tree": [operator, value]},
+        limit_page_length=0,
+    )
+    assert labels(rows) == expected
+
+
+def test_missing_tree_node_matches_nothing(tree, administrator):
+    rows = fetch_rows(
+        TreeItem.objects.all(), user=administrator, fields=["label"],
+        filters={"tree": ["descendants of", "Missing"]},
+    )
+    assert rows == []
+
+
+@pytest.mark.parametrize("field", ["widget", "label"])
+def test_tree_operator_refuses_non_tree_relation_and_plain_column(administrator, field):
+    with pytest.raises(FilterError, match=rf"'{field}' is not a tree field"):
+        fetch_rows(
+            TreeItem.objects.all(), user=administrator, fields=["label"],
+            filters={field: ["descendants of", "x"]},
+        )
 
 
 def valid_nested_set():
