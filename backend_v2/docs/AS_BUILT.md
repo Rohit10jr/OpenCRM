@@ -1,6 +1,6 @@
 # As built — what `backend_v2` actually contains
 
-**Status: FOUNDATION skeleton, account identity, and authentication built (2026-11-13).**
+**Status: FOUNDATION through document serializers and child tables built (2026-11-13).**
 
 This file describes the code that exists, not the code that is planned. **Where it and a
 spec disagree, this file wins**: specs are written before the code and go stale; this
@@ -104,6 +104,21 @@ per-model PostgreSQL transaction advisory lock taken before reading nodes. Its
 `tests_support.TestTree` and `TreeItem` exercise that generic contract only under test
 settings.
 
+`core.serializers.DocumentSerializer` is the base for document resources. It keeps each
+subclass's explicit `Meta.fields`, applies model field-access declarations, requires the
+caller in `context["user"]`, and accepts `save(user=...)` only for that same caller. It
+adds `doctype`, renders the three JSON caches as strings, preserves DRF's padded decimal
+strings, maps text `null` to `""`, and translates duplicate field-value and prompt names
+to the old `DuplicateEntryError` sentence. A sensitive field accidentally included in
+`Meta.fields` is silently excluded rather than made readable.
+
+`core.children` implements declared inline child tables. A real-FK table is declared on
+its parent serializer; a polymorphic table is declared on the parent model so the same
+metadata drives serialization and the post-delete cascade. Writes validate links and
+mandatory values, replace the named table wholesale, assign `idx` from list order, and
+save every row with the explicit caller. Update writes rows before the parent; create
+saves the parent, writes rows, refreshes it, and saves it again, all atomically.
+
 ## 2. Recipes
 
 These are the sections FOUNDATION must write, because every later unit follows them.
@@ -127,6 +142,32 @@ because it cannot supply the required actor. Use `Model(...).save(user=user)`, o
 `accounts.roles.ADMINISTRATOR`; an enqueued job passes the user who enqueued it.
 Passing `None` or an empty string raises `TypeError` with
 `` `user` is required to save a document ``.
+
+Write one `DocumentSerializer` subclass with an explicit `Meta.fields` tuple. Include
+every standard or resource field that may appear; the base never adds parent fields.
+Sensitive fields are still silently excluded if listed, standard/model read-only fields
+are input-ignored, and restricted fields are removed per `context["user"]`. The ViewSet
+passes `request.user` in that context and calls `serializer.save(user=request.user)`.
+Using the serializer without the context user is a `TypeError`.
+
+For a single-parent child, put its virtual field in `Meta.fields` and declare the child
+model label on the serializer:
+
+```python
+class WidgetSerializer(DocumentSerializer):
+    CHILD_TABLES = {"items": "widgets.WidgetItem"}
+
+    class Meta:
+        model = Widget
+        fields = (*STANDARD_FIELDS, "title", "items")
+```
+
+The child model must have exactly one foreign key to that parent. For a child doctype
+shared by multiple parent types, declare the string parent columns on the child and put
+`POLYMORPHIC_CHILD_TABLES = {"items": "widgets.WidgetItem"}` on each parent model;
+again name `items` in the serializer's fields. Declaring a child field opts into that
+child row's full concrete document shape. If the same child model is declared under two
+field names, `parentfield` distinguishes them. Neither kind receives its own route.
 
 ### Adding an action or an endpoint
 
@@ -326,6 +367,12 @@ narrow it. Hidden fields are refused, not dropped, in all five field-naming para
 `fields`, `filters`, `or_filters`, `order_by`, and `group_by`. A list row comes from
 `.values()`, so a decimal remains numeric for DRF's JSON encoder, while `_assign`,
 `_liked_by`, and `_comments` are JSON strings on the wire.
+
+A serialized document and every inline child row carry `doctype`. Document serializers
+render decimals as strings padded to the model column's decimal places; list projections
+leave decimals numeric. `_assign`, `_liked_by`, and `_comments` are JSON strings in both
+shapes. Child table input replaces the table wholesale: update writes children before
+the parent save, while create saves parent, children, then parent in one transaction.
 
 The old backend's list, which is likely to apply here too, is
 `specs/AS_BUILT.md` section 4 — `lead_owner` is the access column, names may contain
