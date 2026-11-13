@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -63,4 +64,6 @@ def test_drf_uses_json_renderer_only():
 
 
 def test_test_database_has_its_own_explicit_name():
-    assert settings.DATABASES["default"]["TEST"]["NAME"] == "test_opencrm_v2"
+    assert re.fullmatch(
+        r"test_opencrm_v2(?:_gw\d+)?", settings.DATABASES["default"]["TEST"]["NAME"]
+    )
