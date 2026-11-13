@@ -115,8 +115,8 @@ comparison skips that block.
 - **Old backend:** accepts the save. The rebuild then walks from roots only, so nodes in
   a rootless loop are never visited and **keep whatever `lft`/`rgt` they had before** —
   possibly overlapping another subtree's (`backend/crm_app/permissions/tree.py:
-  _rebuild_locked`, `depth > len(nodes)` guard). The missing check is the owner's
-  finding 95 in `docs/FINDINGS.md` (owner, 13 Nov 2026)
+  _rebuild_locked`, `depth > len(nodes)` guard). The missing check is finding 95
+  (`docs/FINDINGS.md`, branch `docs/finding-tree-loop`; not yet merged to main)
 - **backend_v2:** the save is refused with upstream's answer —
   `NestedSetRecursionError` (a `ValidationError`, so 417, title `Message`), message
   **`Item cannot be added to its own descendants`** — when the node is the new parent or
