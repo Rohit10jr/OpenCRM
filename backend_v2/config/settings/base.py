@@ -1,5 +1,6 @@
 """Base settings shared by every backend_v2 environment."""
 
+from datetime import timedelta
 from pathlib import Path
 
 import environ
@@ -26,6 +27,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "core",
     "accounts",
@@ -97,10 +99,33 @@ AUTH_USER_MODEL = "accounts.User"
 
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ("core.renderers.FrappeEnvelopeRenderer",),
-    "DEFAULT_AUTHENTICATION_CLASSES": (),
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "accounts.authentication.VersionedJWTAuthentication",
+    ),
     "DEFAULT_PERMISSION_CLASSES": ("core.permissions.IsAuthenticated",),
+    "UNAUTHENTICATED_USER": None,
     "EXCEPTION_HANDLER": "core.exceptions.frappe_exception_handler",
 }
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(
+        minutes=env.int("JWT_ACCESS_TOKEN_LIFETIME_MINUTES", default=5)
+    ),
+    "REFRESH_TOKEN_LIFETIME": timedelta(
+        days=env.int("JWT_REFRESH_TOKEN_LIFETIME_DAYS", default=7)
+    ),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "USER_ID_FIELD": "name",
+    "USER_ID_CLAIM": "user_id",
+}
+
+TRUSTED_PROXY_COUNT = env.int("TRUSTED_PROXY_COUNT", default=0)
+LOGIN_MAX_CONSECUTIVE_ATTEMPTS = env.int(
+    "LOGIN_MAX_CONSECUTIVE_ATTEMPTS", default=10
+)
+LOGIN_LOCK_INTERVAL_SECONDS = env.int("LOGIN_LOCK_INTERVAL_SECONDS", default=60)
 
 FRONTEND_ORIGIN = env("FRONTEND_ORIGIN", default="http://localhost:8080")
 CORS_ALLOWED_ORIGINS = [FRONTEND_ORIGIN]
