@@ -9,3 +9,8 @@ def doctype_of(model) -> str:
 def is_child_table(model) -> bool:
     """Return whether a model represents an inline child table."""
     return bool(getattr(model, "IS_CHILD_TABLE", False))
+
+
+def is_single(model) -> bool:
+    """Return whether a model represents a singleton document."""
+    return bool(getattr(model, "IS_SINGLE", False))
