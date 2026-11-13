@@ -102,6 +102,16 @@ class BaseDocument(models.Model):
     def __str__(self):
         return str(self.pk)
 
+    def get_password(self, fieldname: str = "password") -> str:
+        from core.field_access import encrypted_fields
+        from core.secrets import decrypt
+
+        if fieldname not in encrypted_fields(type(self)):
+            raise ValueError(
+                f"{fieldname!r} is not an encrypted field on {type(self).__name__}"
+            )
+        return decrypt(getattr(self, fieldname, ""))
+
     def apply_fetch_from(self):
         for target, (link_field, source_field) in self.FETCH_FROM.items():
             linked = getattr(self, link_field, None)

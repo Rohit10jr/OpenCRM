@@ -3,6 +3,7 @@
 from django.conf import settings
 from django.db import models
 
+from core.fields import EncryptedCharField
 from core.models import AutoIncrementDocument, BaseDocument
 from core.naming import (
     DataImportTimestamp,
@@ -94,10 +95,15 @@ class SingletonDocument(BaseDocument):
 class SecuredDocument(BaseDocument):
     DOCTYPE = "Foundation Secured"
     NAME_STRATEGY = Hash()
-    SENSITIVE_FIELDS = ("secret",)
+    SENSITIVE_FIELDS = ("secret", "encrypted_secret")
+    READONLY_FIELDS = ("audit_value",)
     RESTRICTED_FIELDS = ("manager_note",)
+    PRIVILEGED_WRITE_FIELDS = ("manager_value",)
     secret = models.CharField(max_length=140, blank=True, default="")
+    encrypted_secret = EncryptedCharField(max_length=255, blank=True, default="")
     manager_note = models.CharField(max_length=140, blank=True, default="")
+    audit_value = models.CharField(max_length=140, blank=True, default="")
+    manager_value = models.CharField(max_length=140, blank=True, default="")
 
 
 class PointingDocument(BaseDocument):
