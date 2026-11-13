@@ -109,6 +109,52 @@ def test_keys_are_independent():
     assert LoginAttemptTracker("b@example.com").is_user_allowed() is True
 
 
+def test_login_succeeds_normally(api, alice):
+    response = api.post(LOGIN, {"usr": alice.name, "pwd": "secret123"}, format="json")
+    assert response.status_code == 200
+
+
+def test_repeated_wrong_passwords_lock_the_account(api, alice, settings):
+    settings.LOGIN_MAX_CONSECUTIVE_ATTEMPTS = 3
+    for _ in range(4):
+        api.post(LOGIN, {"usr": alice.name, "pwd": "wrong"}, format="json")
+    response = api.post(LOGIN, {"usr": alice.name, "pwd": "secret123"}, format="json")
+    assert response.status_code == 403
+    assert response.json()["exc_type"] == "SecurityException"
+
+
+def test_a_successful_login_resets_the_count(api, alice, settings):
+    settings.LOGIN_MAX_CONSECUTIVE_ATTEMPTS = 3
+    for _ in range(2):
+        api.post(LOGIN, {"usr": alice.name, "pwd": "wrong"}, format="json")
+    assert api.post(LOGIN, {"usr": alice.name, "pwd": "secret123"}, format="json").status_code == 200
+    for _ in range(2):
+        api.post(LOGIN, {"usr": alice.name, "pwd": "wrong"}, format="json")
+    assert api.post(LOGIN, {"usr": alice.name, "pwd": "secret123"}, format="json").status_code == 200
+
+
+def test_the_account_key_is_case_insensitive(api, alice, settings):
+    settings.LOGIN_MAX_CONSECUTIVE_ATTEMPTS = 2
+    for _ in range(2):
+        api.post(LOGIN, {"usr": alice.name, "pwd": "wrong"}, format="json")
+    api.post(LOGIN, {"usr": alice.name.upper(), "pwd": "wrong"}, format="json")
+    assert api.post(LOGIN, {"usr": alice.name, "pwd": "secret123"}, format="json").status_code == 403
+
+
+def test_a_disabled_account_counts_as_a_failure_like_upstream(api, make_user, settings):
+    settings.LOGIN_MAX_CONSECUTIVE_ATTEMPTS = 2
+    user = make_user("off@example.com", enabled=False)
+    for _ in range(3):
+        response = api.post(LOGIN, {"usr": user.name, "pwd": "secret123"}, format="json")
+    assert response.json()["exc_type"] == "AuthenticationError"
+    assert LoginAttemptTracker("off@example.com").is_user_allowed() is False
+
+
+def test_an_unknown_user_still_counts(api, settings):
+    settings.LOGIN_MAX_CONSECUTIVE_ATTEMPTS = 2
+    for _ in range(3):
+        api.post(LOGIN, {"usr": "ghost@example.com", "pwd": "x"}, format="json")
+    assert LoginAttemptTracker("ghost@example.com").is_user_allowed() is False
 
 
 @override_settings(ROOT_URLCONF=__name__)
