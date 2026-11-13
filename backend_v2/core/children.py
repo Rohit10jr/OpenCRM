@@ -9,10 +9,9 @@ from django.apps import apps
 from django.db import models, transaction
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
-from django.utils.translation import gettext as _
-
 from core.doctypes import doctype_of, is_child_table
 from core.exceptions import LinkValidationError, MandatoryError
+from core.translate import _
 
 
 def _model(label: str):

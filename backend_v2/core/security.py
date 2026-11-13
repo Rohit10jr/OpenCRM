@@ -9,6 +9,7 @@ from django.core.cache import cache
 
 from core.exceptions import RateLimitExceededError, SecurityException
 from core.inputs import build_payload
+from core.translate import _
 
 
 def resolve_ip(request) -> str | None:
@@ -80,8 +81,9 @@ def check_login_allowed(*keys: str) -> None:
     for key in keys:
         if key and not LoginAttemptTracker(key).is_user_allowed():
             raise SecurityException(
-                "Your account has been locked and will resume after "
-                f"{getattr(settings, 'LOGIN_LOCK_INTERVAL_SECONDS', 60)} seconds"
+                _("Your account has been locked and will resume after {0} seconds").format(
+                    getattr(settings, "LOGIN_LOCK_INTERVAL_SECONDS", 60)
+                )
             )
 
 

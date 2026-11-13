@@ -7,11 +7,10 @@ import re
 from typing import Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.utils.translation import gettext as _
-
 from core.exceptions import ValidationError
 from core.field_access import hidden_from, is_hidden
 from core.filters import apply_filters
+from core.translate import _
 
 DEFAULT_PAGE_LENGTH = 20
 MAX_PAGE_LENGTH = 500

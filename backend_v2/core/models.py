@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from core import naming
 from core.exceptions import InvalidEmailAddressError
+from core.translate import _
 
 
 def validate_email_address(email_str: str) -> str:
@@ -35,7 +36,7 @@ def validate_email_address(email_str: str) -> str:
                 address = ""
         if not address:
             raise InvalidEmailAddressError(
-                f"{escape(candidate)} is not a valid Email Address"
+                _("{0} is not a valid Email Address").format(escape(candidate))
             )
         addresses.append(address)
     return ", ".join(addresses)
@@ -197,7 +198,9 @@ class TreeDocument(BaseDocument):
     @classmethod
     def _parent_attname(cls):
         if not cls.PARENT_FIELD:
-            raise TypeError(f"{cls.__name__}.PARENT_FIELD must name its parent link")
+            raise TypeError(
+                _("{0}.PARENT_FIELD must name its parent link").format(cls.__name__)
+            )
         return cls._meta.get_field(cls.PARENT_FIELD).attname
 
     @classmethod

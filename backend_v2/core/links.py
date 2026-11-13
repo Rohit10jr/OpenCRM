@@ -3,6 +3,7 @@
 from django.apps import apps
 
 from core.exceptions import LinkValidationError
+from core.translate import _
 
 
 def validate_text_links(instance) -> None:
@@ -26,8 +27,12 @@ def validate_text_links(instance) -> None:
             setattr(instance, fieldname, spellings[0])
             continue
         if getattr(instance, "parentfield", None):
-            missing.append(f"Row #{getattr(instance, 'idx', 0)}: {label}: {value}")
+            missing.append(
+                _("Row #{0}: {1}: {2}").format(
+                    getattr(instance, "idx", 0), label, value
+                )
+            )
         else:
-            missing.append(f"{label}: {value}")
+            missing.append(_("{0}: {1}").format(label, value))
     if missing:
-        raise LinkValidationError("Could not find " + ", ".join(missing))
+        raise LinkValidationError(_("Could not find {0}").format(", ".join(missing)))

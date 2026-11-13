@@ -9,6 +9,7 @@ from django.db import transaction
 from django.db.models.functions import Length
 
 from core import exceptions
+from core.translate import _
 
 DEFAULT_SERIES_DIGITS = 5
 FORBIDDEN_NAME_CHARACTERS = "<>"
@@ -42,18 +43,18 @@ def append_number_if_name_exists(model, value: str, separator: str = "-") -> str
 
 def validate_name(doctype: str, name: str, is_single: bool = False) -> str:
     if not name:
-        raise exceptions.ValidationError(f"No Name Specified for {doctype}")
+        raise exceptions.ValidationError(_("No Name Specified for {0}").format(doctype))
     if name.startswith("New " + doctype):
         raise exceptions.NameError(
             "There were some errors setting the name, please contact the administrator"
         )
     name = name.strip()
     if not is_single and doctype == name and name != "DocType":
-        raise exceptions.NameError(f"Name of {doctype} cannot be {name}")
+        raise exceptions.NameError(_("Name of {0} cannot be {1}").format(doctype, name))
     if re.findall(f"[{FORBIDDEN_NAME_CHARACTERS}]+", name):
         characters = ", ".join(f"'{character}'" for character in FORBIDDEN_NAME_CHARACTERS)
         raise exceptions.NameError(
-            f"Name cannot contain special characters like {characters}"
+            _("Name cannot contain special characters like {0}").format(characters)
         )
     return name
 
@@ -136,7 +137,7 @@ class FieldValue(NameStrategy):
         value = ("" if value is None else str(value)).strip()
         if not value:
             label = self.label or _field_label(instance, self.fieldname)
-            raise exceptions.ValidationError(f"{label} is required")
+            raise exceptions.ValidationError(_("{0} is required").format(label))
         return value
 
 

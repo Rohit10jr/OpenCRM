@@ -9,11 +9,10 @@ from typing import Any, Callable
 from django.db.models import Q
 from django.db.models.fields.json import JSONField
 from django.db.models.fields.related import ForeignKey, OneToOneField
-from django.utils.translation import gettext as _
-
 from core.exceptions import FilterError
 from core.field_access import is_hidden
 from core.models import TreeDocument
+from core.translate import _
 
 ME_TOKEN = "@me"
 ME_LIKE_TOKEN = "%@me%"

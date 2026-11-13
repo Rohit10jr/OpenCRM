@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from django.db import IntegrityError, transaction
-from django.utils.translation import gettext as _
 from rest_framework import serializers
 
 from core import children
@@ -17,6 +16,7 @@ from core.field_access import (
 )
 from core.naming import FieldValue, Prompt
 from core.query import wire_json_text
+from core.translate import _
 
 
 READ_ONLY_FIELDS = (
@@ -203,8 +203,8 @@ def _duplicate_name_error(model, validated_data):
     if not name or not model._default_manager.filter(pk=name).exists():
         return None
     return DuplicateEntryError(
-        _("{0} <strong>{1}</strong> already exists").format(
-            doctype_of(model), name
+        _("{0} {1} already exists").format(
+            doctype_of(model), "<strong>{0}</strong>".format(name)
         ),
         title=_("Duplicate Name"),
     )
