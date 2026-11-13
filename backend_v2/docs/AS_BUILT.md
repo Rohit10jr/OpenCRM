@@ -1,6 +1,6 @@
 # As built — what `backend_v2` actually contains
 
-**Status: FOUNDATION skeleton and account identity built (2026-11-13).**
+**Status: FOUNDATION skeleton, account identity, and authentication built (2026-11-13).**
 
 This file describes the code that exists, not the code that is planned. **Where it and a
 spec disagree, this file wins**: specs are written before the code and go stale; this
@@ -15,15 +15,35 @@ needs. **Paths are from the repository root.**
 ## 1. What exists
 
 The Django project skeleton is in place with separate base, local and test settings.
-It installs the ten top-level apps in the settled order, includes each app's currently
-empty URLconf explicitly under `/api/v1/`, and exposes Django admin under `/admin/`.
+It installs the ten top-level apps in the settled order, includes each app's URLconf
+explicitly under `/api/v1/`, and exposes Django admin under `/admin/`.
 
 `core` now supplies the Frappe exception classes and error body, the DRF exception
 handler, the `{"message": ...}` / `{"data": ...}` envelope renderer, merged input
 parsing, surplus-input binding, and `FrappeAPIView` for endpoints that are not resources.
 It also supplies the default authenticated permission and the registry-free `DOCTYPE`
 and `IS_CHILD_TABLE` model metadata readers. Authentication backends are deliberately
-empty until FOUNDATION brief 04; guest views opt out of the default permission.
+limited to `accounts.authentication.VersionedJWTAuthentication`; guest views opt out of
+the default permission, while authentication still runs when they carry a token.
+
+The four authentication routes are explicit in `accounts/urls.py`: login and refresh
+are guest POST endpoints, logout is an authenticated POST endpoint, and `auth/me` is an
+authenticated GET endpoint. Each accepts the route both with and without its trailing
+slash. Login preserves the old input aliases, response shape, case-insensitive account
+lookup, disabled-user wording and paired IP/account lockout. Refresh tokens rotate and
+are recorded in SimpleJWT's blacklist tables; logout blacklists a supplied refresh token
+without revoking other sessions.
+
+Every issued token carries the user's `token_version`. Authentication and refresh both
+refuse a stale version, while a missing claim counts as version zero for tokens issued
+before this mechanism existed. `accounts.authentication.bump_token_version()` uses an
+`F()` update and reloads the user for later ACCOUNTS password and disable-user actions.
+
+`core.security` resolves the request IP from `REMOTE_ADDR`, consulting
+`X-Forwarded-For` only for the configured trusted proxy count. It stores consecutive
+login failures in the configured cache, separately for IP and account, and provides a
+request-aware rate-limit decorator for the later password endpoints. Login itself uses
+the lockout tracker, not the flat rate limiter.
 
 Celery loads one explicit `BEAT_SCHEDULE` from each app and refuses duplicate schedule
 keys. Channels sends HTTP to Django and exposes `ws/realtime`; until NOTIFICATIONS adds
@@ -41,7 +61,8 @@ The first account migrations create `User`, the four role groups, and the two bu
 users. Both built-ins start with unusable passwords; Administrator belongs to the
 Administrator and System Manager groups. The model declares its sensitive, read-only,
 email and attachment fields, but later FOUNDATION briefs add their enforcement and email
-validation. There are no application API routes yet.
+validation. The authentication routes above are the only application API routes built
+so far.
 
 ## 2. Recipes
 
@@ -65,10 +86,18 @@ the keys it knows. Return `Response(payload)` or `self.envelope(payload)`: succe
 responses use `{"message": payload}` with status 200. Return `WithResponseKeys` when
 keys such as `docs` must sit beside `message`.
 
+Apply a flat endpoint limit directly to a view method with
+`@rate_limit(limit=..., seconds=...)`. For a per-input bucket, pass `key="email"` or a
+callable taking the merged input dictionary, plus `normalise` when equivalent spellings
+must share a bucket. The decorator resolves the request from the view-method arguments;
+named and callable keys receive the same query-plus-body inputs as the view, with the
+body winning and `cmd` removed.
+
 Every view is authenticated by default. A guest endpoint declares
-`permission_classes = [AllowAny]`; authentication still runs first once FOUNDATION adds
-JWT authentication. No view binds a user into ambient state: pass `request.user` to any
-service that needs it.
+`permission_classes = [AllowAny]`; JWT authentication still runs first when the request
+carries a token. No view binds a user into ambient state: pass `request.user` to any
+service that needs it. Write both slash forms with one explicit `re_path`, using a final
+`/?$`; do not rely on `APPEND_SLASH`, because POST bodies must not be redirected.
 
 Resource actions and their ViewSet base are not built yet.
 
@@ -165,6 +194,12 @@ directory with:
 ```powershell
 .venv\Scripts\python.exe manage.py migrate
 ```
+
+This also creates SimpleJWT's `token_blacklist` tables. JWT and auth-security settings
+may be overridden with `JWT_ACCESS_TOKEN_LIFETIME_MINUTES`,
+`JWT_REFRESH_TOKEN_LIFETIME_DAYS`, `TRUSTED_PROXY_COUNT`,
+`LOGIN_MAX_CONSECUTIVE_ATTEMPTS`, and `LOGIN_LOCK_INTERVAL_SECONDS`; their defaults are
+5 minutes, 7 days, 0 proxies, 10 failures, and 60 seconds respectively.
 
 Database creation, migrations, seed data, the server on port 8001, the `.http` suite and
 the parity body diff are added by later FOUNDATION briefs.
