@@ -74,9 +74,15 @@ disabled, and there are no bulk actions.
 The first account migrations create `User`, the four role groups, and the two built-in
 users. Both built-ins start with unusable passwords; Administrator belongs to the
 Administrator and System Manager groups. The model declares its sensitive, read-only,
-email and attachment fields, but later FOUNDATION briefs add their enforcement and email
-validation. The authentication routes above are the only application API routes built
-so far.
+email and attachment fields. `core.field_access` now reads every field-access declaration
+from the model and applies the global `password` and `last_login` sensitivity rule. User
+roles are cached only on that `User` instance and can be cleared explicitly or by
+`refresh_from_db()`.
+
+`core.fields` supplies encrypted character and text fields. They encrypt before every
+database write and remain ciphertext on the instance; `core.secrets` retains the old
+prefix, pass-through migration behavior, key failures and changed-key wording. The
+authentication routes above are the only application API routes built so far.
 
 ## 2. Recipes
 
@@ -134,8 +140,27 @@ without swallowing an action segment.
 
 ### Declaring field access
 
-*Not written yet — FOUNDATION.* Sensitive, restricted, read-only, encrypted: where each is
-declared and what enforces it.
+Declare access rules as model class attributes. `SENSITIVE_FIELDS` are never readable;
+`password` and `last_login` are sensitive on every model without being declared.
+`RESTRICTED_FIELDS` are readable only by `System Manager`, `Sales Manager`, and the
+literal `Administrator`, unless `RESTRICTED_FIELDS_ROLES` replaces those two role names.
+`READONLY_FIELDS` are readable but silently ignored on generic writes.
+`PRIVILEGED_WRITE_FIELDS` are readable by everyone but writable only by the restricted
+roles, unless `PRIVILEGED_WRITE_ROLES` replaces them. Anonymous callers are never
+privileged. Pass the `User` instance to `hidden_from(model, user)`,
+`is_hidden(model, field, user)`, and `unwritable_by(model, user)`; none reads ambient
+request state.
+
+Declare stored credentials with `core.fields.EncryptedCharField` or
+`EncryptedTextField`, and also list the field in `SENSITIVE_FIELDS`. Encryption uses only
+`FIELD_ENCRYPTION_KEY`; a missing key refuses the write. Read plaintext explicitly with
+`document.get_password("fieldname")`. `core.field_access.encrypted_fields(model)` derives
+the encrypted names from field types for the credential guard—there is no second list to
+maintain. ViewSet allowlists for fields shown, filtered, sorted and searched arrive in
+brief 08 and may narrow these declarations, never widen them.
+
+`User.get_roles()` memoises on that instance. Call `user.clear_roles_cache()` after a
+test changes group membership in place; `user.refresh_from_db()` clears it automatically.
 
 ### Writing a row rule
 
@@ -262,6 +287,10 @@ requires the acting `user`; there is no ambient current-user state or Guest fall
 
 User admin bulk actions must stay disabled: Django applies them with `QuerySet.update()`,
 which skips `User.save()` and therefore skips disabled-user token revocation.
+
+The attribute of an encrypted field is ciphertext after save and after load. Code that
+needs the credential must call `get_password()`; direct attribute access is deliberately
+not useful.
 
 The old backend's list, which is likely to apply here too, is
 `specs/AS_BUILT.md` section 4 — `lead_owner` is the access column, names may contain
