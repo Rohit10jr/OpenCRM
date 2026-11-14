@@ -50,6 +50,54 @@ def test_delete_is_refused_while_a_dynamic_link_remains(auth_api, widget, alice)
     assert Widget.objects.filter(pk=widget.pk).exists()
 
 
+def test_cancelled_dynamic_link_does_not_hide_a_later_active_link(
+    auth_api, widget, alice
+):
+    save(
+        DynamicReference(
+            name="a-cancelled",
+            reference_doctype="Foundation Widget",
+            reference_name=widget.pk,
+            docstatus=2,
+        ),
+        alice,
+    )
+    active = save(
+        DynamicReference(
+            name="b-active",
+            reference_doctype="Foundation Widget",
+            reference_name=widget.pk,
+        ),
+        alice,
+    )
+
+    response = auth_api.delete(f"{WIDGETS}{widget.pk}/")
+
+    refusal(
+        response,
+        "Cannot delete or cancel because Foundation Widget "
+        f"{widget.pk} is linked with Foundation Dynamic Reference {active.pk}",
+    )
+    assert Widget.objects.filter(pk=widget.pk).exists()
+
+
+def test_cancelled_dynamic_link_alone_does_not_block_delete(auth_api, widget, alice):
+    save(
+        DynamicReference(
+            reference_doctype="Foundation Widget",
+            reference_name=widget.pk,
+            docstatus=2,
+        ),
+        alice,
+    )
+
+    response = auth_api.delete(f"{WIDGETS}{widget.pk}/")
+
+    assert response.status_code == 200
+    assert response.json() == {"message": None}
+    assert not Widget.objects.filter(pk=widget.pk).exists()
+
+
 def test_a_reference_created_by_another_user_still_blocks_delete(
     auth_api, widget, bob
 ):

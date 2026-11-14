@@ -49,17 +49,16 @@ def check_dynamic_links(instance) -> None:
         if reference_doctype in IGNORE_LINKS_ON_DELETE:
             continue
         for doctype_field, name_field in _dynamic_link_declarations(model):
-            row = (
-                model._default_manager.filter(
-                    **{
-                        doctype_field: target_doctype,
-                        name_field: str(instance.pk),
-                    }
-                )
-                .order_by("pk")
-                .first()
+            rows = model._default_manager.filter(
+                **{
+                    doctype_field: target_doctype,
+                    name_field: str(instance.pk),
+                }
             )
-            if row is None or getattr(row, "docstatus", 0) == 2:
+            if any(field.name == "docstatus" for field in model._meta.concrete_fields):
+                rows = rows.exclude(docstatus=2)
+            row = rows.order_by("pk").first()
+            if row is None:
                 continue
             fields = {field.name for field in type(instance)._meta.get_fields()}
             if "enabled" in fields or "disabled" in fields:
