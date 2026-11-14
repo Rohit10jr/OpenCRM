@@ -1,6 +1,6 @@
 # As built — what `backend_v2` actually contains
 
-**Status: FOUNDATION through document serializers and child tables built (2026-11-13).**
+**Status: FOUNDATION through singleton resources and generic value routes built (2026-11-14).**
 
 This file describes the code that exists, not the code that is planned. **Where it and a
 spec disagree, this file wins**: specs are written before the code and go stale; this
@@ -137,6 +137,19 @@ mandatory values, replace the named table wholesale, assign `idx` from list orde
 save every row with the explicit caller. Update writes rows before the parent; create
 saves the parent, writes rows, refreshes it, and saves it again, all atomically.
 
+`core.models.SingletonDocument`, `core.views.SingletonViewSet`, and
+`core.routers.SingletonRouter` are the shared settings-record stack. The model pins its
+one row to the document type's name and supplies a concurrency-safe `load(user=...)`.
+The route exposes the document at the resource root with GET and PATCH only. It has no
+name segment and refuses POST, PUT, and DELETE with the standard 405 body.
+
+Every `DocumentViewSet` also exposes `GET <resource>/value/` and
+`GET <resource>/<name>/permissions/`. The value lookup uses the same row-rule-narrowed
+queryset and field allowlists as list; the permission lookup returns all seven old
+permission booleans without raising for a denied row. Every `SingletonViewSet` exposes
+`GET <settings>/value/`, applying its object rule and the model's sensitive and
+restricted field access before returning one value.
+
 ## 2. Recipes
 
 These are the sections FOUNDATION must write, because every later unit follows them.
@@ -189,6 +202,21 @@ again name `items` in the serializer's fields. Declaring a child field opts into
 child row's full concrete document shape. If the same child model is declared under two
 field names, `parentfield` distinguishes them. Neither kind receives its own route.
 
+### Adding a singleton resource
+
+Subclass `core.models.SingletonDocument`, declare `DOCTYPE`, and add ordinary model
+fields; do not declare a naming strategy. Create or fetch the one row with
+`Model.load(user=user)`. Both `load()` and a direct first save pin its name to `DOCTYPE`,
+and two concurrent first loads converge on the same row.
+
+Use an explicit `DocumentSerializer` as for any other document, then subclass
+`core.views.SingletonViewSet`. Declare the same serializer, field allowlists, and object
+rule a document resource would use. Register it on `SingletonRouter` in the app's
+`urls.py`. The router writes only the root GET/PATCH route and collection actions; it
+cannot create a list, create, delete, PUT, or name route. The inherited
+`GET <settings>/value/?field=<field>` action returns the scalar or `null` and applies the
+read object rule before sensitive and restricted field access.
+
 ### Adding an action or an endpoint
 
 For an endpoint that is not a resource, subclass `core.views.BaseAPIView`, implement
@@ -225,6 +253,13 @@ Every serializer receives `request.user` in its context and every save receives 
 same user explicitly. Create, PATCH, and delete are transactional; delete checks
 declared dynamic links before Django's protected-link check, while the existing
 post-delete hook removes polymorphic child rows.
+
+The same registration also writes two read actions. `GET <resource>/value/` keeps the
+old `fieldname`, `filters`, `as_dict`, and ignored `parent` inputs; it calls
+`get_queryset()` before the shared query layer, so list row rules and field allowlists
+cannot be bypassed. `GET <resource>/<name>/permissions/` returns the seven permission
+booleans from `has_object_rule()` and deliberately does not raise when `read` is false;
+a missing row returns an empty permissions map.
 
 ### Carrying a document name with slashes in a route
 

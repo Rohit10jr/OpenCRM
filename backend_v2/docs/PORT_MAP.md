@@ -110,10 +110,10 @@ the alias `refresh_token`, all in the body. The old paths also answered a second
 |---|---|---|---|---|---|---|
 | `frappe.auth.get_logged_user` | GET/POST | auth | `frappe_core/api/auth.py:get_logged_user` | `GET /api/v1/auth/me/` | accounts | built |
 | `frappe.client.delete` | DELETE/POST | auth | `crm_app/api/client.py:client_delete` | each resource's, in its unit | core | built |
-| `frappe.client.get_doc_permissions` | GET/POST | auth | `crm_app/api/client.py:client_get_doc_permissions` | each resource's, in its unit | core | — |
+| `frappe.client.get_doc_permissions` | GET/POST | auth | `crm_app/api/client.py:client_get_doc_permissions` | `GET /api/v1/<resource>/<name>/permissions/` | core | built |
 | `frappe.client.get_list` | GET/POST | auth | `crm_app/api/client.py:client_get_list` | each resource's, in its unit | core | built |
-| `frappe.client.get_single_value` | GET/POST | auth | `crm_app/api/client.py:client_get_single_value` | each resource's, in its unit | core | — |
-| `frappe.client.get_value` | GET/POST | auth | `crm_app/api/client.py:client_get_value` | each resource's, in its unit | core | — |
+| `frappe.client.get_single_value` | GET/POST | auth | `crm_app/api/client.py:client_get_single_value` | `GET /api/v1/<settings>/value/` | core | built |
+| `frappe.client.get_value` | GET/POST | auth | `crm_app/api/client.py:client_get_value` | `GET /api/v1/<resource>/value/` | core | built |
 | `frappe.client.get` | GET/POST | auth | `crm_app/api/client.py:client_get` | by `name`: each resource's, in its unit. By `filters`: **not served: no caller** (PE-3) | core | built |
 | `frappe.client.insert` | POST | auth | `crm_app/api/client.py:client_insert` | each resource's, in its unit | core | built |
 | `frappe.client.set_value` | POST/PUT | auth | `crm_app/api/client.py:client_set_value` | each resource's, in its unit | core | built |
