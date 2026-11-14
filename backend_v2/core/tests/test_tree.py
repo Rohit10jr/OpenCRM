@@ -2,6 +2,7 @@ import threading
 
 import pytest
 from django.db import connections, transaction
+from django.test.utils import CaptureQueriesContext
 
 from core.exceptions import (
     FilterError,
@@ -65,6 +66,41 @@ def test_delete_rebuilds_bounds(tree):
     assert bounds("World") == (1, 6)
     assert bounds("Asia") == (2, 3)
     assert bounds("Europe") == (4, 5)
+
+
+def assert_tree_lock_precedes_delete(queries):
+    statements = [query["sql"] for query in queries]
+    lock_index = next(
+        index
+        for index, statement in enumerate(statements)
+        if "pg_advisory_xact_lock" in statement
+    )
+    delete_index = next(
+        index
+        for index, statement in enumerate(statements)
+        if 'DELETE FROM "tests_support_testtree"' in statement
+    )
+    assert lock_index < delete_index, statements
+
+
+def test_instance_delete_locks_tree_before_deleting_row(administrator):
+    node = TreeNode(name="Root")
+    node.save(user=administrator)
+
+    with CaptureQueriesContext(connections["default"]) as queries:
+        node.delete()
+
+    assert_tree_lock_precedes_delete(queries)
+
+
+def test_queryset_delete_locks_tree_before_deleting_row(administrator):
+    node = TreeNode(name="Root")
+    node.save(user=administrator)
+
+    with CaptureQueriesContext(connections["default"]) as queries:
+        TreeNode.objects.filter(pk=node.pk).delete()
+
+    assert_tree_lock_precedes_delete(queries)
 
 
 def test_a_rootless_cycle_keeps_its_old_bounds_when_save_is_bypassed(administrator):

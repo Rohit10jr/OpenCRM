@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import validate_email
 from django.db import IntegrityError, connection, models, transaction
 from django.db.models import Q, Subquery
-from django.db.models.signals import post_delete
+from django.db.models.signals import post_delete, pre_delete
 from django.dispatch import receiver
 from django.utils import timezone
 
@@ -335,6 +335,12 @@ class TreeDocument(BaseDocument):
             cls._rebuild_locked()
             return result
 
+    def delete(self, *args, **kwargs):
+        cls = type(self)
+        with transaction.atomic():
+            cls._acquire_tree_lock()
+            return super().delete(*args, **kwargs)
+
     @classmethod
     def _rebuild_locked(cls):
         nodes = list(cls._default_manager.order_by("name"))
@@ -396,6 +402,13 @@ def _is_tree_model(sender):
         and issubclass(sender, TreeDocument)
         and not sender._meta.abstract
     )
+
+
+# FINDINGS 96: backend/ shares the delete-then-lock pattern; lock the tree first.
+@receiver(pre_delete, dispatch_uid="core.tree_document.lock_before_delete")
+def _lock_tree_before_delete(sender, **kwargs):
+    if _is_tree_model(sender):
+        sender._acquire_tree_lock()
 
 
 @receiver(post_delete, dispatch_uid="core.tree_document.delete")

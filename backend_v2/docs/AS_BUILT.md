@@ -125,6 +125,8 @@ its own descendants`; serializing the check and write means two concurrent repar
 cannot together form a loop. The parity rebuild walks roots only, retains the
 `depth > len(nodes)` guard, and updates only visited nodes. A rootless cycle created by
 writing around `save()` therefore keeps its old bounds, as the old backend does.
+Instance and queryset deletes both take the same transaction advisory lock before the
+tree row is deleted; the post-delete rebuild runs while that lock is still held.
 `tests_support.TestTree` and `TreeItem` exercise that generic contract only under test
 settings.
 
