@@ -30,7 +30,14 @@ STANDARD_FIELDS = (
 class WidgetRowSerializer(DocumentSerializer):
     class Meta:
         model = WidgetRow
-        fields = (*STANDARD_FIELDS, "parent", "parentfield", "parenttype", "value")
+        fields = (
+            *STANDARD_FIELDS,
+            "parent",
+            "parentfield",
+            "parenttype",
+            "value",
+            "related_widget",
+        )
 
 
 class WidgetNoteSerializer(DocumentSerializer):
@@ -40,7 +47,7 @@ class WidgetNoteSerializer(DocumentSerializer):
 
 
 class WidgetSerializer(DocumentSerializer):
-    CHILD_TABLES = {"rows": "tests_support.WidgetRow"}
+    CHILD_TABLES = {"rows": ("tests_support.WidgetRow", "parent")}
 
     class Meta:
         model = Widget

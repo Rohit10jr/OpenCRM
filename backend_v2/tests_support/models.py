@@ -85,6 +85,13 @@ class WidgetRow(BaseDocument):
     parentfield = models.CharField(max_length=140, default="rows")
     parenttype = models.CharField(max_length=140, default="Foundation Widget")
     value = models.CharField(max_length=140)
+    related_widget = models.ForeignKey(
+        Widget,
+        on_delete=models.PROTECT,
+        related_name="linked_rows",
+        null=True,
+        blank=True,
+    )
 
 
 class WidgetNote(BaseDocument):
