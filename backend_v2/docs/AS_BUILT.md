@@ -143,10 +143,12 @@ to the old `DuplicateEntryError` sentence. A sensitive field accidentally includ
 
 `core.children` implements declared inline child tables. A real-FK table is declared on
 its parent serializer; a polymorphic table is declared on the parent model so the same
-metadata drives serialization and the post-delete cascade. Writes validate links and
-mandatory values, replace the named table wholesale, assign `idx` from list order, and
-save every row with the explicit caller. Update writes rows before the parent; create
-saves the parent, writes rows, refreshes it, and saves it again, all atomically.
+metadata drives serialization and the post-delete cascade. Every child model declares
+its row fields once in `CHILD_FIELDS`; serialization and writes use only those explicit
+names, with field-access rules applied on top. Writes validate links and mandatory
+values, replace the named table wholesale, assign `idx` from list order, and save every
+row with the explicit caller. Update writes rows before the parent; create saves the
+parent, writes rows, refreshes it, and saves it again, all atomically.
 
 `core.models.SingletonDocument`, `core.views.SingletonViewSet`, and
 `core.routers.SingletonRouter` are the shared settings-record stack. The model pins its
@@ -206,12 +208,29 @@ class WidgetSerializer(DocumentSerializer):
 Name the child model and its parent-link field in the declaration. A bare model label
 remains supported when the child has exactly one foreign key to the parent; if it has
 several, resolving the serializer raises an error listing the fields that can be named.
+On the child model, declare `CHILD_FIELDS` as a literal tuple containing every concrete
+field the row may show or accept, including the standard document and parent fields:
+
+```python
+class WidgetItem(BaseDocument):
+    IS_CHILD_TABLE = True
+    CHILD_FIELDS = (
+        "name", "owner", "modified_by", "creation", "modified", "idx",
+        "docstatus", "_assign", "_liked_by", "_comments", "_user_tags",
+        "parent_widget", "parentfield", "parenttype", "value",
+    )
+```
+
+Do not derive this tuple from model metadata. A new concrete column stays off the wire
+and is ignored on write until explicitly added. Sensitive and restricted fields are
+still hidden per caller, and standard/model read-only fields are ignored on write. A
+child model without `CHILD_FIELDS` raises `TypeError` when its table is used. Keep this
+policy on the child model so a child embedded by several parents has only one list.
 For a child doctype shared by multiple parent types, declare the string parent columns on
 the child and put
 `POLYMORPHIC_CHILD_TABLES = {"items": "widgets.WidgetItem"}` on each parent model;
-again name `items` in the serializer's fields. Declaring a child field opts into that
-child row's full concrete document shape. If the same child model is declared under two
-field names, `parentfield` distinguishes them. Neither kind receives its own route.
+again name `items` in the serializer's fields. If the same child model is declared under
+two field names, `parentfield` distinguishes them. Neither kind receives its own route.
 
 ### Adding a singleton resource
 

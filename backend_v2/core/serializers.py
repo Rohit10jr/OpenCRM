@@ -118,11 +118,7 @@ class DocumentSerializer(serializers.ModelSerializer):
 
     def _represent_child(self, instance):
         model = type(instance)
-        field_names = tuple(
-            field.name
-            for field in model._meta.get_fields()
-            if getattr(field, "concrete", False)
-        )
+        field_names = children.child_fields(model)
         meta = type("Meta", (), {"model": model, "fields": field_names})
         serializer_class = type(
             f"{model.__name__}InlineSerializer",

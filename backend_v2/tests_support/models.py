@@ -105,6 +105,24 @@ class WidgetRow(BaseDocument):
     DOCTYPE = "Foundation Widget Row"
     NAME_STRATEGY = Hash()
     IS_CHILD_TABLE = True
+    CHILD_FIELDS = (
+        "name",
+        "owner",
+        "modified_by",
+        "creation",
+        "modified",
+        "idx",
+        "docstatus",
+        "_assign",
+        "_liked_by",
+        "_comments",
+        "_user_tags",
+        "parent",
+        "parentfield",
+        "parenttype",
+        "value",
+        "related_widget",
+    )
     parent = models.ForeignKey(Widget, on_delete=models.CASCADE, related_name="rows")
     parentfield = models.CharField(max_length=140, default="rows")
     parenttype = models.CharField(max_length=140, default="Foundation Widget")
@@ -122,6 +140,23 @@ class WidgetNote(BaseDocument):
     DOCTYPE = "Foundation Widget Note"
     NAME_STRATEGY = Hash()
     IS_CHILD_TABLE = True
+    CHILD_FIELDS = (
+        "name",
+        "owner",
+        "modified_by",
+        "creation",
+        "modified",
+        "idx",
+        "docstatus",
+        "_assign",
+        "_liked_by",
+        "_comments",
+        "_user_tags",
+        "parent",
+        "parenttype",
+        "parentfield",
+        "value",
+    )
     parent = models.CharField(max_length=140)
     parenttype = models.CharField(max_length=140)
     parentfield = models.CharField(max_length=140)

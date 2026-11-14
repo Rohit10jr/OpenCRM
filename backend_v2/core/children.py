@@ -11,6 +11,7 @@ from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from core.doctypes import doctype_of, is_child_table
 from core.exceptions import LinkValidationError, MandatoryError
+from core.field_access import hidden_from, readonly_fields, unwritable_by
 from core.translate import _
 
 
@@ -26,6 +27,31 @@ def _model(label: str):
     return model
 
 
+def child_fields(child_model) -> tuple[str, ...]:
+    """Return the child row's explicit wire/write field policy."""
+    declared = getattr(child_model, "CHILD_FIELDS", None)
+    if declared is None:
+        raise TypeError(
+            _("Child table {0} must declare CHILD_FIELDS").format(
+                child_model._meta.label
+            )
+        )
+    fields = tuple(declared)
+    concrete = {
+        field.name
+        for field in child_model._meta.get_fields()
+        if getattr(field, "concrete", False)
+    }
+    unknown = [fieldname for fieldname in fields if fieldname not in concrete]
+    if unknown:
+        raise TypeError(
+            _("Child table {0} declares unknown CHILD_FIELDS: {1}").format(
+                child_model._meta.label, ", ".join(unknown)
+            )
+        )
+    return fields
+
+
 def child_table_specs(
     parent_model, declared: dict[str, str | tuple[str, str]] | None = None
 ) -> dict:
@@ -37,6 +63,7 @@ def child_table_specs(
         else:
             label, parent_link = declaration, None
         child_model = _model(label)
+        child_fields(child_model)
         links = [
             field
             for field in child_model._meta.get_fields()
@@ -74,8 +101,10 @@ def child_table_specs(
 
     polymorphic = getattr(parent_model, "POLYMORPHIC_CHILD_TABLES", {}) or {}
     for fieldname, label in polymorphic.items():
+        child_model = _model(label)
+        child_fields(child_model)
         specs[fieldname] = {
-            "model": _model(label),
+            "model": child_model,
             "fk": None,
             "polymorphic": True,
         }
@@ -142,15 +171,40 @@ def _is_link(field) -> bool:
 
 
 def prepare_rows(
-    child_model, rows: list[dict], *, fieldname: str, parent_field: str | None = None
+    child_model,
+    rows: list[dict],
+    *,
+    fieldname: str,
+    parent_field: str | None = None,
+    user=None,
 ) -> list[dict]:
     """Validate links and mandatory values, then return model-ready row payloads."""
+    allowed = set(child_fields(child_model))
     fields = [
         field
         for field in child_model._meta.get_fields()
-        if getattr(field, "concrete", False)
+        if getattr(field, "concrete", False) and field.name in allowed
     ]
-    accepted = {field.name for field in fields} | {field.attname for field in fields}
+    blocked = (
+        hidden_from(child_model, user)
+        | readonly_fields(child_model)
+        | unwritable_by(child_model, user)
+        | {
+            "name",
+            "owner",
+            "modified_by",
+            "creation",
+            "modified",
+            "_assign",
+            "_liked_by",
+            "_comments",
+            "_user_tags",
+        }
+    )
+    writable_fields = [field for field in fields if field.name not in blocked]
+    accepted = {field.name for field in writable_fields} | {
+        field.attname for field in writable_fields
+    }
     missing_links = []
     missing_values = []
     payloads = []
@@ -165,7 +219,7 @@ def prepare_rows(
             payload.pop(parent_field, None)
             payload.pop(f"{parent_field}_id", None)
 
-        for field in fields:
+        for field in writable_fields:
             if not _is_link(field) or field.name not in payload:
                 continue
             value = payload.pop(field.name)
@@ -180,7 +234,7 @@ def prepare_rows(
                     _("Row #{0}: {1}: {2}").format(index, _label(field), value)
                 )
 
-        for field in fields:
+        for field in writable_fields:
             if field.name == parent_field or not _is_mandatory(field):
                 continue
             value = payload.get(field.attname if _is_link(field) else field.name)
@@ -225,7 +279,11 @@ def replace_children(
         base_filter["parentfield"] = fieldname
 
     payloads = prepare_rows(
-        child_model, rows, fieldname=fieldname, parent_field=spec["fk"]
+        child_model,
+        rows,
+        fieldname=fieldname,
+        parent_field=spec["fk"],
+        user=user,
     )
     token = _REPLACING.set(True)
     try:
