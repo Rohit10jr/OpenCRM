@@ -35,6 +35,17 @@ one. Model metadata is declared as ordinary inherited class attributes, without 
 metaclass. `tests_support`, installed only by the test settings, contains small models
 covering every naming strategy and the generic-layer cases later FOUNDATION briefs use.
 
+Change history is withheld from the API and stored in `core.models.Version`, named with
+`Hash(10)`. A document opts in with a `TRACKED_FIELDS` class attribute; `BaseDocument`
+snapshots those values when loading, writes one `{"changed": [[field, old, new], ...]}`
+row after a save that changes any of them, stamps its owner from the explicit
+`save(user=...)` user, and refreshes the snapshot for a second save on the same instance.
+Creates and saves that alter no tracked field write no row. The daily 00:10 task deletes
+only versions whose `ref_doctype` is `CRM View Settings` and whose creation is more than
+14 days old. That doctype deliberately does not opt into tracking today, so normal saves
+give the task nothing to delete; keeping the narrow task implemented makes later view
+tracking safe without ever applying retention to Lead, Deal, or other timeline history.
+
 The four authentication routes are explicit in `accounts/urls.py`: login and refresh
 are guest POST endpoints, logout is an authenticated POST endpoint, and `auth/me` is an
 authenticated GET endpoint. Each accepts the route both with and without its trailing
