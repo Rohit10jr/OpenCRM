@@ -5,7 +5,8 @@ from django.test.utils import CaptureQueriesContext
 from core import children
 from core.children import delete_references_batch, references_handled
 from core.models import Version
-from tests_support.models import TrackedDocument, Widget, WidgetNote
+from tests_support.models import TrackedDocument, Widget, WidgetNote, WidgetRow
+from tests_support.serializers import WidgetSerializer
 
 
 pytestmark = pytest.mark.django_db
@@ -115,3 +116,41 @@ def test_deleting_a_version_does_not_run_reference_cleanup(alice, monkeypatch):
     version.delete()
 
     assert calls == []
+
+
+def test_deleting_a_child_row_does_not_query_versions(alice):
+    widget = Widget(widget_name="Child cleanup")
+    widget.save(user=alice)
+    row = WidgetRow(parent=widget, value="remove")
+    row.save(user=alice)
+
+    with CaptureQueriesContext(connection) as captured:
+        row.delete()
+
+    version_table = Version._meta.db_table.lower()
+    assert not any(
+        version_table in query["sql"].lower() for query in captured.captured_queries
+    )
+
+
+def test_replacing_child_rows_does_not_query_versions(alice):
+    serializer = WidgetSerializer(
+        data={"rows": [{"value": "old"}]}, context={"user": alice}
+    )
+    assert serializer.is_valid(), serializer.errors
+    widget = serializer.save(user=alice)
+    replacement = WidgetSerializer(
+        widget,
+        data={"rows": [{"value": "new"}]},
+        partial=True,
+        context={"user": alice},
+    )
+    assert replacement.is_valid(), replacement.errors
+
+    with CaptureQueriesContext(connection) as captured:
+        replacement.save(user=alice)
+
+    version_table = Version._meta.db_table.lower()
+    assert not any(
+        version_table in query["sql"].lower() for query in captured.captured_queries
+    )

@@ -371,6 +371,7 @@ def connect_cascades() -> None:
             isinstance(model, type)
             and issubclass(model, BaseDocument)
             and not model._meta.abstract
+            and not is_child_table(model)
             and doctype_of(model) not in REFERENCE_DOCTYPES
         ):
             post_delete.connect(
