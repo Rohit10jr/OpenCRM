@@ -172,15 +172,18 @@ model label on the serializer:
 
 ```python
 class WidgetSerializer(DocumentSerializer):
-    CHILD_TABLES = {"items": "widgets.WidgetItem"}
+    CHILD_TABLES = {"items": ("widgets.WidgetItem", "parent_widget")}
 
     class Meta:
         model = Widget
         fields = (*STANDARD_FIELDS, "title", "items")
 ```
 
-The child model must have exactly one foreign key to that parent. For a child doctype
-shared by multiple parent types, declare the string parent columns on the child and put
+Name the child model and its parent-link field in the declaration. A bare model label
+remains supported when the child has exactly one foreign key to the parent; if it has
+several, resolving the serializer raises an error listing the fields that can be named.
+For a child doctype shared by multiple parent types, declare the string parent columns on
+the child and put
 `POLYMORPHIC_CHILD_TABLES = {"items": "widgets.WidgetItem"}` on each parent model;
 again name `items` in the serializer's fields. Declaring a child field opts into that
 child row's full concrete document shape. If the same child model is declared under two

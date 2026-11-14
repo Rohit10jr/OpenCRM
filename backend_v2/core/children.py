@@ -26,10 +26,16 @@ def _model(label: str):
     return model
 
 
-def child_table_specs(parent_model, declared: dict[str, str] | None = None) -> dict:
+def child_table_specs(
+    parent_model, declared: dict[str, str | tuple[str, str]] | None = None
+) -> dict:
     """Resolve the serializer's FK children and the model's polymorphic children."""
     specs = {}
-    for fieldname, label in (declared or {}).items():
+    for fieldname, declaration in (declared or {}).items():
+        if isinstance(declaration, tuple):
+            label, parent_link = declaration
+        else:
+            label, parent_link = declaration, None
         child_model = _model(label)
         links = [
             field
@@ -37,6 +43,23 @@ def child_table_specs(parent_model, declared: dict[str, str] | None = None) -> d
             if isinstance(field, models.ForeignKey)
             and field.related_model is parent_model
         ]
+        if parent_link is not None:
+            matching_links = [field for field in links if field.name == parent_link]
+            if len(matching_links) != 1:
+                raise TypeError(
+                    _("{0}.{1} is not a link to {2}").format(
+                        label, parent_link, parent_model._meta.label
+                    )
+                )
+            links = matching_links
+        elif len(links) > 1:
+            choices = ", ".join(field.name for field in links)
+            raise TypeError(
+                _(
+                    "Child table {0} has multiple links to {1}: {2}. "
+                    "Declare one as (\"{0}\", \"<field_name>\") in CHILD_TABLES."
+                ).format(label, parent_model._meta.label, choices)
+            )
         if len(links) != 1:
             raise TypeError(
                 _("Child table {0} must have exactly one link to {1}").format(
