@@ -1,5 +1,6 @@
 import pytest
 from django.db import models
+from django.test.utils import isolate_apps
 
 from core import children
 from core.children import child_table_specs, prepare_rows
@@ -10,17 +11,6 @@ from tests_support.serializers import WidgetSerializer
 
 
 pytestmark = pytest.mark.django_db
-
-
-class DoubleWidgetRow(models.Model):
-    CHILD_FIELDS = ("parent", "related_widget")
-    parent = models.ForeignKey(Widget, on_delete=models.CASCADE, related_name="+")
-    related_widget = models.ForeignKey(
-        Widget, on_delete=models.PROTECT, related_name="+"
-    )
-
-    class Meta:
-        app_label = "tests_support"
 
 
 class ExplicitFieldChild(BaseDocument):
@@ -65,7 +55,18 @@ def test_declared_child_specs_resolve_fk_and_polymorphic_shapes():
     }
 
 
+@isolate_apps("tests_support")
 def test_multiple_parent_links_require_a_named_parent_field(monkeypatch):
+    class DoubleWidgetRow(models.Model):
+        CHILD_FIELDS = ("parent", "related_widget")
+        parent = models.ForeignKey(Widget, on_delete=models.CASCADE, related_name="+")
+        related_widget = models.ForeignKey(
+            Widget, on_delete=models.PROTECT, related_name="+"
+        )
+
+        class Meta:
+            app_label = "tests_support"
+
     real_model = children._model
     monkeypatch.setattr(
         children,
