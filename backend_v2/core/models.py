@@ -8,7 +8,7 @@ from html import escape
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import validate_email
-from django.db import connection, models, transaction
+from django.db import IntegrityError, connection, models, transaction
 from django.db.models import Q, Subquery
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
@@ -175,6 +175,36 @@ class BaseDocument(models.Model):
         if creating:
             kwargs["force_insert"] = True
         return super().save(*args, **kwargs)
+
+
+class SingletonDocument(BaseDocument):
+    """A settings document whose one row is named after its document type."""
+
+    IS_SINGLE = True
+
+    class Meta(BaseDocument.Meta):
+        abstract = True
+
+    @classmethod
+    def singleton_name(cls) -> str:
+        return cls.DOCTYPE or cls.__name__
+
+    @classmethod
+    def load(cls, *, user):
+        document = cls._default_manager.filter(pk=cls.singleton_name()).first()
+        if document is not None:
+            return document
+        try:
+            with transaction.atomic():
+                document = cls(name=cls.singleton_name())
+                document.save(user=user)
+                return document
+        except IntegrityError:
+            return cls._default_manager.get(pk=cls.singleton_name())
+
+    def _assign_name(self):
+        if not self.pk:
+            self.pk = self.singleton_name()
 
 
 class AutoIncrementDocument(BaseDocument):

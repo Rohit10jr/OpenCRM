@@ -5,12 +5,13 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from core.renderers import Envelope
-from core.views import DocumentViewSet
+from core.views import DocumentViewSet, SingletonViewSet
 from tests_support.serializers import (
     AutoIncrementDocumentSerializer,
     FieldDocumentSerializer,
     PromptDocumentSerializer,
     SecuredDocumentSerializer,
+    SingletonDocumentSerializer,
     WidgetSerializer,
 )
 
@@ -80,3 +81,15 @@ class AutoIncrementDocumentViewSet(DocumentViewSet):
     readable_fields = AutoIncrementDocumentSerializer.Meta.fields
     filterable_fields = ("name", "label")
     sortable_fields = ("name", "label", "modified")
+
+
+class SingletonDocumentViewSet(SingletonViewSet):
+    serializer_class = SingletonDocumentSerializer
+    readable_fields = SingletonDocumentSerializer.Meta.fields
+    filterable_fields = ("name", "value", "manager_note")
+    sortable_fields = ("name", "modified")
+
+    def has_object_rule(self, user, document, ptype):
+        if ptype == "read" and document.value == "Private":
+            return False
+        return None

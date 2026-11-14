@@ -1,9 +1,10 @@
-from core.routers import DocumentRouter
+from core.routers import DocumentRouter, SingletonRouter
 from tests_support.views import (
     AutoIncrementDocumentViewSet,
     FieldDocumentViewSet,
     PromptDocumentViewSet,
     SecuredDocumentViewSet,
+    SingletonDocumentViewSet,
     WidgetViewSet,
 )
 
@@ -16,3 +17,9 @@ router.register("test-prompts", PromptDocumentViewSet, basename="test-prompt")
 router.register("test-auto-increments", AutoIncrementDocumentViewSet, basename="test-auto-increment")
 
 urlpatterns = router.urls
+
+singleton_router = SingletonRouter()
+singleton_router.register(
+    "test-singleton", SingletonDocumentViewSet, basename="test-singleton"
+)
+urlpatterns += singleton_router.urls

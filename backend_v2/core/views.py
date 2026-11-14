@@ -216,3 +216,41 @@ class DocumentViewSet(
             check_dynamic_links(document)
             document.delete()
         return Response(Envelope(None, "message"))
+
+
+class SingletonViewSet(DocumentViewSet):
+    """GET and PATCH one settings document at a URL without its name."""
+
+    http_method_names = ("get", "patch", "head", "options")
+
+    def _singleton(self, ptype: str):
+        document = self.document_model._default_manager.filter(
+            pk=self.document_model.singleton_name()
+        ).first()
+        if document is None:
+            raise DoesNotExistError(
+                _("{0} {1} not found").format(
+                    self.document_type, self.document_model.singleton_name()
+                )
+            )
+        if self.has_object_rule(self.request.user, document, ptype) is False:
+            raise PermissionError(
+                _("No permission for {0} {1}").format(
+                    self.document_type, self.document_model.singleton_name()
+                ),
+                title=_("Not Permitted"),
+            )
+        return document
+
+    def retrieve(self, request, *args, **kwargs):
+        return Response(
+            Envelope(self.get_serializer(self._singleton("read")).data, "message")
+        )
+
+    def partial_update(self, request, *args, **kwargs):
+        document = self._singleton("write")
+        serializer = self.get_serializer(document, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            document = serializer.save(user=request.user)
+        return Response(Envelope(self.get_serializer(document).data, "message"))

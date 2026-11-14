@@ -4,7 +4,12 @@ from django.conf import settings
 from django.db import models
 
 from core.fields import EncryptedCharField
-from core.models import AutoIncrementDocument, BaseDocument, TreeDocument
+from core.models import (
+    AutoIncrementDocument,
+    BaseDocument,
+    SingletonDocument as BaseSingletonDocument,
+    TreeDocument,
+)
 from core.naming import (
     DataImportTimestamp,
     FieldValue,
@@ -104,11 +109,11 @@ class WidgetNote(BaseDocument):
     value = models.CharField(max_length=140)
 
 
-class SingletonDocument(BaseDocument):
+class SingletonDocument(BaseSingletonDocument):
     DOCTYPE = "Foundation Singleton"
-    NAME_STRATEGY = Prompt()
-    IS_SINGLE = True
     value = models.CharField(max_length=140, blank=True, default="")
+    manager_note = models.CharField(max_length=140, blank=True, default="")
+    RESTRICTED_FIELDS = ("manager_note",)
 
 
 class SecuredDocument(BaseDocument):

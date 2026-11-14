@@ -6,6 +6,7 @@ from tests_support.models import (
     FieldDocument,
     PromptDocument,
     SecuredDocument,
+    SingletonDocument,
     Widget,
     WidgetNote,
     WidgetRow,
@@ -95,3 +96,9 @@ class AutoIncrementDocumentSerializer(DocumentSerializer):
     class Meta:
         model = AutoIncrementDocumentFixture
         fields = (*STANDARD_FIELDS, "label")
+
+
+class SingletonDocumentSerializer(DocumentSerializer):
+    class Meta:
+        model = SingletonDocument
+        fields = (*STANDARD_FIELDS, "value", "manager_note")
