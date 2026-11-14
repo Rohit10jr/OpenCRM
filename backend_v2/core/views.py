@@ -8,6 +8,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import mixins, viewsets
 from rest_framework import status
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -19,7 +20,7 @@ from core.exceptions import (
     build_error_body,
 )
 from core.inputs import build_payload
-from core.query import by_name, fetch_rows
+from core.query import by_name, fetch_rows, parse_json_param
 from core.renderers import Envelope, WithResponseKeys
 from core.translate import _
 
@@ -178,6 +179,42 @@ class DocumentViewSet(
             sortable=self.sortable_fields,
         )
         return Response(Envelope(rows, "message"))
+
+    @action(detail=False, methods=("get",), url_path="value")
+    def value(self, request):
+        fields = parse_json_param(request.query_params.get("fieldname"), None)
+        if fields is None or isinstance(fields, str):
+            fields = [fields or "name"]
+        elif isinstance(fields, dict):
+            fields = list(fields)
+        fields = [str(field) for field in fields]
+
+        filters = parse_json_param(request.query_params.get("filters"), None)
+        if isinstance(filters, str):
+            filters = {"name": filters}
+        if not filters:
+            filters = None
+
+        rows = fetch_rows(
+            self.get_queryset(),
+            user=request.user,
+            fields=fields,
+            filters=filters,
+            limit_page_length=1,
+            selectable=self.readable_fields,
+            filterable=self.filterable_fields,
+            sortable=self.sortable_fields,
+        )
+        as_dict = request.query_params.get("as_dict", True)
+        if str(as_dict).strip().lower() not in ("", "0", "false", "none", "null"):
+            payload = rows[0] if rows else {}
+        elif not rows:
+            payload = None
+        elif len(fields) > 1:
+            payload = [rows[0].get(field) for field in fields]
+        else:
+            payload = rows[0].get(fields[0])
+        return Response(Envelope(payload, "message"))
 
     def retrieve(self, request, *args, **kwargs):
         serializer = self.get_serializer(self._object_by_name("read"))
