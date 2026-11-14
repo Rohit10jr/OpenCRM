@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 
 import pytest
+from celery.schedules import crontab
 from django.conf import settings
 from django.urls import get_resolver
 
@@ -49,6 +50,16 @@ def test_beat_schedule_refuses_a_duplicate_key():
         celery_config.merge_beat_schedules(
             [{"same-task": {"task": "one"}}, {"same-task": {"task": "two"}}]
         )
+
+
+def test_change_history_cleanup_runs_daily_at_0010():
+    entry = celery_config.app.conf.beat_schedule[
+        "clear-old-view-setting-versions"
+    ]
+    assert entry == {
+        "task": "core.clear_old_versions",
+        "schedule": crontab(hour=0, minute=10),
+    }
 
 
 def test_settings_read_backend_v2_env_only():
