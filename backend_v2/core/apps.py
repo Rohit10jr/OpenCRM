@@ -5,6 +5,7 @@ class CoreConfig(AppConfig):
     name = "core"
 
     def ready(self):
-        # Import the generic post-delete receiver without requiring any resource app
-        # to register its models with core.
-        from core import children  # noqa: F401
+        # Wire every installed document model without a resource-app registry.
+        from core.children import connect_cascades
+
+        connect_cascades()

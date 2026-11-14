@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import contextvars
 from collections import Counter
+from contextlib import contextmanager
 
 from django.apps import apps
 from django.db import models, transaction
 from django.db.models.signals import post_delete
-from django.dispatch import receiver
-from core.doctypes import doctype_of, is_child_table
+from core.doctypes import doctype_of, is_child_table, model_for_doctype
 from core.exceptions import LinkValidationError, MandatoryError
 from core.field_access import hidden_from, readonly_fields, unwritable_by
 from core.translate import _
@@ -308,7 +308,73 @@ def delete_polymorphic_children(instance) -> int:
     return removed
 
 
-@receiver(post_delete, dispatch_uid="core.children.polymorphic_cascade")
-def _delete_polymorphic_children(sender, instance, **kwargs):
-    if getattr(sender, "POLYMORPHIC_CHILD_TABLES", None):
-        delete_polymorphic_children(instance)
+# ACTIVITIES extends this table with ToDo, Comment, File, and Communication when those
+# models exist. Communication uses ``clear``; the other reference rows use ``delete``.
+_REFERENCE_CLEANUP: tuple[tuple[str, str, str, str], ...] = (
+    ("Version", "ref_doctype", "docname", "delete"),
+)
+
+REFERENCE_DOCTYPES = frozenset(row[0] for row in _REFERENCE_CLEANUP)
+_REFERENCES_HANDLED = contextvars.ContextVar(
+    "core.children.references_handled", default=False
+)
+
+
+def delete_references_batch(doctype: str, names: list[str]) -> int:
+    """Remove reference rows for all supplied document names in one batch per type."""
+    if not names:
+        return 0
+    touched = 0
+    for reference_doctype, doctype_column, name_column, action in _REFERENCE_CLEANUP:
+        reference_model = model_for_doctype(reference_doctype)
+        if reference_model is None:
+            continue
+        rows = reference_model._default_manager.filter(
+            **{doctype_column: doctype, f"{name_column}__in": names}
+        )
+        if action == "delete":
+            count, _ = rows.delete()
+        else:
+            count = rows.update(**{doctype_column: "", name_column: ""})
+        touched += count
+    return touched
+
+
+def delete_references(instance) -> int:
+    return delete_references_batch(
+        doctype_of(type(instance)), [str(instance.pk)]
+    )
+
+
+@contextmanager
+def references_handled():
+    """Stand down per-row cleanup when a caller already cleaned a whole batch."""
+    token = _REFERENCES_HANDLED.set(True)
+    try:
+        yield
+    finally:
+        _REFERENCES_HANDLED.reset(token)
+
+
+def _on_parent_delete(sender, instance, **kwargs):
+    delete_polymorphic_children(instance)
+    if not _REFERENCES_HANDLED.get():
+        delete_references(instance)
+
+
+def connect_cascades() -> None:
+    """Wire document cleanup without wiring the reference doctypes themselves."""
+    from core.models import BaseDocument
+
+    for model in apps.get_models():
+        if (
+            isinstance(model, type)
+            and issubclass(model, BaseDocument)
+            and not model._meta.abstract
+            and doctype_of(model) not in REFERENCE_DOCTYPES
+        ):
+            post_delete.connect(
+                _on_parent_delete,
+                sender=model,
+                dispatch_uid=f"core.children.cascade.{model._meta.label}",
+            )
