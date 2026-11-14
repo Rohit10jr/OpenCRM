@@ -19,6 +19,7 @@ from core.exceptions import (
     PermissionError,
     build_error_body,
 )
+from core.field_access import is_hidden
 from core.inputs import build_payload
 from core.query import by_name, fetch_rows, parse_json_param
 from core.renderers import Envelope, WithResponseKeys
@@ -291,3 +292,19 @@ class SingletonViewSet(DocumentViewSet):
         with transaction.atomic():
             document = serializer.save(user=request.user)
         return Response(Envelope(self.get_serializer(document).data, "message"))
+
+    @action(detail=False, methods=("get",), url_path="value")
+    def value(self, request):
+        field = request.query_params.get("field")
+        document = self.document_model._default_manager.filter(
+            pk=self.document_model.singleton_name()
+        ).first()
+        if document is None:
+            return Response(Envelope(None, "message"))
+        if self.has_object_rule(request.user, document, "read") is False:
+            raise PermissionError(
+                _("Not permitted to read {0}").format(self.document_type)
+            )
+        if is_hidden(self.document_model, field, request.user):
+            raise PermissionError(_("Field {0!r} is not readable").format(field))
+        return Response(Envelope(getattr(document, field, None), "message"))
