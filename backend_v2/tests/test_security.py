@@ -15,13 +15,13 @@ from core.security import (
     record_login_failure,
     resolve_ip,
 )
-from core.views import FrappeAPIView
+from core.views import BaseAPIView
 
 pytestmark = pytest.mark.django_db
 LOGIN = "/api/v1/auth/login/"
 
 
-class RateLimitedView(FrappeAPIView):
+class RateLimitedView(BaseAPIView):
     permission_classes = (AllowAny,)
 
     @rate_limit(limit=2, seconds=60)
@@ -29,7 +29,7 @@ class RateLimitedView(FrappeAPIView):
         return Response("ok")
 
 
-class KeyedRateLimitedView(FrappeAPIView):
+class KeyedRateLimitedView(BaseAPIView):
     permission_classes = (AllowAny,)
 
     @rate_limit(
@@ -50,7 +50,7 @@ def capture_key_inputs(inputs):
     return inputs.get("email", "")
 
 
-class CallableKeyRateLimitedView(FrappeAPIView):
+class CallableKeyRateLimitedView(BaseAPIView):
     permission_classes = (AllowAny,)
 
     @rate_limit(limit=1, seconds=60, key=capture_key_inputs)

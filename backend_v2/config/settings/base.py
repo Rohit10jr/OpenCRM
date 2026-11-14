@@ -12,6 +12,7 @@ env = environ.Env()
 environ.Env.read_env(str(ENV_FILE))
 
 SECRET_KEY = env("DJANGO_SECRET_KEY", default="django-insecure-fallback-for-tests-only")
+FIELD_ENCRYPTION_KEY = env("FIELD_ENCRYPTION_KEY", default="")
 DEBUG = env.bool("DJANGO_DEBUG", default=False)
 ALLOWED_HOSTS = env.list(
     "DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"]
@@ -98,13 +99,13 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = "accounts.User"
 
 REST_FRAMEWORK = {
-    "DEFAULT_RENDERER_CLASSES": ("core.renderers.FrappeEnvelopeRenderer",),
+    "DEFAULT_RENDERER_CLASSES": ("core.renderers.EnvelopeRenderer",),
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "accounts.authentication.VersionedJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("core.permissions.IsAuthenticated",),
     "UNAUTHENTICATED_USER": None,
-    "EXCEPTION_HANDLER": "core.exceptions.frappe_exception_handler",
+    "EXCEPTION_HANDLER": "core.exceptions.api_exception_handler",
 }
 
 SIMPLE_JWT = {

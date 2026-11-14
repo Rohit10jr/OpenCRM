@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 
 import pytest
+from celery.schedules import crontab
 from django.conf import settings
 from django.urls import get_resolver
 
@@ -29,17 +30,25 @@ def test_all_ten_apps_are_installed_in_the_decided_order():
 
 
 def test_each_app_urlconf_is_explicitly_included_under_api_v1():
+    production_resolver = get_resolver("config.urls")
     includes = [
         (
             str(pattern.pattern),
             getattr(pattern.urlconf_module, "__name__", pattern.urlconf_module),
         )
-        for pattern in get_resolver().url_patterns
+        for pattern in production_resolver.url_patterns
         if hasattr(pattern, "urlconf_module")
     ]
     assert [("api/v1/", f"{name}.urls") for name in APP_NAMES] == [
         item for item in includes if item[0] == "api/v1/"
     ]
+    assert any(
+        str(pattern.pattern) == ""
+        and getattr(pattern.urlconf_module, "__name__", pattern.urlconf_module)
+        == "config.urls"
+        for pattern in get_resolver("config.test_urls").url_patterns
+        if hasattr(pattern, "urlconf_module")
+    )
 
 
 def test_beat_schedule_refuses_a_duplicate_key():
@@ -51,6 +60,16 @@ def test_beat_schedule_refuses_a_duplicate_key():
         )
 
 
+def test_change_history_cleanup_runs_daily_at_0010():
+    entry = celery_config.app.conf.beat_schedule[
+        "clear-old-view-setting-versions"
+    ]
+    assert entry == {
+        "task": "core.clear_old_versions",
+        "schedule": crontab(hour=0, minute=10),
+    }
+
+
 def test_settings_read_backend_v2_env_only():
     backend_v2_dir = Path(__file__).resolve().parents[1]
     assert base.ENV_FILE == backend_v2_dir / ".env"
@@ -59,7 +78,7 @@ def test_settings_read_backend_v2_env_only():
 
 def test_drf_uses_json_renderer_only():
     assert settings.REST_FRAMEWORK["DEFAULT_RENDERER_CLASSES"] == (
-        "core.renderers.FrappeEnvelopeRenderer",
+        "core.renderers.EnvelopeRenderer",
     )
 
 

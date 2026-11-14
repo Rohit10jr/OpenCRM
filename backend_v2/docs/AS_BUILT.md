@@ -1,6 +1,6 @@
 # As built — what `backend_v2` actually contains
 
-**Status: FOUNDATION skeleton, account identity, and authentication built (2026-11-13).**
+**Status: FOUNDATION through singleton resources and generic value routes built (2026-11-14).**
 
 This file describes the code that exists, not the code that is planned. **Where it and a
 spec disagree, this file wins**: specs are written before the code and go stale; this
@@ -18,13 +18,38 @@ The Django project skeleton is in place with separate base, local and test setti
 It installs the ten top-level apps in the settled order, includes each app's URLconf
 explicitly under `/api/v1/`, and exposes Django admin under `/admin/`.
 
-`core` now supplies the Frappe exception classes and error body, the DRF exception
-handler, the `{"message": ...}` / `{"data": ...}` envelope renderer, merged input
-parsing, surplus-input binding, and `FrappeAPIView` for endpoints that are not resources.
+`core` now supplies the legacy-compatible exception classes and error body, the DRF
+`api_exception_handler`, the `{"message": ...}` / `{"data": ...}`
+`EnvelopeRenderer`, merged input parsing, surplus-input binding, and `BaseAPIView` for
+endpoints that are not resources.
 It also supplies the default authenticated permission and the registry-free `DOCTYPE`
 and `IS_CHILD_TABLE` model metadata readers. Authentication backends are deliberately
 limited to `accounts.authentication.VersionedJWTAuthentication`; guest views opt out of
 the default permission, while authentication still runs when they carry a token.
+
+`core.models.BaseDocument` supplies the standard document fields, server timestamps,
+user foreign keys, fetch-from, email and text-Link validation, and the create lifecycle.
+Its seven naming strategies live in `core.naming`; naming-series counters are incremented
+under a row lock. `AutoIncrementDocument` replaces the string primary key with an integer
+one. Model metadata is declared as ordinary inherited class attributes, without a
+metaclass. `tests_support`, installed only by the test settings, contains small models
+covering every naming strategy and the generic-layer cases later FOUNDATION briefs use.
+
+Change history is withheld from the API and stored in `core.models.Version`, named with
+`Hash(10)`. A document opts in with a `TRACKED_FIELDS` class attribute; `BaseDocument`
+snapshots those values when loading, writes one `{"changed": [[field, old, new], ...]}`
+row after a save that changes any of them, stamps its owner from the explicit
+`save(user=...)` user, and refreshes the snapshot for a second save on the same instance.
+Creates and saves that alter no tracked field write no row. The daily 00:10 task deletes
+only versions whose `ref_doctype` is `CRM View Settings` and whose creation is more than
+14 days old. That doctype deliberately does not opt into tracking today, so normal saves
+give the task nothing to delete; keeping the narrow task implemented makes later view
+tracking safe without ever applying retention to Lead, Deal, or other timeline history.
+Deleting a document also deletes every `Version` row that names its doctype and name.
+Batch callers can delete all such references in one query and suppress the per-row hook
+while removing the documents. The cleanup table currently registers only `Version`;
+ACTIVITIES adds ToDo, Comment, File, and Communication when their models exist, with a
+Communication's reference cleared rather than deleting the email.
 
 The four authentication routes are explicit in `accounts/urls.py`: login and refresh
 are guest POST endpoints, logout is an authenticated POST endpoint, and `auth/me` is an
@@ -66,9 +91,84 @@ disabled, and there are no bulk actions.
 The first account migrations create `User`, the four role groups, and the two built-in
 users. Both built-ins start with unusable passwords; Administrator belongs to the
 Administrator and System Manager groups. The model declares its sensitive, read-only,
-email and attachment fields, but later FOUNDATION briefs add their enforcement and email
-validation. The authentication routes above are the only application API routes built
-so far.
+email and attachment fields. `core.field_access` now reads every field-access declaration
+from the model and applies the global `password` and `last_login` sensitivity rule. User
+roles are cached only on that `User` instance and can be cleared explicitly or by
+`refresh_from_db()`.
+
+`core.fields` supplies encrypted character and text fields. They encrypt before every
+database write and remain ciphertext on the instance; `core.secrets` retains the old
+prefix, pass-through migration behavior, key failures and changed-key wording. The
+authentication routes above are the only application API routes built so far.
+
+`core.filters` and `core.query` now supply the one registry-free list-query layer used
+by later resources. It accepts Frappe's filter shapes and operators, recursively resolves
+`@me` from the explicitly supplied user, validates all field-naming parameters against
+model field access and optional ViewSet allowlists, and projects `.values()` rows with
+the three underscore caches converted back to JSON strings. Callers provide an already
+row-rule-narrowed queryset; these functions never start from a model manager.
+
+`core.filter_backends.FilterBackend` adapts that layer to DRF and records the
+validated projection on the ViewSet for brief 08. `core.pagination.LimitStartPagination`
+uses `limit_start` and `limit_page_length`, caps positive lengths at 500, treats zero as
+unlimited, and returns a bare list for the envelope renderer.
+
+`core.models.TreeDocument` is the abstract Frappe nested-set base. Concrete trees declare
+their parent foreign-key name, inherit indexed `lft`/`rgt`, rebuild all bounds after each
+save or delete with siblings ordered by name, and serialize rebuilds with a
+per-model PostgreSQL transaction advisory lock taken before reading nodes. Its
+`tree_q()` classmethod is the only contract the five tree-filter operators use.
+On save, the same transaction takes that lock before checking the requested parent,
+writing the row, and rebuilding. A node whose new parent is itself or one of its
+descendants raises `NestedSetRecursionError` with upstream's `Item cannot be added to
+its own descendants`; serializing the check and write means two concurrent reparents
+cannot together form a loop. The parity rebuild walks roots only, retains the
+`depth > len(nodes)` guard, and updates only visited nodes. A rootless cycle created by
+writing around `save()` therefore keeps its old bounds, as the old backend does.
+Instance and queryset deletes both take the same transaction advisory lock before the
+tree row is deleted; the post-delete rebuild runs while that lock is still held.
+`tests_support.TestTree` and `TreeItem` exercise that generic contract only under test
+settings.
+
+S26 renamed every application-owned identifier that formerly carried the framework
+name: `FrappeAPIView` → `BaseAPIView`, `FrappeEnvelopeRenderer` →
+`EnvelopeRenderer`, `FrappeError` → `APIError`, `frappe_exception_handler` →
+`api_exception_handler`, and `frappe_not_found` → `not_found`. Test-only aliases were
+also made descriptive: `FrappeNameError` → `DocumentNameError` and
+`FrappePermissionError` → `APIPermissionError`; the paginator test's
+`frappe_parameters` phrase became `legacy_parameters`. The settings import strings use
+the new renderer and handler names. Wire values for the concrete exception subclasses
+and every `frappe.exceptions.*` string are unchanged; the base class is not raised.
+
+`core.serializers.DocumentSerializer` is the base for document resources. It keeps each
+subclass's explicit `Meta.fields`, applies model field-access declarations, requires the
+caller in `context["user"]`, and accepts `save(user=...)` only for that same caller. It
+adds `doctype`, renders the three JSON caches as strings, preserves DRF's padded decimal
+strings, maps text `null` to `""`, and translates duplicate field-value and prompt names
+to the old `DuplicateEntryError` sentence. A sensitive field accidentally included in
+`Meta.fields` is silently excluded rather than made readable.
+
+`core.children` implements declared inline child tables. A real-FK table is declared on
+its parent serializer; a polymorphic table is declared on the parent model so the same
+metadata drives serialization and the post-delete cascade. Every child model declares
+its row fields once in `CHILD_FIELDS`; serialization and writes use only those explicit
+names, with field-access rules applied on top. Writes validate links and mandatory
+values, replace the named table wholesale, assign `idx` from list order, and save every
+row with the explicit caller. Update writes rows before the parent; create saves the
+parent, writes rows, refreshes it, and saves it again, all atomically.
+
+`core.models.SingletonDocument`, `core.views.SingletonViewSet`, and
+`core.routers.SingletonRouter` are the shared settings-record stack. The model pins its
+one row to the document type's name and supplies a concurrency-safe `load(user=...)`.
+The route exposes the document at the resource root with GET and PATCH only. It has no
+name segment and refuses POST, PUT, and DELETE with the standard 405 body.
+
+Every `DocumentViewSet` also exposes `GET <resource>/value/` and
+`GET <resource>/<name>/permissions/`. The value lookup uses the same row-rule-narrowed
+queryset and field allowlists as list; the permission lookup returns all seven old
+permission booleans without raising for a denied row. Every `SingletonViewSet` exposes
+`GET <settings>/value/`, applying its object rule and the model's sensitive and
+restricted field access before returning one value.
 
 ## 2. Recipes
 
@@ -78,13 +178,85 @@ Until then they are headings only; do not guess their contents from
 
 ### Adding a resource
 
-*Not written yet — FOUNDATION.* Model, serializer, ViewSet with its allowlists, its
-registration on the app's router under `/api/v1/`, the recorded access decision, and the
-tests the guard tests will demand.
+Start the model by subclassing `BaseDocument`, or `AutoIncrementDocument` for a genuine
+integer name. Declare `DOCTYPE` and `NAME_STRATEGY` as class attributes. The other
+model declarations are `IS_CHILD_TABLE`, `IS_SINGLE`, `FETCH_FROM`, `EMAIL_FIELDS`, and
+`TEXT_LINK_FIELDS`; the last maps a text column to `(app_label.Model, label)`. A field
+that deliberately keeps a deleted target's name as audit data is also named in
+`ALLOW_DANGLING_LINK_FIELDS`.
+
+Creating through Django's ordinary `objects.create()` is intentionally unsupported,
+because it cannot supply the required actor. Use `Model(...).save(user=user)`, or
+`Model.objects.create_for_user(user=user, ...)`. Updates likewise call
+`save(user=user)`. A request passes `request.user`; seeds and scheduled jobs pass
+`accounts.roles.ADMINISTRATOR`; an enqueued job passes the user who enqueued it.
+Passing `None` or an empty string raises `TypeError` with
+`` `user` is required to save a document ``.
+
+Write one `DocumentSerializer` subclass with an explicit `Meta.fields` tuple. Include
+every standard or resource field that may appear; the base never adds parent fields.
+Sensitive fields are still silently excluded if listed, standard/model read-only fields
+are input-ignored, and restricted fields are removed per `context["user"]`. The ViewSet
+passes `request.user` in that context and calls `serializer.save(user=request.user)`.
+Using the serializer without the context user is a `TypeError`.
+
+For a single-parent child, put its virtual field in `Meta.fields` and declare the child
+model label on the serializer:
+
+```python
+class WidgetSerializer(DocumentSerializer):
+    CHILD_TABLES = {"items": ("widgets.WidgetItem", "parent_widget")}
+
+    class Meta:
+        model = Widget
+        fields = (*STANDARD_FIELDS, "title", "items")
+```
+
+Name the child model and its parent-link field in the declaration. A bare model label
+remains supported when the child has exactly one foreign key to the parent; if it has
+several, resolving the serializer raises an error listing the fields that can be named.
+On the child model, declare `CHILD_FIELDS` as a literal tuple containing every concrete
+field the row may show or accept, including the standard document and parent fields:
+
+```python
+class WidgetItem(BaseDocument):
+    IS_CHILD_TABLE = True
+    CHILD_FIELDS = (
+        "name", "owner", "modified_by", "creation", "modified", "idx",
+        "docstatus", "_assign", "_liked_by", "_comments", "_user_tags",
+        "parent_widget", "parentfield", "parenttype", "value",
+    )
+```
+
+Do not derive this tuple from model metadata. A new concrete column stays off the wire
+and is ignored on write until explicitly added. Sensitive and restricted fields are
+still hidden per caller, and standard/model read-only fields are ignored on write. A
+child model without `CHILD_FIELDS` raises `TypeError` when its table is used. Keep this
+policy on the child model so a child embedded by several parents has only one list.
+For a child doctype shared by multiple parent types, declare the string parent columns on
+the child and put
+`POLYMORPHIC_CHILD_TABLES = {"items": "widgets.WidgetItem"}` on each parent model;
+again name `items` in the serializer's fields. If the same child model is declared under
+two field names, `parentfield` distinguishes them. Neither kind receives its own route.
+
+### Adding a singleton resource
+
+Subclass `core.models.SingletonDocument`, declare `DOCTYPE`, and add ordinary model
+fields; do not declare a naming strategy. Create or fetch the one row with
+`Model.load(user=user)`. Both `load()` and a direct first save pin its name to `DOCTYPE`,
+and two concurrent first loads converge on the same row.
+
+Use an explicit `DocumentSerializer` as for any other document, then subclass
+`core.views.SingletonViewSet`. Declare the same serializer, field allowlists, and object
+rule a document resource would use. Register it on `SingletonRouter` in the app's
+`urls.py`. The router writes only the root GET/PATCH route and collection actions; it
+cannot create a list, create, delete, PUT, or name route. The inherited
+`GET <settings>/value/?field=<field>` action returns the scalar or `null` and applies the
+read object rule before sensitive and restricted field access.
 
 ### Adding an action or an endpoint
 
-For an endpoint that is not a resource, subclass `core.views.FrappeAPIView`, implement
+For an endpoint that is not a resource, subclass `core.views.BaseAPIView`, implement
 only the allowed HTTP methods, and write its route explicitly in its app's `urls.py` and
 in the route map. `self.get_inputs(request)` merges query and body inputs, JSON-decodes
 query values when possible, lets the body win, and drops `cmd`; the view then reads only
@@ -105,22 +277,87 @@ carries a token. No view binds a user into ambient state: pass `request.user` to
 service that needs it. Write both slash forms with one explicit `re_path`, using a final
 `/?$`; do not rely on `APPEND_SLASH`, because POST bodies must not be redirected.
 
-Resource actions and their ViewSet base are not built yet.
+For a document resource, subclass `core.views.DocumentViewSet`, set its explicit
+`serializer_class`, and declare `readable_fields`, `filterable_fields`,
+`sortable_fields`, and `searchable_fields` as tuples. The first three govern list
+projection, filters, and both ordering and grouping; an empty tuple permits no fields
+for that operation. Register the class explicitly on the app's
+`core.routers.DocumentRouter` and include the app's URLconf under `/api/v1/`.
+
+The base serves list, create, retrieve, PATCH, and delete with the client-reference
+`{"message": ...}` envelope and status 200, including create. It never serves PUT.
+Every serializer receives `request.user` in its context and every save receives the
+same user explicitly. Create, PATCH, and delete are transactional; delete checks
+declared dynamic links before Django's protected-link check, while the existing
+post-delete hook removes polymorphic child rows.
+
+The same registration also writes two read actions. `GET <resource>/value/` keeps the
+old `fieldname`, `filters`, `as_dict`, and ignored `parent` inputs; it calls
+`get_queryset()` before the shared query layer, so list row rules and field allowlists
+cannot be bypassed. `GET <resource>/<name>/permissions/` returns the seven permission
+booleans from `has_object_rule()` and deliberately does not raise when `read` is false;
+a missing row returns an empty permissions map.
 
 ### Carrying a document name with slashes in a route
 
-*Not written yet — FOUNDATION.* Names like `R/GA` are legal; how the lookup allows them
-without swallowing an action segment.
+Use `DocumentRouter`, whose document lookup is `.+?` and whose trailing slash is
+optional. It orders collection actions, document actions, and finally the catch-all
+document route. Thus `/organizations/R/GA/` reaches the `R/GA` record while
+`/organizations/R/GA/convert/` can reach a declared `convert` action. A collection
+action wins over a record with exactly the same one-segment name; that record is the
+settled S25 (8) known limit.
 
 ### Declaring field access
 
-*Not written yet — FOUNDATION.* Sensitive, restricted, read-only, encrypted: where each is
-declared and what enforces it.
+Declare access rules as model class attributes. `SENSITIVE_FIELDS` are never readable;
+`password` and `last_login` are sensitive on every model without being declared.
+`RESTRICTED_FIELDS` are readable only by `System Manager`, `Sales Manager`, and the
+literal `Administrator`, unless `RESTRICTED_FIELDS_ROLES` replaces those two role names.
+`READONLY_FIELDS` are readable but silently ignored on generic writes.
+`PRIVILEGED_WRITE_FIELDS` are readable by everyone but writable only by the restricted
+roles, unless `PRIVILEGED_WRITE_ROLES` replaces them. Anonymous callers are never
+privileged. Pass the `User` instance to `hidden_from(model, user)`,
+`is_hidden(model, field, user)`, and `unwritable_by(model, user)`; none reads ambient
+request state.
+
+Declare stored credentials with `core.fields.EncryptedCharField` or
+`EncryptedTextField`, and also list the field in `SENSITIVE_FIELDS`. Encryption uses only
+`FIELD_ENCRYPTION_KEY`; a missing key refuses the write. Read plaintext explicitly with
+`document.get_password("fieldname")`. `core.field_access.encrypted_fields(model)` derives
+the encrypted names from field types for the credential guard—there is no second list to
+maintain.
+
+Each resource ViewSet declares `selectable_fields`, `filterable_fields`, and
+`sortable_fields` as explicit tuples; brief 08 supplies the resource-specific values and
+adds `searchable_fields`. The first three are passed to `FilterBackend` and the
+plain query functions. `sortable_fields` also governs `group_by`. Omitting an allowlist
+means every non-hidden concrete field is available to the corresponding operation;
+supplying one only narrows access and never widens model field access. A real column
+outside an allowlist receives the same refusal as a hidden field, so the response does
+not disclose that it exists.
+
+`User.get_roles()` memoises on that instance. Call `user.clear_roles_cache()` after a
+test changes group membership in place; `user.refresh_from_db()` clears it automatically.
 
 ### Writing a row rule
 
-*Not written yet — FOUNDATION.* The list rule, the object rule, and the destination
-re-check for rows that point at another document.
+Override `list_rule(user)` on the resource ViewSet and return a Django `Q`, or `None`
+for no narrowing. `get_queryset()` applies this rule before client filters. Record
+lookup instead starts from the model's default manager and then applies the object rule:
+list and object rules may intentionally differ, so exclusion from a list is not a 404.
+
+Override `has_object_rule(user, document, ptype)` for the record decision, returning
+`True`, `False`, or `None`; `None` means no additional restriction. The base calls it
+with `read`, `write`, `delete`, or `create`. Create receives an unsaved candidate built
+from the payload's plain concrete fields, falling back to an empty instance only when
+construction fails.
+
+For a resource whose plain fields identify a referenced destination, declare those
+names in `reference_fields`. A PATCH changing one copies the current document, applies
+the validated values, and runs the `write` object rule again. Refusal answers
+`Not permitted to move <DocType> there`. Dynamic-link models declare
+`DYNAMIC_LINK_FIELDS` as `(doctype_field, name_field)` pairs so deletion can find them
+without a registry.
 
 ### Raising an error
 
@@ -132,6 +369,7 @@ are:
 | Class | Status | Title |
 |---|---:|---|
 | `ValidationError` | 417 | Message |
+| `NestedSetRecursionError` | 417 | Message |
 | `MandatoryError` | 417 | Message |
 | `InvalidEmailAddressError` | 417 | Message |
 | `OutgoingEmailError` | 417 | Message |
@@ -153,13 +391,24 @@ mapping is considered. DRF response headers such as `Retry-After`, `WWW-Authenti
 and `Allow` are preserved. An exception the handler does not recognize remains a plain
 500.
 
+User-facing messages use the identity marker `core.translate._`; translation is
+deliberately deferred. Write numbered templates as
+`_("DocType {0} not found").format(doctype)`. Use the upstream template verbatim when
+one exists, and preserve the old port's wording when it does not. Do not use Django's
+`gettext`: activating a Django language must not translate these messages yet. This
+recipe now covers every application module built through briefs 01–08a, including
+exception-envelope fragments, naming, links, email validation, lockout, filters,
+queries, trees, children, and serializers. Construction that is not a client message
+stays ordinary Python: identifiers and query keys, generated document names, `repr`s,
+logs, test data, and developer-only programming errors.
+
 A wrong method has this body (shown for `GET`) and an `Allow` header:
 
 ```json
 {"exception":"frappe.exceptions.MethodNotAllowed: Method \"GET\" not allowed.","exc_type":"MethodNotAllowed","_server_messages":"[\"{\\\"message\\\": \\\"Method \\\\\\\"GET\\\\\\\" not allowed.\\\", \\\"title\\\": \\\"Message\\\"}\"]","message":"Method \"GET\" not allowed.","messages":["Method \"GET\" not allowed."]}
 ```
 
-`core.views.frappe_not_found` decides the response for an unknown non-admin URL. A
+`core.views.not_found` decides the response for an unknown non-admin URL. A
 final catch-all in `config.urls` makes it apply under `/api/v1/` and elsewhere even
 when `DEBUG=True`; `handler404` uses the same function for `Http404` resolution when
 `DEBUG=False`. Django admin keeps its own 404 pages. The body is:
@@ -234,8 +483,38 @@ Each of these has already cost time on this machine:
 
 ## 4. Invariants that will bite you
 
+An unsaved document always issues an INSERT (`force_insert=True`). A caller-supplied
+name that is already taken therefore raises an integrity error instead of silently
+updating the existing row. Names are stored as Frappe supplies them (trimmed where
+Frappe trims, never slugified), and only `<` and `>` are forbidden. Every document save
+requires the acting `user`; there is no ambient current-user state or Guest fallback.
+
 User admin bulk actions must stay disabled: Django applies them with `QuerySet.update()`,
 which skips `User.save()` and therefore skips disabled-user token revocation.
+
+The attribute of an encrypted field is ciphertext after save and after load. Code that
+needs the credential must call `get_password()`; direct attribute access is deliberately
+not useful.
+
+List-query callers apply the row rule first and pass that base queryset to
+`build_list_queryset()`, `fetch_rows()`, or `count_rows()`; client filters can only
+narrow it. Hidden fields are refused, not dropped, in all five field-naming parameters:
+`fields`, `filters`, `or_filters`, `order_by`, and `group_by`. A list row comes from
+`.values()`, so a decimal remains numeric for DRF's JSON encoder, while `_assign`,
+`_liked_by`, and `_comments` are JSON strings on the wire.
+
+A serialized document and every inline child row carry `doctype`. Document serializers
+render decimals as strings padded to the model column's decimal places; list projections
+leave decimals numeric. `_assign`, `_liked_by`, and `_comments` are JSON strings in both
+shapes. Child table input replaces the table wholesale: update writes children before
+the parent save, while create saves parent, children, then parent in one transaction.
+
+Every document list starts from its row-rule-narrowed queryset and its one explicit
+field policy. Record routes look up the name on the default manager: a missing record is
+404, while a found record whose object rule returns `False` is 403. Create permissions
+inspect payload fields, and a declared destination is checked against the post-PATCH
+candidate before writing. A lookup key the model primary key cannot hold is an ordinary
+not-found response.
 
 The old backend's list, which is likely to apply here too, is
 `specs/AS_BUILT.md` section 4 — `lead_owner` is the access column, names may contain

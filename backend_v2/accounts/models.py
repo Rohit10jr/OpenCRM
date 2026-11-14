@@ -114,10 +114,19 @@ class User(AbstractBaseUser, PermissionsMixin):
         return self.enabled
 
     def get_roles(self) -> set[str]:
-        roles = set(self.groups.values_list("name", flat=True))
-        if self.name == ADMINISTRATOR:
-            roles.add(ROLE_ADMINISTRATOR)
-        return roles
+        if not hasattr(self, "_roles_cache"):
+            roles = set(self.groups.values_list("name", flat=True))
+            if self.name == ADMINISTRATOR:
+                roles.add(ROLE_ADMINISTRATOR)
+            self._roles_cache = roles
+        return set(self._roles_cache)
+
+    def clear_roles_cache(self) -> None:
+        self.__dict__.pop("_roles_cache", None)
+
+    def refresh_from_db(self, *args, **kwargs):
+        self.clear_roles_cache()
+        return super().refresh_from_db(*args, **kwargs)
 
     def has_role(self, role: str) -> bool:
         return role in self.get_roles()

@@ -51,7 +51,7 @@ commit its reference was read at.
 
 | Old model | What it is | New app | Unit | Status |
 |---|---|---|---|---|
-| `frappe_core.NamingSeriesCounter` | One counter row per resolved naming-series prefix | core | FOUNDATION | — |
+| `frappe_core.NamingSeriesCounter` | One counter row per resolved naming-series prefix | core | FOUNDATION | built |
 | `frappe_platform.UserSettings` | Per-user list-view state behind `frappe.model.utils.user_settings.*` | configuration | CONFIGURATION | — |
 | SimpleJWT `token_blacklist` tables | Rotated and logged-out refresh tokens | accounts | FOUNDATION | — |
 
@@ -92,7 +92,7 @@ on seed data from a unit the scan cannot see.
 | DocType | Kind | Naming | Old protection | Declared fields | Old model | New app | Status |
 |---|---|---|---|---|---|---|---|
 | User | main | default | ruled: list rule, object rule | S: `groups`, `user_permissions`, `is_superuser`, `is_staff`, `reset_password_key`, `last_reset_password_key_generated_on`, `token_version`; RO: `enabled`, `user_type` | `frappe_platform.User` | accounts | — |
-| Version | withheld | `Hash(10)` | withheld — `specs/UNROUTED_DOCTYPES.md` |  | `frappe_core.Version` | core | — |
+| Version | withheld | `Hash(10)` | withheld — `specs/UNROUTED_DOCTYPES.md` |  | `frappe_core.Version` | core | built |
 
 ### Method paths (12)
 
@@ -109,14 +109,14 @@ the alias `refresh_token`, all in the body. The old paths also answered a second
 | Dotted path | Verbs | Access | Old source | New route | New app | Status |
 |---|---|---|---|---|---|---|
 | `frappe.auth.get_logged_user` | GET/POST | auth | `frappe_core/api/auth.py:get_logged_user` | `GET /api/v1/auth/me/` | accounts | built |
-| `frappe.client.delete` | DELETE/POST | auth | `crm_app/api/client.py:client_delete` | each resource's, in its unit | core | — |
-| `frappe.client.get_doc_permissions` | GET/POST | auth | `crm_app/api/client.py:client_get_doc_permissions` | each resource's, in its unit | core | — |
-| `frappe.client.get_list` | GET/POST | auth | `crm_app/api/client.py:client_get_list` | each resource's, in its unit | core | — |
-| `frappe.client.get_single_value` | GET/POST | auth | `crm_app/api/client.py:client_get_single_value` | each resource's, in its unit | core | — |
-| `frappe.client.get_value` | GET/POST | auth | `crm_app/api/client.py:client_get_value` | each resource's, in its unit | core | — |
-| `frappe.client.get` | GET/POST | auth | `crm_app/api/client.py:client_get` | by `name`: each resource's, in its unit. By `filters`: **not served: no caller** (PE-3) | core | — |
-| `frappe.client.insert` | POST | auth | `crm_app/api/client.py:client_insert` | each resource's, in its unit | core | — |
-| `frappe.client.set_value` | POST/PUT | auth | `crm_app/api/client.py:client_set_value` | each resource's, in its unit | core | — |
+| `frappe.client.delete` | DELETE/POST | auth | `crm_app/api/client.py:client_delete` | each resource's, in its unit | core | built |
+| `frappe.client.get_doc_permissions` | GET/POST | auth | `crm_app/api/client.py:client_get_doc_permissions` | `GET /api/v1/<resource>/<name>/permissions/` | core | built |
+| `frappe.client.get_list` | GET/POST | auth | `crm_app/api/client.py:client_get_list` | each resource's, in its unit | core | built |
+| `frappe.client.get_single_value` | GET/POST | auth | `crm_app/api/client.py:client_get_single_value` | `GET /api/v1/<settings>/value/` | core | built |
+| `frappe.client.get_value` | GET/POST | auth | `crm_app/api/client.py:client_get_value` | `GET /api/v1/<resource>/value/` | core | built |
+| `frappe.client.get` | GET/POST | auth | `crm_app/api/client.py:client_get` | by `name`: each resource's, in its unit. By `filters`: **not served: no caller** (PE-3) | core | built |
+| `frappe.client.insert` | POST | auth | `crm_app/api/client.py:client_insert` | each resource's, in its unit | core | built |
+| `frappe.client.set_value` | POST/PUT | auth | `crm_app/api/client.py:client_set_value` | each resource's, in its unit | core | built |
 | `login` | POST | guest | `frappe_core/api/auth.py:login` | `POST /api/v1/auth/login/` | accounts | built |
 | `logout` | POST/GET | auth | `frappe_core/api/auth.py:logout` | `POST /api/v1/auth/logout/` | accounts | built |
 | `token/refresh` | POST | guest | `frappe_core/api/auth.py:refresh_token` | `POST /api/v1/auth/token/refresh/` | accounts | built |

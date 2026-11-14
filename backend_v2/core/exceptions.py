@@ -14,9 +14,10 @@ from rest_framework import exceptions as drf_exceptions
 from rest_framework.response import Response
 
 from core.doctypes import doctype_of, is_child_table
+from core.translate import _
 
 
-class FrappeError(Exception):
+class APIError(Exception):
     http_status_code = 417
     title = "Message"
 
@@ -38,21 +39,25 @@ class FrappeError(Exception):
         return type(self).__name__
 
 
-class ValidationError(FrappeError):
+class ValidationError(APIError):
     http_status_code = 417
 
 
-class PermissionError(FrappeError):
+class NestedSetRecursionError(ValidationError):
+    pass
+
+
+class PermissionError(APIError):
     http_status_code = 403
     title = "Not Permitted"
 
 
-class DoesNotExistError(FrappeError):
+class DoesNotExistError(APIError):
     http_status_code = 404
     title = "Not Found"
 
 
-class MandatoryError(FrappeError):
+class MandatoryError(APIError):
     http_status_code = 417
 
 
@@ -68,15 +73,15 @@ class LinkValidationError(ValidationError):
     pass
 
 
-class AuthenticationError(FrappeError):
+class AuthenticationError(APIError):
     http_status_code = 401
 
 
-class DuplicateEntryError(FrappeError):
+class DuplicateEntryError(APIError):
     http_status_code = 409
 
 
-class NameError(FrappeError):
+class NameError(APIError):
     http_status_code = 409
 
 
@@ -84,11 +89,11 @@ class LinkExistsError(ValidationError):
     pass
 
 
-class RateLimitExceededError(FrappeError):
+class RateLimitExceededError(APIError):
     http_status_code = 429
 
 
-class SecurityException(FrappeError):
+class SecurityException(APIError):
     http_status_code = 403
 
 
@@ -98,7 +103,7 @@ class FilterError(ValueError):
 
 def throw(
     message: str,
-    exc: type[FrappeError] = ValidationError,
+    exc: type[APIError] = ValidationError,
     title: str | None = None,
 ):
     raise exc(message, title=title)
@@ -121,7 +126,7 @@ def build_error_body(
         messages = ["Internal Server Error"]
     return {
         "exception": exception
-        or f"frappe.exceptions.{exc_type}: {messages[0]}",
+        or _("frappe.exceptions.{0}: {1}").format(exc_type, messages[0]),
         "exc_type": exc_type,
         "_server_messages": build_server_messages(messages, title),
         "message": messages[0],
@@ -137,7 +142,7 @@ def _flatten_drf_detail(detail) -> list[str]:
                 messages.append(
                     message
                     if key in ("non_field_errors", "detail")
-                    else f"{key}: {message}"
+                    else _("{0}: {1}").format(key, message)
                 )
         return messages
     if isinstance(detail, (list, tuple)):
@@ -252,20 +257,20 @@ def link_exists_message(
     reference_name: str,
     row: str = "",
 ) -> str:
-    parts = (
-        "Cannot delete or cancel because",
+    return _(
+        "Cannot delete or cancel because {0} {1} is linked with {2} {3} {4}"
+    ).format(
         doctype,
         name,
-        "is linked with",
         reference_doctype,
         reference_name,
         row,
-    )
-    return " ".join(str(part) for part in parts if part)
+    ).rstrip()
 
 
-def frappe_exception_handler(exc, context):
-    if isinstance(exc, FrappeError):
+
+def api_exception_handler(exc, context):
+    if isinstance(exc, APIError):
         body = build_error_body(exc.exc_type, list(exc.messages), exc.title)
         return Response(body, status=exc.http_status_code)
 
