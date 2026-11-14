@@ -18,7 +18,15 @@ from tests_support.serializers import (
 class WidgetViewSet(DocumentViewSet):
     serializer_class = WidgetSerializer
     readable_fields = WidgetSerializer.Meta.fields
-    filterable_fields = ("name", "widget_name", "status", "widget_owner")
+    filterable_fields = (
+        "name",
+        "widget_name",
+        "status",
+        "amount",
+        "quantity",
+        "widget_owner",
+        "_assign",
+    )
     sortable_fields = ("name", "widget_name", "status", "modified")
     searchable_fields = ("widget_name", "notes")
     reference_fields = ("status",)
