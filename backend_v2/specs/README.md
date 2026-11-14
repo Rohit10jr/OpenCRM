@@ -91,7 +91,9 @@ before each phase found four or five false claims in its spec; finding none is m
 likely a sign of not looking. Each finding is fixed in the spec, or settled with the
 owner, before the first build brief.
 
-**If the gate fails twice, stop** and report to the owner. A unit with a known hole,
+**If the gate fails twice, stop** and report to the owner — unless the second failure's
+cause is confirmed and its fix is small and plainly right; then make a third attempt and
+report it (root `CLAUDE.md`, Codex section). A unit with a known hole,
 honestly reported, costs less than every later unit built on one believed sound.
 
 **The progress report is the unit's pull request description:** what was built, by app;

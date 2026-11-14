@@ -174,7 +174,14 @@ not write feature code. Codex's side is `AGENTS.md` "When building".
   with the owner, before the first build brief (`backend_v2/specs/README.md`).
 - A brief names the unit and its spec, the `PORT_MAP.md` rows, the old backend's files
   and functions, the decisions already taken, the one change to make, and the tests.
-- **If a unit's gate fails twice, stop** and report to the owner.
+- **Two failures of a brief or a unit's gate (review or tests): stop — unless the cause
+  is known.** If the second failure's root cause is found and confirmed from the
+  evidence (the error, the code, a reproduction) and the fix is small and plainly right,
+  make a **third attempt** without waiting: write the fix brief, then tell the owner and
+  record it in `STATUS.md` / the progress report. Stop and report instead when the cause
+  is a guess, the fix is large, it would change a decision or the contract, or the
+  third attempt fails too. (Owner, 14 Nov 2026: stopping on a known cause with a known
+  fix only wastes time.)
 - **The unit's pull request description is its progress report**; the list of what it
   holds is in `backend_v2/specs/README.md`.
 - Run builds with `network_access=true`, so tests can reach PostgreSQL.
