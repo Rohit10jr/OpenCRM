@@ -2,7 +2,7 @@
 
 import pytest
 
-from tests_support.models import SingletonDocument
+from tests_support.models import SingletonDocument, Widget
 
 
 pytestmark = pytest.mark.django_db
@@ -55,3 +55,28 @@ def test_restricted_single_value_is_refused_for_sales_user_and_returned_for_mana
     )
     assert allowed.status_code == 200
     assert allowed.json() == {"message": "manager-only"}
+
+
+def test_get_doc_permissions_does_not_raise_for_a_denied_row(
+    auth_api, alice, bob
+):
+    row = Widget(widget_name="Theirs", status="Private", widget_owner=bob)
+    row.save(user=alice)
+    response = auth_api.get(f"{WIDGETS}{row.name}/permissions/")
+    assert response.status_code == 200
+    permissions = response.json()["message"]["permissions"]
+    assert permissions == {
+        "read": False,
+        "write": True,
+        "delete": True,
+        "create": True,
+        "share": True,
+        "print": True,
+        "email": True,
+    }
+
+
+def test_get_doc_permissions_returns_an_empty_map_for_a_missing_row(auth_api):
+    response = auth_api.get(f"{WIDGETS}missing/permissions/")
+    assert response.status_code == 200
+    assert response.json() == {"message": {"permissions": {}}}

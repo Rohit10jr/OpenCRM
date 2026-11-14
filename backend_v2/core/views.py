@@ -217,6 +217,29 @@ class DocumentViewSet(
             payload = rows[0].get(fields[0])
         return Response(Envelope(payload, "message"))
 
+    @action(detail=True, methods=("get",), url_path="permissions")
+    def permissions(self, request, *args, **kwargs):
+        name = self.kwargs[self.lookup_url_kwarg or self.lookup_field]
+        document = by_name(self.document_model, name).first()
+        if document is None:
+            payload = {"permissions": {}}
+        else:
+            payload = {
+                "permissions": {
+                    ptype: self.has_object_rule(request.user, document, ptype) is not False
+                    for ptype in (
+                        "read",
+                        "write",
+                        "delete",
+                        "create",
+                        "share",
+                        "print",
+                        "email",
+                    )
+                }
+            }
+        return Response(Envelope(payload, "message"))
+
     def retrieve(self, request, *args, **kwargs):
         serializer = self.get_serializer(self._object_by_name("read"))
         return Response(Envelope(serializer.data, "message"))
