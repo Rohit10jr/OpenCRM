@@ -30,17 +30,25 @@ def test_all_ten_apps_are_installed_in_the_decided_order():
 
 
 def test_each_app_urlconf_is_explicitly_included_under_api_v1():
+    production_resolver = get_resolver("config.urls")
     includes = [
         (
             str(pattern.pattern),
             getattr(pattern.urlconf_module, "__name__", pattern.urlconf_module),
         )
-        for pattern in get_resolver().url_patterns
+        for pattern in production_resolver.url_patterns
         if hasattr(pattern, "urlconf_module")
     ]
     assert [("api/v1/", f"{name}.urls") for name in APP_NAMES] == [
         item for item in includes if item[0] == "api/v1/"
     ]
+    assert any(
+        str(pattern.pattern) == ""
+        and getattr(pattern.urlconf_module, "__name__", pattern.urlconf_module)
+        == "config.urls"
+        for pattern in get_resolver("config.test_urls").url_patterns
+        if hasattr(pattern, "urlconf_module")
+    )
 
 
 def test_beat_schedule_refuses_a_duplicate_key():
