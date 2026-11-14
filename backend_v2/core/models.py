@@ -1,5 +1,6 @@
 """Standard fields and lifecycle shared by document models."""
 
+import json
 import re
 import zlib
 from email.utils import parseaddr
@@ -71,6 +72,7 @@ class BaseDocument(models.Model):
     ALLOW_DANGLING_LINK_FIELDS = ()
     POLYMORPHIC_CHILD_TABLES = {}
     DYNAMIC_LINK_FIELDS = ()
+    TRACKED_FIELDS = ()
 
     name = models.CharField(max_length=140, primary_key=True, editable=False)
     owner = models.ForeignKey(
@@ -105,6 +107,15 @@ class BaseDocument(models.Model):
     class Meta:
         abstract = True
         ordering = ["-modified"]
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        if cls.TRACKED_FIELDS:
+            from core.versions import capture_tracked_values
+
+            instance._tracked_snapshot = capture_tracked_values(instance)
+        return instance
 
     def __str__(self):
         return str(self.pk)
@@ -174,7 +185,39 @@ class BaseDocument(models.Model):
 
         if creating:
             kwargs["force_insert"] = True
-        return super().save(*args, **kwargs)
+        result = super().save(*args, **kwargs)
+
+        if self.TRACKED_FIELDS:
+            from core.versions import capture_tracked_values, record_version
+
+            before = None if creating else getattr(self, "_tracked_snapshot", None)
+            record_version(self, before, user)
+            self._tracked_snapshot = capture_tracked_values(self)
+
+        return result
+
+
+class Version(BaseDocument):
+    """A withheld field-change audit row."""
+
+    DOCTYPE = "Version"
+    NAME_STRATEGY = naming.Hash(10)
+
+    ref_doctype = models.CharField(max_length=140, db_index=True)
+    docname = models.CharField(max_length=140, db_index=True)
+    data = models.TextField(blank=True, default="{}")
+
+    class Meta(BaseDocument.Meta):
+        ordering = ["creation"]
+        indexes = [
+            models.Index(fields=["ref_doctype", "docname"], name="version_ref_idx"),
+        ]
+
+    def changes(self) -> list[list]:
+        try:
+            return json.loads(self.data or "{}").get("changed", [])
+        except (TypeError, ValueError):
+            return []
 
 
 class SingletonDocument(BaseDocument):

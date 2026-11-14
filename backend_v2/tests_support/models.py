@@ -38,6 +38,25 @@ class HashDocument(BaseDocument):
     label = models.CharField(max_length=140, blank=True, default="")
 
 
+class TrackedDocument(BaseDocument):
+    DOCTYPE = "Foundation Tracked"
+    NAME_STRATEGY = Hash()
+    TRACKED_FIELDS = ("label", "amount", "effective_date", "assigned_to")
+    label = models.CharField(max_length=140, blank=True, default="")
+    amount = models.DecimalField(
+        max_digits=18, decimal_places=6, null=True, blank=True
+    )
+    effective_date = models.DateField(null=True, blank=True)
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="+",
+        null=True,
+        blank=True,
+    )
+    notes = models.TextField(blank=True, default="")
+
+
 class FormatDocument(BaseDocument):
     DOCTYPE = "Foundation Format"
     NAME_STRATEGY = Format("{document_type}-{layout_type}")
