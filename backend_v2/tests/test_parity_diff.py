@@ -13,11 +13,12 @@ from scripts.parity_diff import (
 )
 
 
-def response(status, body):
+def response(status, body, headers=None):
     result = requests.Response()
     result.status_code = status
     result._content = body.encode()
     result.headers["Content-Type"] = "application/json"
+    result.headers.update(headers or {})
     return result
 
 
@@ -85,6 +86,32 @@ def test_ignored_value_may_differ_but_must_exist_with_the_same_type():
 def test_status_difference_is_reported_before_the_body():
     difference = response_difference(response(200, '{"message":"same"}'), response(201, '{"message":"same"}'), [])
     assert difference == "$.status: 200 != 201"
+
+
+def test_retry_after_difference_is_reported_when_bodies_match():
+    difference = response_difference(
+        response(429, '{"message":"same"}', {"Retry-After": "10"}),
+        response(429, '{"message":"same"}', {"Retry-After": "20"}),
+        [],
+    )
+    assert difference == "$.headers.Retry-After: '10' != '20'"
+
+
+def test_contract_header_on_one_side_only_is_reported():
+    difference = response_difference(
+        response(401, '{"message":"same"}', {"WWW-Authenticate": "Bearer"}),
+        response(401, '{"message":"same"}'),
+        [],
+    )
+    assert difference == "$.headers.WWW-Authenticate: 'Bearer' != None"
+
+
+def test_allow_header_method_order_is_ignored():
+    assert response_difference(
+        response(405, '{"message":"same"}', {"Allow": "GET, POST"}),
+        response(405, '{"message":"same"}', {"Allow": "POST, GET"}),
+        [],
+    ) is None
 
 
 def test_real_body_difference_reports_short_json_path(temporary_path: Path):

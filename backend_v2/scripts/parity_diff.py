@@ -23,6 +23,7 @@ OLD_HTTP = ROOT / "docs" / "http"
 NEW_HTTP = ROOT / "backend_v2" / "http"
 DEFAULT_IGNORES = Path(__file__).with_name("parity_ignore.json")
 NUMBER_RE = re.compile(r"^(\d+(?:\.\d+)+[a-z]?)\b")
+CONTRACT_HEADERS = ("Allow", "WWW-Authenticate", "Retry-After")
 
 
 @dataclass(frozen=True)
@@ -85,6 +86,16 @@ def body_difference(left, right, rules: list[IgnoreRule], path: str = "$") -> st
 def response_difference(old_response, new_response, rules: list[IgnoreRule]) -> str | None:
     if old_response.status_code != new_response.status_code:
         return f"$.status: {old_response.status_code} != {new_response.status_code}"
+    for header in CONTRACT_HEADERS:
+        old_present = header in old_response.headers
+        new_present = header in new_response.headers
+        old_value = old_response.headers.get(header)
+        new_value = new_response.headers.get(header)
+        if header == "Allow" and old_present and new_present:
+            old_value = sorted({method.strip().upper() for method in old_value.split(",")})
+            new_value = sorted({method.strip().upper() for method in new_value.split(",")})
+        if old_present != new_present or old_value != new_value:
+            return f"$.headers.{header}: {old_value!r} != {new_value!r}"
     try:
         old_body = old_response.json()
         new_body = new_response.json()
