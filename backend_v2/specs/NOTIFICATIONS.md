@@ -59,3 +59,9 @@ ACCOUNTS.
 ## 6. Open questions
 
 None yet.
+
+## 7. Carried from FOUNDATION
+
+- Port the WebSocket stale-token case.
+- Replace `AS_BUILT.md`'s "Background work and live events" stub with the working recipe
+  when this unit supplies the consumer and publisher.

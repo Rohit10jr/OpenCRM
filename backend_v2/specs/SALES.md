@@ -83,3 +83,11 @@ deadline a lead or deal gets on save).
 ## 6. Open questions
 
 None. It is the largest unit, so it is built as more briefs, not more agents.
+
+## 7. Carried from FOUNDATION
+
+- Port the CRM Deal cases from `backend/tests/test_child_rows.py` for products and
+  contacts. FOUNDATION proved the shared child-table behavior on generic test resources;
+  these original Deal cases still belong here.
+- Port the Deal and assignment cases from
+  `backend/tests/test_unrouted_doctypes.py`.
