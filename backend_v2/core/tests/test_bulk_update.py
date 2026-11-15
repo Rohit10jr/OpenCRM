@@ -19,6 +19,10 @@ def save(document, user):
     return document
 
 
+def test_get_is_method_not_allowed(auth_api):
+    assert auth_api.get(URL).status_code == 405
+
+
 def make_widgets(user, count, *, status="Open", prefix="Widget"):
     return [
         save(Widget(widget_name=f"{prefix} {index}", status=status), user)

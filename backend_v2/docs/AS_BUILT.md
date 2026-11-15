@@ -420,6 +420,24 @@ serializer and destination re-check. The worker accepts only a `DocumentViewSet`
 also subclasses `BulkUpdateMixin`, reloads an enabled requesting user, and applies the
 same plain per-document loop. Every document has its own transaction and save actor.
 
+`BulkDeleteMixin` writes `POST <resource>/bulk-delete/`. It validates the old `items`
+input and authorizes the complete batch before changing anything: two batched manager
+queries distinguish missing, list-invisible, and visible rows, then the resource's
+object-delete rule runs on the loaded visible instances. Missing names are dropped;
+the first invisible name in sorted order, then the first object-denied name, refuses
+the batch. Ten authorized existing targets run inline and eleven queue
+`core.delete_bulk_docs`; both answer `{"message": "success"}`. The worker reloads the
+requesting user, repeats authorization, accepts only a `DocumentViewSet` opted in with
+the mixin, and calls the perform half directly so it never re-enqueues.
+
+The perform half is one transaction. It reuses the linked-document batched scan and
+clear helpers, skips links whose resource or actual child-row parent denies object
+write, optionally deletes a cleared link only when its own dynamic-link check permits,
+then checks every target for remaining dynamic links. It batch-removes reference rows,
+stands down per-row reference cleanup, and deletes all targets with one queryset.
+`bulk_delete_remove_contact = True` selects the old Contact-specific clearing hook;
+it defaults off. No production resource opts in yet; the test Widget resource does.
+
 ### Carrying a document name with slashes in a route
 
 Use `DocumentRouter`, whose document lookup is `.+?` and whose trailing slash is
