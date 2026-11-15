@@ -51,7 +51,7 @@ def _source_spec(model, target_model):
     parent_fk = _parent_fk(model) if child_table else None
     foreign_keys = [
         field
-        for field in model._meta.concrete_fields
+        for field in model._meta.get_fields()
         if isinstance(field, (models.ForeignKey, models.OneToOneField))
         and field is not parent_fk
         and field.related_model is target_model
@@ -62,6 +62,10 @@ def _source_spec(model, target_model):
         for doctype_field, name_field in _dynamic_link_declarations(model):
             if doctype_field in concrete and name_field in concrete:
                 dynamic_pairs.append((doctype_field, name_field))
+        field_order = {
+            field.name: index for index, field in enumerate(model._meta.get_fields())
+        }
+        dynamic_pairs.sort(key=lambda pair: field_order[pair[1]])
     elif "reference_doctype" in concrete:
         for name_field in ("reference_name", "reference_docname"):
             if name_field in concrete:
@@ -82,11 +86,18 @@ def linked_documents(target_model, names, user):
     if not target_names:
         return []
 
-    direct = []
-    child_rows = []
-    for model in apps.get_models():
-        if not getattr(model, "DOCTYPE", None):
-            continue
+    tagged = []
+    polymorphic = defaultdict(set)
+    polymorphic_candidates = []
+    source_models = sorted(
+        (
+            model
+            for model in apps.get_models()
+            if getattr(model, "DOCTYPE", None)
+        ),
+        key=doctype_of,
+    )
+    for model in source_models:
         source_doctype = doctype_of(model)
         if source_doctype in IGNORE_LINKS_ON_DELETE:
             continue
@@ -104,48 +115,90 @@ def linked_documents(target_model, names, user):
         if not condition.children:
             continue
 
+        child_table = is_child_table(model)
         rows = model._default_manager.filter(condition)
-        if is_child_table(model):
+        if child_table:
             if parent_fk is not None:
                 rows = rows.select_related(parent_fk.name)
-            concrete = {field.name for field in model._meta.concrete_fields}
-            for row in rows:
-                linked_by_fk = any(
-                    str(getattr(row, field.attname, "")) in target_names
-                    for field in foreign_keys
+        else:
+            rules = _rules_or_raise(model)
+            list_rule = rules.list_rule(user)
+            if list_rule is not None:
+                rows = rows.filter(list_rule)
+        rows = list(rows)
+
+        def collect_child(sort_key, row):
+            if parent_fk is not None:
+                parent = getattr(row, parent_fk.name, None)
+                if parent is not None:
+                    tagged.append(
+                        (sort_key, doctype_of(type(parent)), parent, True)
+                    )
+                return
+            parent_doctype = str(getattr(row, "parenttype", "") or "")
+            parent_name = str(getattr(row, "parent", "") or "")
+            parent_model = model_for_doctype(parent_doctype)
+            if parent_model is not None and parent_name:
+                polymorphic[parent_model].add(parent_name)
+                polymorphic_candidates.append(
+                    (sort_key, parent_model, parent_name)
                 )
-                if not linked_by_fk:
-                    if "docstatus" in concrete and row.docstatus == 2:
-                        continue
-                    if (
-                        str(getattr(row, "parenttype", "") or "")
-                        in IGNORE_LINKS_ON_DELETE
-                    ):
-                        continue
-                child_rows.append((row, parent_fk))
+
+        # Phase 1: FK fields, in doctype and model-field order. Deliberately do
+        # not impose row ordering: the old queries did not have order_by().
+        for field_index, field in enumerate(foreign_keys):
+            matching = [
+                row
+                for row in rows
+                if str(getattr(row, field.attname, "")) in target_names
+            ]
+            for row_position, row in enumerate(matching):
+                sort_key = (1, source_doctype, field_index, row_position)
+                if child_table:
+                    collect_child(sort_key, row)
+                else:
+                    tagged.append((sort_key, source_doctype, row, False))
+
+        if not child_table:
+            # Phase 2: the one conventional parent reference pair (SA2b).
+            for field_index, (doctype_field, name_field) in enumerate(
+                dynamic_pairs
+            ):
+                matching = [
+                    row
+                    for row in rows
+                    if str(getattr(row, doctype_field, "")) == target_doctype
+                    and str(getattr(row, name_field, "")) in target_names
+                ]
+                for row_position, row in enumerate(matching):
+                    sort_key = (
+                        2,
+                        source_doctype,
+                        field_index,
+                        row_position,
+                    )
+                    tagged.append((sort_key, source_doctype, row, False))
             continue
 
-        rules = _rules_or_raise(model)
-        list_rule = rules.list_rule(user)
-        if list_rule is not None:
-            rows = rows.filter(list_rule)
-        direct.extend((source_doctype, row) for row in rows)
-
-    parents = []
-    polymorphic = defaultdict(set)
-    polymorphic_order = []
-    for row, parent_fk in child_rows:
-        if parent_fk is not None:
-            parent = getattr(row, parent_fk.name, None)
-            if parent is not None:
-                parents.append(parent)
-            continue
-        parent_doctype = str(getattr(row, "parenttype", "") or "")
-        parent_name = str(getattr(row, "parent", "") or "")
-        parent_model = model_for_doctype(parent_doctype)
-        if parent_model is not None and parent_name:
-            polymorphic[parent_model].add(parent_name)
-            polymorphic_order.append((parent_model, parent_name))
+        # Phase 3: child Dynamic Link fields. The old query explicitly orders
+        # each field's rows by primary key.
+        concrete = {field.name for field in model._meta.concrete_fields}
+        for field_index, (doctype_field, name_field) in enumerate(dynamic_pairs):
+            matching = [
+                row
+                for row in rows
+                if str(getattr(row, doctype_field, "")) == target_doctype
+                and str(getattr(row, name_field, "")) in target_names
+                and not ("docstatus" in concrete and row.docstatus == 2)
+                and str(getattr(row, "parenttype", "") or "")
+                not in IGNORE_LINKS_ON_DELETE
+            ]
+            for row_position, row in enumerate(
+                sorted(matching, key=lambda item: item.pk)
+            ):
+                collect_child(
+                    (3, source_doctype, field_index, row_position), row
+                )
 
     polymorphic_parents = {}
     for parent_model, parent_names in polymorphic.items():
@@ -153,24 +206,30 @@ def linked_documents(target_model, names, user):
             str(parent.pk): parent
             for parent in parent_model._default_manager.filter(pk__in=parent_names)
         }
-    parents.extend(
-        polymorphic_parents[parent_model][parent_name]
-        for parent_model, parent_name in polymorphic_order
-        if parent_name in polymorphic_parents[parent_model]
-    )
+    for sort_key, parent_model, parent_name in polymorphic_candidates:
+        parent = polymorphic_parents[parent_model].get(parent_name)
+        if parent is not None:
+            tagged.append((sort_key, doctype_of(parent_model), parent, True))
 
-    for parent in parents:
+    visible = []
+    for sort_key, parent_doctype, parent, via_child in tagged:
         parent_model = type(parent)
-        parent_doctype = doctype_of(parent_model)
-        if parent_model is target_model and str(parent.pk) in target_names:
+        if (
+            via_child
+            and parent_model is target_model
+            and str(parent.pk) in target_names
+        ):
             continue
-        rules = _rules_or_raise(parent_model)
-        if rules.has_object_rule(user, parent, "read") is not False:
-            direct.append((parent_doctype, parent))
+        if via_child:
+            rules = _rules_or_raise(parent_model)
+            if rules.has_object_rule(user, parent, "read") is False:
+                continue
+        visible.append((sort_key, parent_doctype, parent))
 
+    visible.sort(key=lambda candidate: candidate[0])
     seen = set()
     found = []
-    for source_doctype, instance in direct:
+    for _, source_doctype, instance in visible:
         key = (source_doctype, str(instance.pk))
         if key not in seen:
             seen.add(key)

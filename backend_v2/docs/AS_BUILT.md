@@ -405,6 +405,12 @@ already unlinked, matching the old endpoint. `clear_linked_document_reference(in
 is the per-model override for special reference-pair clearing. No production resource
 opts in yet; the test Widget resource covers both actions and slash-bearing names.
 
+The batched scan tags its results into the old collection order before that deduplication:
+FK sources, parent reference pairs, then child Dynamic Link parents; within each phase it
+sorts source models by `doctype_of(model)` and fields by model-field order. Only child
+Dynamic Link rows are ordered by primary key. FK and parent-pair rows deliberately retain
+their query order because the old PostgreSQL queries have no explicit `order_by()`.
+
 `BulkUpdateMixin` merges query and body inputs through `core.inputs.build_payload`, with
 the body winning, and ignores surplus keys. Fewer than 20 names run inline and return
 the failed-name list. From 20 through 500, `core.bulk_update_docs` receives the ViewSet's

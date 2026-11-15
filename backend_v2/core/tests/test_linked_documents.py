@@ -200,6 +200,82 @@ def test_dialog_deduplicates_by_name_alone_across_models(auth_api, alice):
     assert rows[0]["reference_docname"] == "shared-name"
 
 
+def test_dialog_uses_old_phase_and_doctype_order_before_deduplication(
+    auth_api, alice, monkeypatch
+):
+    target = save(Widget(widget_name="Target", widget_owner=alice), alice)
+    fk_parent = save(
+        Widget(widget_name="FK child parent", widget_owner=alice), alice
+    )
+    dynamic_parent_a = save(
+        Widget(widget_name="Dynamic child parent A", widget_owner=alice), alice
+    )
+    dynamic_parent_z = save(
+        Widget(widget_name="Dynamic child parent Z", widget_owner=alice), alice
+    )
+    monkeypatch.setattr(WidgetRow, "DOCTYPE", "A Child FK Source")
+    monkeypatch.setattr(DynamicReference, "DOCTYPE", "B Parent Pair Source")
+    monkeypatch.setattr(WidgetNote, "DOCTYPE", "C Child Pair Source")
+    monkeypatch.setattr(PointingDocument, "DOCTYPE", "Z Direct FK Source")
+    save(WidgetRow(parent=fk_parent, value="fk", related_widget=target), alice)
+    save(PointingDocument(name="shared-name", widget=target), alice)
+    save(
+        DynamicReference(
+            name="shared-name",
+            reference_doctype=target.DOCTYPE,
+            reference_name=target.pk,
+        ),
+        alice,
+    )
+    save(
+        WidgetNote(
+            name="z-row",
+            parent=dynamic_parent_z.pk,
+            parenttype=Widget.DOCTYPE,
+            parentfield="poly_rows",
+            value=target.pk,
+        ),
+        alice,
+    )
+    save(
+        WidgetNote(
+            name="a-row",
+            parent=dynamic_parent_a.pk,
+            parenttype=Widget.DOCTYPE,
+            parentfield="poly_rows",
+            value=target.pk,
+        ),
+        alice,
+    )
+
+    assert linked(auth_api, target.pk) == [
+        {
+            "doc": Widget.DOCTYPE,
+            "title": fk_parent.pk,
+            "reference_docname": fk_parent.pk,
+            "reference_doctype": Widget.DOCTYPE,
+        },
+        {
+            "doc": "B Parent Pair Source",
+            "title": "shared-name",
+            "reference_docname": "shared-name",
+            "reference_doctype": "B Parent Pair Source",
+        },
+        {
+            "doc": Widget.DOCTYPE,
+            "title": dynamic_parent_a.pk,
+            "reference_docname": dynamic_parent_a.pk,
+            "reference_doctype": Widget.DOCTYPE,
+        },
+        {
+            "doc": Widget.DOCTYPE,
+            "title": dynamic_parent_z.pk,
+            "reference_docname": dynamic_parent_z.pk,
+            "reference_doctype": Widget.DOCTYPE,
+        },
+    ]
+
+
 def test_source_read_refusal_and_missing_source_keep_old_wording(
     auth_api, alice
 ):
