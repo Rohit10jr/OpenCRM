@@ -2,6 +2,7 @@ import datetime
 
 from celery import shared_task
 from celery.schedules import crontab
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.utils.module_loading import import_string
@@ -53,6 +54,13 @@ def delete_bulk_docs(
     viewset_path, items, delete_linked=False, user_name=None, urlconf=None
 ):
     """Reauthorize and bulk-delete as the requesting user without re-enqueueing."""
+
+    from core.resources import PRODUCTION_URLCONF
+
+    if urlconf is None:
+        urlconf = PRODUCTION_URLCONF
+    elif urlconf not in (PRODUCTION_URLCONF, settings.ROOT_URLCONF):
+        raise ValueError(f"Bulk-delete task received unknown URLconf {urlconf!r}")
 
     from core.mixins import BulkDeleteMixin
     from core.mixins.bulk_delete import authorize_bulk_delete, perform_bulk_delete

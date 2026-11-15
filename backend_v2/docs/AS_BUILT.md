@@ -432,7 +432,9 @@ the first invisible name in sorted order, then the first object-denied name, ref
 the batch. Ten authorized existing targets run inline and eleven queue
 `core.delete_bulk_docs`; both answer `{"message": "success"}`. The worker reloads the
 requesting user, repeats authorization, accepts only a `DocumentViewSet` opted in with
-the mixin, and calls the perform half directly so it never re-enqueues.
+the mixin, and calls the perform half directly so it never re-enqueues. Its queued
+URLconf is limited to the production URLconf or the running settings' URLconf; an omitted
+value selects production, and any other value is refused before authorization.
 
 The perform half is one transaction. It reuses the linked-document batched scan and
 clear helpers, skips links whose resource or actual child-row parent denies object

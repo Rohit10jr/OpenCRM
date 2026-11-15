@@ -2,12 +2,14 @@ import json
 from unittest.mock import Mock
 
 import pytest
+from django.conf import settings
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
 from core.exceptions import PermissionError
 from core.mixins.bulk_delete import authorize_bulk_delete, perform_bulk_delete
 from core.models import Version
+from core.resources import PRODUCTION_URLCONF
 from core.tasks import delete_bulk_docs
 from tests_support.models import (
     DynamicReference,
@@ -135,6 +137,38 @@ def test_worker_deletes_what_the_requesting_user_may_delete(alice):
         urlconf="config.test_urls",
     ) == "success"
     assert not Widget.objects.filter(pk=document.pk).exists()
+
+
+def test_worker_refuses_an_unknown_urlconf_before_deleting(alice):
+    document = widgets(alice, 1)[0]
+
+    with pytest.raises(ValueError, match="unknown.config.urls"):
+        delete_bulk_docs(
+            "tests_support.views.WidgetViewSet",
+            [document.pk],
+            user_name=alice.name,
+            urlconf="unknown.config.urls",
+        )
+
+    assert Widget.objects.filter(pk=document.pk).exists()
+
+
+@pytest.mark.parametrize(
+    ("urlconf", "expected"),
+    [(None, PRODUCTION_URLCONF), (settings.ROOT_URLCONF, settings.ROOT_URLCONF)],
+)
+def test_worker_accepts_known_urlconfs(alice, monkeypatch, urlconf, expected):
+    perform = Mock()
+    monkeypatch.setattr("core.mixins.bulk_delete.perform_bulk_delete", perform)
+
+    assert delete_bulk_docs(
+        "tests_support.views.WidgetViewSet",
+        [],
+        user_name=alice.name,
+        urlconf=urlconf,
+    ) == "success"
+
+    perform.assert_called_once_with(WidgetViewSet, [], alice, False, expected)
 
 
 @pytest.mark.parametrize("user_name", [None, "missing@example.com"])
