@@ -176,6 +176,20 @@ These are the sections FOUNDATION must write, because every later unit follows t
 Until then they are headings only; do not guess their contents from
 `backend_v2/docs/REBUILD_PLAN.md`, which describes intent, not the result.
 
+### Adding development data
+
+Put an app's seed and clear functions in that app (the account example is
+`accounts/dev_data.py`). Each accepts `(user, force)` and returns the number of rows it
+created or removed. Existing rows are normally kept; use `force` only for a row whose
+old restore-defaults behaviour rewrites it. Document-model saves receive the supplied
+user, which the commands resolve to Administrator.
+
+Import both functions in `core/dev_data.py` and append one explicit `DevDataStep` line
+to `STEPS`. This is the only step list: there is no app registry or discovery hook.
+Clearing runs the same list in reverse, and a clear function must identify only its own
+rows and must not remove migrations' built-ins or roles. Add the app's command tests in
+the same change, including a hand-made row that proves clearing is narrow.
+
 ### Adding a resource
 
 Start the model by subclassing `BaseDocument`, or `AutoIncrementDocument` for a genuine
@@ -469,14 +483,36 @@ directory with:
 .venv\Scripts\python.exe manage.py migrate
 ```
 
+Then provide all four suite passwords in `backend_v2/.env` (`ADMIN_PWD`, `SALES_PWD`,
+`MANAGER_PWD`, and `SALES2_PWD`) and seed the development users:
+
+```powershell
+.venv\Scripts\python.exe manage.py seed_dev_data
+```
+
+The command reports created and reset counts per explicit seed step plus a created-row
+total. It is idempotent: FOUNDATION creates no account on a second run, while every run
+restores the four suite users' passwords, enabled flags, and exact groups. `--force` is
+accepted for later restore-default steps. `--demo` currently adds no rows and says so;
+later units use it for upstream records from `crm/demo/`.
+
+Remove only rows owned by those steps with:
+
+```powershell
+.venv\Scripts\python.exe manage.py clear_dev_data
+```
+
+Today this deletes ada, grace, and alan. It keeps Administrator and its initialized
+password, Guest, every role, and all users not named by the account seed step.
+
 This also creates SimpleJWT's `token_blacklist` tables. JWT and auth-security settings
 may be overridden with `JWT_ACCESS_TOKEN_LIFETIME_MINUTES`,
 `JWT_REFRESH_TOKEN_LIFETIME_DAYS`, `TRUSTED_PROXY_COUNT`,
 `LOGIN_MAX_CONSECUTIVE_ATTEMPTS`, and `LOGIN_LOCK_INTERVAL_SECONDS`; their defaults are
 5 minutes, 7 days, 0 proxies, 10 failures, and 60 seconds respectively.
 
-Database creation, migrations, seed data, the server on port 8001, the `.http` suite and
-the parity body diff are added by later FOUNDATION briefs.
+Database creation, the server on port 8001, the `.http` suite and the parity body diff
+are added by later FOUNDATION briefs.
 
 ### Traps — read before starting a server or running tests
 
