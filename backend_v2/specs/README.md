@@ -23,7 +23,7 @@ status is wrong is worse than no status at all.
 
 | Unit | Spec | Apps | Depends on | Status |
 |---|---|---|---|---|
-| FOUNDATION | [`FOUNDATION.md`](FOUNDATION.md) | `core`, and the first part of `accounts` | — | **Running** — briefs in progress |
+| FOUNDATION | [`FOUNDATION.md`](FOUNDATION.md) | `core`, and the first part of `accounts` | — | **Done** — gate passed 16 Nov 2026 (PRs #64, #65, milestone 3) |
 | ACCOUNTS | [`ACCOUNTS.md`](ACCOUNTS.md) | `accounts` | FOUNDATION | Provisional |
 | CONFIGURATION | [`CONFIGURATION.md`](CONFIGURATION.md) | `configuration` | FOUNDATION | Provisional |
 | SHARED_ACTIONS | [`SHARED_ACTIONS.md`](SHARED_ACTIONS.md) | `core` (the mixins in `core/mixins/`, the conditions evaluator, the assignment engine) | FOUNDATION | Provisional |
