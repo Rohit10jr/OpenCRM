@@ -47,7 +47,8 @@ def _rules_or_raise(model):
 
 
 def _source_spec(model, target_model):
-    parent_fk = _parent_fk(model) if is_child_table(model) else None
+    child_table = is_child_table(model)
+    parent_fk = _parent_fk(model) if child_table else None
     foreign_keys = [
         field
         for field in model._meta.concrete_fields
@@ -57,9 +58,15 @@ def _source_spec(model, target_model):
     ]
     dynamic_pairs = []
     concrete = {field.name for field in model._meta.concrete_fields}
-    for doctype_field, name_field in _dynamic_link_declarations(model):
-        if doctype_field in concrete and name_field in concrete:
-            dynamic_pairs.append((doctype_field, name_field))
+    if child_table:
+        for doctype_field, name_field in _dynamic_link_declarations(model):
+            if doctype_field in concrete and name_field in concrete:
+                dynamic_pairs.append((doctype_field, name_field))
+    elif "reference_doctype" in concrete:
+        for name_field in ("reference_name", "reference_docname"):
+            if name_field in concrete:
+                dynamic_pairs.append(("reference_doctype", name_field))
+                break
     return parent_fk, foreign_keys, dynamic_pairs
 
 
@@ -101,7 +108,21 @@ def linked_documents(target_model, names, user):
         if is_child_table(model):
             if parent_fk is not None:
                 rows = rows.select_related(parent_fk.name)
-            child_rows.extend((row, parent_fk) for row in rows)
+            concrete = {field.name for field in model._meta.concrete_fields}
+            for row in rows:
+                linked_by_fk = any(
+                    str(getattr(row, field.attname, "")) in target_names
+                    for field in foreign_keys
+                )
+                if not linked_by_fk:
+                    if "docstatus" in concrete and row.docstatus == 2:
+                        continue
+                    if (
+                        str(getattr(row, "parenttype", "") or "")
+                        in IGNORE_LINKS_ON_DELETE
+                    ):
+                        continue
+                child_rows.append((row, parent_fk))
             continue
 
         rules = _rules_or_raise(model)
@@ -169,10 +190,16 @@ def _clear_reference(instance):
     if callable(hook):
         hook(instance)
         return
-    updates = {}
-    for doctype_field, name_field in _dynamic_link_declarations(type(instance)):
-        updates[doctype_field] = ""
-        updates[name_field] = ""
+    concrete = {field.name for field in type(instance)._meta.concrete_fields}
+    updates = {
+        fieldname: ""
+        for fieldname in (
+            "reference_doctype",
+            "reference_docname",
+            "reference_name",
+        )
+        if fieldname in concrete
+    }
     if updates:
         type(instance)._default_manager.filter(pk=instance.pk).update(**updates)
 

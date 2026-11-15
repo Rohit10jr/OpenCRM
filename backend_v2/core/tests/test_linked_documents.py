@@ -4,6 +4,7 @@ import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
+from core.mixins import linked as linked_mixin
 from core.mixins.linked import linked_documents
 from tests_support.models import (
     DynamicReference,
@@ -102,6 +103,73 @@ def test_polymorphic_child_link_lists_its_actual_parent(auth_api, alice, bob):
     assert [row["reference_docname"] for row in linked(auth_api, target.pk)] == [
         parent.pk
     ]
+
+
+def test_parent_scan_ignores_a_second_non_reference_pair(
+    auth_api, alice, monkeypatch
+):
+    target = save(Widget(widget_name="Target", widget_owner=alice), alice)
+    source = save(
+        DynamicReference(
+            reference_doctype="Other",
+            reference_name="other",
+            _user_tags=target.DOCTYPE,
+            _comments=target.pk,
+        ),
+        alice,
+    )
+    monkeypatch.setattr(
+        DynamicReference,
+        "DYNAMIC_LINK_FIELDS",
+        (
+            ("reference_doctype", "reference_name"),
+            ("_user_tags", "_comments"),
+        ),
+    )
+
+    assert source.pk not in {
+        row["reference_docname"] for row in linked(auth_api, target.pk)
+    }
+
+
+def test_cancelled_polymorphic_child_link_is_not_listed(auth_api, alice, bob):
+    target = save(Widget(widget_name="Target", widget_owner=alice), alice)
+    parent = save(Widget(widget_name="Parent", widget_owner=bob), bob)
+    save(
+        WidgetNote(
+            parent=parent.pk,
+            parenttype=Widget.DOCTYPE,
+            parentfield="poly_rows",
+            value=target.pk,
+            docstatus=2,
+        ),
+        bob,
+    )
+
+    assert linked(auth_api, target.pk) == []
+
+
+def test_polymorphic_child_link_with_ignored_parenttype_is_not_listed(
+    auth_api, alice, bob, monkeypatch
+):
+    target = save(Widget(widget_name="Target", widget_owner=alice), alice)
+    parent = save(Widget(widget_name="Ignored parent", widget_owner=bob), bob)
+    save(
+        WidgetNote(
+            parent=parent.pk,
+            parenttype=Widget.DOCTYPE,
+            parentfield="poly_rows",
+            value=target.pk,
+        ),
+        bob,
+    )
+    monkeypatch.setattr(
+        linked_mixin,
+        "IGNORE_LINKS_ON_DELETE",
+        linked_mixin.IGNORE_LINKS_ON_DELETE | {Widget.DOCTYPE},
+    )
+
+    assert linked(auth_api, target.pk) == []
 
 
 def test_source_list_rules_hide_direct_references(auth_api, alice, bob):
@@ -206,6 +274,47 @@ def test_unlink_without_the_target_still_clears_only_the_reference_pair(
     assert response.json() == {"message": "success"}
     pointer.refresh_from_db()
     assert pointer.widget_id is None
+
+
+def test_unlink_leaves_a_second_declared_dynamic_pair_untouched(
+    auth_api, alice, monkeypatch
+):
+    target = save(Widget(widget_name="Target", widget_owner=alice), alice)
+    reference = save(
+        DynamicReference(
+            reference_doctype=target.DOCTYPE,
+            reference_name=target.pk,
+            _user_tags="Second Doctype",
+            _comments="second-name",
+        ),
+        alice,
+    )
+    monkeypatch.setattr(
+        DynamicReference,
+        "DYNAMIC_LINK_FIELDS",
+        (
+            ("reference_doctype", "reference_name"),
+            ("_user_tags", "_comments"),
+        ),
+    )
+
+    response = auth_api.post(
+        linked_url(target.pk),
+        {
+            "items": [
+                {"doctype": reference.DOCTYPE, "docname": reference.pk}
+            ]
+        },
+        format="json",
+    )
+
+    assert response.json() == {"message": "success"}
+    reference.refresh_from_db()
+    assert (reference.reference_doctype, reference.reference_name) == ("", "")
+    assert (reference._user_tags, reference._comments) == (
+        "Second Doctype",
+        "second-name",
+    )
 
 
 def test_delete_keeps_an_unlinked_item_that_another_document_names(
