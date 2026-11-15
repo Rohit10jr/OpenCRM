@@ -5,6 +5,7 @@ import pytest
 from django.db import models
 from django.db.models.deletion import ProtectedError
 from django.test import Client, override_settings
+from django.test.utils import isolate_apps
 from django.urls import path
 from rest_framework import exceptions as drf_exceptions
 from rest_framework.permissions import AllowAny
@@ -89,23 +90,6 @@ urlpatterns = [
     path("throw/", ThrowingView.as_view()),
     path("siblings/", SiblingsView.as_view()),
 ]
-
-
-class ProtectedTarget(models.Model):
-    DOCTYPE = "Protected Target"
-    name = models.CharField(primary_key=True, max_length=100)
-
-    class Meta:
-        app_label = "core"
-
-
-class ProtectingDocument(models.Model):
-    DOCTYPE = "Protecting Document"
-    name = models.CharField(primary_key=True, max_length=100)
-    target = models.ForeignKey(ProtectedTarget, on_delete=models.PROTECT)
-
-    class Meta:
-        app_label = "core"
 
 
 @pytest.fixture
@@ -334,7 +318,23 @@ def test_drf_response_headers_survive_the_envelope():
     assert response["Retry-After"] == "7"
 
 
+@isolate_apps("core")
 def test_protected_error_is_mapped_before_integrity_error():
+    class ProtectedTarget(models.Model):
+        DOCTYPE = "Protected Target"
+        name = models.CharField(primary_key=True, max_length=100)
+
+        class Meta:
+            app_label = "core"
+
+    class ProtectingDocument(models.Model):
+        DOCTYPE = "Protecting Document"
+        name = models.CharField(primary_key=True, max_length=100)
+        target = models.ForeignKey(ProtectedTarget, on_delete=models.PROTECT)
+
+        class Meta:
+            app_label = "core"
+
     target = ProtectedTarget(name="target-1")
     source = ProtectingDocument(name="source-1", target=target)
     refusal = ProtectedError(
