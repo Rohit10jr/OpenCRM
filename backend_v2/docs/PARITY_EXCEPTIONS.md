@@ -129,6 +129,25 @@ comparison skips that block.
   version, briefly built in brief 07) would have kept accepting a corrupt hierarchy
 - **Recorded by:** FOUNDATION, 13 Nov 2026
 
+### PE-5. Rename also repoints Links stored as plain text
+
+- **Status:** proposed — parked for the owner (`temp` A-9, 16 Nov 2026). The parity
+  version (no repointing) is what is built until this says `approved`
+- **Where:** the rename mixin (`frappe.client.rename_doc` →
+  `POST /api/v1/<resource>/<name>/rename/`), on any resource another model names through a
+  `TEXT_LINK_FIELDS` column. No `.http` block found
+- **Old backend:** repoints Django foreign keys, polymorphic child parents and seven
+  hard-coded doctype/name pairs (`backend/frappe_core/rename.py:30-38, 48-80`), but never
+  a Link held in a plain text column (`frappe_core/links.py:1-19` says such columns exist;
+  rename never calls it). After a rename those columns keep the old name, which now names
+  nothing
+- **backend_v2:** also rewrites every declared `TEXT_LINK_FIELDS` column that names the
+  old name, in the same transaction
+- **Why:** a dangling reference users can see (the old name shown, the link broken). The
+  per-model declarations make it a small change. It changes what users see, so only the
+  owner approves it
+- **Recorded by:** SHARED_ACTIONS, 16 Nov 2026
+
 ---
 
 ## Candidates — not exceptions yet
