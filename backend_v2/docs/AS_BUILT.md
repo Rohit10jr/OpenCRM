@@ -385,6 +385,26 @@ resource's `POST <resource>/bulk-update/` collection action; the app still regis
 resource explicitly and records the concrete route in `PORT_MAP.md` when it opts in.
 No production resource opts in yet; `tests_support.WidgetViewSet` proves the mechanism.
 
+`LinkedDocumentsMixin` writes `GET` and `POST <resource>/<name>/linked-documents/`.
+The GET first uses the resource's `_object_by_name("read")`, then calls the batched
+`core.mixins.linked.linked_documents(model, names, user)` scan. A routed or
+`ROW_RULES` source is narrowed by its `list_rule`; a child row is admitted without its
+own list rule, resolved to its actual FK or polymorphic parent, and kept only when that
+parent's object-read rule is not false. The scan combines every FK and declared dynamic
+pair for one source model into one query, independent of the number of target names.
+Ignored delete-link doctypes and a child table's own parent FK are never links.
+
+The dialog result deliberately deduplicates by document name alone: the first position
+is retained and the last model with that name supplies the value. A model can declare
+`linked_document_title(instance)` for its special dialog title; otherwise a truthy
+`title`, then the name, is used. POST performs no source-document check. It silently
+skips malformed, unknown, missing, unruled, or object-write-denied items, clears generic
+reference pairs and direct FKs with plain `update()` calls, and optionally deletes an
+item after the ordinary dynamic-link check. A refused delete leaves the item present but
+already unlinked, matching the old endpoint. `clear_linked_document_reference(instance)`
+is the per-model override for special reference-pair clearing. No production resource
+opts in yet; the test Widget resource covers both actions and slash-bearing names.
+
 `BulkUpdateMixin` merges query and body inputs through `core.inputs.build_payload`, with
 the body winning, and ignores surplus keys. Fewer than 20 names run inline and return
 the failed-name list. From 20 through 500, `core.bulk_update_docs` receives the ViewSet's

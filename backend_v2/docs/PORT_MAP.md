@@ -221,6 +221,10 @@ The mixins live in `core` (REBUILD_PLAN S24); each resource opts in.
 | `frappe.desk.reportview.export_query` | GET/POST | auth | `crm_app/api/reportview.py:export_query` | core | — |
 | `frappe.desk.search.search_link` | GET/POST | auth | `crm_app/api/client.py:search_link` | core | — |
 
+SA2 builds the linked-document scan and both opt-in actions. These two rows remain `—`
+until a production resource unit adds and records its concrete routes; only the
+`tests_support` Widget ViewSet opts in today.
+
 ## CONTACTS
 
 ### Doctypes (9)
