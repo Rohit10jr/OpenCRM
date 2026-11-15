@@ -187,6 +187,8 @@ state, the exact groups, and the password, while clear removes only the three se
 non-built-in users. Both commands are atomic and report counts without printing a
 password. `--demo` is accepted but deliberately adds nothing until later units append
 their own explicit steps.
+Both commands refuse to run unless `DEV_DATA_ALLOWED` is true. It defaults off in base
+settings and is enabled only by the local-development and test settings modules.
 
 `scripts/build_http_suite.py` parses all 15 old `docs/http/*.http` files and deterministically
 regenerates their REST copies in `backend_v2/http/` from `PORT_MAP.md`. It keeps waiting

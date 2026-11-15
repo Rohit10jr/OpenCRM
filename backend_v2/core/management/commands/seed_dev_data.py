@@ -1,6 +1,7 @@
 """Seed the development rows needed by browser and HTTP tests."""
 
-from django.core.management.base import BaseCommand
+from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils.translation import gettext as _
 
@@ -29,20 +30,30 @@ class Command(BaseCommand):
             ),
         )
 
-    @transaction.atomic
     def handle(self, *args, **options):
-        actor = User.objects.get(name=ADMINISTRATOR)
-        counts = {step.key: step.seed(actor, options["force"]) for step in STEPS}
-        for step in STEPS:
-            self.stdout.write(
-                _("{0}: {1} created, {2} reset").format(
-                    step.key, counts[step.key], step.reset_count
+        if not getattr(settings, "DEV_DATA_ALLOWED", False):
+            raise CommandError(
+                _(
+                    "seed_dev_data refuses to run: DEV_DATA_ALLOWED is not set. "
+                    "These commands reset and delete users; enable it only for a "
+                    "development database."
                 )
             )
-        if options["demo"]:
-            self.stdout.write(_("Demo records are not available yet."))
-        self.stdout.write(
-            self.style.SUCCESS(
-                _("{0} row(s) created").format(sum(counts.values()))
+        with transaction.atomic():
+            actor = User.objects.get(name=ADMINISTRATOR)
+            counts = {
+                step.key: step.seed(actor, options["force"]) for step in STEPS
+            }
+            for step in STEPS:
+                self.stdout.write(
+                    _("{0}: {1} created, {2} reset").format(
+                        step.key, counts[step.key], step.reset_count
+                    )
+                )
+            if options["demo"]:
+                self.stdout.write(_("Demo records are not available yet."))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    _("{0} row(s) created").format(sum(counts.values()))
+                )
             )
-        )

@@ -7,6 +7,7 @@ INSTALLED_APPS = [*INSTALLED_APPS, "tests_support"]
 ROOT_URLCONF = "config.test_urls"
 
 DEBUG = False
+DEV_DATA_ALLOWED = True
 
 CACHES = {
     "default": {

@@ -6,6 +6,7 @@ import pytest
 from django.contrib.auth.models import Group
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.test import override_settings
 
 from accounts.models import User
 from accounts.roles import SEEDED_ROLES
@@ -27,10 +28,46 @@ EXPECTED_USERS = {
 }
 
 
+def _suite_user_rows():
+    rows = []
+    for account in User.objects.filter(name__in=EXPECTED_USERS).order_by("name"):
+        fields = {
+            field.name: getattr(account, field.name)
+            for field in account._meta.concrete_fields
+        }
+        roles = tuple(account.groups.order_by("name").values_list("name", flat=True))
+        rows.append((fields, roles))
+    return rows
+
+
 @pytest.fixture
 def passwords(monkeypatch):
     for variable, value in PASSWORDS.items():
         monkeypatch.setenv(variable, value)
+
+
+@pytest.mark.parametrize("command", ("seed_dev_data", "clear_dev_data"))
+@override_settings(DEV_DATA_ALLOWED=False)
+def test_dev_data_commands_refuse_without_opt_in_and_change_nothing(
+    command, make_user, passwords
+):
+    for name in ("ada@example.com", "grace@example.com", "alan@example.com"):
+        make_user(name, first_name="Must remain", roles=["Sales User"])
+    administrator = User.objects.get(name="Administrator")
+    administrator.set_password("must-remain")
+    administrator.enabled = False
+    administrator.save()
+    before_count = User.objects.count()
+    before_rows = _suite_user_rows()
+
+    with pytest.raises(
+        CommandError,
+        match=rf"{command} refuses to run: DEV_DATA_ALLOWED is not set",
+    ):
+        call_command(command)
+
+    assert User.objects.count() == before_count
+    assert _suite_user_rows() == before_rows
 
 
 def test_seed_creates_the_four_users_with_passwords_and_roles(passwords):
