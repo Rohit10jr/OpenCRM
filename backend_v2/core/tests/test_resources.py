@@ -7,9 +7,10 @@ from django.test import override_settings
 from django.test.utils import isolate_apps
 from django.urls import path
 
+import config.urls as production_urls
 from core.checks import check_resource_rule_viewsets
 from core.models import BaseDocument
-from core.resources import clear_rules_cache, rules_for
+from core.resources import clear_rules_cache, routed_rule_map, rules_for
 from core.views import DocumentViewSet
 from tests_support.models import SecuredDocument, SingletonDocument, Widget
 from tests_support.views import (
@@ -56,9 +57,22 @@ def _route(prefix, viewset):
 
 
 def test_rules_for_finds_test_resource_viewsets():
-    assert rules_for(Widget) is WidgetViewSet
-    assert rules_for(SecuredDocument) is SecuredDocumentViewSet
-    assert rules_for(SingletonDocument) is SingletonDocumentViewSet
+    test_urlconf = "config.test_urls"
+    assert rules_for(Widget, test_urlconf) is WidgetViewSet
+    assert rules_for(SecuredDocument, test_urlconf) is SecuredDocumentViewSet
+    assert rules_for(SingletonDocument, test_urlconf) is SingletonDocumentViewSet
+
+
+def test_default_rule_map_is_always_the_production_map():
+    with override_settings(ROOT_URLCONF="config.urls"):
+        production_settings_map = routed_rule_map()
+    with override_settings(ROOT_URLCONF="config.test_urls"):
+        test_settings_map = routed_rule_map()
+
+    assert test_settings_map == production_settings_map
+    assert all(
+        model._meta.app_label != "tests_support" for model in test_settings_map
+    )
 
 
 @isolate_apps("core")
@@ -94,16 +108,15 @@ def test_rules_for_refreshes_after_urlconf_changes():
 
     viewset = _viewset(RoutedDocument, "ChangingViewSet")
     urlconf = _urlconf(_route("one/", viewset))
-    with override_settings(ROOT_URLCONF=urlconf):
-        assert rules_for(RoutedDocument) is viewset
-        urlconf.urlpatterns = []
-        assert rules_for(RoutedDocument) is viewset
-        clear_rules_cache()
-        assert rules_for(RoutedDocument) is None
+    assert rules_for(RoutedDocument, urlconf) is viewset
+    urlconf.urlpatterns = []
+    assert rules_for(RoutedDocument, urlconf) is viewset
+    clear_rules_cache()
+    assert rules_for(RoutedDocument, urlconf) is None
 
 
 @isolate_apps("core")
-def test_system_check_reports_two_viewsets_for_one_model():
+def test_system_check_reports_two_viewsets_for_one_model(monkeypatch):
     class RoutedDocument(BaseDocument):
         DOCTYPE = "Conflicting ViewSet Fixture"
 
@@ -114,15 +127,16 @@ def test_system_check_reports_two_viewsets_for_one_model():
     second = _viewset(RoutedDocument, "SecondViewSet")
     urlconf = _urlconf(_route("one/", first), _route("two/", second))
 
-    with override_settings(ROOT_URLCONF=urlconf):
-        errors = check_resource_rule_viewsets(None)
+    monkeypatch.setattr(production_urls, "urlpatterns", urlconf.urlpatterns)
+    clear_rules_cache()
+    errors = check_resource_rule_viewsets(None)
 
     assert [error.id for error in errors] == ["core.E001"]
     assert "FirstViewSet, SecondViewSet" in errors[0].msg
 
 
 @isolate_apps("core")
-def test_system_check_allows_one_viewset_at_two_prefixes():
+def test_system_check_allows_one_viewset_at_two_prefixes(monkeypatch):
     class RoutedDocument(BaseDocument):
         DOCTYPE = "Repeated ViewSet Fixture"
 
@@ -132,5 +146,6 @@ def test_system_check_allows_one_viewset_at_two_prefixes():
     viewset = _viewset(RoutedDocument, "RepeatedViewSet")
     urlconf = _urlconf(_route("one/", viewset), _route("two/", viewset))
 
-    with override_settings(ROOT_URLCONF=urlconf):
-        assert check_resource_rule_viewsets(None) == []
+    monkeypatch.setattr(production_urls, "urlpatterns", urlconf.urlpatterns)
+    clear_rules_cache()
+    assert check_resource_rule_viewsets(None) == []

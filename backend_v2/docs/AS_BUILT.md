@@ -345,9 +345,10 @@ open. Document types that intentionally have no resource route are recorded once
 `core.withheld.WITHHELD_DOCUMENT_TYPES`, with a reason; `Version` is currently the only
 entry because the timeline reads it server-side.
 
-`rules_for(model)` walks the active `ROOT_URLCONF`, including nested resolvers, and maps
-each routed `DocumentViewSet` or `SingletonViewSet` by its serializer model. The map is
-cached per URLconf; tests that replace a URLconf's patterns in place call
+`rules_for(model)` walks the production `config.urls`, including nested resolvers, and
+maps each routed `DocumentViewSet` or `SingletonViewSet` by its serializer model. A
+caller handling a request under another URLconf passes it explicitly. The map is cached
+per URLconf; tests that replace a URLconf's patterns in place call
 `clear_rules_cache()`. An unrouted model that needs row rules declares
 `ROW_RULES = "<app>.permissions.<name>"`; that dotted object must provide callable
 `list_rule` and `has_object_rule` functions. There is no implicit fallback. Django's

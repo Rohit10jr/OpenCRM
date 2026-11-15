@@ -1,5 +1,6 @@
 """Transactional bulk deletion through an opted-in resource's policy."""
 
+from django.conf import settings
 from django.db import transaction
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -70,13 +71,17 @@ def authorize_bulk_delete(viewset_class, names, user):
     return [name for name in names if name in existing]
 
 
-def perform_bulk_delete(viewset_class, targets, user, delete_linked=False):
+def perform_bulk_delete(
+    viewset_class, targets, user, delete_linked=False, urlconf=None
+):
     """Clear writable links and delete all targets in one transaction."""
 
     model = viewset_class.serializer_class.Meta.model
     with transaction.atomic():
-        for _source_doctype, instance in linked_documents(model, targets, user):
-            rules = rules_for(type(instance))
+        for _source_doctype, instance in linked_documents(
+            model, targets, user, urlconf
+        ):
+            rules = rules_for(type(instance), urlconf)
             if (
                 rules is None
                 or rules.has_object_rule(user, instance, "write") is False
@@ -110,6 +115,7 @@ class BulkDeleteMixin:
 
     @action(detail=False, methods=("post",), url_path="bulk-delete")
     def bulk_delete(self, request):
+        urlconf = getattr(request, "urlconf", None) or settings.ROOT_URLCONF
         inputs = build_payload(request)
         parsed = parse_json_param(inputs.get("items"), []) or []
         if not parsed:
@@ -124,8 +130,14 @@ class BulkDeleteMixin:
             from core.tasks import delete_bulk_docs
 
             delete_bulk_docs.delay(
-                viewset_path(type(self)), targets, delete_linked, request.user.name
+                viewset_path(type(self)),
+                targets,
+                delete_linked,
+                request.user.name,
+                urlconf,
             )
         else:
-            perform_bulk_delete(type(self), targets, request.user, delete_linked)
+            perform_bulk_delete(
+                type(self), targets, request.user, delete_linked, urlconf
+            )
         return Response(Envelope("success", "message"))

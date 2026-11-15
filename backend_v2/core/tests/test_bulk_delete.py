@@ -100,7 +100,11 @@ def test_threshold_counts_existing_authorized_targets(
         assert not Widget.objects.filter(pk__in=names).exists()
     else:
         delay.assert_called_once_with(
-            "tests_support.views.WidgetViewSet", names, False, alice.name
+            "tests_support.views.WidgetViewSet",
+            names,
+            False,
+            alice.name,
+            "config.test_urls",
         )
         assert Widget.objects.filter(pk__in=names).count() == 11
 
@@ -114,7 +118,10 @@ def test_worker_reauthorizes_after_delete_access_is_lost(alice, monkeypatch):
     )
     with pytest.raises(PermissionError, match="No permission to delete"):
         delete_bulk_docs(
-            "tests_support.views.WidgetViewSet", [document.pk], user_name=alice.name
+            "tests_support.views.WidgetViewSet",
+            [document.pk],
+            user_name=alice.name,
+            urlconf="config.test_urls",
         )
     assert Widget.objects.filter(pk=document.pk).exists()
 
@@ -122,7 +129,10 @@ def test_worker_reauthorizes_after_delete_access_is_lost(alice, monkeypatch):
 def test_worker_deletes_what_the_requesting_user_may_delete(alice):
     document = widgets(alice, 1)[0]
     assert delete_bulk_docs(
-        "tests_support.views.WidgetViewSet", [document.pk], user_name=alice.name
+        "tests_support.views.WidgetViewSet",
+        [document.pk],
+        user_name=alice.name,
+        urlconf="config.test_urls",
     ) == "success"
     assert not Widget.objects.filter(pk=document.pk).exists()
 
@@ -132,7 +142,10 @@ def test_worker_denies_a_missing_requesting_user(alice, user_name):
     document = widgets(alice, 1)[0]
     with pytest.raises(PermissionError, match="No permission to delete"):
         delete_bulk_docs(
-            "tests_support.views.WidgetViewSet", [document.pk], user_name=user_name
+            "tests_support.views.WidgetViewSet",
+            [document.pk],
+            user_name=user_name,
+            urlconf="config.test_urls",
         )
     assert Widget.objects.filter(pk=document.pk).exists()
 
@@ -202,7 +215,10 @@ def test_worker_is_idempotent_and_slashed_names_work(auth_api, alice):
     document = save(Widget(name="R/GA", widget_name="Slash", widget_owner=alice), alice)
     assert delete(auth_api, [document.pk]).json() == {"message": "success"}
     assert delete_bulk_docs(
-        "tests_support.views.WidgetViewSet", [document.pk], user_name=alice.name
+        "tests_support.views.WidgetViewSet",
+        [document.pk],
+        user_name=alice.name,
+        urlconf="config.test_urls",
     ) == "success"
 
 
@@ -213,7 +229,9 @@ def test_authorize_and_perform_query_counts_are_batch_bounded(alice):
         with CaptureQueriesContext(connection) as authorization:
             targets = authorize_bulk_delete(WidgetViewSet, names, alice)
         with CaptureQueriesContext(connection) as performance:
-            perform_bulk_delete(WidgetViewSet, targets, alice)
+            perform_bulk_delete(
+                WidgetViewSet, targets, alice, urlconf="config.test_urls"
+            )
         return len(authorization), len(performance)
 
     assert measure(1) == measure(5)

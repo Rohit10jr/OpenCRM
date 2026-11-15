@@ -3,6 +3,7 @@
 from collections import defaultdict
 
 from django.apps import apps
+from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from django.db.models import Q
@@ -36,8 +37,8 @@ def _parent_fk(model):
     return None
 
 
-def _rules_or_raise(model):
-    rules = rules_for(model)
+def _rules_or_raise(model, urlconf=None):
+    rules = rules_for(model, urlconf)
     if rules is None:
         raise ImproperlyConfigured(
             f"{model._meta.label} is reachable by the linked-document scan "
@@ -74,7 +75,7 @@ def _source_spec(model, target_model):
     return parent_fk, foreign_keys, dynamic_pairs
 
 
-def linked_documents(target_model, names, user):
+def linked_documents(target_model, names, user, urlconf=None):
     """Return visible ``(doctype, instance)`` links to any target name.
 
     Each source model is queried once with all names and all of its reference shapes.
@@ -121,7 +122,7 @@ def linked_documents(target_model, names, user):
             if parent_fk is not None:
                 rows = rows.select_related(parent_fk.name)
         else:
-            rules = _rules_or_raise(model)
+            rules = _rules_or_raise(model, urlconf)
             list_rule = rules.list_rule(user)
             if list_rule is not None:
                 rows = rows.filter(list_rule)
@@ -221,7 +222,7 @@ def linked_documents(target_model, names, user):
         ):
             continue
         if via_child:
-            rules = _rules_or_raise(parent_model)
+            rules = _rules_or_raise(parent_model, urlconf)
             if rules.has_object_rule(user, parent, "read") is False:
                 continue
         visible.append((sort_key, parent_doctype, parent))
@@ -292,11 +293,12 @@ class LinkedDocumentsMixin:
 
     @action(detail=True, methods=("get", "post"), url_path="linked-documents")
     def linked_documents(self, request, *args, **kwargs):
+        urlconf = getattr(request, "urlconf", None) or settings.ROOT_URLCONF
         if request.method == "GET":
             source = self._object_by_name("read")
             results = {}
             for source_doctype, instance in linked_documents(
-                self.document_model, [source.pk], request.user
+                self.document_model, [source.pk], request.user, urlconf
             ):
                 name = str(instance.pk)
                 results[name] = {
@@ -321,7 +323,7 @@ class LinkedDocumentsMixin:
             if not item_doctype or not item_name:
                 continue
             model = model_for_doctype(item_doctype)
-            rules = rules_for(model) if model is not None else None
+            rules = rules_for(model, urlconf) if model is not None else None
             if model is None or rules is None:
                 continue
             instance = model._default_manager.filter(pk=item_name).first()

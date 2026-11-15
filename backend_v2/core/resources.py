@@ -2,12 +2,13 @@
 
 from functools import lru_cache
 
-from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.urls import URLResolver, clear_url_caches, get_resolver
 from django.utils.module_loading import import_string
 
 from core.views import DocumentViewSet
+
+PRODUCTION_URLCONF = "config.urls"
 
 
 def _patterns(urlconf):
@@ -44,14 +45,14 @@ def _routed_rules(urlconf):
 def routed_rule_map(urlconf=None):
     """Return the routed model-to-ViewSet map for ``urlconf``."""
 
-    active_urlconf = settings.ROOT_URLCONF if urlconf is None else urlconf
+    active_urlconf = PRODUCTION_URLCONF if urlconf is None else urlconf
     return _routed_rules(active_urlconf)[0]
 
 
 def routed_rule_conflicts(urlconf=None):
     """Return models served by more than one distinct ViewSet class."""
 
-    active_urlconf = settings.ROOT_URLCONF if urlconf is None else urlconf
+    active_urlconf = PRODUCTION_URLCONF if urlconf is None else urlconf
     return _routed_rules(active_urlconf)[1]
 
 
@@ -77,10 +78,10 @@ def _declared_rules(model):
     return provider
 
 
-def rules_for(model):
+def rules_for(model, urlconf=None):
     """Return routed or explicitly declared row rules for ``model``."""
 
-    return routed_rule_map().get(model) or _declared_rules(model)
+    return routed_rule_map(urlconf).get(model) or _declared_rules(model)
 
 
 def clear_rules_cache():

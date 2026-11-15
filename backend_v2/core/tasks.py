@@ -49,7 +49,9 @@ def bulk_update_docs(
 
 
 @shared_task(name="core.delete_bulk_docs")
-def delete_bulk_docs(viewset_path, items, delete_linked=False, user_name=None):
+def delete_bulk_docs(
+    viewset_path, items, delete_linked=False, user_name=None, urlconf=None
+):
     """Reauthorize and bulk-delete as the requesting user without re-enqueueing."""
 
     from core.mixins import BulkDeleteMixin
@@ -69,7 +71,7 @@ def delete_bulk_docs(viewset_path, items, delete_linked=False, user_name=None):
     targets = authorize_bulk_delete(
         viewset_class, [str(item) for item in items], user
     )
-    perform_bulk_delete(viewset_class, targets, user, delete_linked)
+    perform_bulk_delete(viewset_class, targets, user, delete_linked, urlconf)
     return "success"
 
 

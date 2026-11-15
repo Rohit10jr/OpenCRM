@@ -2,14 +2,15 @@
 
 from django.core.checks import Error, register
 
-from core.resources import routed_rule_conflicts
+from core.resources import PRODUCTION_URLCONF, routed_rule_conflicts
 
 
 @register()
 def check_resource_rule_viewsets(app_configs, **kwargs):
     errors = []
     for model, viewsets in sorted(
-        routed_rule_conflicts().items(), key=lambda item: item[0]._meta.label
+        routed_rule_conflicts(PRODUCTION_URLCONF).items(),
+        key=lambda item: item[0]._meta.label,
     ):
         names = ", ".join(sorted(viewset.__name__ for viewset in viewsets))
         errors.append(

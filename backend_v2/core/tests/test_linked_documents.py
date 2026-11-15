@@ -467,7 +467,12 @@ def test_scan_query_count_does_not_grow_with_target_names(alice):
                 alice,
             )
         with CaptureQueriesContext(connection) as captured:
-            rows = linked_documents(Widget, [target.pk for target in targets], alice)
+            rows = linked_documents(
+                Widget,
+                [target.pk for target in targets],
+                alice,
+                "config.test_urls",
+            )
         assert len(rows) == count * 2
         return len(captured)
 
