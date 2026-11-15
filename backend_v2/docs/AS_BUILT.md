@@ -377,6 +377,23 @@ and `services.py` unless the exact read has a written reason, malformed or unmat
 resource creates or PATCHes that fail to stamp the authenticated caller. Test-only
 routes under `config.test_urls` are not part of production route-map coverage.
 
+### Opting a resource in to a shared action
+
+Add the action mixin before `DocumentViewSet` in the resource's bases. For bulk update,
+use `class LeadViewSet(BulkUpdateMixin, DocumentViewSet)`. This writes only that
+resource's `POST <resource>/bulk-update/` collection action; the app still registers the
+resource explicitly and records the concrete route in `PORT_MAP.md` when it opts in.
+No production resource opts in yet; `tests_support.WidgetViewSet` proves the mechanism.
+
+`BulkUpdateMixin` merges query and body inputs through `core.inputs.build_payload`, with
+the body winning, and ignores surplus keys. Fewer than 20 names run inline and return
+the failed-name list. From 20 through 500, `core.bulk_update_docs` receives the ViewSet's
+dotted class path and the requester's name and the response is `{"message": null}`;
+above 500 is the old 417 refusal. Both paths use the ViewSet's model lookup, write rule,
+serializer and destination re-check. The worker accepts only a `DocumentViewSet` that
+also subclasses `BulkUpdateMixin`, reloads an enabled requesting user, and applies the
+same plain per-document loop. Every document has its own transaction and save actor.
+
 ### Carrying a document name with slashes in a route
 
 Use `DocumentRouter`, whose document lookup is `.+?` and whose trailing slash is
