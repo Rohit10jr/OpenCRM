@@ -483,6 +483,16 @@ Each of these has already cost time on this machine:
 
 ## 4. Invariants that will bite you
 
+Four guards in `tests/guards/test_model_fields.py` walk Django's complete installed-model
+registry. A new credential-shaped concrete field must be sensitive or have a written,
+reasoned exception; every encrypted field must also be sensitive, and a sensitive true
+secret must be encrypted unless its reviewed exception says it is hashed at rest or
+deliberately restricted-only. Exception entries must continue to name real fields and
+carry substantive reasons. Every child-table model must declare `CHILD_FIELDS` directly
+on its class. Finally, every installed model must be defined in its installed app's
+`models` module or `models/` package; a temporary model in a test belongs under
+`isolate_apps`, never at test-module import time.
+
 An unsaved document always issues an INSERT (`force_insert=True`). A caller-supplied
 name that is already taken therefore raises an integrity error instead of silently
 updating the existing row. Names are stored as Frappe supplies them (trimmed where
