@@ -48,6 +48,31 @@ def bulk_update_docs(
     return bulk_update_documents(viewset_class, docnames, action, data, user)
 
 
+@shared_task(name="core.delete_bulk_docs")
+def delete_bulk_docs(viewset_path, items, delete_linked=False, user_name=None):
+    """Reauthorize and bulk-delete as the requesting user without re-enqueueing."""
+
+    from core.mixins import BulkDeleteMixin
+    from core.mixins.bulk_delete import authorize_bulk_delete, perform_bulk_delete
+    from core.query import by_name
+    from core.views import DocumentViewSet
+
+    viewset_class = import_string(viewset_path)
+    if not (
+        isinstance(viewset_class, type)
+        and issubclass(viewset_class, DocumentViewSet)
+        and issubclass(viewset_class, BulkDeleteMixin)
+    ):
+        raise TypeError("Bulk-delete task requires an opted-in DocumentViewSet")
+
+    user = by_name(get_user_model(), user_name).first() if user_name else None
+    targets = authorize_bulk_delete(
+        viewset_class, [str(item) for item in items], user
+    )
+    perform_bulk_delete(viewset_class, targets, user, delete_linked)
+    return "success"
+
+
 BEAT_SCHEDULE = {
     "clear-old-view-setting-versions": {
         "task": "core.clear_old_versions",

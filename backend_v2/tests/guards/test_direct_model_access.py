@@ -48,6 +48,22 @@ DIRECT_MANAGER_READS = {
         "Retention housekeeping is a scheduled job without a request user and deletes "
         "only expired saved-view history."
     ),
+    (
+        "core/mixins/bulk_delete.py",
+        "authorize_bulk_delete",
+        "model._default_manager",
+    ): (
+        "Bulk delete loads all existing rows and list-visible names in two batched "
+        "queries before applying the resource's object-delete rule."
+    ),
+    (
+        "core/mixins/bulk_delete.py",
+        "perform_bulk_delete",
+        "model._default_manager",
+    ): (
+        "Bulk delete rechecks remaining links, then removes the already-authorized "
+        "target names with one queryset delete inside the shared transaction."
+    ),
     ("core/mixins/linked.py", "linked_documents", "model._default_manager"): (
         "The batched link scan starts at each source manager, then immediately applies "
         "that source model's independently callable list rule."
