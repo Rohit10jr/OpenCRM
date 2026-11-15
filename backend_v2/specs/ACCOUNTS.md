@@ -89,7 +89,9 @@ parity copies it.)
   (`frappe_platform/models.py`, the reset flow in `crm_app/api/auth_pages.py`).
   FOUNDATION's credential guard (`backend_v2/tests/guards/test_model_fields.py`,
   `REVIEWED_HASHED_AT_REST`) already excuses the field from encryption on that ground, so
-  the excuse is false until the reset flow hashes it.
+  the excuse is false until the reset flow hashes it. **Back the excuse with a storage
+  test**: after a reset request, the stored column holds `sha256(key)`, never the key
+  sent in the email (milestone-3 review, finding 7).
 - Before any role-dependent body comparison, restore the old `opencrm` database's
   drifted suite-user roles: ada currently also has Sales Manager, grace has Sales User
   instead of Sales Manager, and alan has no role.
