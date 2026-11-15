@@ -284,6 +284,16 @@ projection, filters, and both ordering and grouping; an empty tuple permits no f
 for that operation. Register the class explicitly on the app's
 `core.routers.DocumentRouter` and include the app's URLconf under `/api/v1/`.
 
+Every resource ViewSet also declares its access decision directly on the class. Use
+`access = Access.ruled()` when rows are protected, and define both `list_rule(user)` and
+`has_object_rule(user, document, ptype)` on that ViewSet. Use
+`access = Access.open(reason="…")` only after review, with a substantive reason. The
+base `DocumentViewSet` deliberately has no declaration, so a subclass that forgets one
+fails the access guard. A model with a concrete sensitive or encrypted field cannot be
+open. Document types that intentionally have no resource route are recorded once in
+`core.withheld.WITHHELD_DOCUMENT_TYPES`, with a reason; `Version` is currently the only
+entry because the timeline reads it server-side.
+
 The base serves list, create, retrieve, PATCH, and delete with the client-reference
 `{"message": ...}` envelope and status 200, including create. It never serves PUT.
 Every serializer receives `request.user` in its context and every save receives the
@@ -297,6 +307,15 @@ old `fieldname`, `filters`, `as_dict`, and ignored `parent` inputs; it calls
 cannot be bypassed. `GET <resource>/<name>/permissions/` returns the seven permission
 booleans from `has_object_rule()` and deliberately does not raise when `read` is false;
 a missing row returns an empty permissions map.
+
+The guards in `tests/guards/` walk both production and test URLconfs to validate every
+routed resource declaration, while excluding unrouted `tests_support` scaffolding from
+production-model completeness. They also reject stale or overlapping withheld entries,
+direct `Model.objects` or `_default_manager` reads in project `views.py`, `viewsets.py`,
+and `services.py` unless the exact read has a written reason, malformed or unmatched
+`built` route-map rows, production `/api/v1/` patterns absent from the route map, and
+resource creates or PATCHes that fail to stamp the authenticated caller. Test-only
+routes under `config.test_urls` are not part of production route-map coverage.
 
 ### Carrying a document name with slashes in a route
 
