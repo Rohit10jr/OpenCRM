@@ -528,8 +528,42 @@ by hand.
 
 The generated files use `http://localhost:8001`; `{{$dotenv NAME}}` remains intact and
 the runner reads the values from `backend_v2/.env`. Database creation, the server on
-port 8001, running these files, and the parity body diff are completed by later
-FOUNDATION briefs.
+port 8001, and running the complete parity gate are completed by the last FOUNDATION
+brief. With that server already running, replay one generated file from `backend_v2/`:
+
+```powershell
+.venv\Scripts\python.exe scripts\run_http.py http\01_auth.http
+```
+
+The runner prints one `PASS`, `FAIL`, or `SKIP` line per request block, checks the title's
+status and every `# @expect`, executes tagged negative cases, and skips blocks waiting
+for another unit. It exits non-zero if any block fails. `--new` overrides the default
+`http://localhost:8001`, and `--timeout` sets the per-request timeout. Values read from
+`.env` are redacted from all output.
+
+To compare every response status and complete body with the old server, run both servers
+against their seeded databases and then, still from `backend_v2/`, run one generated
+file:
+
+```powershell
+.venv\Scripts\python.exe scripts\parity_diff.py http\01_auth.http `
+  --old http://localhost:8000 --new http://localhost:8001
+```
+
+The comparison reports `same`, `differs` with the first short JSON path difference, or
+`skipped` for waiting, negative, and PE-3 blocks. Each server has its own response-label
+and variable state, so one server's login token is never sent to the other. Rules in
+`scripts/parity_ignore.json` ignore only values: the path must exist on both sides and
+its type must match. Today's runnable FOUNDATION blocks need exactly two rules,
+`$.message.access` and `$.message.refresh`; timestamps and generated record names are
+not yet returned by a runnable block, so their paths must be added with comments only
+when the owning units make those blocks runnable. Error `exception` and
+`_server_messages` values are never ignored.
+
+`99_lockout.http` locks this machine out for 60 seconds. Run it by itself and last. The
+diff refuses to combine it with other files unless `--include-lockout` is explicit; with
+that flag it reorders the lockout file to the end. Neither script starts or stops a
+server, and both report an unreachable configured server without a traceback.
 
 ### Traps — read before starting a server or running tests
 
