@@ -145,7 +145,7 @@ class DocumentViewSet(
     def get_object(self):
         return self._object_by_name("read")
 
-    def _check_destination(self, document, validated_data):
+    def _check_destination(self, user, document, validated_data):
         watched = set(self.reference_fields)
         if not watched.intersection(validated_data):
             return
@@ -159,7 +159,7 @@ class DocumentViewSet(
         candidate = copy.copy(document)
         for name, value in changed.items():
             setattr(candidate, name, value)
-        if self.has_object_rule(self.request.user, candidate, "write") is False:
+        if self.has_object_rule(user, candidate, "write") is False:
             raise PermissionError(
                 _("Not permitted to move {0} there").format(self.document_type),
                 title=_("Not Permitted"),
@@ -264,7 +264,7 @@ class DocumentViewSet(
         document = self._object_by_name("write")
         serializer = self.get_serializer(document, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        self._check_destination(document, serializer.validated_data)
+        self._check_destination(request.user, document, serializer.validated_data)
         with transaction.atomic():
             document = serializer.save(user=request.user)
         return Response(Envelope(self.get_serializer(document).data, "message"))
