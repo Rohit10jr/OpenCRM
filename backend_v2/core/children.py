@@ -308,6 +308,18 @@ def delete_polymorphic_children(instance) -> int:
     return removed
 
 
+def delete_polymorphic_children_batch(model, names: list[str]) -> int:
+    """Delete each declared polymorphic child table once for a parent batch."""
+    removed = 0
+    declarations = getattr(model, "POLYMORPHIC_CHILD_TABLES", {}) or {}
+    for child_model in {_model(label) for label in declarations.values()}:
+        count, _ = child_model._default_manager.filter(
+            parent__in=names, parenttype=doctype_of(model)
+        ).delete()
+        removed += count
+    return removed
+
+
 # ACTIVITIES extends this table with ToDo, Comment, File, and Communication when those
 # models exist. Communication uses ``clear``; the other reference rows use ``delete``.
 _REFERENCE_CLEANUP: tuple[tuple[str, str, str, str], ...] = (
@@ -357,9 +369,10 @@ def references_handled():
 
 
 def _on_parent_delete(sender, instance, **kwargs):
+    if _REFERENCES_HANDLED.get():
+        return
     delete_polymorphic_children(instance)
-    if not _REFERENCES_HANDLED.get():
-        delete_references(instance)
+    delete_references(instance)
 
 
 def connect_cascades() -> None:
