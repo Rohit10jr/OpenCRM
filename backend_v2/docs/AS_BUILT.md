@@ -108,6 +108,10 @@ model field access and optional ViewSet allowlists, and projects `.values()` row
 the three underscore caches converted back to JSON strings. Callers provide an already
 row-rule-narrowed queryset; these functions never start from a model manager.
 
+`core.conditions` evaluates the condition editor's JSON as data through `is_empty`,
+`validate`, `document_values`, `evaluate`, and `evaluate_safely`, without executing saved
+code.
+
 `core.filter_backends.FilterBackend` adapts that layer to DRF and records a validated
 projection on its ViewSet. The completed `DocumentViewSet` calls the same query layer
 directly with its `readable_fields`, `filterable_fields`, and `sortable_fields` tuples.
