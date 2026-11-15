@@ -11,31 +11,39 @@ from tests_support.serializers import WidgetSerializer
 
 
 pytestmark = pytest.mark.django_db
+_document_user_model = Widget._meta.get_field("owner").remote_field.model
 
 
-class ExplicitFieldChild(BaseDocument):
-    DOCTYPE = "Foundation Explicit Field Child"
-    IS_CHILD_TABLE = True
-    CHILD_FIELDS = (
-        "name",
-        "owner",
-        "modified_by",
-        "creation",
-        "modified",
-        "idx",
-        "docstatus",
-        "_assign",
-        "_liked_by",
-        "_comments",
-        "_user_tags",
-        "listed_value",
-    )
-    listed_value = models.CharField(max_length=140, blank=True, default="")
-    unlisted_value = models.CharField(max_length=140, blank=True, default="")
+def _explicit_field_child_model():
+    class ExplicitFieldChild(BaseDocument):
+        DOCTYPE = "Foundation Explicit Field Child"
+        IS_CHILD_TABLE = True
+        CHILD_FIELDS = (
+            "name",
+            "owner",
+            "modified_by",
+            "creation",
+            "modified",
+            "idx",
+            "docstatus",
+            "_assign",
+            "_liked_by",
+            "_comments",
+            "_user_tags",
+            "listed_value",
+        )
+        listed_value = models.CharField(max_length=140, blank=True, default="")
+        unlisted_value = models.CharField(max_length=140, blank=True, default="")
 
-    class Meta:
-        app_label = "tests_support"
-        managed = False
+        class Meta:
+            app_label = "tests_support"
+            managed = False
+
+    for field_name in ("owner", "modified_by"):
+        field = ExplicitFieldChild._meta.get_field(field_name)
+        field.remote_field.model = _document_user_model
+
+    return ExplicitFieldChild
 
 
 def test_declared_child_specs_resolve_fk_and_polymorphic_shapes():
@@ -108,7 +116,9 @@ def test_prepare_rows_reports_the_old_mandatory_child_message():
     ]
 
 
+@isolate_apps("tests_support")
 def test_unlisted_child_column_is_not_rendered(alice):
+    ExplicitFieldChild = _explicit_field_child_model()
     child = ExplicitFieldChild(
         listed_value="shown",
         unlisted_value="withheld",
@@ -121,7 +131,9 @@ def test_unlisted_child_column_is_not_rendered(alice):
     assert "unlisted_value" not in data
 
 
+@isolate_apps("tests_support")
 def test_unlisted_child_column_is_not_written():
+    ExplicitFieldChild = _explicit_field_child_model()
     payload = prepare_rows(
         ExplicitFieldChild,
         [{"listed_value": "kept", "unlisted_value": "dropped"}],
@@ -132,7 +144,9 @@ def test_unlisted_child_column_is_not_written():
     assert "unlisted_value" not in payload
 
 
+@isolate_apps("tests_support")
 def test_child_model_without_an_explicit_field_list_raises(monkeypatch):
+    ExplicitFieldChild = _explicit_field_child_model()
     monkeypatch.delattr(ExplicitFieldChild, "CHILD_FIELDS")
 
     with pytest.raises(TypeError) as caught:
