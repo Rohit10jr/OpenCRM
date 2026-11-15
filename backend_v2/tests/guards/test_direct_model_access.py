@@ -56,6 +56,26 @@ DIRECT_MANAGER_READS = {
         "Polymorphic child rows require a batched parent lookup before the actual "
         "parent's object-read rule can be applied."
     ),
+    (
+        "core/mixins/linked.py",
+        "LinkedDocumentsMixin.linked_documents",
+        "model._default_manager",
+    ): (
+        "Unlink intentionally loads each named item directly so a write-object-rule "
+        "refusal can be skipped silently instead of becoming list invisibility."
+    ),
+    ("core/mixins/linked.py", "_clear_reference", "type(instance)._default_manager"): (
+        "Unlink clears reference pairs with a plain update to avoid modified stamps "
+        "and Version rows, matching the old endpoint."
+    ),
+    ("core/mixins/linked.py", "_clear_link_fields", "type(instance)._default_manager"): (
+        "Unlink clears direct foreign keys with a plain update to avoid modified stamps "
+        "and Version rows, matching the old endpoint."
+    ),
+    ("core/mixins/linked.py", "_clear_contact", "type(instance)._default_manager"): (
+        "The contact-specific unlink path clears its direct field with a plain update, "
+        "matching the old endpoint's unstamped write."
+    ),
 }
 
 

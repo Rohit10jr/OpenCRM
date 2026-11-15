@@ -157,3 +157,103 @@ def linked_documents(target_model, names, user):
     return found
 
 
+def _linked_title(instance):
+    hook = getattr(type(instance), "linked_document_title", None)
+    if callable(hook):
+        return str(hook(instance))
+    return str(getattr(instance, "title", None) or instance.pk)
+
+
+def _clear_reference(instance):
+    hook = getattr(type(instance), "clear_linked_document_reference", None)
+    if callable(hook):
+        hook(instance)
+        return
+    updates = {}
+    for doctype_field, name_field in _dynamic_link_declarations(type(instance)):
+        updates[doctype_field] = ""
+        updates[name_field] = ""
+    if updates:
+        type(instance)._default_manager.filter(pk=instance.pk).update(**updates)
+
+
+def _clear_link_fields(instance, target_model, target_name):
+    updates = {}
+    parent_fk = _parent_fk(type(instance)) if is_child_table(type(instance)) else None
+    for field in type(instance)._meta.concrete_fields:
+        if (
+            isinstance(field, (models.ForeignKey, models.OneToOneField))
+            and field is not parent_fk
+            and field.related_model is target_model
+            and str(getattr(instance, field.attname, "")) == str(target_name)
+        ):
+            updates[field.name] = None
+    if updates:
+        type(instance)._default_manager.filter(pk=instance.pk).update(**updates)
+
+
+def _clear_contact(instance):
+    concrete = {field.name for field in type(instance)._meta.concrete_fields}
+    if "contact" in concrete:
+        type(instance)._default_manager.filter(pk=instance.pk).update(contact=None)
+    contacts = getattr(instance, "contacts", None)
+    if contacts is not None:
+        contacts.all().delete()
+
+
+class LinkedDocumentsMixin:
+    """Add the delete-dialog list and unlink action to a document resource."""
+
+    @action(detail=True, methods=("get", "post"), url_path="linked-documents")
+    def linked_documents(self, request, *args, **kwargs):
+        if request.method == "GET":
+            source = self._object_by_name("read")
+            results = {}
+            for source_doctype, instance in linked_documents(
+                self.document_model, [source.pk], request.user
+            ):
+                name = str(instance.pk)
+                results[name] = {
+                    "doc": source_doctype,
+                    "title": _linked_title(instance),
+                    "reference_docname": name,
+                    "reference_doctype": source_doctype,
+                }
+            return Response(Envelope(list(results.values()), "message"))
+
+        inputs = build_payload(request)
+        items = parse_json_param(inputs.get("items"), []) or []
+        remove_contact = bool(inputs.get("remove_contact", False))
+        delete = bool(inputs.get("delete", False))
+        target_name = self.kwargs[self.lookup_url_kwarg or self.lookup_field]
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            item_doctype = item.get("doctype")
+            item_name = item.get("docname")
+            if not item_doctype or not item_name:
+                continue
+            model = model_for_doctype(item_doctype)
+            rules = rules_for(model) if model is not None else None
+            if model is None or rules is None:
+                continue
+            instance = model._default_manager.filter(pk=item_name).first()
+            if instance is None:
+                continue
+            if rules.has_object_rule(request.user, instance, "write") is False:
+                continue
+
+            if remove_contact:
+                _clear_contact(instance)
+            else:
+                _clear_reference(instance)
+                _clear_link_fields(instance, self.document_model, target_name)
+            if delete:
+                try:
+                    check_dynamic_links(instance)
+                except LinkExistsError:
+                    continue
+                instance.delete()
+
+        return Response(Envelope("success", "message"))

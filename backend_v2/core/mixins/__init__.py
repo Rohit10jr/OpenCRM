@@ -1,5 +1,6 @@
 """Shared actions that document resources opt in to explicitly."""
 
 from core.mixins.bulk_update import BulkUpdateMixin
+from core.mixins.linked import LinkedDocumentsMixin
 
-__all__ = ("BulkUpdateMixin",)
+__all__ = ("BulkUpdateMixin", "LinkedDocumentsMixin")
