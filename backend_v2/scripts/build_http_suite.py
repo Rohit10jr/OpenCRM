@@ -146,6 +146,20 @@ def _annotate(block: HttpBlock, marker: str) -> None:
         block.lines.insert(0, marker)
 
 
+def _mark_cleanup_blocks(blocks: list[HttpBlock]) -> None:
+    under_cleanup_heading = False
+    for block in blocks:
+        if any("cleanup first" in line.lower() for line in block.lines):
+            under_cleanup_heading = True
+        title = block.title or ""
+        numbered_cleanup = under_cleanup_heading and bool(re.match(r"0\.\d", title))
+        titled_cleanup = bool(re.match(r"(?:\d+(?:\.\d+)*[a-z]?\s+)?clean[ -]?up\b", title, re.I))
+        if block.request and (numbered_cleanup or titled_cleanup):
+            _annotate(block, "# @cleanup")
+        if under_cleanup_heading and title and not re.match(r"0\.\d", title):
+            under_cleanup_heading = False
+
+
 def _replace_request(block: HttpBlock, method: str, url: str, body: dict | None = None) -> None:
     index = block.request_index
     assert index is not None
@@ -344,6 +358,7 @@ def _added_negative(title: str, method: str, route: str) -> HttpBlock:
 
 def rewrite_http(text: str, route_map: RouteMap, filename: str = "fixture.http") -> str:
     document = parse_http(text)
+    _mark_cleanup_blocks(document.blocks)
     variables: dict[str, str] = {}
     resource_names: set[str] = set()
     for block in document.blocks:

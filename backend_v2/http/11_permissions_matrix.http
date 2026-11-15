@@ -73,6 +73,7 @@ Content-Type: application/json
 
 ### 0.5 hierarchy off, in case an earlier run died with it on -> 200
 # @waiting CONFIGURATION
+# @cleanup
 PUT {{settings}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -81,69 +82,82 @@ Content-Type: application/json
 
 ### 0.6 leftover tree rows -> 200
 # @waiting ACCOUNTS
+# @cleanup
 # @name old_tree
 GET {{tree}}?fields=["name"]&order_by=lft desc
 Authorization: Bearer {{token}}
 
 ### 0.7 -> 200|404
 # @waiting ACCOUNTS
+# @cleanup
 DELETE {{tree}}/{{old_tree.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.8 -> 200|404
 # @waiting ACCOUNTS
+# @cleanup
 DELETE {{tree}}/{{old_tree.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.9 -> 200|404
 # @waiting ACCOUNTS
+# @cleanup
 DELETE {{tree}}/{{old_tree.response.body.$.data[2].name}}
 Authorization: Bearer {{token}}
 
 ### 0.10 leftover leads -> 200
 # @waiting SALES
+# @cleanup
 # @name old_l
 GET {{lead}}?fields=["name"]&filters=[{{scope}}]
 Authorization: Bearer {{token}}
 
 ### 0.11 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{lead}}/{{old_l.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.12 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{lead}}/{{old_l.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.13 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{lead}}/{{old_l.response.body.$.data[2].name}}
 Authorization: Bearer {{token}}
 
 ### 0.14 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{lead}}/{{old_l.response.body.$.data[3].name}}
 Authorization: Bearer {{token}}
 
 ### 0.15 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{lead}}/{{old_l.response.body.$.data[4].name}}
 Authorization: Bearer {{token}}
 
 ### 0.16 leftover deals -> 200
 # @waiting SALES
+# @cleanup
 # @name old_d
 GET {{deal}}?fields=["name"]&filters=[["next_step","like","ZZ Matrix%25"]]
 Authorization: Bearer {{token}}
 
 ### 0.17 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{deal}}/{{old_d.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.18 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{deal}}/{{old_d.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 

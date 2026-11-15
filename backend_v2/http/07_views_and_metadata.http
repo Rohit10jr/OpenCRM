@@ -58,64 +58,76 @@ Content-Type: application/json
 
 ### 0.4 leftover ZZ views -> 200
 # @waiting CONFIGURATION
+# @cleanup
 # @name old_views
 GET {{views}}?fields=["name"]&filters=[["label","like","ZZ%25"]]
 Authorization: Bearer {{token}}
 
 ### 0.5 -> 200|404
 # @waiting CONFIGURATION
+# @cleanup
 DELETE {{views}}/{{old_views.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.6 -> 200|404
 # @waiting CONFIGURATION
+# @cleanup
 DELETE {{views}}/{{old_views.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.7 -> 200|404
 # @waiting CONFIGURATION
+# @cleanup
 DELETE {{views}}/{{old_views.response.body.$.data[2].name}}
 Authorization: Bearer {{token}}
 
 ### 0.8 -> 200|404
 # @waiting CONFIGURATION
+# @cleanup
 DELETE {{views}}/{{old_views.response.body.$.data[3].name}}
 Authorization: Bearer {{token}}
 
 ### 0.9 a standard CRM Lead view for Administrator, if an earlier run left one -> 200
 # @waiting CONFIGURATION
+# @cleanup
 # @name old_std
 GET {{views}}?fields=["name"]&filters=[["dt","=","CRM Lead"],["is_standard","=",1],["user","=","Administrator"]]
 Authorization: Bearer {{token}}
 
 ### 0.10 -> 200|404
 # @waiting CONFIGURATION
+# @cleanup
 DELETE {{views}}/{{old_std.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.11 -> 200|404
 # @waiting CONFIGURATION
+# @cleanup
 DELETE {{views}}/{{old_std.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.12 leftover quick-filter override for CRM Task -> 200
 # @waiting CONFIGURATION
+# @cleanup
 # @name old_qf
 GET {{host}}/api/resource/CRM%20Global%20Settings?fields=["name"]&filters=[["dt","=","CRM Task"],["type","=","Quick Filters"]]
 Authorization: Bearer {{token}}
 
 ### 0.13 -> 200|404
 # @waiting CONFIGURATION
+# @cleanup
 DELETE {{host}}/api/resource/CRM%20Global%20Settings/{{old_qf.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.14 leftover Quick Entry layout for CRM Task -> 200|404
 # @waiting CONFIGURATION
+# @cleanup
 DELETE {{host}}/api/resource/CRM%20Fields%20Layout/CRM%20Task-Quick%20Entry
 Authorization: Bearer {{token}}
 
 ### 0.15 leftover form script -> 200|404
 # @waiting CONFIGURATION
+# @cleanup
 DELETE {{host}}/api/resource/CRM%20Form%20Script/ZZ%20Lead%20Script
 Authorization: Bearer {{token}}
 

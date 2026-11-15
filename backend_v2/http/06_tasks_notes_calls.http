@@ -34,12 +34,14 @@ Content-Type: application/json
 
 ### 0.2 leftover tasks -> 200
 # @waiting ACTIVITIES
+# @cleanup
 # @name old_tasks
 GET {{task}}?fields=["name"]&filters=[["title","like","ZZ%25"]]
 Authorization: Bearer {{token}}
 
 ### 0.3 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 # When 0.2 found nothing, REST Client cannot resolve `$.data[0].name` and sends the
 # placeholder text itself as the name. A task's name is a number, so that name cannot
 # exist and the answer is 404 - which is what the block accepts. (It answered 500 until
@@ -49,74 +51,88 @@ Authorization: Bearer {{token}}
 
 ### 0.4 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{task}}/{{old_tasks.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.5 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{task}}/{{old_tasks.response.body.$.data[2].name}}
 Authorization: Bearer {{token}}
 
 ### 0.6 leftover notes -> 200
 # @waiting ACTIVITIES
+# @cleanup
 # @name old_notes
 GET {{note}}?fields=["name"]&filters=[["title","like","ZZ%25"]]
 Authorization: Bearer {{token}}
 
 ### 0.7 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{note}}/{{old_notes.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.8 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{note}}/{{old_notes.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.9 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{note}}/{{old_notes.response.body.$.data[2].name}}
 Authorization: Bearer {{token}}
 
 ### 0.10 leftover call logs -> 200
 # @waiting ACTIVITIES
+# @cleanup
 # @name old_calls
 GET {{call}}?fields=["name"]&filters=[["to","=","+49 30 7"]]
 Authorization: Bearer {{token}}
 
 ### 0.11 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{call}}/{{old_calls.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.12 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{call}}/{{old_calls.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.13 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{call}}/ZZ-CALL-1
 Authorization: Bearer {{token}}
 
 ### 0.14 leftover leads: the fixture lead and the one 4.7c creates from a call -> 200
 # @waiting SALES
+# @cleanup
 # @name old_leads
 GET {{lead}}?fields=["name"]&filters=[["first_name","in",["ZZ Task Lead","ZZ Call Lead"]]]
 Authorization: Bearer {{token}}
 
 ### 0.15 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{lead}}/{{old_leads.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.15b -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{lead}}/{{old_leads.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.16 cleanup contact -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{host}}/api/resource/Contact/ZZ%20Caller
 Authorization: Bearer {{token}}
 

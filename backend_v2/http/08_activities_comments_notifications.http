@@ -59,85 +59,101 @@ Content-Type: application/json
 
 ### 0.4 leftover comments -> 200
 # @waiting ACTIVITIES
+# @cleanup
 # @name old_c
 GET {{comment}}?fields=["name"]&filters=[["content","like","%25ZZ%25"]]
 Authorization: Bearer {{token}}
 
 ### 0.5 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{comment}}/{{old_c.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.6 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{comment}}/{{old_c.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.7 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{comment}}/{{old_c.response.body.$.data[2].name}}
 Authorization: Bearer {{token}}
 
 ### 0.8 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{comment}}/{{old_c.response.body.$.data[3].name}}
 Authorization: Bearer {{token}}
 
 ### 0.9 leftover communications -> 200
 # @waiting ACTIVITIES
+# @cleanup
 # @name old_m
 GET {{comm}}?fields=["name"]&filters=[["subject","like","ZZ%25"]]
 Authorization: Bearer {{token}}
 
 ### 0.10 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{comm}}/{{old_m.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.11 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{comm}}/{{old_m.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.12 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{comm}}/{{old_m.response.body.$.data[2].name}}
 Authorization: Bearer {{token}}
 
 ### 0.13 leftover notifications -> 200
 # @waiting NOTIFICATIONS
+# @cleanup
 # @name old_n
 GET {{notif}}?fields=["name"]&filters=[["message","like","%25ZZ%25"]]
 Authorization: Bearer {{token}}
 
 ### 0.14 -> 200|404
 # @waiting NOTIFICATIONS
+# @cleanup
 DELETE {{notif}}/{{old_n.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.15 -> 200|404
 # @waiting NOTIFICATIONS
+# @cleanup
 DELETE {{notif}}/{{old_n.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.16 -> 200|404
 # @waiting NOTIFICATIONS
+# @cleanup
 DELETE {{notif}}/{{old_n.response.body.$.data[2].name}}
 Authorization: Bearer {{token}}
 
 ### 0.17 leftover leads -> 200
 # @waiting SALES
+# @cleanup
 # @name old_l
 GET {{lead}}?fields=["name"]&filters=[["first_name","like","ZZ Timeline%25"]]
 Authorization: Bearer {{token}}
 
 ### 0.18 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{lead}}/{{old_l.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.19 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{lead}}/{{old_l.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 

@@ -127,6 +127,20 @@ def test_dotenv_values_are_redacted_in_escaped_and_url_encoded_forms():
         assert "<redacted>" in output
 
 
+def test_replay_error_is_skipped_only_for_marked_cleanup_block():
+    blocks = parse_http("""\
+### marked -> 200|404
+# @cleanup
+DELETE http://example.test/{{missing}}
+### unmarked -> 200|404
+DELETE http://example.test/{{missing}}
+""").blocks
+    runner = HttpRunner(output=lambda line: None)
+
+    assert runner.run_block(blocks[1]).outcome == "skipped"
+    assert runner.run_block(blocks[2]).outcome == "fail"
+
+
 def test_statusless_block_accepts_any_2xx():
     block = parse_http("### request\nPOST http://example.test/path\n").blocks[1]
     runner = HttpRunner(request=lambda *args, **kwargs: response(204, ""))

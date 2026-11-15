@@ -84,6 +84,27 @@ def test_unbuilt_method_is_kept_and_marked_with_its_unit():
     assert "/api/method/future.method" in result
 
 
+def test_cleanup_sections_and_cleanup_titles_are_marked():
+    source = """\
+# ---- cleanup first ----
+### 0.1 find leftovers -> 200
+POST http://localhost:8000/api/method/login
+### 0.2 remove leftover -> 200|404
+POST http://localhost:8000/api/method/logout
+### 1.1 normal request -> 200
+POST http://localhost:8000/api/method/login
+### 2.1 cleanup later -> 200|404
+POST http://localhost:8000/api/method/logout
+"""
+    result = rewrite_http(source, parse_route_map(ROUTE_MAP_TEXT))
+    blocks = parse_http(result).blocks
+
+    assert blocks[1].cleanup
+    assert blocks[2].cleanup
+    assert not blocks[3].cleanup
+    assert blocks[4].cleanup
+
+
 def test_auth_wrong_verbs_and_added_cases_are_negative_405s():
     source = """\
 @host = http://localhost:8000

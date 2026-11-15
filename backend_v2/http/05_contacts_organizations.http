@@ -32,77 +32,92 @@ Content-Type: application/json
 
 ### 0.2 find deals left by an earlier run -> 200
 # @waiting SALES
+# @cleanup
 # @name leftovers
 GET {{host}}/api/resource/CRM%20Deal?fields=["name"]&filters=[["next_step","like","ZZ Link%25"]]
 Authorization: Bearer {{token}}
 
 ### 0.3 delete leftover deal 1 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{host}}/api/resource/CRM%20Deal/{{leftovers.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.4 delete leftover deal 2 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{host}}/api/resource/CRM%20Deal/{{leftovers.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.5 cleanup contacts -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{contact}}/ZZ%20Jane%20Roe
 Authorization: Bearer {{token}}
 
 ### 0.6 -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{contact}}/ZZ%20Jane%20Roe-1
 Authorization: Bearer {{token}}
 
 ### 0.7 -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{contact}}/ZZ%20Jane%20Renamed
 Authorization: Bearer {{token}}
 
 ### 0.8 -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{contact}}/ZZ%20John%20Doe
 Authorization: Bearer {{token}}
 
 ### 0.9 -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{contact}}/ZZ%20Acme%20Only
 Authorization: Bearer {{token}}
 
 ### 0.9b -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{contact}}/ZZ%20No%20Mail
 Authorization: Bearer {{token}}
 
 ### 0.10 cleanup organizations -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{org}}/ZZ%20Contact%20Org
 Authorization: Bearer {{token}}
 
 ### 0.11 -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{org}}/ZZ%20Renamed%20Org
 Authorization: Bearer {{token}}
 
 ### 0.12 cleanup territories, leaves first -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{territory}}/ZZ%20Berlin
 Authorization: Bearer {{token}}
 
 ### 0.13 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{territory}}/ZZ%20Europe
 Authorization: Bearer {{token}}
 
 ### 0.14 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{territory}}/ZZ%20World
 Authorization: Bearer {{token}}
 
 ### 0.15 cleanup industry -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{host}}/api/resource/CRM%20Industry/ZZ%20Industry
 Authorization: Bearer {{token}}
 

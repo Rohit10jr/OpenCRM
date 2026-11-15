@@ -60,39 +60,46 @@ Content-Type: application/json
 
 ### 0.4 -> 200
 # @waiting INTEGRATIONS
+# @cleanup
 # @name old_tw
 GET {{twilio}}?fields=["name"]
 Authorization: Bearer {{token}}
 
 ### 0.5 -> 200|404
 # @waiting INTEGRATIONS
+# @cleanup
 DELETE {{twilio}}/{{old_tw.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.6 -> 200
 # @waiting INTEGRATIONS
+# @cleanup
 # @name old_ex
 GET {{exotel}}?fields=["name"]
 Authorization: Bearer {{token}}
 
 ### 0.7 -> 200|404
 # @waiting INTEGRATIONS
+# @cleanup
 DELETE {{exotel}}/{{old_ex.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.8 -> 200
 # @waiting INTEGRATIONS
+# @cleanup
 # @name old_erp
 GET {{erp}}?fields=["name"]
 Authorization: Bearer {{token}}
 
 ### 0.9 -> 200|404
 # @waiting INTEGRATIONS
+# @cleanup
 DELETE {{erp}}/{{old_erp.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.10 FCRM access_key cleared -> 200
 # @waiting CONFIGURATION
+# @cleanup
 PUT {{fcrm}}/FCRM%20Settings
 Authorization: Bearer {{token}}
 Content-Type: application/json

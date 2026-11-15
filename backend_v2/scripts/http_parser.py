@@ -14,6 +14,7 @@ NAME_RE = re.compile(r"^#\s*@name\s+(\S+)")
 EXPECT_RE = re.compile(
     r"^#\s*@expect\s+(\S+)\s+(==|!=|contains|excludes|exists|absent|count)\s*(.*)$"
 )
+CLEANUP_RE = re.compile(r"^#\s*@cleanup\s*$")
 REQUEST_RE = re.compile(r"^(GET|POST|PUT|PATCH|DELETE)\s+(\S.*)$", re.IGNORECASE)
 
 
@@ -56,6 +57,10 @@ class HttpBlock:
     def expected_statuses(self) -> set[int]:
         match = STATUS_RE.search(self.title or "")
         return {int(value) for value in match.group(1).split("|")} if match else set()
+
+    @property
+    def cleanup(self) -> bool:
+        return any(CLEANUP_RE.match(line) for line in self.lines)
 
     @property
     def request_index(self) -> int | None:

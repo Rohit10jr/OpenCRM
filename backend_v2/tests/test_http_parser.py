@@ -9,6 +9,7 @@ def test_parser_covers_the_walkthrough_syntax_losslessly():
 @method = login
 
 ### named request -> 200|404
+# @cleanup
 # @name signed_in
 # @expect $.message.items[0].name contains Example
 # @expect $.message.enabled == true
@@ -35,6 +36,7 @@ name={{signed_in.response.body.$.message.items[0].name}}&enabled=1
     named = parsed.blocks[1]
     assert parsed.render() == text
     assert named.name == "signed_in"
+    assert named.cleanup
     assert named.expected_statuses == {200, 404}
     assert [item.operator for item in named.expectations] == [
         "contains",

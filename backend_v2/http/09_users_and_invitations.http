@@ -56,33 +56,39 @@ Content-Type: application/json
 
 ### 0.4 leftover throwaway user -> 200|404
 # @waiting FOUNDATION
+# @cleanup
 DELETE {{user}}/{{temp}}
 Authorization: Bearer {{token}}
 
 ### 0.5 leftover invitations -> 200
 # @waiting ACCOUNTS
+# @cleanup
 # @name old_inv
 GET {{inv}}?fields=["name"]&filters=[["email","like","zz.%25"]]
 Authorization: Bearer {{token}}
 
 ### 0.6 -> 200|404
 # @waiting ACCOUNTS
+# @cleanup
 DELETE {{inv}}/{{old_inv.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.7 -> 200|404
 # @waiting ACCOUNTS
+# @cleanup
 DELETE {{inv}}/{{old_inv.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.8 leftover leads -> 200
 # @waiting SALES
+# @cleanup
 # @name old_l
 GET {{host}}/api/resource/CRM%20Lead?fields=["name"]&filters=[["first_name","like","ZZ Attach%25"]]
 Authorization: Bearer {{token}}
 
 ### 0.9 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{host}}/api/resource/CRM%20Lead/{{old_l.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 

@@ -31,21 +31,25 @@ Content-Type: application/json
 
 ### 0.2 cleanup Alpha -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{org}}/ZZ%20Grammar%20Alpha
 Authorization: Bearer {{token}}
 
 ### 0.3 cleanup Beta -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{org}}/ZZ%20Grammar%20Beta
 Authorization: Bearer {{token}}
 
 ### 0.4 cleanup Gamma -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{org}}/ZZ%20Grammar%20Gamma
 Authorization: Bearer {{token}}
 
 ### 0.5 cleanup industry -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{host}}/api/resource/CRM%20Industry/ZZ%20Grammar%20Industry
 Authorization: Bearer {{token}}
 

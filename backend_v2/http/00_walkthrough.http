@@ -92,6 +92,7 @@ Content-Type: application/json
 
 ### 2.0a Clean up a previous run -> 200|404
 # @waiting CONTACTS
+# @cleanup
 # Every file removes its own leftovers FIRST, so a run that died halfway does not make
 # the next one fail on "duplicate". 404 here just means there was nothing to remove.
 DELETE {{host}}/api/resource/CRM%20Organization/Acme%20Test%20Co
@@ -296,6 +297,7 @@ Authorization: Bearer {{token}}
 
 ### 3.13 Clean up the walkthrough lead
 # @waiting SALES
+# @cleanup
 DELETE {{host}}/api/resource/CRM%20Lead/{{lead_name}}
 Authorization: Bearer {{token}}
 

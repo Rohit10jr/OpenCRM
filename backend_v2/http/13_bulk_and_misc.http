@@ -59,95 +59,113 @@ Content-Type: application/json
 
 ### 0.4 leftover orgs -> 200
 # @waiting CONTACTS
+# @cleanup
 # @name old_o
 GET {{org}}?fields=["name"]&filters=[["name","like","ZZ Bulk%25"]]
 Authorization: Bearer {{token}}
 
 ### 0.5 -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{org}}/{{old_o.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.6 -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{org}}/{{old_o.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.7 -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{org}}/{{old_o.response.body.$.data[2].name}}
 Authorization: Bearer {{token}}
 
 ### 0.8 -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{org}}/ZZ%20Inserted
 Authorization: Bearer {{token}}
 
 ### 0.9 leftover leads -> 200
 # @waiting SALES
+# @cleanup
 # @name old_l
 GET {{lead}}?fields=["name"]&filters=[["first_name","like","ZZ Bulk%25"]]
 Authorization: Bearer {{token}}
 
 ### 0.10 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{lead}}/{{old_l.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.11 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{lead}}/{{old_l.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.12 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{lead}}/{{old_l.response.body.$.data[2].name}}
 Authorization: Bearer {{token}}
 
 ### 0.13 leftover notes -> 200
 # @waiting ACTIVITIES
+# @cleanup
 # @name old_n
 GET {{note}}?fields=["name"]&filters=[["title","like","ZZ Bulk%25"]]
 Authorization: Bearer {{token}}
 
 ### 0.14 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{note}}/{{old_n.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.15 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{note}}/{{old_n.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.16 leftover tag, templates -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{host}}/api/resource/Tag/ZZ%20Hot
 Authorization: Bearer {{token}}
 
 ### 0.17 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{host}}/api/resource/Email%20Template/ZZ%20Welcome
 Authorization: Bearer {{token}}
 
 ### 0.18 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{host}}/api/resource/Email%20Template/ZZ%20Welcome%202
 Authorization: Bearer {{token}}
 
 ### 0.19 leftover files -> 200
 # @waiting ACTIVITIES
+# @cleanup
 # @name old_f
 GET {{file}}?fields=["name"]&filters=[["file_name","like","zz-%25"]]
 Authorization: Bearer {{token}}
 
 ### 0.20 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{file}}/{{old_f.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.21 -> 200|404
 # @waiting ACTIVITIES
+# @cleanup
 DELETE {{file}}/{{old_f.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 

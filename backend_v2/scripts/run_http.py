@@ -178,7 +178,7 @@ class HttpRunner:
         try:
             prepared = self.prepare(block)
         except ReplayError as exc:
-            if 404 in block.expected_statuses:
+            if block.cleanup and 404 in block.expected_statuses:
                 return BlockResult(title, "skipped", f"cleanup reference unavailable: {exc}")
             return BlockResult(title, "fail", self.redact(exc))
         if prepared is None:

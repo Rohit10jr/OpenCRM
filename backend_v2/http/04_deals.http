@@ -31,6 +31,7 @@ Content-Type: application/json
 
 ### 0.2 forecasting off, in case an earlier run died with it on -> 200
 # @waiting CONFIGURATION
+# @cleanup
 PUT {{settings}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -39,82 +40,98 @@ Content-Type: application/json
 
 ### 0.3 find deals left by an earlier run -> 200
 # @waiting SALES
+# @cleanup
 # @name leftovers
 GET {{deal}}?fields=["name"]&or_filters=[["organization","=","ZZ Deal Org"],["next_step","like","ZZ%25"]]&limit_page_length=10
 Authorization: Bearer {{token}}
 
 ### 0.4 delete leftover 1 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{deal}}/{{leftovers.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.5 delete leftover 2 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{deal}}/{{leftovers.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.6 delete leftover 3 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{deal}}/{{leftovers.response.body.$.data[2].name}}
 Authorization: Bearer {{token}}
 
 ### 0.7 delete leftover 4 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{deal}}/{{leftovers.response.body.$.data[3].name}}
 Authorization: Bearer {{token}}
 
 ### 0.8 delete leftover 5 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{deal}}/{{leftovers.response.body.$.data[4].name}}
 Authorization: Bearer {{token}}
 
 ### 0.9 delete leftover 6 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{deal}}/{{leftovers.response.body.$.data[5].name}}
 Authorization: Bearer {{token}}
 
 ### 0.10 cleanup contact ZZ Primary -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{contact}}/ZZ%20Primary
 Authorization: Bearer {{token}}
 
 ### 0.11 cleanup contact ZZ Second -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{contact}}/ZZ%20Second
 Authorization: Bearer {{token}}
 
 ### 0.11b cleanup contact ZZ Modal Person (made by create_deal in 5.17) -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{contact}}/ZZ%20Modal%20Person
 Authorization: Bearer {{token}}
 
 ### 0.12 cleanup org -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{host}}/api/resource/CRM%20Organization/ZZ%20Deal%20Org
 Authorization: Bearer {{token}}
 
 ### 0.12b cleanup org ZZ Modal Org (made by create_deal in 5.17) -> 200|404
 # @waiting CONTACTS
+# @cleanup
 DELETE {{host}}/api/resource/CRM%20Organization/ZZ%20Modal%20Org
 Authorization: Bearer {{token}}
 
 ### 0.13 cleanup status ZZ Hot -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{host}}/api/resource/CRM%20Deal%20Status/ZZ%20Hot
 Authorization: Bearer {{token}}
 
 ### 0.14 cleanup lost reason Other -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{host}}/api/resource/CRM%20Lost%20Reason/Other
 Authorization: Bearer {{token}}
 
 ### 0.15 cleanup lost reason ZZ Churn -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{host}}/api/resource/CRM%20Lost%20Reason/ZZ%20Churn
 Authorization: Bearer {{token}}
 
 ### 0.16 cleanup product ZZ-P1 -> 200|404
 # @waiting SALES
+# @cleanup
 DELETE {{host}}/api/resource/CRM%20Product/ZZ-P1
 Authorization: Bearer {{token}}
 
