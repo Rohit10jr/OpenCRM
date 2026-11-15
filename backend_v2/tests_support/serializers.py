@@ -3,7 +3,9 @@
 from core.serializers import DocumentSerializer
 from tests_support.models import (
     AutoIncrementDocumentFixture,
+    DynamicReference,
     FieldDocument,
+    PointingDocument,
     PromptDocument,
     SecuredDocument,
     SingletonDocument,
@@ -65,6 +67,18 @@ class WidgetSerializer(DocumentSerializer):
             "rows",
             "poly_rows",
         )
+
+
+class PointingDocumentSerializer(DocumentSerializer):
+    class Meta:
+        model = PointingDocument
+        fields = (*STANDARD_FIELDS, "widget", "widget_status")
+
+
+class DynamicReferenceSerializer(DocumentSerializer):
+    class Meta:
+        model = DynamicReference
+        fields = (*STANDARD_FIELDS, "reference_doctype", "reference_name")
 
 
 class SecuredDocumentSerializer(DocumentSerializer):

@@ -140,6 +140,7 @@ class WidgetNote(BaseDocument):
     DOCTYPE = "Foundation Widget Note"
     NAME_STRATEGY = Hash()
     IS_CHILD_TABLE = True
+    DYNAMIC_LINK_FIELDS = (("parenttype", "value"),)
     CHILD_FIELDS = (
         "name",
         "owner",
@@ -188,7 +189,13 @@ class PointingDocument(BaseDocument):
     DOCTYPE = "Foundation Pointing"
     NAME_STRATEGY = Hash()
     FETCH_FROM = {"widget_status": ("widget", "status")}
-    widget = models.ForeignKey(Widget, on_delete=models.PROTECT, related_name="pointers")
+    widget = models.ForeignKey(
+        Widget,
+        on_delete=models.PROTECT,
+        related_name="pointers",
+        null=True,
+        blank=True,
+    )
     widget_status = models.CharField(max_length=50, blank=True, default="")
 
 
@@ -227,6 +234,7 @@ class TestTree(TreeDocument):
 class TreeItem(BaseDocument):
     DOCTYPE = "Foundation Tree Item"
     NAME_STRATEGY = Prompt()
+    ROW_RULES = "tests_support.permissions.OpenRows"
     tree = models.ForeignKey(TestTree, on_delete=models.PROTECT, related_name="items")
     widget = models.ForeignKey(
         Widget,

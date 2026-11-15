@@ -48,6 +48,14 @@ DIRECT_MANAGER_READS = {
         "Retention housekeeping is a scheduled job without a request user and deletes "
         "only expired saved-view history."
     ),
+    ("core/mixins/linked.py", "linked_documents", "model._default_manager"): (
+        "The batched link scan starts at each source manager, then immediately applies "
+        "that source model's independently callable list rule."
+    ),
+    ("core/mixins/linked.py", "linked_documents", "parent_model._default_manager"): (
+        "Polymorphic child rows require a batched parent lookup before the actual "
+        "parent's object-read rule can be applied."
+    ),
 }
 
 

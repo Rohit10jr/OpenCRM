@@ -10,7 +10,9 @@ from core.renderers import Envelope
 from core.views import DocumentViewSet, SingletonViewSet
 from tests_support.serializers import (
     AutoIncrementDocumentSerializer,
+    DynamicReferenceSerializer,
     FieldDocumentSerializer,
+    PointingDocumentSerializer,
     PromptDocumentSerializer,
     SecuredDocumentSerializer,
     SingletonDocumentSerializer,
@@ -48,6 +50,38 @@ class WidgetViewSet(BulkUpdateMixin, DocumentViewSet):
         if ptype == "write":
             return document.status != "Locked"
         return None
+
+
+class PointingDocumentViewSet(DocumentViewSet):
+    access = Access.ruled()
+    serializer_class = PointingDocumentSerializer
+    readable_fields = PointingDocumentSerializer.Meta.fields
+    filterable_fields = ("name", "widget", "widget_status")
+    sortable_fields = ("name", "modified")
+
+    @staticmethod
+    def list_rule(user):
+        return Q(owner=user)
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        return document.owner_id == user.pk
+
+
+class DynamicReferenceViewSet(DocumentViewSet):
+    access = Access.ruled()
+    serializer_class = DynamicReferenceSerializer
+    readable_fields = DynamicReferenceSerializer.Meta.fields
+    filterable_fields = ("name", "reference_doctype", "reference_name")
+    sortable_fields = ("name", "modified")
+
+    @staticmethod
+    def list_rule(user):
+        return Q(owner=user)
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        return document.owner_id == user.pk
 
 
 class FieldDocumentViewSet(DocumentViewSet):
