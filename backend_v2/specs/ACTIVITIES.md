@@ -9,8 +9,9 @@ App `activities`: everything that hangs off a lead or a deal and appears on its 
 The `PORT_MAP.md` rows under **ACTIVITIES**:
 
 - **Doctypes:** Comment, Communication, FCRM Note, CRM Task (integer key), **CRM Call
-  Log**, File, Tag, Email Template, **Assignment Rule** and its child tables Assignment
-  Rule Day and Assignment Rule User, and ToDo (withheld — no route)
+  Log**, File, Tag, Email Template, and the **routes** of Assignment Rule (its model, its
+  child tables Assignment Rule Day and Assignment Rule User, and ToDo — withheld, no
+  route — are built by ASSIGNMENTS)
 - **Method paths (22):** `upload_file`;
   `frappe.automation.doctype.assignment_rule.assignment_rule.bulk_apply`;
   `crm.api.activities.get_activities`,
@@ -29,15 +30,18 @@ The `PORT_MAP.md` rows under **ACTIVITIES**:
 no Twilio or Exotel configured, the Call Logs page is core CRM, and calls sit on the
 timeline beside notes and tasks. The providers are in INTEGRATIONS.
 
-**Assignment rules live here; their engine does not.** The engine that decides who a saved
-document goes to is in SHARED_ACTIONS, because SALES calls it on save and is built first.
-This unit builds the Assignment Rule doctypes, their routes, `bulk_apply` and the rules'
-access, on top of that engine.
+**Assignment rules' routes live here; their models and engine do not.** ASSIGNMENTS (unit 7,
+in this same `activities` app) builds ToDo, the Assignment Rule doctype and its Day/User
+rows, `assign_to_user` and the engine, because SALES calls the engine on save and is built
+before this unit (A-7, 16 Nov 2026). This unit adds the Assignment Rule routes,
+`bulk_apply`, the assign/unassign routes and the rules' route access, on top of them.
+The Email Template doctype stays here; its rendering calls `core`'s `render_template`.
 
 ## 2. Depends on
 
 SALES (the records activities hang off), NOTIFICATIONS (mentions and assignments create
-notifications), SHARED_ACTIONS (the assignment engine).
+notifications), SHARED_ACTIONS (the mixins), ASSIGNMENTS (ToDo, Assignment Rule, the
+engine).
 
 ## 3. Read in `backend/` first
 
@@ -48,7 +52,7 @@ notifications), SHARED_ACTIONS (the assignment engine).
 - `frappe_core/assignment.py`, `frappe_core/doc_caches.py`, `crm_app/async_signals.py`
 - Assignment rules: `frappe_platform/models.py` (Assignment Rule and its rows),
   `crm_app/permissions/assignment_rule.py`, `crm_app/api/assignment_rule.py`,
-  `crm_app/assignment_rules.py` (`bulk_apply`, and the engine SHARED_ACTIONS ports)
+  `crm_app/assignment_rules.py` (`bulk_apply`; the engine is ASSIGNMENTS')
 - Uploads: `crm_app/api/upload.py`, `frappe_platform/files.py`, `frappe_core/file_views.py`
 - `crm_app/api/activities.py`, `api/comment.py`, `api/client.py` (assign and like),
   `api/assignment_rule.py`, `api/misc.py`, `api/communication.py`,
@@ -122,8 +126,9 @@ remaining KNOWN_ISSUES §7 candidate (`remove_multiple`) is in `PARITY_EXCEPTION
 
 ## 7. Carried from FOUNDATION
 
-- Add ToDo, Comment, File, and Communication to the reference-cleanup table in
-  `core/children.py`; Communication clears its reference rather than deleting the email.
+- Add Comment, File, and Communication to the reference-cleanup table in
+  `core/children.py` (ToDo is added by ASSIGNMENTS); Communication clears its reference
+  rather than deleting the email.
 - Port the file route's stale-token case.
 - Port the CRM-specific delete cases for Task, Note, Call Log, WhatsApp, Notification,
   and Comment.

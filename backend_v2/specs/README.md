@@ -29,8 +29,9 @@ status is wrong is worse than no status at all.
 | SHARED_ACTIONS | [`SHARED_ACTIONS.md`](SHARED_ACTIONS.md) | `core` (the mixins in `core/mixins/`, the conditions evaluator, the assignment engine) | FOUNDATION | Provisional |
 | CONTACTS | [`CONTACTS.md`](CONTACTS.md) | `contacts` | ACCOUNTS, SHARED_ACTIONS | Provisional |
 | NOTIFICATIONS | [`NOTIFICATIONS.md`](NOTIFICATIONS.md) | `notifications` | ACCOUNTS | Provisional |
-| SALES | [`SALES.md`](SALES.md) | `sales` | ACCOUNTS, CONFIGURATION, SHARED_ACTIONS, CONTACTS, SLA | Provisional |
-| ACTIVITIES | [`ACTIVITIES.md`](ACTIVITIES.md) | `activities` | SALES, NOTIFICATIONS, SHARED_ACTIONS | Provisional |
+| ASSIGNMENTS | [`ASSIGNMENTS.md`](ASSIGNMENTS.md) | `activities` (ToDo, Assignment Rule, the engine), `core` (`render_template`) | ACCOUNTS, NOTIFICATIONS, SHARED_ACTIONS | Provisional |
+| SALES | [`SALES.md`](SALES.md) | `sales` | ACCOUNTS, CONFIGURATION, SHARED_ACTIONS, CONTACTS, ASSIGNMENTS, SLA | Provisional |
+| ACTIVITIES | [`ACTIVITIES.md`](ACTIVITIES.md) | `activities` | SALES, NOTIFICATIONS, SHARED_ACTIONS, ASSIGNMENTS | Provisional |
 | DASHBOARD | [`DASHBOARD.md`](DASHBOARD.md) | `dashboard` | SALES | Provisional |
 | SLA | [`SLA.md`](SLA.md) | `sla` | FOUNDATION, SHARED_ACTIONS | Provisional |
 | INTEGRATIONS | [`INTEGRATIONS.md`](INTEGRATIONS.md) | `integrations` | SALES, ACTIVITIES | Provisional |
@@ -49,17 +50,18 @@ in parallel. Each unit depends only on units above it.
 | # | Unit | Why here |
 |---|---|---|
 | 1 | FOUNDATION | It sets the conventions every other unit copies, and writes every shared file |
-| 2 | SHARED_ACTIONS | The mixins every resource opts in to, and the conditions evaluator and assignment engine that SLA and SALES call |
+| 2 | SHARED_ACTIONS | The mixins every resource opts in to, and the conditions evaluator that SLA and the assignment engine call |
 | 3 | ACCOUNTS | `User`'s rules, roles and the sales hierarchy, which most later rules read |
 | 4 | CONFIGURATION | The list engine and settings every screen reads |
 | 5 | CONTACTS | Needs ACCOUNTS, and opts in to the rename mixin |
 | 6 | NOTIFICATIONS | Comments, assignments and WhatsApp messages all create notifications, so it comes before them |
-| 7 | SLA | Saving a lead or deal calls it, so it comes before SALES |
-| 8 | SALES | The largest unit. Lead and Deal reference nearly everything above |
-| 9 | ACTIVITIES | Hangs off leads and deals; builds the assignment rules on the engine from 2 |
-| 10 | DASHBOARD | Counts and sums over leads and deals |
-| 11 | INTEGRATIONS | Off by default; the phone providers need the call logs from ACTIVITIES |
-| 12 | DATA_IMPORT | Writes Leads, Deals, Contacts, Organizations, Tasks and Call Logs through their normal create path, so it needs all of them |
+| 7 | ASSIGNMENTS | ToDo, the Assignment Rule doctype and the engine that SALES calls on save; it needs NOTIFICATIONS (a ToDo notifies its assignee). Split out of SHARED_ACTIONS on 16 Nov 2026 (A-7): the engine cannot run without these models |
+| 8 | SLA | Saving a lead or deal calls it, so it comes before SALES |
+| 9 | SALES | The largest unit. Lead and Deal reference nearly everything above |
+| 10 | ACTIVITIES | Hangs off leads and deals; adds the assignment-rule routes on the models from ASSIGNMENTS |
+| 11 | DASHBOARD | Counts and sums over leads and deals |
+| 12 | INTEGRATIONS | Off by default; the phone providers need the call logs from ACTIVITIES |
+| 13 | DATA_IMPORT | Writes Leads, Deals, Contacts, Organizations, Tasks and Call Logs through their normal create path, so it needs all of them |
 
 **Resource units opt in to the mixins** (REBUILD_PLAN S24): each adds the shared-action
 and list-view mixins it needs to its own ViewSets, and its gate proves those routes on

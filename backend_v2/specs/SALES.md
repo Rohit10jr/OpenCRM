@@ -17,14 +17,14 @@ The `PORT_MAP.md` rows under **SALES**:
   `crm.api.onboarding.get_first_lead` / `get_first_deal`
 - **The org-hierarchy row rules** for leads and deals
 - **The list definitions** for Lead and Deal that `get_data` reads
-- **The calls on save** into SLA and the assignment engine from SHARED_ACTIONS, so a lead
+- **The calls on save** into SLA and the assignment engine from ASSIGNMENTS, so a lead
   or deal gets its deadline and its auto-assignment when it is saved
 
 ## 2. Depends on
 
 ACCOUNTS (the sales hierarchy), CONFIGURATION (the FCRM Settings flags and the list
-engine), SHARED_ACTIONS (the mixins), CONTACTS (organizations and contacts), SLA (the
-deadline a lead or deal gets on save).
+engine), SHARED_ACTIONS (the mixins), CONTACTS (organizations and contacts), ASSIGNMENTS (the
+engine a lead or deal calls after owner sync), SLA (the deadline a lead or deal gets on save).
 
 ## 3. Read in `backend/` first
 
