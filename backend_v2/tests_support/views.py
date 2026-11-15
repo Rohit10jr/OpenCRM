@@ -34,10 +34,12 @@ class WidgetViewSet(DocumentViewSet):
     searchable_fields = ("widget_name", "notes")
     reference_fields = ("status",)
 
-    def list_rule(self, user):
+    @staticmethod
+    def list_rule(user):
         return Q(widget_owner=user) | Q(widget_owner__isnull=True)
 
-    def has_object_rule(self, user, document, ptype):
+    @staticmethod
+    def has_object_rule(user, document, ptype):
         if ptype == "create":
             return document.status != "Forbidden"
         if ptype == "read":
@@ -74,10 +76,12 @@ class SecuredDocumentViewSet(DocumentViewSet):
     sortable_fields = ("name", "modified")
     searchable_fields = ()
 
-    def list_rule(self, user):
+    @staticmethod
+    def list_rule(user):
         return None
 
-    def has_object_rule(self, user, document, ptype):
+    @staticmethod
+    def has_object_rule(user, document, ptype):
         return None
 
 
@@ -108,10 +112,12 @@ class SingletonDocumentViewSet(SingletonViewSet):
     filterable_fields = ("name", "value", "manager_note")
     sortable_fields = ("name", "modified")
 
-    def list_rule(self, user):
+    @staticmethod
+    def list_rule(user):
         return None
 
-    def has_object_rule(self, user, document, ptype):
+    @staticmethod
+    def has_object_rule(user, document, ptype):
         if ptype == "read" and document.value == "Private":
             return False
         return None

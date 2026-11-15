@@ -1,5 +1,7 @@
 """Guard every routed document model's explicit access decision."""
 
+import inspect
+
 from django.apps import apps
 from django.db import models
 from django.test.utils import isolate_apps
@@ -87,10 +89,36 @@ def _invalid_access_declarations(viewsets):
     return failures
 
 
+def _non_static_rule_methods(viewsets):
+    failures = []
+    for viewset in sorted(viewsets, key=lambda item: item.__name__):
+        for method in ("list_rule", "has_object_rule"):
+            descriptor = inspect.getattr_static(viewset, method)
+            if not isinstance(descriptor, staticmethod):
+                failures.append(f"{viewset.__name__}.{method}")
+    return failures
+
+
 def test_every_resource_viewset_declares_a_valid_access_decision():
     failures = _invalid_access_declarations(_resource_viewsets())
 
     assert not failures, "Invalid resource access declarations:\n" + "\n".join(failures)
+
+
+def test_every_resource_row_rule_is_a_staticmethod():
+    failures = _non_static_rule_methods(_resource_viewsets())
+
+    assert not failures, "Resource row rules must be staticmethods: " + repr(failures)
+
+
+def test_static_rule_guard_rejects_an_instance_method():
+    class OldStyleViewSet(DocumentViewSet):
+        def list_rule(self, user):
+            return None
+
+    assert _non_static_rule_methods({OldStyleViewSet}) == [
+        "OldStyleViewSet.list_rule"
+    ]
 
 
 @isolate_apps("core")

@@ -91,10 +91,12 @@ class DocumentViewSet(
     searchable_fields = ()
     reference_fields = ()
 
-    def list_rule(self, user) -> Q | None:
+    @staticmethod
+    def list_rule(user) -> Q | None:
         return None
 
-    def has_object_rule(self, user, document, ptype: str) -> bool | None:
+    @staticmethod
+    def has_object_rule(user, document, ptype: str) -> bool | None:
         return None
 
     @property
