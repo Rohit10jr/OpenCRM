@@ -394,6 +394,9 @@ own list rule, resolved to its actual FK or polymorphic parent, and kept only wh
 parent's object-read rule is not false. The scan combines every FK and declared dynamic
 pair for one source model into one query, independent of the number of target names.
 Ignored delete-link doctypes and a child table's own parent FK are never links.
+The link-scan row-rule guard calls the scanner's own `is_link_source()` discovery, so
+FKs, declared dynamic pairs, and conventional reference pairs cannot drift between the
+runtime scan and its classification check.
 
 The dialog result deliberately deduplicates by document name alone: the first position
 is retained and the last model with that name supplies the value. A model can declare

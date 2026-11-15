@@ -47,7 +47,7 @@ def _rules_or_raise(model, urlconf=None):
     return rules
 
 
-def _source_spec(model, target_model):
+def _source_spec(model, target_model=None):
     child_table = is_child_table(model)
     parent_fk = _parent_fk(model) if child_table else None
     foreign_keys = [
@@ -55,7 +55,11 @@ def _source_spec(model, target_model):
         for field in model._meta.get_fields()
         if isinstance(field, (models.ForeignKey, models.OneToOneField))
         and field is not parent_fk
-        and field.related_model is target_model
+        and (
+            field.related_model is target_model
+            if target_model is not None
+            else getattr(field.related_model, "DOCTYPE", None)
+        )
     ]
     dynamic_pairs = []
     concrete = {field.name for field in model._meta.concrete_fields}
@@ -73,6 +77,13 @@ def _source_spec(model, target_model):
                 dynamic_pairs.append(("reference_doctype", name_field))
                 break
     return parent_fk, foreign_keys, dynamic_pairs
+
+
+def is_link_source(model):
+    """Return whether the linked-document scan can query ``model``."""
+
+    _, foreign_keys, dynamic_pairs = _source_spec(model)
+    return bool(foreign_keys or dynamic_pairs)
 
 
 def linked_documents(target_model, names, user, urlconf=None):
