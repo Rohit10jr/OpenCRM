@@ -1,11 +1,13 @@
 """Guard every routed document model's explicit access decision."""
 
 from django.apps import apps
+from django.db import models
+from django.test.utils import isolate_apps
 from django.urls import URLResolver, get_resolver
 
 from core.access import Access
 from core.doctypes import is_child_table
-from core.field_access import encrypted_fields, sensitive_fields
+from core.field_access import encrypted_fields, restricted_fields, sensitive_fields
 from core.models import BaseDocument
 from core.views import DocumentViewSet
 from core.withheld import WITHHELD_DOCUMENT_TYPES
@@ -55,12 +57,14 @@ def _declared_sensitive_fields(model):
         for field in model._meta.get_fields()
         if getattr(field, "concrete", False)
     }
-    return (sensitive_fields(model) | encrypted_fields(model)) & concrete
+    return (
+        sensitive_fields(model) | restricted_fields(model) | encrypted_fields(model)
+    ) & concrete
 
 
-def test_every_resource_viewset_declares_a_valid_access_decision():
+def _invalid_access_declarations(viewsets):
     failures = []
-    for viewset in sorted(_resource_viewsets(), key=lambda item: item.__name__):
+    for viewset in sorted(viewsets, key=lambda item: item.__name__):
         access = viewset.__dict__.get("access")
         if not isinstance(access, Access) or access.kind not in {"open", "ruled"}:
             failures.append(f"{viewset.__name__}: declare Access.open or Access.ruled")
@@ -80,8 +84,38 @@ def test_every_resource_viewset_declares_a_valid_access_decision():
             failures.append(
                 f"{viewset.__name__}: fields {sorted(secrets)} require ruled access"
             )
+    return failures
+
+
+def test_every_resource_viewset_declares_a_valid_access_decision():
+    failures = _invalid_access_declarations(_resource_viewsets())
 
     assert not failures, "Invalid resource access declarations:\n" + "\n".join(failures)
+
+
+@isolate_apps("core")
+def test_open_resource_with_only_a_restricted_field_is_rejected():
+    class RestrictedDocument(BaseDocument):
+        DOCTYPE = "Restricted Guard Fixture"
+        RESTRICTED_FIELDS = ("manager_note",)
+        manager_note = models.CharField(max_length=140)
+
+        class Meta:
+            app_label = "core"
+
+    class RestrictedSerializer:
+        class Meta:
+            model = RestrictedDocument
+
+    class OpenRestrictedViewSet(DocumentViewSet):
+        serializer_class = RestrictedSerializer
+        access = Access.open(
+            reason="This fixture proves restricted fields require a row access rule."
+        )
+
+    assert _invalid_access_declarations({OpenRestrictedViewSet}) == [
+        "OpenRestrictedViewSet: fields ['manager_note'] require ruled access"
+    ]
 
 
 def test_every_production_document_model_is_served_or_withheld():
