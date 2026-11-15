@@ -26,7 +26,7 @@ status is wrong is worse than no status at all.
 | FOUNDATION | [`FOUNDATION.md`](FOUNDATION.md) | `core`, and the first part of `accounts` | — | **Done** — gate passed 16 Nov 2026 (PRs #64, #65, milestone 3) |
 | ACCOUNTS | [`ACCOUNTS.md`](ACCOUNTS.md) | `accounts` | FOUNDATION | Provisional |
 | CONFIGURATION | [`CONFIGURATION.md`](CONFIGURATION.md) | `configuration` | FOUNDATION | Provisional |
-| SHARED_ACTIONS | [`SHARED_ACTIONS.md`](SHARED_ACTIONS.md) | `core` (the mixins in `core/mixins/`, the conditions evaluator, the assignment engine) | FOUNDATION | Provisional |
+| SHARED_ACTIONS | [`SHARED_ACTIONS.md`](SHARED_ACTIONS.md) | `core` (the mixins in `core/mixins/`, the conditions evaluator) | FOUNDATION | **Running** — rewritten and spec-checked 16 Nov 2026 |
 | CONTACTS | [`CONTACTS.md`](CONTACTS.md) | `contacts` | ACCOUNTS, SHARED_ACTIONS | Provisional |
 | NOTIFICATIONS | [`NOTIFICATIONS.md`](NOTIFICATIONS.md) | `notifications` | ACCOUNTS | Provisional |
 | ASSIGNMENTS | [`ASSIGNMENTS.md`](ASSIGNMENTS.md) | `activities` (ToDo, Assignment Rule, the engine), `core` (`render_template`) | ACCOUNTS, NOTIFICATIONS, SHARED_ACTIONS | Provisional |
