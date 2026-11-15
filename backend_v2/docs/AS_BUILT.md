@@ -511,8 +511,25 @@ may be overridden with `JWT_ACCESS_TOKEN_LIFETIME_MINUTES`,
 `LOGIN_MAX_CONSECUTIVE_ATTEMPTS`, and `LOGIN_LOCK_INTERVAL_SECONDS`; their defaults are
 5 minutes, 7 days, 0 proxies, 10 failures, and 60 seconds respectively.
 
-Database creation, the server on port 8001, the `.http` suite and the parity body diff
-are added by later FOUNDATION briefs.
+Regenerate the REST copy of all 15 walkthrough files whenever a unit marks routes built:
+
+```powershell
+.venv\Scripts\python.exe scripts\build_http_suite.py
+```
+
+The command reads `../docs/http/*.http` and `docs/PORT_MAP.md`, then replaces the
+committed files in `http/` deterministically. A block marked `# @waiting UNIT` is kept
+in its original position but is not runnable until that unit supplies a concrete New
+route, marks the row `built`, and regenerates. A block marked `# @negative` deliberately
+exercises a method or URL the REST API does not serve; the runner executes it, while the
+old/new body comparison excludes it. `# @not-served PE-3` records the three
+`frappe.client.get`-by-filter blocks that have no REST copy. Do not edit generated files
+by hand.
+
+The generated files use `http://localhost:8001`; `{{$dotenv NAME}}` remains intact and
+the runner reads the values from `backend_v2/.env`. Database creation, the server on
+port 8001, running these files, and the parity body diff are completed by later
+FOUNDATION briefs.
 
 ### Traps — read before starting a server or running tests
 

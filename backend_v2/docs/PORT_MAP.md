@@ -44,6 +44,7 @@ commit its reference was read at.
 |---|---|---|---|
 | `/api/resource/<DocType>` — list, create. Not served by `backend_v2`: replaced by each resource's collection route | each resource's app | each resource's unit | — |
 | `/api/resource/<DocType>/<name>` — read, update, delete. Not served by `backend_v2`: replaced by each resource's document route | each resource's app | each resource's unit | — |
+| `/api/method/crm.api.no_such_thing` → `/api/v1/no-such-thing/` — negative 404 case; neither route is served | config | FOUNDATION | built |
 | `ws/realtime?token=<access>` — WebSocket | notifications | NOTIFICATIONS | — |
 | `/admin/` — Django admin, not part of the contract | config | FOUNDATION | — |
 
