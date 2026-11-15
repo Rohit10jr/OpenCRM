@@ -183,6 +183,8 @@ unreviewed direct manager reads, keep concrete built route-map entries in lockst
 the production URLconf, require explicit credential and child-field declarations, and
 prove that resource writes stamp the authenticated caller. `Version` is the sole
 withheld document type; the `User` resource and its row rules wait for ACCOUNTS.
+`core.resources.rules_for(model)` now exposes independently callable row rules for a
+routed model, or for an unrouted model with an explicit `ROW_RULES` provider.
 
 `seed_dev_data` and `clear_dev_data` run the one explicit step list in
 `core.dev_data.STEPS`. FOUNDATION's account step creates or restores Administrator,
@@ -332,13 +334,25 @@ for that operation. Register the class explicitly on the app's
 
 Every resource ViewSet also declares its access decision directly on the class. Use
 `access = Access.ruled()` when rows are protected, and define both `list_rule(user)` and
-`has_object_rule(user, document, ptype)` on that ViewSet. Use
+`has_object_rule(user, document, ptype)` on that ViewSet. Both rules are
+`@staticmethod`s: a shared mixin can apply another resource's rules through
+`core.resources.rules_for(model)` without constructing a ViewSet or inheriting hidden
+request or action state. Existing calls through `self` remain valid. Use
 `access = Access.open(reason="…")` only after review, with a substantive reason. The
 base `DocumentViewSet` deliberately has no declaration, so a subclass that forgets one
 fails the access guard. A model with a concrete sensitive or encrypted field cannot be
 open. Document types that intentionally have no resource route are recorded once in
 `core.withheld.WITHHELD_DOCUMENT_TYPES`, with a reason; `Version` is currently the only
 entry because the timeline reads it server-side.
+
+`rules_for(model)` walks the active `ROOT_URLCONF`, including nested resolvers, and maps
+each routed `DocumentViewSet` or `SingletonViewSet` by its serializer model. The map is
+cached per URLconf; tests that replace a URLconf's patterns in place call
+`clear_rules_cache()`. An unrouted model that needs row rules declares
+`ROW_RULES = "<app>.permissions.<name>"`; that dotted object must provide callable
+`list_rule` and `has_object_rule` functions. There is no implicit fallback. Django's
+`core.E001` system check refuses one model served by two different ViewSet classes;
+registering the same class at several prefixes is valid.
 
 The base serves list, create, retrieve, PATCH, and delete with the client-reference
 `{"message": ...}` envelope and status 200, including create. It never serves PUT.
