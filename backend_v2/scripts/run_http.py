@@ -9,6 +9,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+from urllib.parse import quote, quote_plus
 
 import requests
 
@@ -69,8 +70,19 @@ class HttpRunner:
 
     def redact(self, value: object) -> str:
         text = str(value)
-        for secret in sorted((v for v in self.secrets.values() if v), key=len, reverse=True):
-            text = text.replace(secret, "<redacted>")
+        redactions = {
+            encoded
+            for secret in self.secrets.values()
+            if secret
+            for encoded in (
+                secret,
+                json.dumps(secret)[1:-1],
+                quote(secret, safe=""),
+                quote_plus(secret),
+            )
+        }
+        for redaction in sorted(redactions, key=len, reverse=True):
+            text = text.replace(redaction, "<redacted>")
         return text
 
     def resolve(self, text: str) -> str:

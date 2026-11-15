@@ -1,5 +1,7 @@
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from urllib.parse import quote, quote_plus
 
 import requests
 
@@ -108,6 +110,21 @@ def test_dotenv_values_are_redacted_from_all_file_output():
         assert not okay
         assert secret not in "\n".join(lines)
         assert "<redacted>" in "\n".join(lines)
+
+
+def test_dotenv_values_are_redacted_in_escaped_and_url_encoded_forms():
+    with TemporaryDirectory(dir=Path(__file__).parents[1] / "scripts") as directory:
+        temporary = Path(directory)
+        secret = 'pa"ss\\word% value'
+        env = temporary / ".env"
+        env.write_text(f"ADMIN_PWD={secret}\n", encoding="utf-8")
+        runner = HttpRunner(dotenv_path=env)
+        forms = (secret, json.dumps(secret)[1:-1], quote(secret, safe=""), quote_plus(secret))
+
+        output = runner.redact(" | ".join(forms))
+
+        assert all(form not in output for form in forms)
+        assert "<redacted>" in output
 
 
 def test_statusless_block_accepts_any_2xx():
