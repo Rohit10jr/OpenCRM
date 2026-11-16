@@ -21,6 +21,7 @@ from tests_support.serializers import (
     FieldDocumentSerializer,
     PointingDocumentSerializer,
     PromptDocumentSerializer,
+    SearchableDocumentSerializer,
     SecuredDocumentSerializer,
     SingletonDocumentSerializer,
     WidgetSerializer,
@@ -45,7 +46,6 @@ class WidgetViewSet(
         "status",
         "amount",
         "quantity",
-        "disabled",
         "notes",
         "widget_owner",
         "_assign",
@@ -67,6 +67,17 @@ class WidgetViewSet(
         if ptype == "write":
             return document.status != "Locked"
         return None
+
+
+class SearchableDocumentViewSet(LinkSearchMixin, DocumentViewSet):
+    access = Access.open(
+        reason="A disabled-row search fixture with no confidential or protected data."
+    )
+    serializer_class = SearchableDocumentSerializer
+    readable_fields = SearchableDocumentSerializer.Meta.fields
+    filterable_fields = ("name", "title", "disabled")
+    sortable_fields = ("name", "title", "modified")
+    searchable_fields = ("title",)
 
 
 class PointingDocumentViewSet(DocumentViewSet):

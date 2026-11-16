@@ -5,6 +5,7 @@ from tests_support.views import (
     FieldDocumentViewSet,
     PointingDocumentViewSet,
     PromptDocumentViewSet,
+    SearchableDocumentViewSet,
     SecuredDocumentViewSet,
     SingletonDocumentViewSet,
     WidgetViewSet,
@@ -13,6 +14,11 @@ from tests_support.views import (
 
 router = DocumentRouter()
 router.register("test-widgets", WidgetViewSet, basename="test-widget")
+router.register(
+    "test-searchable-documents",
+    SearchableDocumentViewSet,
+    basename="test-searchable-document",
+)
 router.register("test-pointers", PointingDocumentViewSet, basename="test-pointer")
 router.register(
     "test-dynamic-references",

@@ -92,7 +92,6 @@ class Widget(BaseDocument):
     amount = models.DecimalField(max_digits=18, decimal_places=6, null=True, blank=True)
     quantity = models.IntegerField(null=True, blank=True)
     active = models.BooleanField(default=True)
-    disabled = models.BooleanField(default=False)
     due_date = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True, default="")
     external_id = models.CharField(max_length=140, null=True, blank=True, unique=True)
@@ -103,6 +102,14 @@ class Widget(BaseDocument):
         null=True,
         blank=True,
     )
+
+
+class SearchableDocument(BaseDocument):
+    DOCTYPE = "Foundation Searchable Document"
+    NAME_STRATEGY = Hash()
+    SEARCH_FIELD = "title"
+    title = models.CharField(max_length=140, blank=True, default="")
+    disabled = models.BooleanField(default=False)
 
 
 class WidgetRow(BaseDocument):

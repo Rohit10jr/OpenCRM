@@ -11,11 +11,12 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
-from tests_support.models import Widget
+from tests_support.models import SearchableDocument, Widget
 
 
 pytestmark = pytest.mark.django_db
 SEARCH = "/api/v1/test-widgets/search/"
+SEARCHABLE_SEARCH = "/api/v1/test-searchable-documents/search/"
 
 
 def save_widget(user, name, title="", **values):
@@ -29,16 +30,16 @@ def save_widget(user, name, title="", **values):
     return document
 
 
-def search(client, method="post", **inputs):
+def search(client, method="post", url=SEARCH, **inputs):
     request = getattr(client, method)
     if method == "get":
         inputs = {
             key: json.dumps(value) if isinstance(value, (dict, list)) else value
             for key, value in inputs.items()
         }
-        response = request(SEARCH, inputs)
+        response = request(url, inputs)
     else:
-        response = request(SEARCH, inputs, format="json")
+        response = request(url, inputs, format="json")
     assert response.status_code == 200, response.content[:300]
     return response.json()["message"]
 
@@ -65,12 +66,21 @@ def test_hidden_search_field_never_matches_or_appears(auth_api, alice, monkeypat
 
 
 def test_disabled_rows_are_hidden_unless_the_filter_flag_includes_them(auth_api, alice):
-    enabled = save_widget(alice, "Enabled", title="Enabled")
-    disabled = save_widget(alice, "Disabled", title="Disabled", disabled=True)
+    enabled = SearchableDocument(name="Enabled", title="Enabled")
+    enabled.save(user=alice)
+    disabled = SearchableDocument(name="Disabled", title="Disabled", disabled=True)
+    disabled.save(user=alice)
 
-    assert [row["value"] for row in search(auth_api)] == [enabled.name]
+    assert [row["value"] for row in search(auth_api, url=SEARCHABLE_SEARCH)] == [
+        enabled.name
+    ]
     assert [
-        row["value"] for row in search(auth_api, filters={"include_disabled": 1})
+        row["value"]
+        for row in search(
+            auth_api,
+            url=SEARCHABLE_SEARCH,
+            filters={"include_disabled": 1},
+        )
     ] == [disabled.name, enabled.name]
 
 
