@@ -5,7 +5,12 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from core.access import Access
-from core.mixins import BulkDeleteMixin, BulkUpdateMixin, LinkedDocumentsMixin
+from core.mixins import (
+    BulkDeleteMixin,
+    BulkUpdateMixin,
+    LinkedDocumentsMixin,
+    RenameMixin,
+)
 from core.renderers import Envelope
 from core.views import DocumentViewSet, SingletonViewSet
 from tests_support.serializers import (
@@ -21,7 +26,11 @@ from tests_support.serializers import (
 
 
 class WidgetViewSet(
-    BulkDeleteMixin, BulkUpdateMixin, LinkedDocumentsMixin, DocumentViewSet
+    BulkDeleteMixin,
+    BulkUpdateMixin,
+    LinkedDocumentsMixin,
+    RenameMixin,
+    DocumentViewSet,
 ):
     access = Access.ruled()
     serializer_class = WidgetSerializer

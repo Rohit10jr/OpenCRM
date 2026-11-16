@@ -92,6 +92,26 @@ DIRECT_MANAGER_READS = {
         "The contact-specific unlink path clears its direct field with a plain update, "
         "matching the old endpoint's unstamped write."
     ),
+    ("core/mixins/rename.py", "RenameMixin.rename", "self.document_model._default_manager"): (
+        "Rename must distinguish a missing row from one excluded by its list rule, then "
+        "apply the resource's object-write rule to the directly loaded document."
+    ),
+    ("core/rename.py", "_repoint_foreign_keys", "relation.related_model._default_manager"): (
+        "Rename performs schema-wide write-only foreign-key updates after the target "
+        "resource has already authorized the operation."
+    ),
+    ("core/rename.py", "_repoint_child_parents", "spec['model']._default_manager"): (
+        "Rename performs write-only updates of declared polymorphic child parents so "
+        "the original row's cleanup hook cannot delete them."
+    ),
+    ("core/rename.py", "_repoint_dynamic_links", "other_model._default_manager"): (
+        "Rename performs write-only updates of every declared doctype/name pair; these "
+        "are references being preserved, not resource rows being disclosed."
+    ),
+    ("core/rename.py", "rename_document", "model._default_manager"): (
+        "The authorized rename locks and copies the original through its manager, then "
+        "deletes the old key and restores parked unique values in one transaction."
+    ),
 }
 
 
@@ -169,7 +189,7 @@ def _source_files():
             path
             for path in candidates
             if path.relative_to(root).as_posix()
-            in {"views.py", "viewsets.py", "tasks.py"}
+            in {"views.py", "viewsets.py", "tasks.py", "rename.py"}
             or path.relative_to(root).parts[0] == "mixins"
             or defines_routed_handler(path)
         )

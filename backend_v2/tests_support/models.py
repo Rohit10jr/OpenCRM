@@ -92,6 +92,7 @@ class Widget(BaseDocument):
     active = models.BooleanField(default=True)
     due_date = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True, default="")
+    external_id = models.CharField(max_length=140, null=True, blank=True, unique=True)
     widget_owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
