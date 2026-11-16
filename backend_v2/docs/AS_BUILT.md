@@ -489,6 +489,14 @@ stands down per-row reference cleanup, and deletes all targets with one queryset
 `bulk_delete_remove_contact = True` selects the old Contact-specific clearing hook;
 it defaults off. No production resource opts in yet; the test Widget resource does.
 
+`ListExportMixin` writes `GET` and `POST <resource>/export/`, merges query and body
+inputs, reads through the resource queryset and field allowlists, and returns the raw
+CSV/XLSX `HttpResponse`. Selection replaces both filter sets; client paging is ignored
+and the query fetches every matching row. DocType field labels and fieldtypes do not yet
+exist in `backend_v2`, so headers deliberately use field names and `Data` as the SA7
+placeholder; CONFIGURATION must replace `field_info()` with its metadata source before
+production resources opt in. Only test-support resources opt in today.
+
 ### Carrying a document name with slashes in a route
 
 Use `DocumentRouter`, whose document lookup is `.+?` and whose trailing slash is

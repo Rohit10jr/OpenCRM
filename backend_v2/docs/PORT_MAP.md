@@ -229,6 +229,10 @@ SA5 builds the rename service and opt-in action. Its row remains `—` until a p
 resource unit adds and records a concrete `<resource>/<name>/rename/` route; only the
 `tests_support` Widget ViewSet opts in today.
 
+SA7 builds the list-export mixin. Its row remains `—` until a production resource unit
+adds and records a concrete `<resource>/export/` route; only test-support ViewSets opt in
+today. CONFIGURATION still owns the field labels and fieldtypes used by export headers.
+
 ## CONTACTS
 
 ### Doctypes (9)
