@@ -84,12 +84,15 @@ class DataImportDocument(BaseDocument):
 class Widget(BaseDocument):
     DOCTYPE = "Foundation Widget"
     NAME_STRATEGY = NamingSeries("WIDGET-.YYYY.-")
+    SEARCH_FIELD = "widget_name"
+    SHOW_TITLE_FIELD_IN_LINK = False
     POLYMORPHIC_CHILD_TABLES = {"poly_rows": "tests_support.WidgetNote"}
     widget_name = models.CharField(max_length=140, blank=True, default="")
     status = models.CharField(max_length=50, blank=True, default="Open")
     amount = models.DecimalField(max_digits=18, decimal_places=6, null=True, blank=True)
     quantity = models.IntegerField(null=True, blank=True)
     active = models.BooleanField(default=True)
+    disabled = models.BooleanField(default=False)
     due_date = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True, default="")
     external_id = models.CharField(max_length=140, null=True, blank=True, unique=True)

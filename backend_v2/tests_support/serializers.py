@@ -61,6 +61,7 @@ class WidgetSerializer(DocumentSerializer):
             "amount",
             "quantity",
             "active",
+            "disabled",
             "due_date",
             "notes",
             "widget_owner",

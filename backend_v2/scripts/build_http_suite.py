@@ -229,6 +229,30 @@ def _document_entry(routes: RouteMap, doctype: str | None, fallback: RouteEntry)
     return fallback
 
 
+def _rewrite_search_link(
+    block: HttpBlock,
+    method: str,
+    resolved_url: str,
+    entry: RouteEntry,
+    routes: RouteMap,
+) -> None:
+    payload = _payload(block, resolved_url)
+    doctype = payload.get("doctype")
+    if doctype != "DocType":
+        resource = routes.doctypes.get(doctype) if isinstance(doctype, str) else None
+        _annotate(block, f"# @waiting {(resource or entry).unit}")
+        return
+    allowed = {verb for verb, _ in entry.routes}
+    route = entry.routes[0][1]
+    if method not in allowed:
+        _negative(block, method, route)
+        return
+    route = next(path for verb, path in entry.routes if verb == method)
+    body = dict(payload)
+    body.pop("doctype", None)
+    _replace_request(block, method, "{{host}}" + route, body)
+
+
 def _rewrite_generic(
     block: HttpBlock, path: str, url: str, entry: RouteEntry, routes: RouteMap
 ) -> bool:
@@ -379,7 +403,9 @@ def rewrite_http(text: str, route_map: RouteMap, filename: str = "fixture.http")
                 raise SuiteBuildError(
                     f"{filename}:{block.start_line}: method path {path!r} is not in PORT_MAP.md"
                 )
-            if path in GENERIC_CALLS:
+            if path == "frappe.desk.search.search_link":
+                _rewrite_search_link(block, method, resolved_url, entry, route_map)
+            elif path in GENERIC_CALLS:
                 if (
                     filename == "13_bulk_and_misc.http"
                     and block.title

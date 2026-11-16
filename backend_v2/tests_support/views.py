@@ -9,6 +9,7 @@ from core.mixins import (
     BulkDeleteMixin,
     BulkUpdateMixin,
     LinkedDocumentsMixin,
+    LinkSearchMixin,
     RenameMixin,
 )
 from core.renderers import Envelope
@@ -29,6 +30,7 @@ class WidgetViewSet(
     BulkDeleteMixin,
     BulkUpdateMixin,
     LinkedDocumentsMixin,
+    LinkSearchMixin,
     RenameMixin,
     DocumentViewSet,
 ):
@@ -41,6 +43,8 @@ class WidgetViewSet(
         "status",
         "amount",
         "quantity",
+        "disabled",
+        "notes",
         "widget_owner",
         "_assign",
     )
