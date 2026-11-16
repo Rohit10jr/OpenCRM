@@ -63,3 +63,21 @@ None yet.
 - Build child-row writes for Contact Email and Contact Phone (owner, 12 Nov 2026).
 - Update `API_CONTRACT.md`'s "a child row is never reachable on its own" rule with the
   approved exception for those two nested routes when they are built.
+
+## 8. Carried from SHARED_ACTIONS
+
+Opt the resources below in to the `core/mixins/` actions (AS_BUILT §2, "Opting a
+resource in to a shared action"), write each generated route's row in `PORT_MAP.md`,
+and port the real-doctype cases SHARED_ACTIONS left (its §3 table). Their generic
+mechanism is tested on `tests_support`; the cases below prove it on real records.
+
+- Contact and CRM Organization opt in to rename, bulk delete, linked documents, bulk
+  update and search.
+- Contact sets `bulk_delete_remove_contact = True` (the old
+  `remove_contact=(doctype == "Contact")`, `backend/crm_app/api/doc.py:703`).
+- Address overrides the search mixin's `search_filters` hook with the
+  `link_doctype`/`link_name` rewrite (`backend/crm_app/api/client.py:63-81`).
+- From `test_rename.py`: a renamed Contact keeps its email and phone rows and its deal
+  links (FINDINGS 13), and the Organization cases. From
+  `test_contact_delete_rule.py`: the Contact permission matrix including its
+  bulk-delete door.

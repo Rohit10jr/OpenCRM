@@ -91,3 +91,26 @@ None. It is the largest unit, so it is built as more briefs, not more agents.
   these original Deal cases still belong here.
 - Port the Deal and assignment cases from
   `backend/tests/test_unrouted_doctypes.py`.
+
+## 8. Carried from SHARED_ACTIONS
+
+Opt the resources below in to the `core/mixins/` actions (AS_BUILT §2, "Opting a
+resource in to a shared action"), write each generated route's row in `PORT_MAP.md`,
+and port the real-doctype cases SHARED_ACTIONS left (its §3 table). Their generic
+mechanism is tested on `tests_support`; the cases below prove it on real records.
+
+- Lead and Deal opt in to bulk delete, linked documents, bulk update and search;
+  export once CONFIGURATION supplies field labels (see CONFIGURATION).
+- From `test_delete_dialog_links.py` / `test_unlink_linked_docs.py`: Deal comments
+  and tasks, the Call Log/Lead/Deal cases (with ACTIVITIES), Contact-on-Deal unlink
+  and Deal-Organization unlink/delete (with CONTACTS), write-denied Deal cases, and
+  converted Lead-Deal unlink.
+- The Deal linked-document title (`organization_id`, `backend/crm_app/api/doc.py:465-466`)
+  through the model's `linked_document_title` hook.
+- From `test_rename.py`: Lead unique columns and Deal links. From
+  `test_bulk_actions.py`: the Lead bulk-update cases. From `test_export_query.py`:
+  the Lead row-rule cases. From `test_reference_doctype_search.py`: the saved
+  reference case (:56-82, with ACTIVITIES). From `test_conditions.py`: the Lead
+  model-conversion case (:279-295).
+- From `test_delete_link_check.py`: a hidden CRM Notification blocking a Deal
+  (with NOTIFICATIONS).

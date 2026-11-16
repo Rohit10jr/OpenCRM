@@ -95,3 +95,16 @@ parity copies it.)
 - Before any role-dependent body comparison, restore the old `opencrm` database's
   drifted suite-user roles: ada currently also has Sales Manager, grace has Sales User
   instead of Sales Manager, and alan has no role.
+
+## 8. Carried from SHARED_ACTIONS
+
+Opt the resources below in to the `core/mixins/` actions (AS_BUILT §2, "Opting a
+resource in to a shared action"), write each generated route's row in `PORT_MAP.md`,
+and port the real-doctype cases SHARED_ACTIONS left (its §3 table). Their generic
+mechanism is tested on `tests_support`; the cases below prove it on real records.
+
+- User overrides the search mixin's `search_filters` hook with `ignore_user_type`
+  and the enabled / Website User rules (`backend/crm_app/api/client.py:45-60`,
+  FINDINGS 46).
+- PE-6 (proposed): if approved, the bulk-delete worker also refuses a disabled
+  requester; if rejected, the bulk-update worker stops refusing one.

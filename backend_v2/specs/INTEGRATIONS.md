@@ -102,3 +102,13 @@ timeline).
 ## 6. Open questions
 
 None yet.
+
+## 7. Carried from SHARED_ACTIONS
+
+Opt the resources below in to the `core/mixins/` actions (AS_BUILT §2, "Opting a
+resource in to a shared action"), write each generated route's row in `PORT_MAP.md`,
+and port the real-doctype cases SHARED_ACTIONS left (its §3 table). Their generic
+mechanism is tested on `tests_support`; the cases below prove it on real records.
+
+- Email Account opts in to rename (`EmailEdit.vue:191-196`).
+- From `test_delete_link_check.py`: the WhatsApp Message blocking and unlinking cases.

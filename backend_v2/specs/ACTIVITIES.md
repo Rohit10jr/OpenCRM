@@ -133,3 +133,21 @@ remaining KNOWN_ISSUES §7 candidate (`remove_multiple`) is in `PARITY_EXCEPTION
 - Port the CRM-specific delete cases for Task, Note, Call Log, WhatsApp, Notification,
   and Comment.
 - Port the tag cases from `backend/tests/test_route_surface_review.py`.
+
+## 8. Carried from SHARED_ACTIONS
+
+Opt the resources below in to the `core/mixins/` actions (AS_BUILT §2, "Opting a
+resource in to a shared action"), write each generated route's row in `PORT_MAP.md`,
+and port the real-doctype cases SHARED_ACTIONS left (its §3 table). Their generic
+mechanism is tested on `tests_support`; the cases below prove it on real records.
+
+- Task and Call Log opt in to bulk delete and linked documents; Task to bulk update
+  (Call Log hides it, `CallLogsListView.vue:175-183`); Assignment Rule and Email
+  Template to rename; export once CONFIGURATION supplies field labels.
+- The Call Log linked-document title (`Call from <from> to <to>`,
+  `backend/crm_app/api/doc.py:463-464`) through `linked_document_title`.
+- From `test_delete_dialog_links.py`: task unlink and the Call Log cases (with SALES).
+  From `test_delete_link_check.py`: the Call Log child-row `at Row: 1` case and
+  Comment cleanup with a Deal. From `test_rename.py`: the Comment case. From
+  `test_export_query.py`: the Task cases. From `test_task_assignment.py`: its
+  bulk-update block.

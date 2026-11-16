@@ -65,3 +65,17 @@ None yet.
 - Port the WebSocket stale-token case.
 - Replace `AS_BUILT.md`'s "Background work and live events" stub with the working recipe
   when this unit supplies the consumer and publisher.
+
+## 8. Carried from SHARED_ACTIONS
+
+Opt the resources below in to the `core/mixins/` actions (AS_BUILT §2, "Opting a
+resource in to a shared action"), write each generated route's row in `PORT_MAP.md`,
+and port the real-doctype cases SHARED_ACTIONS left (its §3 table). Their generic
+mechanism is tested on `tests_support`; the cases below prove it on real records.
+
+- CRM Notification's linked-document title (`message`, `doc.py:467-468`) through
+  `linked_document_title`, and its reference clearing (the notification-type pair
+  cleared only when it matches the reference, `doc.py:530-534`) through
+  `clear_linked_document_reference`.
+- From `test_rename.py`: the Notification case. From `test_delete_link_check.py`: a
+  hidden notification blocking a Deal (with SALES).
