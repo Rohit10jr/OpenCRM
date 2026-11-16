@@ -352,9 +352,11 @@ caller handling a request under another URLconf passes it explicitly. The map is
 per URLconf; tests that replace a URLconf's patterns in place call
 `clear_rules_cache()`. An unrouted model that needs row rules declares
 `ROW_RULES = "<app>.permissions.<name>"`; that dotted object must provide callable
-`list_rule` and `has_object_rule` functions. There is no implicit fallback. Django's
-`core.E001` system check refuses one model served by two different ViewSet classes;
-registering the same class at several prefixes is valid.
+`list_rule` and `has_object_rule` functions. If the provider is a class, both must be
+`staticmethod`s; modules and other non-class providers may expose plain functions. The
+guard resolves every project model's declaration. There is no implicit fallback.
+Django's `core.E001` system check refuses one model served by two different ViewSet
+classes; registering the same class at several prefixes is valid.
 
 The base serves list, create, retrieve, PATCH, and delete with the client-reference
 `{"message": ...}` envelope and status 200, including create. It never serves PUT.

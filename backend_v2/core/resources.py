@@ -1,5 +1,6 @@
 """Resolve a document model's independently callable row rules."""
 
+import inspect
 from functools import lru_cache
 
 from django.core.exceptions import ImproperlyConfigured
@@ -75,6 +76,14 @@ def _declared_rules(model):
         raise ImproperlyConfigured(
             f"{model._meta.label}.ROW_RULES {path!r} is missing {missing}"
         )
+    if inspect.isclass(provider):
+        for name in ("list_rule", "has_object_rule"):
+            descriptor = inspect.getattr_static(provider, name, None)
+            if not isinstance(descriptor, staticmethod):
+                raise ImproperlyConfigured(
+                    f"{model._meta.label}.ROW_RULES {path!r} method {name} "
+                    "must be a staticmethod"
+                )
     return provider
 
 

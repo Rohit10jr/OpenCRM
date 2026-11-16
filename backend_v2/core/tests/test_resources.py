@@ -3,6 +3,7 @@
 from types import ModuleType
 
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 from django.test import override_settings
 from django.test.utils import isolate_apps
 from django.urls import path
@@ -27,6 +28,14 @@ class DeclaredRules:
 
     @staticmethod
     def has_object_rule(user, document, ptype):
+        return None
+
+
+class InstanceMethodRules:
+    def list_rule(self, user):
+        return None
+
+    def has_object_rule(self, user, document, ptype):
         return None
 
 
@@ -96,6 +105,40 @@ def test_rules_for_resolves_declared_rules_on_unrouted_model():
             app_label = "core"
 
     assert rules_for(UnroutedDocument) is DeclaredRules
+
+
+@isolate_apps("core")
+def test_rules_for_rejects_instance_methods_on_declared_rule_class():
+    class UnroutedDocument(BaseDocument):
+        DOCTYPE = "Instance Rule Fixture"
+        ROW_RULES = "core.tests.test_resources.InstanceMethodRules"
+
+        class Meta:
+            app_label = "core"
+
+    with pytest.raises(
+        ImproperlyConfigured,
+        match=r"core\.UnroutedDocument.*list_rule",
+    ):
+        rules_for(UnroutedDocument)
+
+
+@isolate_apps("core")
+def test_rules_for_allows_plain_functions_on_module_provider(monkeypatch):
+    provider = ModuleType("module_rule_provider")
+    provider.list_rule = lambda user: None
+    provider.has_object_rule = lambda user, document, ptype: None
+
+    class UnroutedDocument(BaseDocument):
+        DOCTYPE = "Module Rule Fixture"
+        ROW_RULES = "core.tests.module_rule_provider"
+
+        class Meta:
+            app_label = "core"
+
+    monkeypatch.setattr("core.resources.import_string", lambda path: provider)
+
+    assert rules_for(UnroutedDocument) is provider
 
 
 @isolate_apps("core")
