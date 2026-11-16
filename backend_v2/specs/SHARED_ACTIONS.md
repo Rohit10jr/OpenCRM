@@ -1,6 +1,6 @@
 # SHARED_ACTIONS — bulk delete, linked documents, bulk update, rename, link search, export, and the conditions evaluator
 
-**Status: Running** — rewritten 16 Nov 2026 against `backend_v2/docs/AS_BUILT.md` and the
+**Status: Done** — gate passed 16 Nov 2026 (PRs #67, #68). Rewritten 16 Nov 2026 against `backend_v2/docs/AS_BUILT.md` and the
 spec check (`tasks/SHARED_ACTIONS_00_spec_check_verdict.md`, 15 findings). Paths are from
 the repository root. Open questions are at §6; the ones not yet answered are marked.
 
