@@ -47,10 +47,11 @@ only versions whose `ref_doctype` is `CRM View Settings` and whose creation is m
 give the task nothing to delete; keeping the narrow task implemented makes later view
 tracking safe without ever applying retention to Lead, Deal, or other timeline history.
 Deleting a document also deletes every `Version` row that names its doctype and name.
-Batch callers can delete all such references in one query and suppress the per-row hook
-while removing the documents. The cleanup table currently registers only `Version`;
-ACTIVITIES adds ToDo, Comment, File, and Communication when their models exist, with a
-Communication's reference cleared rather than deleting the email.
+`references_handled()` suppresses only per-row reference cleanup, while
+`children_and_references_handled()` suppresses both child and reference cleanup after a
+batch caller has run both batch helpers. The cleanup table currently registers only
+`Version`; ACTIVITIES adds ToDo, Comment, File, and Communication when their models
+exist, with a Communication's reference cleared rather than deleting the email.
 
 The four authentication routes are explicit in `accounts/urls.py`: login and refresh
 are guest POST endpoints, logout is an authenticated POST endpoint, and `auth/me` is an

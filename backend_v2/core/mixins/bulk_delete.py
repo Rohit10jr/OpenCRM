@@ -6,9 +6,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from core.children import (
+    children_and_references_handled,
     delete_polymorphic_children_batch,
     delete_references_batch,
-    references_handled,
 )
 from core.delete import check_dynamic_links, check_dynamic_links_batch
 from core.doctypes import doctype_of
@@ -104,7 +104,7 @@ def perform_bulk_delete(
         check_dynamic_links_batch(target_instances)
         delete_polymorphic_children_batch(model, targets)
         delete_references_batch(doctype_of(model), targets)
-        with references_handled():
+        with children_and_references_handled():
             model._default_manager.filter(pk__in=targets).delete()
 
 

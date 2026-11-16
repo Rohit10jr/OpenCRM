@@ -111,18 +111,44 @@ def test_deleting_references_uses_a_constant_query_count(alice):
     assert one == five, f"query count grew with references: {one} -> {five}"
 
 
-def test_references_handled_makes_the_per_row_hook_stand_down(alice):
-    document = TrackedDocument(label="Handled")
-    document.save(user=alice)
+def test_references_handled_keeps_child_cleanup_and_skips_references(
+    alice, widget_with_dependants
+):
+    document = widget_with_dependants
+    name = document.pk
     version = Version(
-        ref_doctype=document.DOCTYPE, docname=document.pk, data="{}"
+        ref_doctype=document.DOCTYPE, docname=name, data="{}"
     )
     version.save(user=alice)
 
     with references_handled():
         document.delete()
 
+    assert not WidgetNote.objects.filter(parent=name).exists()
     assert Version.objects.filter(pk=version.pk).exists()
+
+
+def test_children_and_references_handled_skips_both_per_row_cleanups(
+    alice, monkeypatch
+):
+    document = Widget(widget_name="Batch cleaned")
+    document.save(user=alice)
+    calls = []
+    monkeypatch.setattr(
+        children,
+        "delete_polymorphic_children",
+        lambda instance: calls.append(("children", instance.pk)),
+    )
+    monkeypatch.setattr(
+        children,
+        "delete_references",
+        lambda instance: calls.append(("references", instance.pk)),
+    )
+
+    with children.children_and_references_handled():
+        document.delete()
+
+    assert calls == []
 
 
 def test_deleting_a_version_does_not_run_reference_cleanup(alice, monkeypatch):

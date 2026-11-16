@@ -330,6 +330,9 @@ REFERENCE_DOCTYPES = frozenset(row[0] for row in _REFERENCE_CLEANUP)
 _REFERENCES_HANDLED = contextvars.ContextVar(
     "core.children.references_handled", default=False
 )
+_CHILDREN_AND_REFERENCES_HANDLED = contextvars.ContextVar(
+    "core.children.children_and_references_handled", default=False
+)
 
 
 def delete_references_batch(doctype: str, names: list[str]) -> int:
@@ -360,7 +363,7 @@ def delete_references(instance) -> int:
 
 @contextmanager
 def references_handled():
-    """Stand down per-row cleanup when a caller already cleaned a whole batch."""
+    """Stand down per-row reference cleanup after a caller cleaned a batch."""
     token = _REFERENCES_HANDLED.set(True)
     try:
         yield
@@ -368,11 +371,22 @@ def references_handled():
         _REFERENCES_HANDLED.reset(token)
 
 
+@contextmanager
+def children_and_references_handled():
+    """Stand down both per-row cleanups after a caller cleaned both batches."""
+    token = _CHILDREN_AND_REFERENCES_HANDLED.set(True)
+    try:
+        yield
+    finally:
+        _CHILDREN_AND_REFERENCES_HANDLED.reset(token)
+
+
 def _on_parent_delete(sender, instance, **kwargs):
-    if _REFERENCES_HANDLED.get():
+    if _CHILDREN_AND_REFERENCES_HANDLED.get():
         return
     delete_polymorphic_children(instance)
-    delete_references(instance)
+    if not _REFERENCES_HANDLED.get():
+        delete_references(instance)
 
 
 def connect_cascades() -> None:
