@@ -114,3 +114,5 @@ mechanism is tested on `tests_support`; the cases below prove it on real records
   model-conversion case (:279-295).
 - From `test_delete_link_check.py`: a hidden CRM Notification blocking a Deal
   (with NOTIFICATIONS).
+- Lead keeps `lead_name` and Deal `organization` (their `SEARCH_FIELD`s) in their
+  readable and filterable fields, or link search stops matching on them (A-12).

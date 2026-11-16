@@ -110,5 +110,4 @@ resource in to a shared action"), write each generated route's row in `PORT_MAP.
 and port the real-doctype cases SHARED_ACTIONS left (its §3 table). Their generic
 mechanism is tested on `tests_support`; the cases below prove it on real records.
 
-- Email Account opts in to rename (`EmailEdit.vue:191-196`).
 - From `test_delete_link_check.py`: the WhatsApp Message blocking and unlinking cases.

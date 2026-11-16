@@ -81,3 +81,5 @@ mechanism is tested on `tests_support`; the cases below prove it on real records
   links (FINDINGS 13), and the Organization cases. From
   `test_contact_delete_rule.py`: the Contact permission matrix including its
   bulk-delete door.
+- Contact and CRM Organization opt in to export only after CONFIGURATION supplies the real field labels (see CONFIGURATION),
+  with the route rows and real-doctype export tests (A-12).

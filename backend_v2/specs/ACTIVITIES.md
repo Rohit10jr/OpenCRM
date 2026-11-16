@@ -151,3 +151,7 @@ mechanism is tested on `tests_support`; the cases below prove it on real records
   Comment cleanup with a Deal. From `test_rename.py`: the Comment case. From
   `test_export_query.py`: the Task cases. From `test_task_assignment.py`: its
   bulk-update block.
+- FCRM Note opts in to export only after CONFIGURATION supplies the real field labels (see CONFIGURATION),
+  with the route rows and real-doctype export tests (A-12).
+- FCRM Note keeps `title` (its `SEARCH_FIELD`) in its readable and filterable
+  fields, or link search stops matching on it (A-12).

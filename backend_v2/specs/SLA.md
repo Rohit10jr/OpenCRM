@@ -66,3 +66,9 @@ None yet.
 ## 7. Carried from FOUNDATION
 
 - Port the SLA-policy cases from `backend/tests/test_route_surface_review.py`.
+
+## 8. Carried from SHARED_ACTIONS
+
+- CRM Service Level Agreement opts in to `RenameMixin` (the frontend renames from
+  `SlaPolicyView.vue:438-445`): its `PORT_MAP.md` row, an allowed and a
+  write-denied rename case on real agreements (A-12).
