@@ -10,6 +10,7 @@ from core.mixins import (
     BulkUpdateMixin,
     LinkedDocumentsMixin,
     LinkSearchMixin,
+    ListExportMixin,
     RenameMixin,
 )
 from core.renderers import Envelope
@@ -31,6 +32,7 @@ class WidgetViewSet(
     BulkUpdateMixin,
     LinkedDocumentsMixin,
     LinkSearchMixin,
+    ListExportMixin,
     RenameMixin,
     DocumentViewSet,
 ):
@@ -118,7 +120,7 @@ class FieldDocumentViewSet(DocumentViewSet):
         return Response(Envelope(self.get_object().pk, "message"))
 
 
-class SecuredDocumentViewSet(DocumentViewSet):
+class SecuredDocumentViewSet(ListExportMixin, DocumentViewSet):
     access = Access.ruled()
     serializer_class = SecuredDocumentSerializer
     readable_fields = SecuredDocumentSerializer.Meta.fields
