@@ -1,5 +1,7 @@
 """Require every doctype/name column pair to declare its rename behavior."""
 
+from pathlib import Path
+
 from django.apps import apps
 from django.db import models
 from django.test.utils import isolate_apps
@@ -9,6 +11,7 @@ from core.doctypes import doctype_of
 from core.models import BaseDocument, Version
 
 
+BASE_DIR = Path(__file__).resolve().parents[2]
 OLD_DYNAMIC_LINK_PAIRS = (
     ("reference_doctype", "reference_name"),
     ("reference_doctype", "reference_docname"),
@@ -38,10 +41,20 @@ def _expected_dynamic_link_pairs(model):
     return expected
 
 
+def _is_project_concrete_model(model):
+    options = model._meta
+    return (
+        Path(options.app_config.path).parent == BASE_DIR
+        and not options.abstract
+        and not options.proxy
+        and options.managed
+    )
+
+
 def _missing_dynamic_link_declarations(installed_models):
     failures = []
     for model in installed_models:
-        if not isinstance(model, type) or not issubclass(model, BaseDocument):
+        if not isinstance(model, type) or not _is_project_concrete_model(model):
             continue
         expected = _expected_dynamic_link_pairs(model)
         declared = set(_dynamic_link_declarations(model))
@@ -79,3 +92,25 @@ def test_guard_rejects_an_undeclared_pair():
             ("reference_doctype", "reference_name"),
         )
     ]
+
+
+@isolate_apps("core")
+def test_guard_covers_non_document_models_and_accepts_their_declaration():
+    class PlainReference(models.Model):
+        reference_doctype = models.CharField(max_length=140)
+        reference_name = models.CharField(max_length=140)
+
+        class Meta:
+            app_label = "core"
+
+    assert _missing_dynamic_link_declarations([PlainReference]) == [
+        (
+            "core.PlainReference",
+            ("reference_doctype", "reference_name"),
+        )
+    ]
+
+    PlainReference.DYNAMIC_LINK_FIELDS = (
+        ("reference_doctype", "reference_name"),
+    )
+    assert _missing_dynamic_link_declarations([PlainReference]) == []

@@ -425,9 +425,12 @@ non-key unique values, repoints every reverse FK/O2O (including hidden through-t
 relations), declared polymorphic child parent, and declared `DYNAMIC_LINK_FIELDS` pair,
 then deletes the old row and restores the unique values. `TEXT_LINK_FIELDS` deliberately
 keep the old name for parity while PE-5 remains proposed. The dynamic-link declaration
-guard covers the old seven pair shapes and same-stem `*_doctype` plus
-`*_name`/`*_docname`/`*_doc` columns; `Version` declares `ref_doctype`/`docname` while
-remaining in `IGNORE_LINKS_ON_DELETE`. No production resource opts in yet; the test
+guard scans every concrete, managed model in project apps, including `tests_support`;
+like the direct-manager guard, it identifies project apps by their path directly under
+`backend_v2/`, excluding Django and third-party apps. It covers the old seven pair shapes
+and same-stem `*_doctype` plus `*_name`/`*_docname`/`*_doc` columns;
+`Version` declares `ref_doctype`/`docname` while remaining in `IGNORE_LINKS_ON_DELETE`.
+No production resource opts in yet; the test
 Widget resource proves the action, permission path, slash-bearing names, and every
 reference shape.
 
