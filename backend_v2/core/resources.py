@@ -22,20 +22,31 @@ def _patterns(urlconf):
             yield pattern
 
 
+def routed_viewsets(urlconf=None):
+    """Return the distinct document ViewSets routed by one URLconf."""
+
+    active_urlconf = PRODUCTION_URLCONF if urlconf is None else urlconf
+    viewsets = {
+        getattr(pattern.callback, "cls", None) for pattern in _patterns(active_urlconf)
+    }
+    return {
+        viewset
+        for viewset in viewsets
+        if (
+            isinstance(viewset, type)
+            and issubclass(viewset, DocumentViewSet)
+            and viewset is not DocumentViewSet
+        )
+    }
+
+
 @lru_cache(maxsize=None)
 def _routed_rules(urlconf):
     """Return model mappings and conflicting ViewSets for one URLconf."""
 
     by_model = {}
     conflicts = {}
-    for pattern in _patterns(urlconf):
-        viewset = getattr(pattern.callback, "cls", None)
-        if not (
-            isinstance(viewset, type)
-            and issubclass(viewset, DocumentViewSet)
-            and viewset is not DocumentViewSet
-        ):
-            continue
+    for viewset in routed_viewsets(urlconf):
         model = viewset.serializer_class.Meta.model
         previous = by_model.setdefault(model, viewset)
         if previous is not viewset:

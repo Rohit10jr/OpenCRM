@@ -2,7 +2,8 @@
 
 from django.core.checks import Error, register
 
-from core.resources import PRODUCTION_URLCONF, routed_rule_conflicts
+from core.mixins.export import ListExportMixin
+from core.resources import PRODUCTION_URLCONF, routed_rule_conflicts, routed_viewsets
 
 
 @register()
@@ -19,6 +20,33 @@ def check_resource_rule_viewsets(app_configs, **kwargs):
                 hint="Route one ViewSet class per model; one class may use many prefixes.",
                 obj=model,
                 id="core.E001",
+            )
+        )
+    return errors
+
+
+@register()
+def check_export_field_info_viewsets(app_configs, **kwargs):
+    errors = []
+    for viewset in sorted(
+        routed_viewsets(PRODUCTION_URLCONF), key=lambda item: item.__name__
+    ):
+        if not issubclass(viewset, ListExportMixin):
+            continue
+        provider = getattr(viewset, "export_field_info", None)
+        if callable(provider) and not getattr(
+            provider, "test_only_export_placeholder", False
+        ):
+            continue
+        errors.append(
+            Error(
+                f"{viewset.__name__} must define a production export_field_info provider.",
+                hint=(
+                    "Supply field labels and field types from the resource metadata; "
+                    "the tests_support placeholder is test-only."
+                ),
+                obj=viewset,
+                id="core.E002",
             )
         )
     return errors

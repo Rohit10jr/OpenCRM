@@ -492,10 +492,11 @@ it defaults off. No production resource opts in yet; the test Widget resource do
 `ListExportMixin` writes `GET` and `POST <resource>/export/`, merges query and body
 inputs, reads through the resource queryset and field allowlists, and returns the raw
 CSV/XLSX `HttpResponse`. Selection replaces both filter sets; client paging is ignored
-and the query fetches every matching row. DocType field labels and fieldtypes do not yet
-exist in `backend_v2`, so headers deliberately use field names and `Data` as the SA7
-placeholder; CONFIGURATION must replace `field_info()` with its metadata source before
-production resources opt in. Only test-support resources opt in today.
+and the query fetches every matching row. An opting-in ViewSet must define a callable
+`export_field_info(fields)` provider that returns `fieldname`, `label`, and `fieldtype`
+for each column. CONFIGURATION's field metadata is intended to supply the production
+provider. Django's `core.E002` check rejects a routed production ViewSet with no provider
+or with the field-name/`Data` placeholder, which lives only in `tests_support`.
 
 ### Carrying a document name with slashes in a route
 

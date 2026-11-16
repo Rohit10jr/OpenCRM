@@ -9,11 +9,16 @@ from django.test.utils import isolate_apps
 from django.urls import path
 
 import config.urls as production_urls
-from core.checks import check_resource_rule_viewsets
+from core.checks import (
+    check_export_field_info_viewsets,
+    check_resource_rule_viewsets,
+)
+from core.mixins import ListExportMixin
 from core.models import BaseDocument
 from core.resources import clear_rules_cache, routed_rule_map, rules_for
 from core.views import DocumentViewSet
 from tests_support.models import SecuredDocument, SingletonDocument, Widget
+from tests_support.export import placeholder_export_field_info
 from tests_support.views import (
     SecuredDocumentViewSet,
     SingletonDocumentViewSet,
@@ -63,6 +68,14 @@ def _urlconf(*routes):
 
 def _route(prefix, viewset):
     return path(prefix, viewset.as_view({"get": "list"}))
+
+
+def _export_viewset(model, name, provider=None):
+    parent = _viewset(model, name)
+    attributes = {}
+    if provider is not None:
+        attributes["export_field_info"] = staticmethod(provider)
+    return type(name, (ListExportMixin, parent), attributes)
 
 
 def test_rules_for_finds_test_resource_viewsets():
@@ -192,3 +205,29 @@ def test_system_check_allows_one_viewset_at_two_prefixes(monkeypatch):
     monkeypatch.setattr(production_urls, "urlpatterns", urlconf.urlpatterns)
     clear_rules_cache()
     assert check_resource_rule_viewsets(None) == []
+
+
+@isolate_apps("core")
+@pytest.mark.parametrize(
+    "provider",
+    [None, placeholder_export_field_info],
+    ids=["missing", "test-placeholder"],
+)
+def test_system_check_rejects_export_without_production_metadata(
+    monkeypatch, provider
+):
+    class RoutedDocument(BaseDocument):
+        DOCTYPE = "Export Metadata Fixture"
+
+        class Meta:
+            app_label = "core"
+
+    viewset = _export_viewset(RoutedDocument, "UnsafeExportViewSet", provider)
+    urlconf = _urlconf(_route("export/", viewset))
+
+    monkeypatch.setattr(production_urls, "urlpatterns", urlconf.urlpatterns)
+    clear_rules_cache()
+    errors = check_export_field_info_viewsets(None)
+
+    assert [error.id for error in errors] == ["core.E002"]
+    assert "UnsafeExportViewSet" in errors[0].msg

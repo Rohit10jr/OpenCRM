@@ -5,6 +5,9 @@ import io
 import json
 import zipfile
 import pytest
+from django.core.exceptions import ImproperlyConfigured
+from rest_framework.request import Request
+from rest_framework.test import APIRequestFactory
 from core.mixins.export import format_duration, handle_html
 from tests_support.models import Widget
 pytestmark = pytest.mark.django_db
@@ -141,3 +144,17 @@ def test_duration_and_html_formatting_helpers():
     assert format_duration(90000, hide_days=True) == "25h"
     assert handle_html("<p>Hello<br>there &amp; you</p>") == "Hello there & you"
     assert handle_html("plain") == "plain"
+
+
+def test_export_without_field_info_provider_fails_with_viewset_name():
+    from core.mixins.export import ListExportMixin
+
+    class MissingExportProviderViewSet(ListExportMixin):
+        pass
+
+    request = Request(APIRequestFactory().get("/export/"))
+    with pytest.raises(
+        ImproperlyConfigured,
+        match="MissingExportProviderViewSet.*export_field_info",
+    ):
+        MissingExportProviderViewSet().export(request)

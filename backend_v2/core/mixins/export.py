@@ -6,6 +6,7 @@ import io
 import re
 from typing import Any
 
+from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
 from rest_framework.decorators import action
 
@@ -24,13 +25,6 @@ def _int(value, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
-
-def field_info(fields: list[str]) -> list[dict]:
-    """Temporary descriptors until CONFIGURATION owns DocType field metadata."""
-    # Django verbose_name does not preserve labels such as lead_name -> "Full Name",
-    # and model field classes cannot identify Frappe types such as integer Duration.
-    # Field names are the brief's required placeholder; CONFIGURATION must replace it.
-    return [{"fieldname": field, "label": field, "fieldtype": "Data"} for field in fields]
 
 def format_duration(seconds, hide_days: bool = False) -> str:
     seconds = _int(seconds)
@@ -99,6 +93,14 @@ def to_xlsx_bytes(data: list[list], sheet_name: str) -> bytes:
     return buffer.getvalue()
 
 class ListExportMixin:
+    def get_export_field_info(self, fields: list[str]) -> list[dict]:
+        provider = getattr(self, "export_field_info", None)
+        if not callable(provider):
+            raise ImproperlyConfigured(
+                f"{type(self).__name__} must define a callable export_field_info provider."
+            )
+        return provider(fields)
+
     @action(detail=False, methods=("get", "post"), url_path="export")
     def export(self, request):
         inputs = build_payload(request)
@@ -106,6 +108,7 @@ class ListExportMixin:
         if isinstance(fields, str):
             fields = [fields]
         fields = [str(field) for field in fields]
+        info = self.get_export_field_info(fields)
         filters = parse_json_param(inputs.get("filters"), inputs.get("filters"))
         or_filters = parse_json_param(inputs.get("or_filters"), inputs.get("or_filters"))
         selection = parse_json_param(inputs.get("selected_items"), inputs.get("selected_items"))
@@ -126,7 +129,6 @@ class ListExportMixin:
             filterable=self.filterable_fields,
             sortable=self.sortable_fields,
         )
-        info = field_info(fields)
         data: list[list] = [["Sr", *(column["label"] for column in info)]]
         for index, row in enumerate(rows, start=1):
             values = []
