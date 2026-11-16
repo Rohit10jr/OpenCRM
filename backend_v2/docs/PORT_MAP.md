@@ -225,6 +225,10 @@ SA2 builds the linked-document scan and both opt-in actions. These two rows rema
 until a production resource unit adds and records its concrete routes; only the
 `tests_support` Widget ViewSet opts in today.
 
+SA5 builds the rename service and opt-in action. Its row remains `—` until a production
+resource unit adds and records a concrete `<resource>/<name>/rename/` route; only the
+`tests_support` Widget ViewSet opts in today.
+
 ## CONTACTS
 
 ### Doctypes (9)

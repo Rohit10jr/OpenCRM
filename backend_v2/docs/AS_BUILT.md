@@ -389,6 +389,24 @@ resource's `POST <resource>/bulk-update/` collection action; the app still regis
 resource explicitly and records the concrete route in `PORT_MAP.md` when it opts in.
 No production resource opts in yet; `tests_support.WidgetViewSet` proves the mechanism.
 
+`RenameMixin` writes `POST <resource>/<name>/rename/`. It reads only `new_name` and
+`merge`; the URL supplies the old name and surplus body keys are ignored. The lookup
+starts from the model's default manager so list-invisible rows still reach the static
+object-write rule. Merge, missing, unchanged, taken, and write-denied refusals keep the
+old order, 417 status, and wording before `core.naming.validate_name` runs.
+
+`core.rename.rename_document` locks the original and completes the rename in one
+transaction. It inserts a hook-free copy under the new primary key, temporarily parks
+non-key unique values, repoints every reverse FK/O2O (including hidden through-table
+relations), declared polymorphic child parent, and declared `DYNAMIC_LINK_FIELDS` pair,
+then deletes the old row and restores the unique values. `TEXT_LINK_FIELDS` deliberately
+keep the old name for parity while PE-5 remains proposed. The dynamic-link declaration
+guard covers the old seven pair shapes and same-stem `*_doctype` plus
+`*_name`/`*_docname`/`*_doc` columns; `Version` declares `ref_doctype`/`docname` while
+remaining in `IGNORE_LINKS_ON_DELETE`. No production resource opts in yet; the test
+Widget resource proves the action, permission path, slash-bearing names, and every
+reference shape.
+
 `LinkedDocumentsMixin` writes `GET` and `POST <resource>/<name>/linked-documents/`.
 The GET first uses the resource's `_object_by_name("read")`, then calls the batched
 `core.mixins.linked.linked_documents(model, names, user)` scan. A routed or
