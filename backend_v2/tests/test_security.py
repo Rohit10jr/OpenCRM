@@ -58,7 +58,24 @@ class CallableKeyRateLimitedView(BaseAPIView):
         return Response("ok")
 
 
+user_key_calls = []
+
+
+def capture_user_key(inputs, user):
+    user_key_calls.append(user.name if user else None)
+    return user.name if user else ""
+
+
+class UserKeyRateLimitedView(BaseAPIView):
+    permission_classes = (AllowAny,)
+
+    @rate_limit(limit=1, seconds=60, key=capture_user_key, pass_user=True)
+    def post(self, request):
+        return Response("ok")
+
+
 urlpatterns = [
+    re_path(r"^user-key-limited/?$", UserKeyRateLimitedView.as_view()),
     re_path(r"^limited/?$", RateLimitedView.as_view()),
     re_path(r"^keyed-limited/?$", KeyedRateLimitedView.as_view()),
     re_path(r"^callable-key-limited/?$", CallableKeyRateLimitedView.as_view()),
@@ -201,6 +218,17 @@ def test_rate_limit_callable_key_receives_merged_inputs(api):
     )
     assert response.status_code == 200
     assert callable_key_inputs == [{"email": "body@example.com", "source": "query"}]
+
+
+@override_settings(ROOT_URLCONF=__name__)
+def test_rate_limit_callable_key_can_see_the_authenticated_user(api, auth_api, alice):
+    """ACCOUNTS: update_password buckets its old-password path on the token's user."""
+    user_key_calls.clear()
+    url = "/user-key-limited/"
+    assert auth_api.post(url, {}, format="json", REMOTE_ADDR="10.0.0.11").status_code == 200
+    assert auth_api.post(url, {}, format="json", REMOTE_ADDR="10.0.0.11").status_code == 429
+    assert api.post(url, {}, format="json", REMOTE_ADDR="10.0.0.11").status_code == 200
+    assert user_key_calls == [alice.name, alice.name, None]
 
 
 def test_rate_limit_is_inert_outside_a_request():
