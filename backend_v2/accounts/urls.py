@@ -1,6 +1,7 @@
 from django.urls import re_path
 
 from accounts.views import (
+    ChangePasswordView,
     LoggedUserView,
     LoginView,
     LogoutView,
@@ -26,5 +27,10 @@ urlpatterns = [
     ),
     re_path(r"^auth/logout/?$", LogoutView.as_view(), name="auth-logout"),
     re_path(r"^auth/me/?$", LoggedUserView.as_view(), name="auth-me"),
+    re_path(
+        r"^auth/change-password/?$",
+        ChangePasswordView.as_view(),
+        name="auth-change-password",
+    ),
     *router.urls,
 ]

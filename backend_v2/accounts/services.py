@@ -92,3 +92,42 @@ def refresh_token(refresh: str = "") -> dict:
         parsed.set_iat()
         parsed.outstand()
     return {"access": access, "refresh": str(parsed)}
+
+
+def change_password(user, old_password: str = "", new_password: str = "") -> str:
+    """`crm.api.user.change_password` (old `crm_app/api/user.py:54-107`), messages
+    verbatim. The route is not guest, so the old Guest branch cannot be reached.
+
+    Beside the endpoint's flat limit, an account lockout counts wrong current passwords
+    against this account and resets on success.
+    """
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError as DjangoValidationError
+
+    from core.security import LoginAttemptTracker
+
+    tracker = LoginAttemptTracker(user.name)
+    if not tracker.is_user_allowed():
+        raise ValidationError("Too many failed attempts. Please try again after some time.")
+
+    if old_password == new_password:
+        raise ValidationError(
+            "New password cannot be the same as current password. "
+            "Please choose a different password."
+        )
+
+    if not user.check_password(old_password):
+        tracker.add_failure_attempt()
+        raise ValidationError("Incorrect current password. Please try again.")
+
+    tracker.add_success_attempt()
+
+    try:
+        validate_password(new_password, user=user)
+    except DjangoValidationError as exc:
+        suggestions = " ".join(exc.messages)
+        raise ValidationError(f"Password is too weak. {suggestions}".strip()) from exc
+
+    user.set_password(new_password)
+    user.save(update_fields=["password"])
+    return "Password Updated Successfully"

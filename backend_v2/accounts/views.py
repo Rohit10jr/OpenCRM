@@ -12,7 +12,7 @@ from core.access import Access
 from core.inputs import build_payload
 from core.mixins import LinkSearchMixin
 from core.renderers import Envelope
-from core.security import resolve_ip
+from core.security import rate_limit, resolve_ip
 from core.views import BaseAPIView, DocumentViewSet
 
 BUILTIN_USERS = (ADMINISTRATOR, GUEST)
@@ -183,3 +183,19 @@ class CRMSalesHierarchyViewSet(DocumentViewSet):
         if user.name == ADMINISTRATOR or ptype == "read":
             return True
         return user.has_role(ROLE_SYSTEM_MANAGER)
+
+
+class ChangePasswordView(BaseAPIView):
+    """`crm.api.user.change_password`: five calls per five minutes per address, counting
+    successes too (`crm/api/user.py:9`), beside the account lockout."""
+
+    @rate_limit(limit=5, seconds=300)
+    def post(self, request):
+        inputs = self.get_inputs(request)
+        return Response(
+            services.change_password(
+                request.user,
+                inputs.get("old_password") or "",
+                inputs.get("new_password") or "",
+            )
+        )
