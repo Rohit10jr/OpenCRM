@@ -69,7 +69,10 @@ def reset_password(address: str) -> dict:
 def caller_username(inputs: dict, user) -> str:
     """Who the old-password path acts for: `usr`, `user`, or the token's user,
     lowercased and stripped (old `auth_pages.py:177-190`)."""
-    named = inputs.get("usr") or inputs.get("user") or (user.name if user else "")
+    # An anonymous caller is "Guest", as the old session user is
+    # (backend/frappe_core/session.py:21,52): the bucket is (IP, guest), not the IP alone
+    # that key redemptions share (A-24).
+    named = inputs.get("usr") or inputs.get("user") or (user.name if user else "Guest")
     return str(named or "").strip().lower()
 
 

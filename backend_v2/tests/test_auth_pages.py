@@ -675,3 +675,20 @@ def test_accept_is_rate_limited(api, administrator):
 
     response = _post(api, ACCEPT, {"key": "wrong"})
     assert response.status_code == 429
+
+
+# --- A-24: the anonymous old-password bucket is (IP, guest), as the old one ------------
+
+
+def test_an_anonymous_old_password_attempt_has_its_own_bucket():
+    assert auth_pages.throttle_identity({"old_password": "x"}, None) == "guest"
+    assert auth_pages.throttle_identity({"key": "k", "old_password": "x"}, None) == ""
+    assert auth_pages.throttle_identity({"usr": "Ada@Example.com "}, None) == "ada@example.com"
+
+
+def test_anonymous_old_password_attempts_do_not_use_up_key_redemptions(api, alice):
+    for _ in range(20):
+        _post(api, UPDATE, {"old_password": "x", "new_password": "Str0ng!Passw0rd"})
+
+    response = _post(api, UPDATE, {"key": "not-a-key", "new_password": "Str0ng!Passw0rd"})
+    assert response.status_code == 410, "the key path still has its own allowance"
