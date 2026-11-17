@@ -93,3 +93,11 @@ with Codex/agy (owner, 17 Nov 2026; DECISIONS 20), summarised for the owner in
   save into a hook list `core` knows. Lead/Deal call the engine directly instead.
 - **ToDo's Lead/Deal owner sync** needs `sales`, built later: does ASSIGNMENTS leave the
   sync to SALES (SALES connects its own handler), so `activities` never imports `sales`?
+
+## 7. Carried from ACCOUNTS
+
+- The old User document carries `assignmentruleuser_set` (an accident of reverse-FK
+  discovery, `backend/frappe_core/children.py:38-51`); ASSIGNMENTS' spec check decides
+  whether v2 emits the real rows or records a parity exception, and v2 never accepts
+  writes to it through User. Until then `UserSerializer` emits it empty
+  (`backend_v2/accounts/serializers.py`, `EMPTY_CHILD_KEYS`).
