@@ -282,3 +282,57 @@ def test_timestamps_are_normalised_but_not_other_values():
     assert response_difference(old, new, []) is None
     changed = response(200, '{"message": {"creation": "2026-11-17T23:22:30.702068Z", "role": "Sales Manager"}}')
     assert response_difference(old, changed, []).startswith("$.message.role:")
+
+
+# --- A-26: every path, rows by name, narrower normalisations -----------------------------
+
+
+def test_every_differing_path_is_reported():
+    difference = body_difference(
+        {"message": {"a": 1, "b": 2, "c": 3}}, {"message": {"a": 9, "b": 2, "c": 8}}, []
+    )
+    assert "$.message.a" in difference and "$.message.c" in difference
+
+
+def test_rows_with_names_are_compared_by_name():
+    old = [{"name": "ada", "role": "Sales User"}, {"name": "zed", "role": "x"}]
+    new = [{"name": "ada", "role": "Sales Manager"}]
+    difference = body_difference(old, new, [])
+    assert "length 2 != 1" in difference
+    assert "names only in old ['zed']" in difference
+    assert "$[name=ada].role" in difference
+
+
+def test_a_timestamp_format_change_is_reported():
+    assert body_difference(
+        {"creation": "2026-11-18 10:00:00"}, {"creation": "2026-11-18T10:00:00.123456Z"}, []
+    )
+    assert body_difference(
+        {"creation": "2026-11-18T10:00:00.123456Z"}, {"creation": "2026-11-19T11:01:02.654321Z"}, []
+    ) is None
+
+
+def test_a_timestamp_in_another_key_is_compared_exactly():
+    assert body_difference(
+        {"due_date": "2026-11-18T10:00:00Z"}, {"due_date": "2026-11-19T10:00:00Z"}, []
+    )
+    assert body_difference({"note": "2026-11-18T10:00:00Z"}, {"note": "2026-11-19T10:00:00Z"}, [])
+
+
+def test_two_different_ten_digit_numbers_differ():
+    assert body_difference({"phone": "9876543210"}, {"phone": "9876543211"}, [])
+
+
+def test_a_reused_generated_name_must_be_reused_on_the_other_side():
+    same = body_difference(
+        {"a": "abc123def0", "b": "abc123def0"}, {"a": "fed321cba9", "b": "fed321cba9"}, []
+    )
+    assert same is None
+    broken = body_difference(
+        {"a": "abc123def0", "b": "abc123def0"}, {"a": "fed321cba9", "b": "0123456abc"}, []
+    )
+    assert broken
+    shared = body_difference(
+        {"a": "abc123def0", "b": "111111111a"}, {"a": "fed321cba9", "b": "fed321cba9"}, []
+    )
+    assert shared
