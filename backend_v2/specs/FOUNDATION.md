@@ -89,7 +89,9 @@ Each item names the old implementation in `backend/` to read first.
 **Who owns `User`** (section 6, Q9): FOUNDATION builds the model, its seed migration,
 the four auth routes, the issuing and checking of `token_version`, and revocation whenever
 a disabled user is saved. **ACCOUNTS** builds the `/api/v1/users/` routes, ports
-`test_user_access.py`, and owns the password-change and password-reset revocation triggers.
+`test_user_access.py`, and owns the one other revocation trigger, `update_password` with
+`logout_all_sessions` (corrected 18 Nov 2026 by ACCOUNTS' spec check: a password change
+or a plain reset revokes nothing in `backend/`; `specs/ACCOUNTS.md` §4.4).
 
 - **`User`** as `AUTH_USER_MODEL` — it has to exist before the first migration. The
   primary key is the lowercased email (stripped); `Administrator` and `Guest` are real

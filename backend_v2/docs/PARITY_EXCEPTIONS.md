@@ -170,6 +170,22 @@ comparison skips that block.
   (`frappe.set_user`), with no `enabled` check
 - **Recorded by:** SHARED_ACTIONS, 16 Nov 2026
 
+### PE-7. `name` cannot be changed through the User resource
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-21 D-B, DECISIONS, 18 Nov 2026); built as described
+- **Where:** `PATCH /api/v1/users/<name>/` (old `PUT /api/resource/User/<name>`) with a
+  `name` in the body. No `.http` block found
+- **Old backend:** accepts `name` as a writable field on update (`backend/frappe_platform/
+  models.py:131`, an editable primary key; `backend/frappe_core/serializers.py:243-283`)
+- **backend_v2:** a sent `name` is ignored on update, as other read-only fields are; the
+  record keeps its name
+- **Why:** no caller changes a User's name through the resource (the profile screens only
+  post back the session user's own document), and Frappe v15 refuses it
+  (`frappe/model/document.py:850-859`, `check_if_latest`). Renaming a record is
+  `rename_doc`, which `User` does not serve here
+- **Recorded by:** ACCOUNTS, 18 Nov 2026
+
 ---
 
 ## Candidates — not exceptions yet

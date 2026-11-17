@@ -164,3 +164,10 @@ mechanism is tested on `tests_support`; the cases below prove it on real records
   remove that entry and the guard's withheld-set member, and give the ViewSet its static
   `list_rule` / `has_object_rule` and `access` declaration (AS_BUILT "Writing a row
   rule"), matching `backend/`'s permission rule for Assignment Rule.
+
+## 10. Carried from ACCOUNTS
+
+- Mail sent from a document goes through the outgoing-account lookup in the old order:
+  the Email Account steps (CONFIGURATION) before the settings-configured account ACCOUNTS
+  built in `core` (`backend/crm_app/communication.py:find_outgoing_account`, `:400-440`).
+- `test_token_version.py:236` (the file route) is this unit's.

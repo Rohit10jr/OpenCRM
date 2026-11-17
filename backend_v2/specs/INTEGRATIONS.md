@@ -111,3 +111,9 @@ and port the real-doctype cases SHARED_ACTIONS left (its §3 table). Their gener
 mechanism is tested on `tests_support`; the cases below prove it on real records.
 
 - From `test_delete_link_check.py`: the WhatsApp Message blocking and unlinking cases.
+
+## 8. Carried from ACCOUNTS
+
+- **`get_users`' `is_telephony_agent`**: ACCOUNTS answers `false` for every user until
+  CRM Telephony Agent exists. Fill it from the agents' `user` column
+  (`backend/crm_app/api/session.py:105,127`), with a test.

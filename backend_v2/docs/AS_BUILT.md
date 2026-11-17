@@ -65,8 +65,9 @@ Every issued token carries the user's `token_version`. Authentication and refres
 refuse a stale version, while a missing claim counts as version zero for tokens issued
 before this mechanism existed. `accounts.authentication.bump_token_version()` uses an
 `F()` update and reloads the user. `User.save()` calls it on every save while the user is
-disabled, preventing old tokens from becoming valid again after re-enabling; password
-change and reset triggers remain ACCOUNTS' responsibility.
+disabled, preventing old tokens from becoming valid again after re-enabling. The only
+other trigger, `update_password` with `logout_all_sessions`, is ACCOUNTS'; a password
+change or plain reset revokes nothing (`specs/ACCOUNTS.md` §4.4).
 
 `core.security` resolves the request IP from `REMOTE_ADDR`, consulting
 `X-Forwarded-For` only for the configured trusted proxy count. It stores consecutive
