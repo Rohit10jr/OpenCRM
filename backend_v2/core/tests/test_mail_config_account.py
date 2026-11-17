@@ -140,3 +140,38 @@ def test_the_reset_mail_is_from_the_config_account(config_account):
     assert message.subject == "Reset your Open CRM password"
     assert "http://f/crm/update-password?key=k" in message.body
     assert "expires in 60 minutes" in message.body
+
+
+# --- ported from backend/tests/test_mail_config_account.py:367, :378 (the reset route) ---
+
+RESET = "/api/v1/auth/reset-password/"
+
+
+@pytest.mark.django_db
+def test_a_password_reset_is_sent_from_the_config_account(api, alice, config_account):
+    from django.core import mail
+
+    mail.outbox.clear()
+    response = api.post(RESET, {"user": alice.pk}, format="json")
+
+    assert response.status_code == 200
+    assert len(mail.outbox) == 1
+    assert mail.outbox[0].from_email == f"Frappe <{FROM}>"
+    assert mail.outbox[0].to == [alice.email or alice.pk]
+    assert "/crm/update-password?key=" in mail.outbox[0].body
+
+
+@pytest.mark.django_db
+def test_a_password_reset_with_nothing_to_send_through_stays_silent(
+    api, alice, no_config_account
+):
+    from django.core import mail
+
+    from accounts import front_door as auth_pages
+
+    mail.outbox.clear()
+    response = api.post(RESET, {"user": alice.pk}, format="json")
+
+    assert response.status_code == 200
+    assert response.json()["message"]["message"] == auth_pages.GENERIC_RESET_RESPONSE
+    assert mail.outbox == []

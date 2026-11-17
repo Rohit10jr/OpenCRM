@@ -3,6 +3,7 @@ from django.test import RequestFactory
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
+from accounts import password_reset
 from accounts.authentication import VersionedJWTAuthentication, bump_token_version
 
 pytestmark = pytest.mark.django_db
@@ -119,3 +120,94 @@ def test_the_version_cannot_be_written(alice, auth_api):
     auth_api.patch(f"/api/v1/users/{alice.pk}/", {"token_version": 5}, format="json")
     alice.refresh_from_db()
     assert alice.token_version == 0
+
+
+# --- ACCOUNTS milestone 2: ported from backend/tests/test_token_version.py:64-140 ---------
+# update_password is POST /api/v1/auth/update-password/; expected answers unchanged.
+
+UPDATE = "/api/v1/auth/update-password/"
+NEW_PASSWORD = "Str0ng!Passw0rd"
+
+
+def _update_password(**payload):
+    return APIClient().post(UPDATE, payload, format="json")
+
+
+def test_logout_all_sessions_revokes_an_access_token_issued_before_it(alice):
+    """The test KNOWN_ISSUES §6 says to write first. Failed before the fix: 200."""
+    before = _login(alice)
+    assert _whoami(before["access"]).status_code == 200
+
+    response = _update_password(
+        key=password_reset.issue_key(alice), new_password=NEW_PASSWORD, logout_all_sessions=1
+    )
+    assert response.status_code == 200, response.json()
+
+    assert _whoami(before["access"]).status_code == 401
+    # The device that made the change stays signed in, as upstream's `keep_current` does.
+    assert _whoami(response.json()["message"]["access"]).status_code == 200
+
+
+def test_logout_all_sessions_reaches_a_refresh_token_that_has_been_rotated(alice):
+    """The version check stops a rotated refresh token. Until 2 Nov 2026 it was the only
+    thing that did: the refresh endpoint rotated without `outstand()`, so the rotated token
+    was never in `OutstandingToken` for `_blacklist_outstanding_tokens` to find."""
+    rotated = _refresh(_login(alice)["refresh"]).json()["message"]
+
+    _update_password(
+        key=password_reset.issue_key(alice), new_password=NEW_PASSWORD, logout_all_sessions=1
+    )
+
+    assert _refresh(rotated["refresh"]).status_code == 401
+    assert _whoami(rotated["access"]).status_code == 401
+
+
+def test_a_rotated_refresh_token_is_outstanding_and_gets_blacklisted(alice):
+    """KNOWN_ISSUES §6, found while building it. The refresh endpoint now records the token
+    it rotates to, as SimpleJWT's `TokenRefreshSerializer` does, so `logout_all_sessions`
+    blacklists it as well as refusing it by version."""
+    from rest_framework_simplejwt.token_blacklist.models import (
+        BlacklistedToken,
+        OutstandingToken,
+    )
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    rotated = _refresh(_login(alice)["refresh"]).json()["message"]["refresh"]
+    jti = RefreshToken(rotated)["jti"]
+    assert OutstandingToken.objects.filter(jti=jti, user=alice).exists()
+
+    _update_password(
+        key=password_reset.issue_key(alice), new_password=NEW_PASSWORD, logout_all_sessions=1
+    )
+
+    assert BlacklistedToken.objects.filter(token__jti=jti).exists()
+
+
+def test_a_password_set_without_the_box_ticked_keeps_other_sessions(alice):
+    """As upstream: `update_password` clears sessions only when `logout_all_sessions` is set
+    (`frappe/utils/password.py:150`)."""
+    before = _login(alice)
+
+    response = _update_password(key=password_reset.issue_key(alice), new_password=NEW_PASSWORD)
+    assert response.status_code == 200, response.json()
+
+    assert _whoami(before["access"]).status_code == 200
+    assert _whoami(response.json()["message"]["access"]).status_code == 200
+
+
+def test_a_password_change_with_the_box_ticked_revokes_the_old_access_token(alice):
+    """The old-password path of `update_password`. Its response is a fresh token pair, and
+    that pair must carry the new version or the user is signed out by their own change."""
+    before = _login(alice)
+
+    response = _update_password(
+        usr=alice.name,
+        old_password="secret123",
+        new_password=NEW_PASSWORD,
+        logout_all_sessions=1,
+    )
+    assert response.status_code == 200, response.json()
+
+    assert _whoami(before["access"]).status_code == 401
+    fresh = response.json()["message"]
+    assert _whoami(fresh["access"]).status_code == 200
