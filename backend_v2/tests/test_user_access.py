@@ -207,3 +207,39 @@ def test_reading_a_user_document_does_not_leak_the_hash(auth_api, alice):
     response = auth_api.get(f"{USERS}{alice.name}/")
     assert response.status_code == 200
     assert "password" not in response.json()["message"]
+
+
+# --- A-23: built-in before admin (old platform_docs.py:125-129) --------------------------
+
+
+def test_a_system_manager_cannot_write_or_delete_administrator(make_user, api_as):
+    boss = make_user("boss@example.com", roles=["System Manager"])
+    client = api_as(boss)
+    assert client.patch(
+        f"{USERS}Administrator/", {"first_name": "X"}, format="json"
+    ).status_code == 403
+    assert client.delete(f"{USERS}Administrator/").status_code == 403
+    assert User.objects.filter(pk="Administrator").exists()
+
+
+def test_the_literal_administrator_can_write_a_built_in(administrator, api_as):
+    response = api_as(administrator).patch(
+        f"{USERS}Administrator/", {"last_name": "Root"}, format="json"
+    )
+    assert response.status_code == 200, response.json()
+    administrator.refresh_from_db()
+    assert administrator.last_name == "Root"
+
+
+def test_a_create_differing_only_by_case_is_a_duplicate_not_an_update(
+    make_user, alice, api_as
+):
+    """A-23: pins v2's answer. User has no naming strategy, so the duplicate is the raw
+    409 rather than the "already exists" sentence; the old answer is unconfirmed."""
+    boss = make_user("boss@example.com", roles=["System Manager"])
+    response = api_as(boss).post(
+        USERS, {"name": alice.name.upper(), "first_name": "Clone"}, format="json"
+    )
+    assert response.status_code == 409
+    alice.refresh_from_db()
+    assert alice.first_name == "Alice"
