@@ -34,10 +34,8 @@ Content-Type: application/json
 ### 1.2 Who am I -> 200, {"message": "Administrator"}
 GET {{host}}/api/v1/auth/me/
 Authorization: Bearer {{token}}
-
 ### 1.3 Same call with no token -> 401, exc_type AuthenticationError
 GET {{host}}/api/v1/auth/me/
-
 ### 1.4 A method that does not exist -> 405, exc_type DoesNotExistError
 # @negative
 # @expect $.exc_type == MethodNotAllowed
@@ -195,7 +193,7 @@ GET {{host}}/api/resource/CRM%20Organization/Acme%20Test%20Co
 Authorization: Bearer {{token}}
 
 ### 2.15 A doctype that is not routable answers exactly like one that does not exist -> 404
-# @waiting ACTIVITIES
+# @waiting ASSIGNMENTS
 GET {{host}}/api/resource/ToDo
 Authorization: Bearer {{token}}
 
@@ -356,19 +354,18 @@ DELETE {{host}}/api/resource/CRM%20Lead/{{orphan_name}}
 Authorization: Bearer {{token}}
 
 ### 4.8 She may not rewrite the org chart -> 403 (the tree is an input to the permission engine)
-# @waiting ACCOUNTS
-POST {{host}}/api/resource/CRM%20Sales%20Hierarchy
+# @resource-envelope {"data"}/201 -> {"message"}/200
+POST {{host}}/api/v1/sales-hierarchies/
 Authorization: Bearer {{sales_token}}
 Content-Type: application/json
 
 {"user": "{{sales}}"}
-
 ### 4.9 She may read her own User row but not change her roles -> groups is never on the wire
-# @waiting FOUNDATION
-GET {{host}}/api/resource/User/{{sales}}
+# @resource-envelope {"data"}/201 -> {"message"}/200
+GET {{host}}/api/v1/users/ada@example.com/
 Authorization: Bearer {{sales_token}}
 
 ### 4.10 Filtering on a hidden field is refused rather than answered -> 400, "Invalid Filter"
-# @waiting FOUNDATION
-GET {{host}}/api/resource/User?filters=[["groups","like","%25Manager%25"]]
+# @resource-envelope {"data"}/201 -> {"message"}/200
+GET {{host}}/api/v1/users/?filters=[["groups","like","%25Manager%25"]]
 Authorization: Bearer {{sales_token}}

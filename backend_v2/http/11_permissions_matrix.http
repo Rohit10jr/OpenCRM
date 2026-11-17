@@ -81,28 +81,28 @@ Content-Type: application/json
 {"enable_sales_hierarchy": 0}
 
 ### 0.6 leftover tree rows -> 200
-# @waiting ACCOUNTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
 # @name old_tree
-GET {{tree}}?fields=["name"]&order_by=lft desc
+GET {{host}}/api/v1/sales-hierarchies/?fields=["name"]&order_by=lft desc
 Authorization: Bearer {{token}}
 
 ### 0.7 -> 200|404
-# @waiting ACCOUNTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{tree}}/{{old_tree.response.body.$.data[0].name}}
+DELETE {{host}}/api/v1/sales-hierarchies/{{old_tree.response.body.$.message[0].name}}/
 Authorization: Bearer {{token}}
 
 ### 0.8 -> 200|404
-# @waiting ACCOUNTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{tree}}/{{old_tree.response.body.$.data[1].name}}
+DELETE {{host}}/api/v1/sales-hierarchies/{{old_tree.response.body.$.message[1].name}}/
 Authorization: Bearer {{token}}
 
 ### 0.9 -> 200|404
-# @waiting ACCOUNTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{tree}}/{{old_tree.response.body.$.data[2].name}}
+DELETE {{host}}/api/v1/sales-hierarchies/{{old_tree.response.body.$.message[2].name}}/
 Authorization: Bearer {{token}}
 
 ### 0.10 leftover leads -> 200
@@ -396,7 +396,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "name": "{{l_alan}}", "assign_to": ["{{sales}}"]}
 
 ### 3.2 nor write the ToDo behind it: the route is withheld -> 404, indistinguishable from "no such doctype"
-# @waiting ACTIVITIES
+# @waiting ASSIGNMENTS
 # @expect $.exc_type == DoesNotExistError
 POST {{host}}/api/resource/ToDo
 Authorization: Bearer {{stoken}}
@@ -507,75 +507,70 @@ Authorization: Bearer {{s2token}}
 # ---- the org tree: System Manager only, because it is an input to this engine ----------------------
 
 ### 5.1 a Sales User may not add herself to the tree -> 403
-# @waiting ACCOUNTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == PermissionError
-POST {{tree}}
+POST {{host}}/api/v1/sales-hierarchies/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"user": "{{sales}}"}
-
 ### 5.2 a Sales Manager may not either (System Manager only; the tree decides what she can see) -> 403
-# @waiting ACCOUNTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == PermissionError
-POST {{tree}}
+POST {{host}}/api/v1/sales-hierarchies/
 Authorization: Bearer {{mtoken}}
 Content-Type: application/json
 
 {"user": "{{manager}}"}
-
-### 5.3 Administrator builds it: grace at the root -> 201
-# @waiting ACCOUNTS
+### 5.3 Administrator builds it: grace at the root -> 200
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @name n_grace_req
-POST {{tree}}
+POST {{host}}/api/v1/sales-hierarchies/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"user": "{{manager}}", "is_group": 1}
-
 ###
-@n_grace = {{n_grace_req.response.body.$.data.name}}
+@n_grace = {{n_grace_req.response.body.$.message.name}}
 
-### 5.4 ada reports to grace -> 201; full_name is fetched from the user
-# @waiting ACCOUNTS
+### 5.4 ada reports to grace -> 200; full_name is fetched from the user
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @name n_ada_req
-# @expect $.data.reports_to == {{n_grace}}
-# @expect $.data.full_name exists
-POST {{tree}}
+# @expect $.message.reports_to == {{n_grace}}
+# @expect $.message.full_name exists
+POST {{host}}/api/v1/sales-hierarchies/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"user": "{{sales}}", "reports_to": "{{n_grace}}"}
-
 ###
-@n_ada = {{n_ada_req.response.body.$.data.name}}
+@n_ada = {{n_ada_req.response.body.$.message.name}}
 
 ### 5.5 the nested-set bounds were rebuilt: grace's node spans ada's
-# @waiting ACCOUNTS
-# @expect $.data.lft != null
-# @expect $.data.rgt != null
-GET {{tree}}/{{n_grace}}
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.lft != null
+# @expect $.message.rgt != null
+GET {{host}}/api/v1/sales-hierarchies/{{n_grace_req.response.body.$.message.name}}/
 Authorization: Bearer {{token}}
 
 ### 5.6 everyone may READ the tree (upstream grants all three roles read) -> 200, both rows
-# @waiting ACCOUNTS
-# @expect $.data count 2
-GET {{tree}}?fields=["name","user","reports_to"]
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message count 2
+GET {{host}}/api/v1/sales-hierarchies/?fields=["name","user","reports_to"]
 Authorization: Bearer {{stoken}}
 
 ### 5.7 but ada may not re-parent anyone -> 403
-# @waiting ACCOUNTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == PermissionError
-PUT {{tree}}/{{n_grace}}
+PATCH {{host}}/api/v1/sales-hierarchies/{{n_grace_req.response.body.$.message.name}}/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"reports_to": "{{n_ada}}"}
-
 ### 5.8 nor delete a node -> 403
-# @waiting ACCOUNTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == PermissionError
-DELETE {{tree}}/{{n_ada}}
+DELETE {{host}}/api/v1/sales-hierarchies/{{n_ada_req.response.body.$.message.name}}/
 Authorization: Bearer {{stoken}}
 
 ### 5.9 the tree exists but the feature is OFF: grace still sees everything -> 4
@@ -660,14 +655,12 @@ GET {{deal}}?fields=["name"]&filters=[["next_step","like","ZZ Matrix%25"]]
 Authorization: Bearer {{mtoken}}
 
 ### 6.12 a manager in the tree cannot be demoted while she has reports -> 417, crm/api/user.py:172 verbatim
-# @waiting ACCOUNTS
 # @expect $.message == Remove this user from the sales hierarchy before changing their role to Sales User
-POST {{host}}/api/method/crm.api.user.update_user_role
+POST {{host}}/api/v1/users/{{manager}}/update-role/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"user": "{{manager}}", "new_role": "Sales User"}
-
+{"new_role": "Sales User"}
 ### 6.13 the dashboard reads through the same permission layer (base_queryset), so a manager in the
 # @waiting DASHBOARD
 # tree counts her subtree's leads plus the demo rows she may see, never the whole company -> 200
@@ -697,13 +690,13 @@ Authorization: Bearer {{mtoken}}
 # ---- teardown ---------------------------------------------------------------------------------------------
 
 ### 7.1 delete the tree, leaf first -> 200
-# @waiting ACCOUNTS
-DELETE {{tree}}/{{n_ada}}
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/sales-hierarchies/{{n_ada_req.response.body.$.message.name}}/
 Authorization: Bearer {{token}}
 
 ### 7.2 -> 200
-# @waiting ACCOUNTS
-DELETE {{tree}}/{{n_grace}}
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/sales-hierarchies/{{n_grace_req.response.body.$.message.name}}/
 Authorization: Bearer {{token}}
 
 ### 7.3 delete the leads -> 200
