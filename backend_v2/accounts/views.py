@@ -73,6 +73,16 @@ class UserViewSet(LinkSearchMixin, DocumentViewSet):
         result = directory.get_user_info(request.user, inputs.get("users"))
         return Response(Envelope(result, "message"))
 
+    @action(detail=False, methods=("get",), url_path="timezones")
+    def timezones(self, request):
+        """`frappe.core.doctype.user.user.get_timezones`."""
+        return Response(Envelope({"timezones": services.timezones()}, "message"))
+
+    @action(detail=False, methods=("get",), url_path="signature")
+    def signature(self, request):
+        """`crm.api.get_user_signature`: the caller's own."""
+        return Response(Envelope(services.user_signature(request.user), "message"))
+
     @action(detail=False, methods=("post",), url_path="add-existing")
     def add_existing(self, request):
         """`crm.api.user.add_existing_users`."""
@@ -199,3 +209,13 @@ class ChangePasswordView(BaseAPIView):
                 inputs.get("new_password") or "",
             )
         )
+
+
+class OAuthProvidersView(BaseAPIView):
+    """`crm.api.auth.oauth_providers`: always `[]`, guest. There is no Social Login Key
+    model, as in the old backend (`crm_app/api/auth.py`); no frontend file calls it."""
+
+    permission_classes = (AllowAny,)
+
+    def get(self, request):
+        return Response([])

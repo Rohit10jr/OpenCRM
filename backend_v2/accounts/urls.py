@@ -5,6 +5,7 @@ from accounts.views import (
     LoggedUserView,
     LoginView,
     LogoutView,
+    OAuthProvidersView,
     RefreshTokenView,
     UserViewSet,
     CRMSalesHierarchyViewSet,
@@ -31,6 +32,11 @@ urlpatterns = [
         r"^auth/change-password/?$",
         ChangePasswordView.as_view(),
         name="auth-change-password",
+    ),
+    re_path(
+        r"^auth/oauth-providers/?$",
+        OAuthProvidersView.as_view(),
+        name="auth-oauth-providers",
     ),
     *router.urls,
 ]

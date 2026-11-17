@@ -147,8 +147,8 @@ alone, an old `POST` body moves into the query string: a reshaped input
 | Dotted path | Verbs | Access | Old source | New route | New app | Status |
 |---|---|---|---|---|---|---|
 | `crm.api.accept_invitation` | GET/POST | guest | `crm_app/api/auth_pages.py:accept_invitation` | `POST /api/v1/auth/accept-invitation/` | accounts | — |
-| `crm.api.auth.oauth_providers` | GET/POST | guest | `crm_app/api/auth.py:oauth_providers` | `GET /api/v1/auth/oauth-providers/` | accounts | — |
-| `crm.api.get_user_signature` | GET/POST | auth | `crm_app/api/misc.py:get_user_signature` | `GET /api/v1/users/signature/` | accounts | — |
+| `crm.api.auth.oauth_providers` | GET/POST | guest | `crm_app/api/auth.py:oauth_providers` | `GET /api/v1/auth/oauth-providers/` | accounts | built |
+| `crm.api.get_user_signature` | GET/POST | auth | `crm_app/api/misc.py:get_user_signature` | `GET /api/v1/users/signature/` | accounts | built |
 | `crm.api.invite_by_email` | GET/POST | auth | `crm_app/api/misc.py:invite_by_email` | `POST /api/v1/invitations/invite-by-email/` | accounts | — |
 | `crm.api.session.get_user_info` | GET/POST | auth | `crm_app/api/session.py:get_user_info` | `GET /api/v1/users/info/`, `POST /api/v1/users/info/` (a list of up to 200 names) | accounts | built |
 | `crm.api.session.get_users` | GET/POST | auth | `crm_app/api/session.py:get_users` | `GET /api/v1/users/directory/` | accounts | built |
@@ -156,7 +156,7 @@ alone, an old `POST` body moves into the query string: a reshaped input
 | `crm.api.user.change_password` | GET/POST | auth | `crm_app/api/user.py:change_password` | `POST /api/v1/auth/change-password/` | accounts | built |
 | `crm.api.user.remove_crm_roles_from_user` | GET/POST | auth | `crm_app/api/user.py:remove_crm_roles_from_user` | `POST /api/v1/users/<name>/remove-crm-roles/` (`user` in the URL) | accounts | built |
 | `crm.api.user.update_user_role` | GET/POST | auth | `crm_app/api/user.py:update_user_role` | `POST /api/v1/users/<name>/update-role/` (`user` in the URL) | accounts | built |
-| `frappe.core.doctype.user.user.get_timezones` | GET/POST | auth | `crm_app/api/desk.py:get_timezones` | `GET /api/v1/users/timezones/` | accounts | — |
+| `frappe.core.doctype.user.user.get_timezones` | GET/POST | auth | `crm_app/api/desk.py:get_timezones` | `GET /api/v1/users/timezones/` | accounts | built |
 | `frappe.core.doctype.user.user.reset_password` | POST | guest | `crm_app/api/auth_pages.py:reset_password` | `POST /api/v1/auth/reset-password/` | accounts | — |
 | `frappe.core.doctype.user.user.update_password` | POST | guest | `crm_app/api/auth_pages.py:update_password` | `POST /api/v1/auth/update-password/` | accounts | — |
 

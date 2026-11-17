@@ -1,5 +1,8 @@
 """Account authentication services shared by API routes and later account actions."""
 
+import zoneinfo
+from functools import lru_cache
+
 from django.contrib.auth import authenticate, get_user_model
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
@@ -131,3 +134,31 @@ def change_password(user, old_password: str = "", new_password: str = "") -> str
     user.set_password(new_password)
     user.save(update_fields=["password"])
     return "Password Updated Successfully"
+
+
+# Fixed-offset and legacy families `pytz.common_timezones` leaves out (old desk.py).
+_UNCOMMON_TIMEZONE_PREFIXES = ("Etc/", "SystemV/", "posix/", "right/")
+
+
+@lru_cache(maxsize=1)
+def timezones() -> list[str]:
+    """`get_timezones`' list (old `crm_app/api/desk.py:_get_timezones`): upstream's
+    `sorted(pytz.common_timezones)`, approximated from `zoneinfo` without adding pytz —
+    `Area/Location` names plus UTC and GMT, cached for the process."""
+    names = {
+        name
+        for name in zoneinfo.available_timezones()
+        if "/" in name and not name.startswith(_UNCOMMON_TIMEZONE_PREFIXES)
+    }
+    names.update({"UTC", "GMT"})
+    return sorted(names)
+
+
+def user_signature(user) -> str | None:
+    """`crm.api.get_user_signature` (old `crm_app/api/misc.py:42-72`): the user's own
+    signature, wrapped. The default outgoing Email Account's signature, the old
+    fallback, arrives with CONFIGURATION (specs/ACCOUNTS.md section 2)."""
+    signature = user.email_signature
+    if not signature:
+        return None
+    return f'<br><p class="signature">{signature}</p>'
