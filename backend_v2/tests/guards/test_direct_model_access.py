@@ -56,6 +56,23 @@ DIRECT_MANAGER_READS = {
         "Removing CRM roles deletes the user's chart node, as the old action does "
         "(user.py:215), after the manager-pair and System Manager checks."
     ),
+    ("accounts/front_door.py", "reset_password", "User._default_manager"): (
+        "Forgot password runs before any request user exists; it finds the account by "
+        "address and answers one sentence whatever it finds (old auth_pages.py:81)."
+    ),
+    ("accounts/front_door.py", "_blacklist_outstanding_tokens", "OutstandingToken.objects"): (
+        "logout_all_sessions blacklists the authenticated account's own refresh tokens, "
+        "after the reset key or old password proved who it is."
+    ),
+    ("accounts/password_reset.py", "issue_key", "User._default_manager"): (
+        "A write-only update of one account's reset-key columns from a guest endpoint."
+    ),
+    ("accounts/password_reset.py", "resolve_key", "User._default_manager"): (
+        "Finds the account a reset key belongs to: the key is the credential, not a row rule."
+    ),
+    ("accounts/password_reset.py", "consume_key", "User._default_manager"): (
+        "A conditional write-only update clearing one account's reset key."
+    ),
     ("accounts/services.py", "login", "get_user_model()._default_manager"): (
         "Authentication must locate the account before a request user exists; lockout "
         "and password verification protect this lookup."

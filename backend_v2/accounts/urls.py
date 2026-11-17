@@ -7,6 +7,8 @@ from accounts.views import (
     LogoutView,
     OAuthProvidersView,
     RefreshTokenView,
+    ResetPasswordView,
+    UpdatePasswordView,
     UserViewSet,
     CRMSalesHierarchyViewSet,
 )
@@ -37,6 +39,16 @@ urlpatterns = [
         r"^auth/oauth-providers/?$",
         OAuthProvidersView.as_view(),
         name="auth-oauth-providers",
+    ),
+    re_path(
+        r"^auth/reset-password/?$",
+        ResetPasswordView.as_view(),
+        name="auth-reset-password",
+    ),
+    re_path(
+        r"^auth/update-password/?$",
+        UpdatePasswordView.as_view(),
+        name="auth-update-password",
     ),
     *router.urls,
 ]

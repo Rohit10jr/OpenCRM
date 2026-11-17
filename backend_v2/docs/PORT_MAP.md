@@ -157,8 +157,8 @@ alone, an old `POST` body moves into the query string: a reshaped input
 | `crm.api.user.remove_crm_roles_from_user` | GET/POST | auth | `crm_app/api/user.py:remove_crm_roles_from_user` | `POST /api/v1/users/<name>/remove-crm-roles/` (`user` in the URL) | accounts | built |
 | `crm.api.user.update_user_role` | GET/POST | auth | `crm_app/api/user.py:update_user_role` | `POST /api/v1/users/<name>/update-role/` (`user` in the URL) | accounts | built |
 | `frappe.core.doctype.user.user.get_timezones` | GET/POST | auth | `crm_app/api/desk.py:get_timezones` | `GET /api/v1/users/timezones/` | accounts | built |
-| `frappe.core.doctype.user.user.reset_password` | POST | guest | `crm_app/api/auth_pages.py:reset_password` | `POST /api/v1/auth/reset-password/` | accounts | — |
-| `frappe.core.doctype.user.user.update_password` | POST | guest | `crm_app/api/auth_pages.py:update_password` | `POST /api/v1/auth/update-password/` | accounts | — |
+| `frappe.core.doctype.user.user.reset_password` | POST | guest | `crm_app/api/auth_pages.py:reset_password` | `POST /api/v1/auth/reset-password/` | accounts | built |
+| `frappe.core.doctype.user.user.update_password` | POST | guest | `crm_app/api/auth_pages.py:update_password` | `POST /api/v1/auth/update-password/` | accounts | built |
 
 ## CONFIGURATION
 

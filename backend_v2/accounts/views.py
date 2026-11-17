@@ -5,7 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from accounts import directory, services, user_roles
+from accounts import directory, front_door, services, user_roles
 from accounts.roles import ADMINISTRATOR, GUEST, ROLE_SYSTEM_MANAGER
 from accounts.serializers import CRMSalesHierarchySerializer, UserSerializer
 from core.access import Access
@@ -221,3 +221,39 @@ class OAuthProvidersView(BaseAPIView):
 
     def get(self, request):
         return Response([])
+
+
+class ResetPasswordView(BaseAPIView):
+    """`frappe.core.doctype.user.user.reset_password`: 10 per hour per (IP, address)."""
+
+    permission_classes = (AllowAny,)
+
+    @rate_limit(
+        limit=10,
+        seconds=60 * 60,
+        key="user",
+        normalise=lambda value: str(value or "").strip().lower(),
+    )
+    def post(self, request):
+        inputs = self.get_inputs(request)
+        return Response(
+            front_door.reset_password(inputs.get("user") or inputs.get("email") or "")
+        )
+
+
+class UpdatePasswordView(BaseAPIView):
+    """`frappe.core.doctype.user.user.update_password`: 20 per hour, on the IP alone with a
+    key and on (IP, account) on the old-password path."""
+
+    permission_classes = (AllowAny,)
+
+    @rate_limit(
+        limit=20, seconds=60 * 60, key=front_door.throttle_identity, pass_user=True
+    )
+    def post(self, request):
+        user = request.user if getattr(request.user, "is_authenticated", False) else None
+        return Response(
+            front_door.update_password(
+                self.get_inputs(request), user, resolve_ip(request)
+            )
+        )
