@@ -1,14 +1,17 @@
 """The authentication endpoints and the accounts resources."""
 
 from django.db.models import Q
+from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from accounts import services
+from accounts import directory, services
 from accounts.roles import ADMINISTRATOR, GUEST, ROLE_SYSTEM_MANAGER
 from accounts.serializers import CRMSalesHierarchySerializer, UserSerializer
 from core.access import Access
+from core.inputs import build_payload
 from core.mixins import LinkSearchMixin
+from core.renderers import Envelope
 from core.security import resolve_ip
 from core.views import BaseAPIView, DocumentViewSet
 
@@ -55,6 +58,20 @@ class UserViewSet(LinkSearchMixin, DocumentViewSet):
             return True
         # Your own row only, and never delete: it would orphan everything you own.
         return ptype == "write" and str(name) == str(user.name)
+
+    @action(detail=False, methods=("get",), url_path="directory")
+    def directory(self, request):
+        """`crm.api.session.get_users`."""
+        inputs = build_payload(request)
+        result = directory.get_users(request.user, inputs.get("include_all", False))
+        return Response(Envelope(list(result), "message"))
+
+    @action(detail=False, methods=("get", "post"), url_path="info")
+    def info(self, request):
+        """`crm.api.session.get_user_info`."""
+        inputs = build_payload(request)
+        result = directory.get_user_info(request.user, inputs.get("users"))
+        return Response(Envelope(result, "message"))
 
     def search_filters(self, filters, flags, user):
         """Frappe's `user_query` (old `crm_app/api/client.py:45-60`, FINDINGS 46):

@@ -20,6 +20,17 @@ DIRECT_MANAGER_READS = {
         "Token revocation is a write-only conditional update of the authenticated "
         "caller's own row, not a read of resource rows."
     ),
+    ("accounts/directory.py", "get_users", "User._default_manager"): (
+        "get_users is the CRM directory, gated by a CRM role, and reads enabled users "
+        "as the old one does (crm_app/api/session.py:80-98), not through User's list rule."
+    ),
+    ("accounts/directory.py", "get_users", "Group.objects"): (
+        "get_users reads the role names of the users it already selected, in one query."
+    ),
+    ("accounts/directory.py", "get_user_info", "User._default_manager"): (
+        "get_user_info returns five public fields for named users, including built-in "
+        "and disabled ones, as the old one does (session.py:151-155); CRM role required."
+    ),
     ("accounts/services.py", "login", "get_user_model()._default_manager"): (
         "Authentication must locate the account before a request user exists; lockout "
         "and password verification protect this lookup."

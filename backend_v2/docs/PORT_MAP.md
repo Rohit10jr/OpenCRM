@@ -150,8 +150,8 @@ alone, an old `POST` body moves into the query string: a reshaped input
 | `crm.api.auth.oauth_providers` | GET/POST | guest | `crm_app/api/auth.py:oauth_providers` | `GET /api/v1/auth/oauth-providers/` | accounts | — |
 | `crm.api.get_user_signature` | GET/POST | auth | `crm_app/api/misc.py:get_user_signature` | `GET /api/v1/users/signature/` | accounts | — |
 | `crm.api.invite_by_email` | GET/POST | auth | `crm_app/api/misc.py:invite_by_email` | `POST /api/v1/invitations/invite-by-email/` | accounts | — |
-| `crm.api.session.get_user_info` | GET/POST | auth | `crm_app/api/session.py:get_user_info` | `GET /api/v1/users/info/`, `POST /api/v1/users/info/` (a list of up to 200 names) | accounts | — |
-| `crm.api.session.get_users` | GET/POST | auth | `crm_app/api/session.py:get_users` | `GET /api/v1/users/directory/` | accounts | — |
+| `crm.api.session.get_user_info` | GET/POST | auth | `crm_app/api/session.py:get_user_info` | `GET /api/v1/users/info/`, `POST /api/v1/users/info/` (a list of up to 200 names) | accounts | built |
+| `crm.api.session.get_users` | GET/POST | auth | `crm_app/api/session.py:get_users` | `GET /api/v1/users/directory/` | accounts | built |
 | `crm.api.user.add_existing_users` | GET/POST | auth | `crm_app/api/user.py:add_existing_users` | `POST /api/v1/users/add-existing/` | accounts | — |
 | `crm.api.user.change_password` | GET/POST | auth | `crm_app/api/user.py:change_password` | `POST /api/v1/auth/change-password/` | accounts | — |
 | `crm.api.user.remove_crm_roles_from_user` | GET/POST | auth | `crm_app/api/user.py:remove_crm_roles_from_user` | `POST /api/v1/users/<name>/remove-crm-roles/` (`user` in the URL) | accounts | — |
