@@ -221,6 +221,10 @@ The mixins live in `core` (REBUILD_PLAN S24); each resource opts in.
 | `frappe.desk.reportview.export_query` | GET/POST | auth | `crm_app/api/reportview.py:export_query` | core | — |
 | `frappe.desk.search.search_link` | GET/POST | auth | `crm_app/api/client.py:search_link` | core | — |
 
+SA2 builds the linked-document scan and both opt-in actions. These two rows remain `—`
+until a production resource unit adds and records its concrete routes; only the
+`tests_support` Widget ViewSet opts in today.
+
 ## CONTACTS
 
 ### Doctypes (9)
@@ -261,6 +265,22 @@ The mixins live in `core` (REBUILD_PLAN S24); each resource opts in.
 |---|---|---|---|---|---|
 | `crm.api.notifications.get_notifications` | GET/POST | auth | `crm_app/api/notifications.py:get_notifications` | notifications | — |
 | `crm.api.notifications.mark_as_read` | GET/POST | auth | `crm_app/api/notifications.py:mark_as_read` | notifications | — |
+
+## ASSIGNMENTS
+
+Split out of SHARED_ACTIONS and ACTIVITIES on 16 Nov 2026 (`temp` A-7; `specs/ASSIGNMENTS.md`):
+the assignment engine needs these models, and SALES calls it on save before ACTIVITIES
+exists. Also builds the Assignment Rule model (its row is under ACTIVITIES) and
+`core`'s `render_template`. No method path of its own: the assign and Assignment Rule
+routes are ACTIVITIES'.
+
+### Doctypes (3)
+
+| DocType | Kind | Naming | Old protection | Declared fields | Old model | New app | Status |
+|---|---|---|---|---|---|---|---|
+| ToDo | withheld | `Hash(10)` | withheld — `specs/UNROUTED_DOCTYPES.md` | RO: `assignment_rule` | `frappe_platform.ToDo` | activities | — |
+| Assignment Rule Day | child | `Hash(10)` | n/a |  | `frappe_platform.AssignmentRuleDay` | activities | — |
+| Assignment Rule User | child | `Hash(10)` | n/a |  | `frappe_platform.AssignmentRuleUser` | activities | — |
 
 ## SLA
 
@@ -309,7 +329,10 @@ The mixins live in `core` (REBUILD_PLAN S24); each resource opts in.
 
 ## ACTIVITIES
 
-### Doctypes (12)
+The Assignment Rule **model** is built by ASSIGNMENTS (above); its row stays here because
+its protection is enforced on the routes this unit adds, and this unit marks it built.
+
+### Doctypes (9)
 
 | DocType | Kind | Naming | Old protection | Declared fields | Old model | New app | Status |
 |---|---|---|---|---|---|---|---|
@@ -322,9 +345,6 @@ The mixins live in `core` (REBUILD_PLAN S24); each resource opts in.
 | FCRM Note | main | `Hash(10)` | reviewed-open — same as CRM Task - `pages/Notes.vue` is company-wide, and a note can legitimately have no parent at all |  | `crm_app.FCRMNote` | activities | — |
 | File | main | `Hash(10)` | ruled: list rule, object rule, destination re-check |  | `frappe_platform.File` | activities | — |
 | Tag | main | `Prompt()` | ruled: list rule, object rule |  | `frappe_platform.Tag` | activities | — |
-| ToDo | withheld | `Hash(10)` | withheld — `specs/UNROUTED_DOCTYPES.md` | RO: `assignment_rule` | `frappe_platform.ToDo` | activities | — |
-| Assignment Rule Day | child | `Hash(10)` | n/a |  | `frappe_platform.AssignmentRuleDay` | activities | — |
-| Assignment Rule User | child | `Hash(10)` | n/a |  | `frappe_platform.AssignmentRuleUser` | activities | — |
 
 ### Method paths (22)
 

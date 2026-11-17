@@ -47,10 +47,11 @@ only versions whose `ref_doctype` is `CRM View Settings` and whose creation is m
 give the task nothing to delete; keeping the narrow task implemented makes later view
 tracking safe without ever applying retention to Lead, Deal, or other timeline history.
 Deleting a document also deletes every `Version` row that names its doctype and name.
-Batch callers can delete all such references in one query and suppress the per-row hook
-while removing the documents. The cleanup table currently registers only `Version`;
-ACTIVITIES adds ToDo, Comment, File, and Communication when their models exist, with a
-Communication's reference cleared rather than deleting the email.
+`references_handled()` suppresses only per-row reference cleanup, while
+`children_and_references_handled()` suppresses both child and reference cleanup after a
+batch caller has run both batch helpers. The cleanup table currently registers only
+`Version`; ACTIVITIES adds ToDo, Comment, File, and Communication when their models
+exist, with a Communication's reference cleared rather than deleting the email.
 
 The four authentication routes are explicit in `accounts/urls.py`: login and refresh
 are guest POST endpoints, logout is an authenticated POST endpoint, and `auth/me` is an
@@ -107,6 +108,10 @@ by later resources. It accepts Frappe's filter shapes and operators, recursively
 model field access and optional ViewSet allowlists, and projects `.values()` rows with
 the three underscore caches converted back to JSON strings. Callers provide an already
 row-rule-narrowed queryset; these functions never start from a model manager.
+
+`core.conditions` evaluates the condition editor's JSON as data through `is_empty`,
+`validate`, `document_values`, `evaluate`, and `evaluate_safely`, without executing saved
+code.
 
 `core.filter_backends.FilterBackend` adapts that layer to DRF and records a validated
 projection on its ViewSet. The completed `DocumentViewSet` calls the same query layer
@@ -179,6 +184,8 @@ unreviewed direct manager reads, keep concrete built route-map entries in lockst
 the production URLconf, require explicit credential and child-field declarations, and
 prove that resource writes stamp the authenticated caller. `Version` is the sole
 withheld document type; the `User` resource and its row rules wait for ACCOUNTS.
+`core.resources.rules_for(model)` now exposes independently callable row rules for a
+routed model, or for an unrouted model with an explicit `ROW_RULES` provider.
 
 `seed_dev_data` and `clear_dev_data` run the one explicit step list in
 `core.dev_data.STEPS`. FOUNDATION's account step creates or restores Administrator,
@@ -328,13 +335,28 @@ for that operation. Register the class explicitly on the app's
 
 Every resource ViewSet also declares its access decision directly on the class. Use
 `access = Access.ruled()` when rows are protected, and define both `list_rule(user)` and
-`has_object_rule(user, document, ptype)` on that ViewSet. Use
+`has_object_rule(user, document, ptype)` on that ViewSet. Both rules are
+`@staticmethod`s: a shared mixin can apply another resource's rules through
+`core.resources.rules_for(model)` without constructing a ViewSet or inheriting hidden
+request or action state. Existing calls through `self` remain valid. Use
 `access = Access.open(reason="…")` only after review, with a substantive reason. The
 base `DocumentViewSet` deliberately has no declaration, so a subclass that forgets one
 fails the access guard. A model with a concrete sensitive or encrypted field cannot be
 open. Document types that intentionally have no resource route are recorded once in
 `core.withheld.WITHHELD_DOCUMENT_TYPES`, with a reason; `Version` is currently the only
 entry because the timeline reads it server-side.
+
+`rules_for(model)` walks the production `config.urls`, including nested resolvers, and
+maps each routed `DocumentViewSet` or `SingletonViewSet` by its serializer model. A
+caller handling a request under another URLconf passes it explicitly. The map is cached
+per URLconf; tests that replace a URLconf's patterns in place call
+`clear_rules_cache()`. An unrouted model that needs row rules declares
+`ROW_RULES = "<app>.permissions.<name>"`; that dotted object must provide callable
+`list_rule` and `has_object_rule` functions. If the provider is a class, both must be
+`staticmethod`s; modules and other non-class providers may expose plain functions. The
+guard resolves every project model's declaration. There is no implicit fallback.
+Django's `core.E001` system check refuses one model served by two different ViewSet
+classes; registering the same class at several prefixes is valid.
 
 The base serves list, create, retrieve, PATCH, and delete with the client-reference
 `{"message": ...}` envelope and status 200, including create. It never serves PUT.
@@ -358,6 +380,72 @@ and `services.py` unless the exact read has a written reason, malformed or unmat
 `built` route-map rows, production `/api/v1/` patterns absent from the route map, and
 resource creates or PATCHes that fail to stamp the authenticated caller. Test-only
 routes under `config.test_urls` are not part of production route-map coverage.
+
+### Opting a resource in to a shared action
+
+Add the action mixin before `DocumentViewSet` in the resource's bases. For bulk update,
+use `class LeadViewSet(BulkUpdateMixin, DocumentViewSet)`. This writes only that
+resource's `POST <resource>/bulk-update/` collection action; the app still registers the
+resource explicitly and records the concrete route in `PORT_MAP.md` when it opts in.
+No production resource opts in yet; `tests_support.WidgetViewSet` proves the mechanism.
+
+`LinkedDocumentsMixin` writes `GET` and `POST <resource>/<name>/linked-documents/`.
+The GET first uses the resource's `_object_by_name("read")`, then calls the batched
+`core.mixins.linked.linked_documents(model, names, user)` scan. A routed or
+`ROW_RULES` source is narrowed by its `list_rule`; a child row is admitted without its
+own list rule, resolved to its actual FK or polymorphic parent, and kept only when that
+parent's object-read rule is not false. The scan combines every FK and declared dynamic
+pair for one source model into one query, independent of the number of target names.
+Ignored delete-link doctypes and a child table's own parent FK are never links.
+The link-scan row-rule guard calls the scanner's own `is_link_source()` discovery, so
+FKs, declared dynamic pairs, and conventional reference pairs cannot drift between the
+runtime scan and its classification check.
+
+The dialog result deliberately deduplicates by document name alone: the first position
+is retained and the last model with that name supplies the value. A model can declare
+`linked_document_title(instance)` for its special dialog title; otherwise a truthy
+`title`, then the name, is used. POST performs no source-document check. It silently
+skips malformed, unknown, missing, unruled, or object-write-denied items, clears generic
+reference pairs and direct FKs with plain `update()` calls, and optionally deletes an
+item after the ordinary dynamic-link check. A refused delete leaves the item present but
+already unlinked, matching the old endpoint. `clear_linked_document_reference(instance)`
+is the per-model override for special reference-pair clearing. No production resource
+opts in yet; the test Widget resource covers both actions and slash-bearing names.
+
+The batched scan tags its results into the old collection order before that deduplication:
+FK sources, parent reference pairs, then child Dynamic Link parents; within each phase it
+sorts source models by `doctype_of(model)` and fields by model-field order. Only child
+Dynamic Link rows are ordered by primary key. FK and parent-pair rows deliberately retain
+their query order because the old PostgreSQL queries have no explicit `order_by()`.
+
+`BulkUpdateMixin` merges query and body inputs through `core.inputs.build_payload`, with
+the body winning, and ignores surplus keys. Fewer than 20 names run inline and return
+the failed-name list. From 20 through 500, `core.bulk_update_docs` receives the ViewSet's
+dotted class path and the requester's name and the response is `{"message": null}`;
+above 500 is the old 417 refusal. Both paths use the ViewSet's model lookup, write rule,
+serializer and destination re-check. The worker accepts only a `DocumentViewSet` that
+also subclasses `BulkUpdateMixin`, reloads an enabled requesting user, and applies the
+same plain per-document loop. Every document has its own transaction and save actor.
+
+`BulkDeleteMixin` writes `POST <resource>/bulk-delete/`. It validates the old `items`
+input and authorizes the complete batch before changing anything: two batched manager
+queries distinguish missing, list-invisible, and visible rows, then the resource's
+object-delete rule runs on the loaded visible instances. Missing names are dropped;
+the first invisible name in sorted order, then the first object-denied name, refuses
+the batch. Ten authorized existing targets run inline and eleven queue
+`core.delete_bulk_docs`; both answer `{"message": "success"}`. The worker reloads the
+requesting user, repeats authorization, accepts only a `DocumentViewSet` opted in with
+the mixin, and calls the perform half directly so it never re-enqueues. Its queued
+URLconf is limited to the production URLconf or the running settings' URLconf; an omitted
+value selects production, and any other value is refused before authorization.
+
+The perform half is one transaction. It reuses the linked-document batched scan and
+clear helpers, skips links whose resource or actual child-row parent denies object
+write, optionally deletes a cleared link only when its own dynamic-link check permits,
+then checks every target for remaining dynamic links. It batch-removes reference rows,
+stands down per-row reference cleanup, and deletes all targets with one queryset.
+`bulk_delete_remove_contact = True` selects the old Contact-specific clearing hook;
+it defaults off. No production resource opts in yet; the test Widget resource does.
 
 ### Carrying a document name with slashes in a route
 

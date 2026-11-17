@@ -1,0 +1,194 @@
+"""Model-to-row-rule resolution and its startup check."""
+
+from types import ModuleType
+
+import pytest
+from django.core.exceptions import ImproperlyConfigured
+from django.test import override_settings
+from django.test.utils import isolate_apps
+from django.urls import path
+
+import config.urls as production_urls
+from core.checks import check_resource_rule_viewsets
+from core.models import BaseDocument
+from core.resources import clear_rules_cache, routed_rule_map, rules_for
+from core.views import DocumentViewSet
+from tests_support.models import SecuredDocument, SingletonDocument, Widget
+from tests_support.views import (
+    SecuredDocumentViewSet,
+    SingletonDocumentViewSet,
+    WidgetViewSet,
+)
+
+
+class DeclaredRules:
+    @staticmethod
+    def list_rule(user):
+        return None
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        return None
+
+
+class InstanceMethodRules:
+    def list_rule(self, user):
+        return None
+
+    def has_object_rule(self, user, document, ptype):
+        return None
+
+
+@pytest.fixture(autouse=True)
+def _fresh_rule_map():
+    clear_rules_cache()
+    yield
+    clear_rules_cache()
+
+
+def _viewset(model, name):
+    serializer = type(
+        f"{name}Serializer",
+        (),
+        {"Meta": type("Meta", (), {"model": model})},
+    )
+    return type(name, (DocumentViewSet,), {"serializer_class": serializer})
+
+
+def _urlconf(*routes):
+    urlconf = ModuleType("test_resource_urlconf")
+    urlconf.urlpatterns = list(routes)
+    return urlconf
+
+
+def _route(prefix, viewset):
+    return path(prefix, viewset.as_view({"get": "list"}))
+
+
+def test_rules_for_finds_test_resource_viewsets():
+    test_urlconf = "config.test_urls"
+    assert rules_for(Widget, test_urlconf) is WidgetViewSet
+    assert rules_for(SecuredDocument, test_urlconf) is SecuredDocumentViewSet
+    assert rules_for(SingletonDocument, test_urlconf) is SingletonDocumentViewSet
+
+
+def test_default_rule_map_is_always_the_production_map():
+    with override_settings(ROOT_URLCONF="config.urls"):
+        production_settings_map = routed_rule_map()
+    with override_settings(ROOT_URLCONF="config.test_urls"):
+        test_settings_map = routed_rule_map()
+
+    assert test_settings_map == production_settings_map
+    assert all(
+        model._meta.app_label != "tests_support" for model in test_settings_map
+    )
+
+
+@isolate_apps("core")
+def test_rules_for_returns_none_for_unrouted_model_without_declaration():
+    class UnroutedDocument(BaseDocument):
+        DOCTYPE = "Unrouted Rule Fixture"
+
+        class Meta:
+            app_label = "core"
+
+    assert rules_for(UnroutedDocument) is None
+
+
+@isolate_apps("core")
+def test_rules_for_resolves_declared_rules_on_unrouted_model():
+    class UnroutedDocument(BaseDocument):
+        DOCTYPE = "Declared Rule Fixture"
+        ROW_RULES = "core.tests.test_resources.DeclaredRules"
+
+        class Meta:
+            app_label = "core"
+
+    assert rules_for(UnroutedDocument) is DeclaredRules
+
+
+@isolate_apps("core")
+def test_rules_for_rejects_instance_methods_on_declared_rule_class():
+    class UnroutedDocument(BaseDocument):
+        DOCTYPE = "Instance Rule Fixture"
+        ROW_RULES = "core.tests.test_resources.InstanceMethodRules"
+
+        class Meta:
+            app_label = "core"
+
+    with pytest.raises(
+        ImproperlyConfigured,
+        match=r"core\.UnroutedDocument.*list_rule",
+    ):
+        rules_for(UnroutedDocument)
+
+
+@isolate_apps("core")
+def test_rules_for_allows_plain_functions_on_module_provider(monkeypatch):
+    provider = ModuleType("module_rule_provider")
+    provider.list_rule = lambda user: None
+    provider.has_object_rule = lambda user, document, ptype: None
+
+    class UnroutedDocument(BaseDocument):
+        DOCTYPE = "Module Rule Fixture"
+        ROW_RULES = "core.tests.module_rule_provider"
+
+        class Meta:
+            app_label = "core"
+
+    monkeypatch.setattr("core.resources.import_string", lambda path: provider)
+
+    assert rules_for(UnroutedDocument) is provider
+
+
+@isolate_apps("core")
+def test_rules_for_refreshes_after_urlconf_changes():
+    class RoutedDocument(BaseDocument):
+        DOCTYPE = "Changing URLconf Fixture"
+
+        class Meta:
+            app_label = "core"
+
+    viewset = _viewset(RoutedDocument, "ChangingViewSet")
+    urlconf = _urlconf(_route("one/", viewset))
+    assert rules_for(RoutedDocument, urlconf) is viewset
+    urlconf.urlpatterns = []
+    assert rules_for(RoutedDocument, urlconf) is viewset
+    clear_rules_cache()
+    assert rules_for(RoutedDocument, urlconf) is None
+
+
+@isolate_apps("core")
+def test_system_check_reports_two_viewsets_for_one_model(monkeypatch):
+    class RoutedDocument(BaseDocument):
+        DOCTYPE = "Conflicting ViewSet Fixture"
+
+        class Meta:
+            app_label = "core"
+
+    first = _viewset(RoutedDocument, "FirstViewSet")
+    second = _viewset(RoutedDocument, "SecondViewSet")
+    urlconf = _urlconf(_route("one/", first), _route("two/", second))
+
+    monkeypatch.setattr(production_urls, "urlpatterns", urlconf.urlpatterns)
+    clear_rules_cache()
+    errors = check_resource_rule_viewsets(None)
+
+    assert [error.id for error in errors] == ["core.E001"]
+    assert "FirstViewSet, SecondViewSet" in errors[0].msg
+
+
+@isolate_apps("core")
+def test_system_check_allows_one_viewset_at_two_prefixes(monkeypatch):
+    class RoutedDocument(BaseDocument):
+        DOCTYPE = "Repeated ViewSet Fixture"
+
+        class Meta:
+            app_label = "core"
+
+    viewset = _viewset(RoutedDocument, "RepeatedViewSet")
+    urlconf = _urlconf(_route("one/", viewset), _route("two/", viewset))
+
+    monkeypatch.setattr(production_urls, "urlpatterns", urlconf.urlpatterns)
+    clear_rules_cache()
+    assert check_resource_rule_viewsets(None) == []

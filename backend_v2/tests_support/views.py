@@ -5,11 +5,14 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from core.access import Access
+from core.mixins import BulkDeleteMixin, BulkUpdateMixin, LinkedDocumentsMixin
 from core.renderers import Envelope
 from core.views import DocumentViewSet, SingletonViewSet
 from tests_support.serializers import (
     AutoIncrementDocumentSerializer,
+    DynamicReferenceSerializer,
     FieldDocumentSerializer,
+    PointingDocumentSerializer,
     PromptDocumentSerializer,
     SecuredDocumentSerializer,
     SingletonDocumentSerializer,
@@ -17,7 +20,9 @@ from tests_support.serializers import (
 )
 
 
-class WidgetViewSet(DocumentViewSet):
+class WidgetViewSet(
+    BulkDeleteMixin, BulkUpdateMixin, LinkedDocumentsMixin, DocumentViewSet
+):
     access = Access.ruled()
     serializer_class = WidgetSerializer
     readable_fields = WidgetSerializer.Meta.fields
@@ -34,10 +39,12 @@ class WidgetViewSet(DocumentViewSet):
     searchable_fields = ("widget_name", "notes")
     reference_fields = ("status",)
 
-    def list_rule(self, user):
+    @staticmethod
+    def list_rule(user):
         return Q(widget_owner=user) | Q(widget_owner__isnull=True)
 
-    def has_object_rule(self, user, document, ptype):
+    @staticmethod
+    def has_object_rule(user, document, ptype):
         if ptype == "create":
             return document.status != "Forbidden"
         if ptype == "read":
@@ -45,6 +52,38 @@ class WidgetViewSet(DocumentViewSet):
         if ptype == "write":
             return document.status != "Locked"
         return None
+
+
+class PointingDocumentViewSet(DocumentViewSet):
+    access = Access.ruled()
+    serializer_class = PointingDocumentSerializer
+    readable_fields = PointingDocumentSerializer.Meta.fields
+    filterable_fields = ("name", "widget", "widget_status")
+    sortable_fields = ("name", "modified")
+
+    @staticmethod
+    def list_rule(user):
+        return Q(owner=user)
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        return document.owner_id == user.pk
+
+
+class DynamicReferenceViewSet(DocumentViewSet):
+    access = Access.ruled()
+    serializer_class = DynamicReferenceSerializer
+    readable_fields = DynamicReferenceSerializer.Meta.fields
+    filterable_fields = ("name", "reference_doctype", "reference_name")
+    sortable_fields = ("name", "modified")
+
+    @staticmethod
+    def list_rule(user):
+        return Q(owner=user)
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        return document.owner_id == user.pk
 
 
 class FieldDocumentViewSet(DocumentViewSet):
@@ -74,10 +113,12 @@ class SecuredDocumentViewSet(DocumentViewSet):
     sortable_fields = ("name", "modified")
     searchable_fields = ()
 
-    def list_rule(self, user):
+    @staticmethod
+    def list_rule(user):
         return None
 
-    def has_object_rule(self, user, document, ptype):
+    @staticmethod
+    def has_object_rule(user, document, ptype):
         return None
 
 
@@ -108,10 +149,12 @@ class SingletonDocumentViewSet(SingletonViewSet):
     filterable_fields = ("name", "value", "manager_note")
     sortable_fields = ("name", "modified")
 
-    def list_rule(self, user):
+    @staticmethod
+    def list_rule(user):
         return None
 
-    def has_object_rule(self, user, document, ptype):
+    @staticmethod
+    def has_object_rule(user, document, ptype):
         if ptype == "read" and document.value == "Private":
             return False
         return None

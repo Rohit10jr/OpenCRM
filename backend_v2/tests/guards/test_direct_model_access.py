@@ -48,6 +48,50 @@ DIRECT_MANAGER_READS = {
         "Retention housekeeping is a scheduled job without a request user and deletes "
         "only expired saved-view history."
     ),
+    (
+        "core/mixins/bulk_delete.py",
+        "authorize_bulk_delete",
+        "model._default_manager",
+    ): (
+        "Bulk delete loads all existing rows and list-visible names in two batched "
+        "queries before applying the resource's object-delete rule."
+    ),
+    (
+        "core/mixins/bulk_delete.py",
+        "perform_bulk_delete",
+        "model._default_manager",
+    ): (
+        "Bulk delete rechecks remaining links, then removes the already-authorized "
+        "target names with one queryset delete inside the shared transaction."
+    ),
+    ("core/mixins/linked.py", "linked_documents", "model._default_manager"): (
+        "The batched link scan starts at each source manager, then immediately applies "
+        "that source model's independently callable list rule."
+    ),
+    ("core/mixins/linked.py", "linked_documents", "parent_model._default_manager"): (
+        "Polymorphic child rows require a batched parent lookup before the actual "
+        "parent's object-read rule can be applied."
+    ),
+    (
+        "core/mixins/linked.py",
+        "LinkedDocumentsMixin.linked_documents",
+        "model._default_manager",
+    ): (
+        "Unlink intentionally loads each named item directly so a write-object-rule "
+        "refusal can be skipped silently instead of becoming list invisibility."
+    ),
+    ("core/mixins/linked.py", "_clear_reference", "type(instance)._default_manager"): (
+        "Unlink clears reference pairs with a plain update to avoid modified stamps "
+        "and Version rows, matching the old endpoint."
+    ),
+    ("core/mixins/linked.py", "_clear_link_fields", "type(instance)._default_manager"): (
+        "Unlink clears direct foreign keys with a plain update to avoid modified stamps "
+        "and Version rows, matching the old endpoint."
+    ),
+    ("core/mixins/linked.py", "_clear_contact", "type(instance)._default_manager"): (
+        "The contact-specific unlink path clears its direct field with a plain update, "
+        "matching the old endpoint's unstamped write."
+    ),
 }
 
 
