@@ -4,6 +4,7 @@ from django.db.models import Q
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from core.access import Access
 from core.renderers import Envelope
 from core.views import DocumentViewSet, SingletonViewSet
 from tests_support.serializers import (
@@ -17,6 +18,7 @@ from tests_support.serializers import (
 
 
 class WidgetViewSet(DocumentViewSet):
+    access = Access.ruled()
     serializer_class = WidgetSerializer
     readable_fields = WidgetSerializer.Meta.fields
     filterable_fields = (
@@ -46,6 +48,9 @@ class WidgetViewSet(DocumentViewSet):
 
 
 class FieldDocumentViewSet(DocumentViewSet):
+    access = Access.open(
+        reason="A field-naming fixture with no confidential rows or protected fields."
+    )
     serializer_class = FieldDocumentSerializer
     readable_fields = FieldDocumentSerializer.Meta.fields
     filterable_fields = ("name", "title")
@@ -62,14 +67,24 @@ class FieldDocumentViewSet(DocumentViewSet):
 
 
 class SecuredDocumentViewSet(DocumentViewSet):
+    access = Access.ruled()
     serializer_class = SecuredDocumentSerializer
     readable_fields = SecuredDocumentSerializer.Meta.fields
     filterable_fields = ("name", "manager_note", "audit_value", "manager_value")
     sortable_fields = ("name", "modified")
     searchable_fields = ()
 
+    def list_rule(self, user):
+        return None
+
+    def has_object_rule(self, user, document, ptype):
+        return None
+
 
 class PromptDocumentViewSet(DocumentViewSet):
+    access = Access.open(
+        reason="A prompt-naming fixture with no confidential rows or protected fields."
+    )
     serializer_class = PromptDocumentSerializer
     readable_fields = PromptDocumentSerializer.Meta.fields
     filterable_fields = ("name", "label")
@@ -77,6 +92,9 @@ class PromptDocumentViewSet(DocumentViewSet):
 
 
 class AutoIncrementDocumentViewSet(DocumentViewSet):
+    access = Access.open(
+        reason="An integer-naming fixture with no confidential rows or protected fields."
+    )
     serializer_class = AutoIncrementDocumentSerializer
     readable_fields = AutoIncrementDocumentSerializer.Meta.fields
     filterable_fields = ("name", "label")
@@ -84,10 +102,14 @@ class AutoIncrementDocumentViewSet(DocumentViewSet):
 
 
 class SingletonDocumentViewSet(SingletonViewSet):
+    access = Access.ruled()
     serializer_class = SingletonDocumentSerializer
     readable_fields = SingletonDocumentSerializer.Meta.fields
     filterable_fields = ("name", "value", "manager_note")
     sortable_fields = ("name", "modified")
+
+    def list_rule(self, user):
+        return None
 
     def has_object_rule(self, user, document, ptype):
         if ptype == "read" and document.value == "Private":

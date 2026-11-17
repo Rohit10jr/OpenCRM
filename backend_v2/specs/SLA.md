@@ -62,3 +62,7 @@ FOUNDATION, and SHARED_ACTIONS for the conditions evaluator that picks which SLA
 ## 6. Open questions
 
 None yet.
+
+## 7. Carried from FOUNDATION
+
+- Port the SLA-policy cases from `backend/tests/test_route_surface_review.py`.

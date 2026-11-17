@@ -119,3 +119,12 @@ notifications), SHARED_ACTIONS (the assignment engine).
 
 None. The line-break 500 was fixed in `backend/`, so parity copies the fix; the one
 remaining KNOWN_ISSUES §7 candidate (`remove_multiple`) is in `PARITY_EXCEPTIONS.md`.
+
+## 7. Carried from FOUNDATION
+
+- Add ToDo, Comment, File, and Communication to the reference-cleanup table in
+  `core/children.py`; Communication clears its reference rather than deleting the email.
+- Port the file route's stale-token case.
+- Port the CRM-specific delete cases for Task, Note, Call Log, WhatsApp, Notification,
+  and Comment.
+- Port the tag cases from `backend/tests/test_route_surface_review.py`.

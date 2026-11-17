@@ -57,3 +57,9 @@ ACCOUNTS, and SHARED_ACTIONS (Contact and CRM Organization opt in to its rename 
 ## 6. Open questions
 
 None yet.
+
+## 7. Carried from FOUNDATION
+
+- Build child-row writes for Contact Email and Contact Phone (owner, 12 Nov 2026).
+- Update `API_CONTRACT.md`'s "a child row is never reachable on its own" rule with the
+  approved exception for those two nested routes when they are built.

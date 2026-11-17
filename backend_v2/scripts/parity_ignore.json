@@ -1,0 +1,12 @@
+{
+  "rules": [
+    {
+      "path": "$.message.access",
+      "comment": "JWT access tokens are signed and issued independently by each server."
+    },
+    {
+      "path": "$.message.refresh",
+      "comment": "JWT refresh tokens are signed and issued independently by each server."
+    }
+  ]
+}

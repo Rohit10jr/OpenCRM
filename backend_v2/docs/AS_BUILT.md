@@ -1,6 +1,7 @@
 # As built — what `backend_v2` actually contains
 
-**Status: FOUNDATION through singleton resources and generic value routes built (2026-11-14).**
+**Status: FOUNDATION built through its final records (2026-11-15); its gate has not yet
+changed the unit status to Done.**
 
 This file describes the code that exists, not the code that is planned. **Where it and a
 spec disagree, this file wins**: specs are written before the code and go stale; this
@@ -33,7 +34,7 @@ Its seven naming strategies live in `core.naming`; naming-series counters are in
 under a row lock. `AutoIncrementDocument` replaces the string primary key with an integer
 one. Model metadata is declared as ordinary inherited class attributes, without a
 metaclass. `tests_support`, installed only by the test settings, contains small models
-covering every naming strategy and the generic-layer cases later FOUNDATION briefs use.
+covering every naming strategy and the completed generic-layer tests.
 
 Change history is withheld from the API and stored in `core.models.Version`, named with
 `Hash(10)`. A document opts in with a `TRACKED_FIELDS` class attribute; `BaseDocument`
@@ -98,8 +99,7 @@ roles are cached only on that `User` instance and can be cleared explicitly or b
 
 `core.fields` supplies encrypted character and text fields. They encrypt before every
 database write and remain ciphertext on the instance; `core.secrets` retains the old
-prefix, pass-through migration behavior, key failures and changed-key wording. The
-authentication routes above are the only application API routes built so far.
+prefix, pass-through migration behavior, key failures and changed-key wording.
 
 `core.filters` and `core.query` now supply the one registry-free list-query layer used
 by later resources. It accepts Frappe's filter shapes and operators, recursively resolves
@@ -108,10 +108,12 @@ model field access and optional ViewSet allowlists, and projects `.values()` row
 the three underscore caches converted back to JSON strings. Callers provide an already
 row-rule-narrowed queryset; these functions never start from a model manager.
 
-`core.filter_backends.FilterBackend` adapts that layer to DRF and records the
-validated projection on the ViewSet for brief 08. `core.pagination.LimitStartPagination`
-uses `limit_start` and `limit_page_length`, caps positive lengths at 500, treats zero as
-unlimited, and returns a bare list for the envelope renderer.
+`core.filter_backends.FilterBackend` adapts that layer to DRF and records a validated
+projection on its ViewSet. The completed `DocumentViewSet` calls the same query layer
+directly with its `readable_fields`, `filterable_fields`, and `sortable_fields` tuples.
+`core.pagination.LimitStartPagination` uses `limit_start` and `limit_page_length`, caps
+positive lengths at 500, treats zero as unlimited, and returns a bare list for the
+envelope renderer.
 
 `core.models.TreeDocument` is the abstract Frappe nested-set base. Concrete trees declare
 their parent foreign-key name, inherit indexed `lft`/`rgt`, rebuild all bounds after each
@@ -170,11 +172,51 @@ permission booleans without raising for a denied row. Every `SingletonViewSet` e
 `GET <settings>/value/`, applying its object rule and the model's sensitive and
 restricted field access before returning one value.
 
+`core.access.Access` makes each routed resource declare whether it is row-ruled or
+deliberately open. The guards in `tests/guards/` enforce those declarations, require
+every production document model to be routed or named in `core.withheld`, reject
+unreviewed direct manager reads, keep concrete built route-map entries in lockstep with
+the production URLconf, require explicit credential and child-field declarations, and
+prove that resource writes stamp the authenticated caller. `Version` is the sole
+withheld document type; the `User` resource and its row rules wait for ACCOUNTS.
+
+`seed_dev_data` and `clear_dev_data` run the one explicit step list in
+`core.dev_data.STEPS`. FOUNDATION's account step creates or restores Administrator,
+ada, grace, and alan from four environment passwords; every seed restores enabled
+state, the exact groups, and the password, while clear removes only the three seeded
+non-built-in users. Both commands are atomic and report counts without printing a
+password. `--demo` is accepted but deliberately adds nothing until later units append
+their own explicit steps.
+Both commands refuse to run unless `DEV_DATA_ALLOWED` is true. It defaults off in base
+settings and is enabled only by the local-development and test settings modules.
+
+`scripts/build_http_suite.py` parses all 15 old `docs/http/*.http` files and deterministically
+regenerates their REST copies in `backend_v2/http/` from `PORT_MAP.md`. It keeps waiting
+blocks in place, tags wrong-verb and unknown-route negative cases, and records the three
+PE-3 blocks as not served. `scripts/run_http.py` replays a generated file with isolated
+captured variables, dotenv substitution, status and `# @expect` checks, redacted output,
+and explicit pass/fail/skip lines. `scripts/parity_diff.py` gives the old and new runs
+separate state, compares status and the complete JSON body, and permits only the
+type-preserving value paths documented in `scripts/parity_ignore.json` to differ.
+
 ## 2. Recipes
 
-These are the sections FOUNDATION must write, because every later unit follows them.
-Until then they are headings only; do not guess their contents from
-`backend_v2/docs/REBUILD_PLAN.md`, which describes intent, not the result.
+These recipes describe the completed FOUNDATION conventions every later unit follows.
+The code remains authoritative when a recipe goes stale.
+
+### Adding development data
+
+Put an app's seed and clear functions in that app (the account example is
+`accounts/dev_data.py`). Each accepts `(user, force)` and returns the number of rows it
+created or removed. Existing rows are normally kept; use `force` only for a row whose
+old restore-defaults behaviour rewrites it. Document-model saves receive the supplied
+user, which the commands resolve to Administrator.
+
+Import both functions in `core/dev_data.py` and append one explicit `DevDataStep` line
+to `STEPS`. This is the only step list: there is no app registry or discovery hook.
+Clearing runs the same list in reverse, and a clear function must identify only its own
+rows and must not remove migrations' built-ins or roles. Add the app's command tests in
+the same change, including a hand-made row that proves clearing is narrow.
 
 ### Adding a resource
 
@@ -284,6 +326,16 @@ projection, filters, and both ordering and grouping; an empty tuple permits no f
 for that operation. Register the class explicitly on the app's
 `core.routers.DocumentRouter` and include the app's URLconf under `/api/v1/`.
 
+Every resource ViewSet also declares its access decision directly on the class. Use
+`access = Access.ruled()` when rows are protected, and define both `list_rule(user)` and
+`has_object_rule(user, document, ptype)` on that ViewSet. Use
+`access = Access.open(reason="…")` only after review, with a substantive reason. The
+base `DocumentViewSet` deliberately has no declaration, so a subclass that forgets one
+fails the access guard. A model with a concrete sensitive or encrypted field cannot be
+open. Document types that intentionally have no resource route are recorded once in
+`core.withheld.WITHHELD_DOCUMENT_TYPES`, with a reason; `Version` is currently the only
+entry because the timeline reads it server-side.
+
 The base serves list, create, retrieve, PATCH, and delete with the client-reference
 `{"message": ...}` envelope and status 200, including create. It never serves PUT.
 Every serializer receives `request.user` in its context and every save receives the
@@ -297,6 +349,15 @@ old `fieldname`, `filters`, `as_dict`, and ignored `parent` inputs; it calls
 cannot be bypassed. `GET <resource>/<name>/permissions/` returns the seven permission
 booleans from `has_object_rule()` and deliberately does not raise when `read` is false;
 a missing row returns an empty permissions map.
+
+The guards in `tests/guards/` walk both production and test URLconfs to validate every
+routed resource declaration, while excluding unrouted `tests_support` scaffolding from
+production-model completeness. They also reject stale or overlapping withheld entries,
+direct `Model.objects` or `_default_manager` reads in project `views.py`, `viewsets.py`,
+and `services.py` unless the exact read has a written reason, malformed or unmatched
+`built` route-map rows, production `/api/v1/` patterns absent from the route map, and
+resource creates or PATCHes that fail to stamp the authenticated caller. Test-only
+routes under `config.test_urls` are not part of production route-map coverage.
 
 ### Carrying a document name with slashes in a route
 
@@ -327,14 +388,15 @@ Declare stored credentials with `core.fields.EncryptedCharField` or
 the encrypted names from field types for the credential guard—there is no second list to
 maintain.
 
-Each resource ViewSet declares `selectable_fields`, `filterable_fields`, and
-`sortable_fields` as explicit tuples; brief 08 supplies the resource-specific values and
-adds `searchable_fields`. The first three are passed to `FilterBackend` and the
-plain query functions. `sortable_fields` also governs `group_by`. Omitting an allowlist
-means every non-hidden concrete field is available to the corresponding operation;
-supplying one only narrows access and never widens model field access. A real column
-outside an allowlist receives the same refusal as a hidden field, so the response does
-not disclose that it exists.
+Each resource ViewSet declares `readable_fields`, `filterable_fields`,
+`sortable_fields`, and `searchable_fields` as explicit tuples. The first three are
+passed to the plain query functions; `sortable_fields` also governs `group_by`.
+`DocumentViewSet` defaults each tuple to empty, so an operation has no fields until the
+resource opts them in. Supplying an allowlist only narrows access and never widens model
+field access. A real column outside an allowlist receives the same refusal as a hidden
+field, so the response does not disclose that it exists. The standalone
+`FilterBackend` uses its adapter name `selectable_fields`; resource ViewSets use
+`readable_fields` directly.
 
 `User.get_roles()` memoises on that instance. Call `user.clear_roles_cache()` after a
 test changes group membership in place; `user.refresh_from_db()` clears it automatically.
@@ -395,12 +457,11 @@ User-facing messages use the identity marker `core.translate._`; translation is
 deliberately deferred. Write numbered templates as
 `_("DocType {0} not found").format(doctype)`. Use the upstream template verbatim when
 one exists, and preserve the old port's wording when it does not. Do not use Django's
-`gettext`: activating a Django language must not translate these messages yet. This
-recipe now covers every application module built through briefs 01–08a, including
+`gettext`: activating a Django language must not translate API messages yet. This covers
 exception-envelope fragments, naming, links, email validation, lockout, filters,
-queries, trees, children, and serializers. Construction that is not a client message
-stays ordinary Python: identifiers and query keys, generated document names, `repr`s,
-logs, test data, and developer-only programming errors.
+queries, trees, children, serializers, resource views, and history. Construction that
+is not a client message stays ordinary Python: identifiers and query keys, generated
+document names, `repr`s, logs, test data, and developer-only programming errors.
 
 A wrong method has this body (shown for `GET`) and an `Allow` header:
 
@@ -426,38 +487,129 @@ recipe.*
 
 ## 3. Running it
 
-From the repository root on Windows, create the isolated Python 3.13 environment and
-install the exact pinned dependencies:
+The local command path uses Django's ASGI-capable `runserver`; `daphne` is installed and
+the project points `ASGI_APPLICATION` at `config.asgi.application`, so the HTTP and
+placeholder WebSocket routes are both served. From the repository root on Windows,
+create the isolated Python 3.13 environment and install the pinned dependencies:
 
 ```powershell
 py -3.13 -m venv backend_v2\.venv
 backend_v2\.venv\Scripts\python.exe -m pip install -r backend_v2\requirements.txt
 ```
 
-Settings read only `backend_v2/.env`; it is optional because the skeleton has defaults.
-Use `backend_v2/.env.example` when local overrides are needed. Do not reuse the root
-`.env`. From `backend_v2/`, check the project or run one test file with:
+Copy the dedicated example and edit the copy. Settings read only `backend_v2/.env`; do
+not reuse the repository-root `.env`, which belongs to `backend/`:
 
 ```powershell
-.venv\Scripts\python.exe manage.py check
-.venv\Scripts\python.exe -m pytest tests/test_skeleton.py
+Copy-Item backend_v2\.env.example backend_v2\.env
 ```
 
-Apply schema and seed migrations to the configured `opencrm_v2` database from the same
-directory with:
+Set a real `DJANGO_SECRET_KEY`, `FIELD_ENCRYPTION_KEY`, and the PostgreSQL connection
+values needed locally. Append all four suite passwords—`ADMIN_PWD`, `SALES_PWD`,
+`MANAGER_PWD`, and `SALES2_PWD`—using the values shared with the main checkout so the
+two servers can replay the same login blocks. Never commit or print this file.
+
+Start PostgreSQL 17 and Redis before Django. PostgreSQL must contain the configured
+database (normally `opencrm_v2`) and accept the `.env` credentials. Redis supplies the
+cache, Celery broker/result backend, and channel layer at the four URLs in `.env`.
+Then enter `backend_v2`, apply migrations, seed the four suite users, and check the
+project:
 
 ```powershell
+Set-Location backend_v2
 .venv\Scripts\python.exe manage.py migrate
+.venv\Scripts\python.exe manage.py seed_dev_data
+.venv\Scripts\python.exe manage.py check
 ```
 
-This also creates SimpleJWT's `token_blacklist` tables. JWT and auth-security settings
+The command reports created and reset counts per explicit seed step plus a created-row
+total. It is idempotent: FOUNDATION creates no account on a second run, while every run
+restores the four suite users' passwords, enabled flags, and exact groups. `--force` is
+accepted for later restore-default steps. `--demo` currently adds no rows and says so;
+later units use it for upstream records from `crm/demo/`.
+
+Remove only rows owned by those steps with:
+
+```powershell
+.venv\Scripts\python.exe manage.py clear_dev_data
+```
+
+Today this deletes ada, grace, and alan. It keeps Administrator and its initialized
+password, Guest, every role, and all users not named by the account seed step.
+
+Migrations also create SimpleJWT's `token_blacklist` tables. JWT and auth-security settings
 may be overridden with `JWT_ACCESS_TOKEN_LIFETIME_MINUTES`,
 `JWT_REFRESH_TOKEN_LIFETIME_DAYS`, `TRUSTED_PROXY_COUNT`,
 `LOGIN_MAX_CONSECUTIVE_ATTEMPTS`, and `LOGIN_LOCK_INTERVAL_SECONDS`; their defaults are
 5 minutes, 7 days, 0 proxies, 10 failures, and 60 seconds respectively.
 
-Database creation, migrations, seed data, the server on port 8001, the `.http` suite and
-the parity body diff are added by later FOUNDATION briefs.
+Start the new backend on port 8001 from `backend_v2/`:
+
+```powershell
+.venv\Scripts\python.exe manage.py runserver 8001
+```
+
+For pytest, keep only one pytest process alive. Run one file while developing, and the
+full suite only when the unit gate calls for it:
+
+```powershell
+.venv\Scripts\python.exe -m pytest tests/test_skeleton.py
+.venv\Scripts\python.exe -m pytest
+```
+
+Regenerate the REST copy of all 15 walkthrough files whenever a unit marks routes built:
+
+```powershell
+.venv\Scripts\python.exe scripts\build_http_suite.py
+```
+
+The command reads `../docs/http/*.http` and `docs/PORT_MAP.md`, then replaces the
+committed files in `http/` deterministically. A block marked `# @waiting UNIT` is kept
+in its original position but is not runnable until that unit supplies a concrete New
+route, marks the row `built`, and regenerates. A block marked `# @negative` deliberately
+exercises a method or URL the REST API does not serve; the runner executes it, while the
+old/new body comparison excludes it. `# @not-served PE-3` records the three
+`frappe.client.get`-by-filter blocks that have no REST copy. Do not edit generated files
+by hand.
+
+The generated files use `http://localhost:8001`; `{{$dotenv NAME}}` remains intact and
+the runner reads values from `backend_v2/.env`. With the new server already running,
+replay one generated file from `backend_v2/`:
+
+```powershell
+.venv\Scripts\python.exe scripts\run_http.py http\01_auth.http
+```
+
+The runner prints one `PASS`, `FAIL`, or `SKIP` line per request block, checks the title's
+status and every `# @expect`, executes tagged negative cases, and skips blocks waiting
+for another unit. It exits non-zero if any block fails. `--new` overrides the default
+`http://localhost:8001`, and `--timeout` sets the per-request timeout. Values read from
+`.env` are redacted from all output.
+
+For a body comparison, the old backend must be the `backend/` application in the
+**main checkout**, not the `backend/` directory in this rebuild worktree: the worktree's
+root environment names the v2 database. Seed that main checkout's old database, run it
+on port 8000, keep the new server on 8001, and then run from `backend_v2/`:
+
+```powershell
+.venv\Scripts\python.exe scripts\parity_diff.py http\01_auth.http `
+  --old http://localhost:8000 --new http://localhost:8001
+```
+
+The comparison reports `same`, `differs` with the first short JSON path difference, or
+`skipped` for waiting, negative, and PE-3 blocks. Each server has its own response-label
+and variable state, so one server's login token is never sent to the other. Rules in
+`scripts/parity_ignore.json` ignore only values: the path must exist on both sides and
+its type must match. Today's runnable FOUNDATION blocks need exactly two rules,
+`$.message.access` and `$.message.refresh`; timestamps and generated record names are
+not yet returned by a runnable block, so their paths must be added with comments only
+when the owning units make those blocks runnable. Error `exception` and
+`_server_messages` values are never ignored.
+
+`99_lockout.http` locks this machine out for 60 seconds. Run it by itself and last. The
+diff refuses to combine it with other files unless `--include-lockout` is explicit; with
+that flag it reorders the lockout file to the end. Neither script starts or stops a
+server, and both report an unreachable configured server without a traceback.
 
 ### Traps — read before starting a server or running tests
 
@@ -483,39 +635,95 @@ Each of these has already cost time on this machine:
 
 ## 4. Invariants that will bite you
 
-An unsaved document always issues an INSERT (`force_insert=True`). A caller-supplied
-name that is already taken therefore raises an integrity error instead of silently
-updating the existing row. Names are stored as Frappe supplies them (trimmed where
-Frappe trims, never slugified), and only `<` and `>` are forbidden. Every document save
-requires the acting `user`; there is no ambient current-user state or Guest fallback.
+Credential and child-field declarations are closed lists. A credential-shaped concrete
+field must be sensitive or have a written exception; every encrypted field is sensitive,
+and a sensitive true secret is encrypted unless its reviewed exception says it is hashed
+or deliberately restricted-only. Exceptions must still name real fields and give a
+substantive reason. Every child model declares `CHILD_FIELDS` directly. Installed models
+belong in their app's `models` module or package; temporary test models belong under
+`isolate_apps`, never at test-module import time. The four rules and the exception
+hygiene are guarded by `tests/guards/test_model_fields.py`.
 
-User admin bulk actions must stay disabled: Django applies them with `QuerySet.update()`,
-which skips `User.save()` and therefore skips disabled-user token revocation.
+Every production `BaseDocument` model is either served or explicitly withheld, and a
+routed ViewSet declares `Access.ruled()` or a reasoned `Access.open(...)`. Ruled resources
+define both list and object rules; a model with a concrete sensitive or encrypted field
+cannot be open. `Version` is the only current withheld type. These are guarded by
+`tests/guards/test_resource_access.py`; direct manager reads that could bypass the one
+resource queryset are rejected by `tests/guards/test_direct_model_access.py`.
 
-The attribute of an encrypted field is ciphertext after save and after load. Code that
-needs the credential must call `get_password()`; direct attribute access is deliberately
-not useful.
+Routes and writes remain explicit. Every concrete `built` New route resolves with its
+recorded method, every production `/api/v1/` pattern has a built route-map row, malformed
+route tables fail loudly, and test-only URLs do not count. Resource creates and PATCHes
+must stamp the authenticated caller. The guards are
+`tests/guards/test_route_map.py` and `tests/guards/test_write_stamps.py`.
 
-List-query callers apply the row rule first and pass that base queryset to
-`build_list_queryset()`, `fetch_rows()`, or `count_rows()`; client filters can only
-narrow it. Hidden fields are refused, not dropped, in all five field-naming parameters:
-`fields`, `filters`, `or_filters`, `order_by`, and `group_by`. A list row comes from
-`.values()`, so a decimal remains numeric for DRF's JSON encoder, while `_assign`,
-`_liked_by`, and `_comments` are JSON strings on the wire.
+An unsaved document always issues an INSERT (`force_insert=True`). A caller-supplied name
+that is already taken therefore raises instead of silently updating the existing row.
+Names follow the declared strategy, are never slugified, may contain slashes, and reject
+only `<` and `>`. Every document save requires the acting `user`; there is no ambient
+current-user state or Guest fallback (`core/tests/test_base_document.py`,
+`core/tests/test_naming.py`, `tests/test_name_validation.py`, and
+`tests/test_name_lookup.py`).
 
-A serialized document and every inline child row carry `doctype`. Document serializers
-render decimals as strings padded to the model column's decimal places; list projections
-leave decimals numeric. `_assign`, `_liked_by`, and `_comments` are JSON strings in both
-shapes. Child table input replaces the table wholesale: update writes children before
-the parent save, while create saves parent, children, then parent in one transaction.
+User tokens carry `token_version`; refresh and authentication reject stale versions, and
+every save while disabled bumps the version. User admin bulk actions must stay disabled
+because `QuerySet.update()` would skip that save hook. Login failures count against both
+the shared IP and account trackers, and only the configured trusted proxy suffix may
+supply the client IP (`tests/test_token_version.py`, `tests/test_disable_user.py`,
+`tests/test_auth.py`, `tests/test_security.py`, and `tests/test_accounts_user.py`).
 
-Every document list starts from its row-rule-narrowed queryset and its one explicit
-field policy. Record routes look up the name on the default manager: a missing record is
-404, while a found record whose object rule returns `False` is 403. Create permissions
-inspect payload fields, and a declared destination is checked against the post-PATCH
-candidate before writing. A lookup key the model primary key cannot hold is an ordinary
-not-found response.
+An encrypted field's attribute is ciphertext after save and load. Code needing plaintext
+calls `get_password()`; a missing or changed key fails with the recorded wording. The
+field is also sensitive, so it cannot be selected or inferred through queries
+(`core/tests/test_encrypted_fields.py`, `core/tests/test_field_access.py`, and the secret
+guard in `tests/guards/test_model_fields.py`).
 
-The old backend's list, which is likely to apply here too, is
-`specs/AS_BUILT.md` section 4 — `lead_owner` is the access column, names may contain
-slashes, "assigned" has two definitions, underscore caches never bump `modified`.
+List-query callers apply the row rule first and pass that queryset to
+`build_list_queryset()`, `fetch_rows()`, or `count_rows()`; client filters only narrow
+it. Hidden or non-opted-in fields are refused in `fields`, `filters`, `or_filters`,
+`order_by`, and `group_by`. Text matching is case-insensitive, nested `@me` resolves from
+the explicit user, and the five tree operators accept only `TreeDocument` relations.
+Tree saves, reparents, and deletes take the same PostgreSQL advisory lock; a rootless
+cycle written around `save()` keeps its old bounds (`core/tests/test_filters.py`,
+`core/tests/test_query.py`, `core/tests/test_filter_backend.py`,
+`core/tests/test_tree.py`, and `tests/test_field_security.py`).
+
+A serialized document and every inline child row carry `doctype`. Documents render
+decimals as padded strings; list projections leave them numeric. `_assign`, `_liked_by`,
+and `_comments` are JSON strings in both shapes. Child input replaces only the named
+table: update writes children before the parent, while create saves parent, children,
+then parent atomically. Child columns remain off the wire until added to `CHILD_FIELDS`
+(`core/tests/test_document_serializer.py`, `core/tests/test_child_tables.py`,
+`tests/test_child_rows.py`, `tests/test_document_doctype_key.py`, and
+`tests/test_wire_shapes.py`).
+
+Lists use the row-rule queryset; record routes intentionally look up by name first and
+then apply the object rule. Thus a missing record is 404 and a found denied record is
+403. Create checks an unsaved instance carrying payload fields, PATCH re-checks a changed
+destination, delete checks dynamic links before protected links, and an invalid integer
+lookup is an ordinary 404. The value route keeps the list rule and field policy; the
+permissions route returns seven booleans without turning denied read into an exception
+(`tests/test_document_viewset.py`, `tests/test_resource_api.py`,
+`tests/test_client_get_value.py`, `tests/test_document_value_routes.py`,
+`tests/test_delete_link_check.py`, and `tests/test_delete_dependants.py`).
+
+A singleton always has its doctype as its name and is exposed only at the resource root
+with GET, PATCH, and `value/`; no list, name route, POST, PUT, or DELETE exists. Its value
+route applies the object rule before field access (`tests/test_singleton_names.py` and
+`tests/test_document_value_routes.py`).
+
+Change history is opt-in through `TRACKED_FIELDS`; no-op saves and creates write no
+Version, a changed save writes one row, and document deletion cleans matching references.
+The 00:10 retention task deletes only old `CRM View Settings` versions, never general
+history (`core/tests/test_versions.py` and `core/tests/test_version_retention.py`).
+
+Development data has one explicit ordered step list. Seeding is idempotent but restores
+the four login accounts each run; clearing reverses the steps and removes only owned
+rows. Password values never appear in output (`tests/test_dev_data_commands.py`).
+
+`backend_v2/http/` is generated, not hand-edited. Generation is deterministic and fails
+on unknown or malformed mappings; replay keeps variables per runner and redacts dotenv
+values; parity comparison keeps old and new state separate and ignores a value only when
+the path exists on both sides with the same type (`tests/test_http_parser.py`,
+`tests/test_http_suite_builder.py`, `tests/test_run_http.py`, and
+`tests/test_parity_diff.py`).

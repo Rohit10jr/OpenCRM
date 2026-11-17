@@ -44,6 +44,7 @@ commit its reference was read at.
 |---|---|---|---|
 | `/api/resource/<DocType>` — list, create. Not served by `backend_v2`: replaced by each resource's collection route | each resource's app | each resource's unit | — |
 | `/api/resource/<DocType>/<name>` — read, update, delete. Not served by `backend_v2`: replaced by each resource's document route | each resource's app | each resource's unit | — |
+| `/api/method/crm.api.no_such_thing` → `/api/v1/no-such-thing/` — negative 404 case; neither route is served | config | FOUNDATION | built |
 | `ws/realtime?token=<access>` — WebSocket | notifications | NOTIFICATIONS | — |
 | `/admin/` — Django admin, not part of the contract | config | FOUNDATION | — |
 
@@ -53,7 +54,7 @@ commit its reference was read at.
 |---|---|---|---|---|
 | `frappe_core.NamingSeriesCounter` | One counter row per resolved naming-series prefix | core | FOUNDATION | built |
 | `frappe_platform.UserSettings` | Per-user list-view state behind `frappe.model.utils.user_settings.*` | configuration | CONFIGURATION | — |
-| SimpleJWT `token_blacklist` tables | Rotated and logged-out refresh tokens | accounts | FOUNDATION | — |
+| SimpleJWT `token_blacklist` tables | Rotated and logged-out refresh tokens | accounts | FOUNDATION | built |
 
 ---
 
@@ -91,7 +92,7 @@ on seed data from a unit the scan cannot see.
 
 | DocType | Kind | Naming | Old protection | Declared fields | Old model | New app | Status |
 |---|---|---|---|---|---|---|---|
-| User | main | default | ruled: list rule, object rule | S: `groups`, `user_permissions`, `is_superuser`, `is_staff`, `reset_password_key`, `last_reset_password_key_generated_on`, `token_version`; RO: `enabled`, `user_type` | `frappe_platform.User` | accounts | — |
+| User | main | default | ruled: list rule, object rule; no `User` route until ACCOUNTS, so these protections are not yet enforced and tested on a route | S: `groups`, `user_permissions`, `is_superuser`, `is_staff`, `reset_password_key`, `last_reset_password_key_generated_on`, `token_version`; RO: `enabled`, `user_type` | `frappe_platform.User` | accounts | — |
 | Version | withheld | `Hash(10)` | withheld — `specs/UNROUTED_DOCTYPES.md` |  | `frappe_core.Version` | core | built |
 
 ### Method paths (12)
