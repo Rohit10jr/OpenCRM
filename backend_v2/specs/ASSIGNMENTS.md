@@ -64,6 +64,15 @@ SHARED_ACTIONS (the conditions evaluator, `core/conditions.py`).
 - **Assigning notifies the assignee** (FINDINGS 18).
 - **A rule's description renders in the sandbox** — template text is user-authored.
 - Add ToDo to FOUNDATION's reference-cleanup table in `core/children.py`.
+- **Two models without routes** (owner, 17 Nov 2026) — follow AS_BUILT "Writing a row
+  rule" (the six-point list) for both:
+  - **ToDo, permanently withheld:** an entry in `core/withheld.py`, the guard's exact
+    withheld set updated, and a link-scan classification (it is already in
+    `IGNORE_LINKS_ON_DELETE`, `core/delete.py:22` — confirm that suffices).
+  - **Assignment Rule, withheld only until ACTIVITIES routes it:** this unit lists it in
+    `core/withheld.py` with `ROW_RULES` or an explicit ignore, so the served-or-withheld
+    and link-scan guards pass; ACTIVITIES removes both when it adds the routes (its
+    "Carried from ASSIGNMENTS").
 
 ## 5. Acceptance
 
@@ -72,7 +81,12 @@ SHARED_ACTIONS (the conditions evaluator, `core/conditions.py`).
   hook's skip list; the condition-error path.
 - No `.http` block of its own: the assignment blocks are ACTIVITIES' and SALES'.
 
-## 6. Questions for the owner — after the spec check, before the first build brief
+## 6. Questions — after the spec check, before the first build brief
+
+Design choices inside the plan: decided at the spec review by the supervising session
+with Codex/agy (owner, 17 Nov 2026; DECISIONS 20), summarised for the owner in
+`temp\SPEC_REVIEWS.md`. Supervisor's early view on the second: yes.
+
 
 - **How the generic save hook is wired** without a registry (S24): a `post_save` signal
   connected per model in `activities/apps.py`, or an explicit call from `BaseDocument`'s

@@ -94,7 +94,36 @@ parity copies it.)
   sent in the email (milestone-3 review, finding 7).
 - Before any role-dependent body comparison, restore the old `opencrm` database's
   drifted suite-user roles: ada currently also has Sales Manager, grace has Sales User
-  instead of Sales Manager, and alan has no role.
+  instead of Sales Manager, and alan has no role. **How (owner, 17 Nov 2026; DECISIONS
+  19):** run `backend_v2`'s users seed step against `opencrm` once, before this unit's
+  gate, with `DEV_DATA_ALLOWED` on for that run only; passwords from `backend_v2\.env`,
+  never printed; it deletes nothing. Re-check the roles read-only afterwards
+  (`backend/crm_app/management/commands/seed_e2e_users.py` resets only Administrator and
+  ada, so it is not enough on its own).
+- **Two `parity_diff.py` fixes before this unit's gate** (owner, 17 Nov 2026; from #66):
+  run `99_lockout` against each backend in turn, not interleaved (alternating the two
+  servers spreads the 11 failed logins past the 60 s window, so neither locks); and
+  compare `Retry-After` within ±1 s, or by presence, not exactly (it counts down).
+- **Development-data safety, both measures** (owner, 17 Nov 2026; DECISIONS 9): move
+  `DEV_DATA_ALLOWED` from the settings files into `backend_v2\.env`, next to `DB_NAME`,
+  default off (the flag belongs to the database it names, as Frappe's per-site
+  `allow_tests`); and make the seed record every row it creates (e.g. a small
+  `DevDataRecord`: model, primary key, step) so `clear_dev_data` deletes only those
+  rows. Reason: a future setup wizard will load demo data on real sites, as Frappe CRM's
+  `crm/demo/` does. Note for that wizard: its demo users are created only if absent
+  (as `crm/demo/users.py:38`), unlike the dev seed, which resets passwords every run.
+- **`User` as a resource** (owner, 17 Nov 2026; DECISIONS 18, `temp` A-13): route it on a
+  `DocumentViewSet` subclass. `User` is not a `BaseDocument`, so give it the
+  `BaseDocument` helpers and class settings (`get_doctype()`, `DOCTYPE`, …) **in any
+  case** — without `get_doctype()` the old per-record permission check answered
+  "allowed" for every User (`backend/frappe_core/permissions.py:34-43`, patched at
+  `registry.py:198-205`) — and handle its missing `owner`/`modified_by` in one small,
+  tested place in the base. Test that `User`'s object rule is actually applied (a Sales
+  User editing another user's row is refused). **First, investigate** (supervisor, with
+  Codex/agy) whether `User` should also get the standard fields (`owner`, `modified_by`,
+  `idx`, `docstatus`, `_assign`…): compare Frappe's own User doctype with `backend/`'s
+  and find every use. If the evidence supports adding them, a `User`-only parity
+  exception is pre-approved by the owner, under the conditions in A-13.
 
 ## 8. Carried from SHARED_ACTIONS
 
