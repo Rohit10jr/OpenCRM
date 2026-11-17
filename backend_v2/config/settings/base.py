@@ -14,7 +14,9 @@ environ.Env.read_env(str(ENV_FILE))
 SECRET_KEY = env("DJANGO_SECRET_KEY", default="django-insecure-fallback-for-tests-only")
 FIELD_ENCRYPTION_KEY = env("FIELD_ENCRYPTION_KEY", default="")
 DEBUG = env.bool("DJANGO_DEBUG", default=False)
-DEV_DATA_ALLOWED = False
+# The flag belongs to the database it names (owner, DECISIONS 9): set it in that database's
+# .env, never in a settings file. Off unless the environment turns it on.
+DEV_DATA_ALLOWED = env.bool("DEV_DATA_ALLOWED", default=False)
 ALLOWED_HOSTS = env.list(
     "DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"]
 )

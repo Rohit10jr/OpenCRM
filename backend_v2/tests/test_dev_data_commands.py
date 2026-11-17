@@ -166,3 +166,44 @@ def test_demo_is_accepted_and_reports_that_it_adds_nothing_yet(passwords):
     call_command("seed_dev_data", demo=True, stdout=output)
 
     assert "Demo records are not available yet." in output.getvalue()
+
+
+# --- ACCOUNTS milestone 3: the flag comes from the database's .env (DECISIONS 9) ----------
+
+FLAG_PROBE = (
+    "import os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.local'); "
+    "import django; from django.conf import settings; "
+    "print(f'FLAG:{settings.DEV_DATA_ALLOWED}')"
+)
+
+
+@pytest.mark.parametrize("value,expected", [("False", "FLAG:False"), ("True", "FLAG:True")])
+def test_the_local_settings_take_the_flag_from_the_environment(value, expected):
+    """No settings module turns it on any more: the environment (the database's .env)
+    decides. The explicit value overrides whatever the developer's .env says."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    env = dict(
+        os.environ,
+        DEV_DATA_ALLOWED=value,
+        DJANGO_SETTINGS_MODULE="config.settings.local",
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", FLAG_PROBE],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert expected in result.stdout.splitlines()
+
+
+def test_the_test_settings_keep_it_on_for_the_scratch_database():
+    from django.conf import settings
+
+    assert settings.DEV_DATA_ALLOWED is True
