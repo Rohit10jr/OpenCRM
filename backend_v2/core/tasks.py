@@ -76,6 +76,8 @@ def delete_bulk_docs(
         raise TypeError("Bulk-delete task requires an opted-in DocumentViewSet")
 
     user = by_name(get_user_model(), user_name).first() if user_name else None
+    if user is not None and not user.enabled:
+        user = None  # PE-6: refused like a missing requester; nothing is deleted
     targets = authorize_bulk_delete(
         viewset_class, [str(item) for item in items], user
     )

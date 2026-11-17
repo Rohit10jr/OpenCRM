@@ -479,7 +479,7 @@ object-delete rule runs on the loaded visible instances. Missing names are dropp
 the first invisible name in sorted order, then the first object-denied name, refuses
 the batch. Ten authorized existing targets run inline and eleven queue
 `core.delete_bulk_docs`; both answer `{"message": "success"}`. The worker reloads the
-requesting user, repeats authorization, accepts only a `DocumentViewSet` opted in with
+requesting user, treats a disabled one as missing (PE-6), repeats authorization, accepts only a `DocumentViewSet` opted in with
 the mixin, and calls the perform half directly so it never re-enqueues. Its queued
 URLconf is limited to the production URLconf or the running settings' URLconf; an omitted
 value selects production, and any other value is refused before authorization.

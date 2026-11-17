@@ -182,6 +182,21 @@ def test_worker_denies_a_missing_requesting_user(alice, user_name):
     assert Widget.objects.filter(pk=document.pk).exists()
 
 
+def test_worker_denies_a_requester_disabled_after_queuing(alice):
+    """PE-6: the old worker (backend/crm_app/tasks.py:340-344) never checks enabled."""
+    document = widgets(alice, 1)[0]
+    alice.enabled = False
+    alice.save(update_fields=["enabled"])
+    with pytest.raises(PermissionError, match="No permission to delete"):
+        delete_bulk_docs(
+            "tests_support.views.WidgetViewSet",
+            [document.pk],
+            user_name=alice.name,
+            urlconf="config.test_urls",
+        )
+    assert Widget.objects.filter(pk=document.pk).exists()
+
+
 @pytest.mark.parametrize(
     "path", ["core.views.DocumentViewSet", "tests_support.views.FieldDocumentViewSet"]
 )

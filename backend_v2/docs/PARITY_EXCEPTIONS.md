@@ -151,20 +151,21 @@ comparison skips that block.
 
 ### PE-6. Both queued bulk workers refuse a missing or disabled requester
 
-- **Status:** proposed — parked for the owner (`temp` A-11 finding 1, DECISIONS 16,
-  16 Nov 2026)
+- **Status:** approved — owner, 17 Nov 2026 (proposed 16 Nov 2026)
 - **Where:** the queued halves of bulk update (`core.bulk_update_docs`, 20–500 documents)
   and bulk delete (`core.delete_bulk_docs`, more than ten). No `.http` block found
 - **Old backend:** neither worker checks `enabled`: each binds the requesting user and
   re-checks the row rules as that user (`backend/crm_app/bulk_update.py:111-134`,
   `backend/crm_app/tasks.py:321-345`). A user disabled after queuing still has the job run
 - **backend_v2:** both workers refuse a requester who is missing or disabled; bulk update
-  fails every document, bulk delete deletes nothing. **Today only the bulk-update worker
-  does this** (`core/tasks.py`, built before the divergence was noticed) — an unapproved
-  difference until this entry is decided; bulk delete keeps the old behaviour
+  fails every document; bulk delete refuses the batch as it refuses a missing requester
+  (the job raises `PermissionError`, `No permission to delete <DocType> <name>`) and
+  deletes nothing
+  (`backend_v2/core/tasks.py`, `bulk_update_docs` and `delete_bulk_docs`)
 - **Why:** a queued job outlives its request; disabling an account should revoke what it
   queued. Other users can see the difference (records not updated or deleted), so only
-  the owner approves it
+  the owner approves it. Upstream has the same gap: its worker only sets the user
+  (`frappe.set_user`), with no `enabled` check
 - **Recorded by:** SHARED_ACTIONS, 16 Nov 2026
 
 ---
