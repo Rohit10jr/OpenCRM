@@ -212,25 +212,22 @@ Content-Type: application/json
 # ---- forgot password. The response never varies: CWE-204, and upstream's own comment. ----
 
 ### 3.1 reset for a real account -> 200, the generic sentence; the mail lands in the backend console
-# @waiting ACCOUNTS
 # @expect $.message.message == If this email is registered with us, we have sent password reset instructions to it. Please check your inbox.
-POST {{host}}/api/method/frappe.core.doctype.user.user.reset_password
+POST {{host}}/api/v1/auth/reset-password/
 Content-Type: application/json
 
 {"user": "{{manager}}"}
 
 ### 3.2 reset for an address that does not exist -> 200, byte-identical
-# @waiting ACCOUNTS
 # @expect $.message.message == If this email is registered with us, we have sent password reset instructions to it. Please check your inbox.
-POST {{host}}/api/method/frappe.core.doctype.user.user.reset_password
+POST {{host}}/api/v1/auth/reset-password/
 Content-Type: application/json
 
 {"user": "ghost@example.com"}
 
 ### 3.3 reset for a disabled built-in -> 200, still identical
-# @waiting ACCOUNTS
 # @expect $.message.message == If this email is registered with us, we have sent password reset instructions to it. Please check your inbox.
-POST {{host}}/api/method/frappe.core.doctype.user.user.reset_password
+POST {{host}}/api/v1/auth/reset-password/
 Content-Type: application/json
 
 {"user": "Guest"}
@@ -238,71 +235,62 @@ Content-Type: application/json
 # ---- set / update password ---------------------------------------------------------------
 
 ### 4.1 a key that was never issued -> 410, and "used" and "invalid" share one message on purpose
-# @waiting ACCOUNTS
 # @expect $.message == The reset password link has either been used before or is invalid
-POST {{host}}/api/method/frappe.core.doctype.user.user.update_password
+POST {{host}}/api/v1/auth/update-password/
 Content-Type: application/json
 
 {"key": "not-a-real-key", "new_password": "{{temp_pwd}}"}
 
 ### 4.2 neither a key nor an old password -> 417
-# @waiting ACCOUNTS
 # @expect $.message == Provide either a reset key or your current password
-POST {{host}}/api/method/frappe.core.doctype.user.user.update_password
+POST {{host}}/api/v1/auth/update-password/
 Content-Type: application/json
 
 {"new_password": "{{temp_pwd}}"}
 
 ### 4.3 no new password -> 417
-# @waiting ACCOUNTS
 # @expect $.message == New password is required
-POST {{host}}/api/method/frappe.core.doctype.user.user.update_password
+POST {{host}}/api/v1/auth/update-password/
 Content-Type: application/json
 
 {"key": "not-a-real-key"}
 
 ### 4.4 old-password path, wrong old password -> 401 (upstream's status for this case)
-# @waiting ACCOUNTS
 # @expect $.message == Invalid password
-POST {{host}}/api/method/frappe.core.doctype.user.user.update_password
+POST {{host}}/api/v1/auth/update-password/
 Content-Type: application/json
 
 {"usr": "{{sales}}", "old_password": "wrong", "new_password": "{{temp_pwd}}"}
 
 ### 4.5 old-password path without naming the account -> 401
-# @waiting ACCOUNTS
 # @expect $.message == Invalid password
-POST {{host}}/api/method/frappe.core.doctype.user.user.update_password
+POST {{host}}/api/v1/auth/update-password/
 Content-Type: application/json
 
 {"old_password": "{{sales_pwd}}", "new_password": "{{temp_pwd}}"}
 
 ### 4.6 a weak new password is refused server-side -> 417
-# @waiting ACCOUNTS
 # @expect $.exc_type == ValidationError
-POST {{host}}/api/method/frappe.core.doctype.user.user.update_password
+POST {{host}}/api/v1/auth/update-password/
 Content-Type: application/json
 
 {"usr": "{{sales}}", "old_password": "{{sales_pwd}}", "new_password": "1234"}
 
 ### 4.7 change ada's password -> 200, and it returns a token pair, same shape as login
-# @waiting ACCOUNTS
 # @expect $.message.access exists
 # @expect $.message.user == ada@example.com
-POST {{host}}/api/method/frappe.core.doctype.user.user.update_password
+POST {{host}}/api/v1/auth/update-password/
 Content-Type: application/json
 
 {"usr": "{{sales}}", "old_password": "{{sales_pwd}}", "new_password": "{{temp_pwd}}"}
 
 ### 4.8 the old password no longer logs in -> 401
-# @waiting ACCOUNTS
 POST {{host}}/api/v1/auth/login/
 Content-Type: application/json
 
 {"usr": "{{sales}}", "pwd": "{{sales_pwd}}"}
 
 ### 4.9 the new one does -> 200
-# @waiting ACCOUNTS
 # @expect $.message.user == ada@example.com
 POST {{host}}/api/v1/auth/login/
 Content-Type: application/json
@@ -310,15 +298,13 @@ Content-Type: application/json
 {"usr": "{{sales}}", "pwd": "{{temp_pwd}}"}
 
 ### 4.10 change it back -> 200 (if this block fails, ada's password is the temp one above)
-# @waiting ACCOUNTS
 # @expect $.message.user == ada@example.com
-POST {{host}}/api/method/frappe.core.doctype.user.user.update_password
+POST {{host}}/api/v1/auth/update-password/
 Content-Type: application/json
 
 {"usr": "{{sales}}", "old_password": "{{temp_pwd}}", "new_password": "{{sales_pwd}}"}
 
 ### 4.11 and the original works again -> 200
-# @waiting ACCOUNTS
 # @expect $.message.user == ada@example.com
 POST {{host}}/api/v1/auth/login/
 Content-Type: application/json
@@ -328,22 +314,20 @@ Content-Type: application/json
 # ---- invitation redemption ----------------------------------------------------------------
 
 ### 5.1 a key nobody issued -> 417, upstream's message
-# @waiting ACCOUNTS
 # @expect $.message == Invalid or expired key
-POST {{host}}/api/method/crm.api.accept_invitation
+POST {{host}}/api/v1/auth/accept-invitation/
 Content-Type: application/json
 
 {"key": "not-a-real-key"}
 
 ### 5.2 no key at all -> 417
-# @waiting ACCOUNTS
 # @expect $.message == Invalid or expired key
-POST {{host}}/api/method/crm.api.accept_invitation
+POST {{host}}/api/v1/auth/accept-invitation/
 Content-Type: application/json
 
 {}
 
-### 5.3 GET works too, because the emailed link is a GET -> 417 for a bad key, not 403
-# @waiting ACCOUNTS
-# @expect $.message == Invalid or expired key
-GET {{host}}/api/method/crm.api.accept_invitation?key=not-a-real-key
+### 5.3 GET works too, because the emailed link is a GET -> 405 for a bad key, not 403
+# @negative
+# @expect $.exc_type == MethodNotAllowed
+GET {{host}}/api/v1/auth/accept-invitation/

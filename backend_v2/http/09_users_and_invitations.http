@@ -61,22 +61,22 @@ DELETE {{host}}/api/v1/users/zz.temp@example.com/
 Authorization: Bearer {{token}}
 
 ### 0.5 leftover invitations -> 200
-# @waiting ACCOUNTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
 # @name old_inv
-GET {{inv}}?fields=["name"]&filters=[["email","like","zz.%25"]]
+GET {{host}}/api/v1/invitations/?fields=["name"]&filters=[["email","like","zz.%25"]]
 Authorization: Bearer {{token}}
 
 ### 0.6 -> 200|404
-# @waiting ACCOUNTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{inv}}/{{old_inv.response.body.$.data[0].name}}
+DELETE {{host}}/api/v1/invitations/{{old_inv.response.body.$.message[0].name}}/
 Authorization: Bearer {{token}}
 
 ### 0.7 -> 200|404
-# @waiting ACCOUNTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{inv}}/{{old_inv.response.body.$.data[1].name}}
+DELETE {{host}}/api/v1/invitations/{{old_inv.response.body.$.message[1].name}}/
 Authorization: Bearer {{token}}
 
 ### 0.8 leftover leads -> 200
@@ -341,97 +341,89 @@ Content-Type: application/json
 
 {"new_role": "Sales User"}
 ### 4.1 a Sales User may not invite -> 403 "Not permitted"
-# @waiting ACCOUNTS
 # @expect $.exc_type == PermissionError
-POST {{host}}/api/method/crm.api.invite_by_email
+POST {{host}}/api/v1/invitations/invite-by-email/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"emails": "zz.invitee@example.test", "role": "Sales User"}
 
 ### 4.2 a Sales Manager may not invite a System Manager -> 403, crm/api/__init__.py:116 verbatim
-# @waiting ACCOUNTS
 # @expect $.message == You are not allowed to invite System Managers
-POST {{host}}/api/method/crm.api.invite_by_email
+POST {{host}}/api/v1/invitations/invite-by-email/
 Authorization: Bearer {{mtoken}}
 Content-Type: application/json
 
 {"emails": "zz.invitee@example.test", "role": "System Manager"}
 
 ### 4.3 nor a Sales Manager -> 403, :119 verbatim
-# @waiting ACCOUNTS
 # @expect $.message == You are not allowed to invite Sales Managers
-POST {{host}}/api/method/crm.api.invite_by_email
+POST {{host}}/api/v1/invitations/invite-by-email/
 Authorization: Bearer {{mtoken}}
 Content-Type: application/json
 
 {"emails": "zz.invitee@example.test", "role": "Sales Manager"}
 
 ### 4.4 a role outside the three -> 403 "Cannot invite for this role"
-# @waiting ACCOUNTS
 # @expect $.message == Cannot invite for this role
-POST {{host}}/api/method/crm.api.invite_by_email
+POST {{host}}/api/v1/invitations/invite-by-email/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"emails": "zz.invitee@example.test", "role": "Guest"}
 
 ### 4.5 a Sales Manager invites two addresses as Sales User; one is already a member -> the three-way split
-# @waiting ACCOUNTS
 # @expect $.message.to_invite contains zz.invitee@example.test
 # @expect $.message.existing_members contains ada@example.com
 # @expect $.message.existing_invites count 0
-POST {{host}}/api/method/crm.api.invite_by_email
+POST {{host}}/api/v1/invitations/invite-by-email/
 Authorization: Bearer {{mtoken}}
 Content-Type: application/json
 
 {"emails": "zz.invitee@example.test, ada@example.com, not-an-address", "role": "Sales User"}
 
 ### 4.6 the same address again -> existing_invites, nothing new
-# @waiting ACCOUNTS
 # @expect $.message.existing_invites contains zz.invitee@example.test
 # @expect $.message.to_invite count 0
-POST {{host}}/api/method/crm.api.invite_by_email
+POST {{host}}/api/v1/invitations/invite-by-email/
 Authorization: Bearer {{mtoken}}
 Content-Type: application/json
 
 {"emails": "zz.invitee@example.test", "role": "Sales User"}
 
 ### 4.7 the invitation row, as a manager: Pending, the role, and NO key on the wire
-# @waiting ACCOUNTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @name invrow
-# @expect $.data count 1
-# @expect $.data[0].status == Pending
-# @expect $.data[0].role == Sales User
-# @expect $.data[0].key absent
-GET {{inv}}?fields=["*"]&filters=[["email","=","zz.invitee@example.test"]]
+# @expect $.message count 1
+# @expect $.message[0].status == Pending
+# @expect $.message[0].role == Sales User
+# @expect $.message[0].key absent
+GET {{host}}/api/v1/invitations/?fields=["*"]&filters=[["email","=","zz.invitee@example.test"]]
 Authorization: Bearer {{mtoken}}
 
 ### 4.8 a Sales User cannot see invitations at all -> empty list
-# @waiting ACCOUNTS
-# @expect $.data count 0
-GET {{inv}}?fields=["name"]&filters=[["email","=","zz.invitee@example.test"]]
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message count 0
+GET {{host}}/api/v1/invitations/?fields=["name"]&filters=[["email","=","zz.invitee@example.test"]]
 Authorization: Bearer {{stoken}}
 
 ### 4.9 ...nor forge one that grants System Manager -> 403
-# @waiting ACCOUNTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == PermissionError
-POST {{inv}}
+POST {{host}}/api/v1/invitations/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"email": "zz.evil@example.test", "role": "System Manager", "status": "Pending", "key": "chosen-by-me"}
-
 ### 4.10 filtering on the key is refused rather than answered -> 400
-# @waiting ACCOUNTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.message contains Cannot filter
-GET {{inv}}?fields=["name"]&filters=[["key","like","a%25"]]
+GET {{host}}/api/v1/invitations/?fields=["name"]&filters=[["key","like","a%25"]]
 Authorization: Bearer {{mtoken}}
 
 ### 4.11 an empty address list -> 200, null
-# @waiting ACCOUNTS
 # @expect $.message == null
-POST {{host}}/api/method/crm.api.invite_by_email
+POST {{host}}/api/v1/invitations/invite-by-email/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -579,8 +571,8 @@ DELETE {{host}}/api/resource/CRM%20Lead/{{lead}}
 Authorization: Bearer {{mtoken}}
 
 ### 8.2 delete the invitation -> 200
-# @waiting ACCOUNTS
-DELETE {{inv}}/{{invrow.response.body.$.data[0].name}}
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/invitations/{{invrow.response.body.$.message[0].name}}/
 Authorization: Bearer {{token}}
 
 ### 8.3 delete the throwaway account -> 200
