@@ -133,3 +133,29 @@ def test_remove_crm_roles_drops_roles_and_the_hierarchy_node(
     assert response.json() == {"message": f"User {bob.name} has been removed from CRM roles."}
     assert roles(bob) == set()
     assert not CRMSalesHierarchy.objects.filter(user=bob).exists()
+
+
+def test_an_empty_role_is_refused_not_defaulted(grace, make_user, api_as):
+    """The default applies only when `role` is absent (old user.py:111, A-23)."""
+    make_user("new@example.com")
+    response = api_as(grace).post(
+        f"{USERS}add-existing/", {"users": ["new@example.com"], "role": ""}, format="json"
+    )
+    assert response.status_code == 417
+    assert response.json()["messages"] == ["Cannot assign this role"]
+
+
+def test_a_caller_who_demotes_themselves_is_refused_for_the_next_name(
+    grace, bob, api_as
+):
+    """The old loop re-reads the caller's roles per name (user.py:21-25, A-23)."""
+    bob.groups.clear()
+    response = api_as(grace).post(
+        f"{USERS}add-existing/",
+        {"users": [grace.name, bob.name], "role": "Sales User"},
+        format="json",
+    )
+    assert roles(grace) == {"Sales User"}
+    assert response.status_code == 403
+    assert response.json()["messages"] == ["Not permitted"]
+    assert roles(bob) == set()

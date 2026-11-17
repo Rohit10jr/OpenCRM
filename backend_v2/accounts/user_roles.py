@@ -55,6 +55,9 @@ def add_existing_users(user, users, role="Sales User") -> None:
     if isinstance(names, str):
         names = [names]
     for name in names:
+        # The old code re-reads the caller's roles on every call (user.py:21-25): a
+        # caller who demotes themselves part-way is refused for the next name.
+        user.clear_roles_cache()
         update_user_role(user, name, role)
 
 

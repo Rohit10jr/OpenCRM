@@ -88,7 +88,9 @@ class UserViewSet(LinkSearchMixin, DocumentViewSet):
         """`crm.api.user.add_existing_users`."""
         inputs = build_payload(request)
         user_roles.add_existing_users(
-            request.user, inputs.get("users"), inputs.get("role") or "Sales User"
+            # The default applies only when `role` is absent (old user.py:111); an empty
+            # one reaches update_user_role and is refused there.
+            request.user, inputs.get("users"), inputs.get("role", "Sales User")
         )
         return Response(Envelope(None, "message"))
 
