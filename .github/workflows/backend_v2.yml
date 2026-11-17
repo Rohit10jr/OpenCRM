@@ -2,7 +2,10 @@
 #
 # The rebuild lives on `django-rebuild`, and its milestone pull requests target that
 # branch, so this runs on pull requests into it and pushes to it (and to main, once the
-# rebuild merges). A newer push to the same pull request cancels the run still going.
+# rebuild merges). Milestones built while earlier ones wait unmerged are stacked: their
+# pull requests target the previous milestone's `rebuild/...` branch, so those bases run
+# it too (owner, 17 Nov 2026). A newer push to the same pull request cancels the run
+# still going.
 #
 # As in backend.yml, the workflow always starts and the `changes` job decides whether
 # the tests run — only when backend_v2/ or this file changed — so a required check never
@@ -19,7 +22,7 @@ on:
   push:
     branches: [django-rebuild, main]
   pull_request:
-    branches: [django-rebuild, main]
+    branches: [django-rebuild, main, 'rebuild/**']
 
 concurrency:
   group: backend-v2-${{ github.ref }}
