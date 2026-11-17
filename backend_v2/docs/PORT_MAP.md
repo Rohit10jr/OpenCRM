@@ -130,25 +130,36 @@ the alias `refresh_token`, all in the body. The old paths also answered a second
 |---|---|---|---|---|---|---|---|
 | CRM Invitation | main | `Hash(10)` | ruled: list rule, object rule | S: `key` | `crm_app.CRMInvitation` | accounts | — |
 | CRM Sales Hierarchy | main | `Hash(10)` | ruled: list rule, object rule |  | `crm_app.CRMSalesHierarchy` | accounts | — |
-| User Email | child | `Hash(10)` | n/a |  | `frappe_platform.UserEmail` | accounts | — |
+| User Email | child | `Hash(10)` | n/a |  | `frappe_platform.UserEmail` | configuration (moved to CONFIGURATION with Email Account, `temp` A-21 D-D) | — |
+
+New routes for the resources (S25): User `/api/v1/users/` and `/api/v1/users/<name>/`
+(the FOUNDATION row above; ACCOUNTS marks it built); CRM Invitation `/api/v1/invitations/`
+and `/api/v1/invitations/<name>/`; CRM Sales Hierarchy `/api/v1/sales-hierarchies/` and
+`/api/v1/sales-hierarchies/<name>/`. Each: `GET`/`POST` on the collection, `GET`/`PATCH`/
+`DELETE` on a record. `User` opts in to search only; `frappe.client.rename_doc` on `User`
+is **not served** (`specs/ACCOUNTS.md` §1). On `User`, a `name` sent in a PATCH is ignored
+(PE-7, proposed).
 
 ### Method paths (13)
 
-| Dotted path | Verbs | Access | Old source | New app | Status |
-|---|---|---|---|---|---|
-| `crm.api.accept_invitation` | GET/POST | guest | `crm_app/api/auth_pages.py:accept_invitation` | accounts | — |
-| `crm.api.auth.oauth_providers` | GET/POST | guest | `crm_app/api/auth.py:oauth_providers` | accounts | — |
-| `crm.api.get_user_signature` | GET/POST | auth | `crm_app/api/misc.py:get_user_signature` | accounts | — |
-| `crm.api.invite_by_email` | GET/POST | auth | `crm_app/api/misc.py:invite_by_email` | accounts | — |
-| `crm.api.session.get_user_info` | GET/POST | auth | `crm_app/api/session.py:get_user_info` | accounts | — |
-| `crm.api.session.get_users` | GET/POST | auth | `crm_app/api/session.py:get_users` | accounts | — |
-| `crm.api.user.add_existing_users` | GET/POST | auth | `crm_app/api/user.py:add_existing_users` | accounts | — |
-| `crm.api.user.change_password` | GET/POST | auth | `crm_app/api/user.py:change_password` | accounts | — |
-| `crm.api.user.remove_crm_roles_from_user` | GET/POST | auth | `crm_app/api/user.py:remove_crm_roles_from_user` | accounts | — |
-| `crm.api.user.update_user_role` | GET/POST | auth | `crm_app/api/user.py:update_user_role` | accounts | — |
-| `frappe.core.doctype.user.user.get_timezones` | GET/POST | auth | `crm_app/api/desk.py:get_timezones` | accounts | — |
-| `frappe.core.doctype.user.user.reset_password` | POST | guest | `crm_app/api/auth_pages.py:reset_password` | accounts | — |
-| `frappe.core.doctype.user.user.update_password` | POST | guest | `crm_app/api/auth_pages.py:update_password` | accounts | — |
+Inputs keep their names. Only the user moves into the URL, for the two per-user role
+actions (`user` in the old body).
+
+| Dotted path | Verbs | Access | Old source | New route | New app | Status |
+|---|---|---|---|---|---|---|
+| `crm.api.accept_invitation` | GET/POST | guest | `crm_app/api/auth_pages.py:accept_invitation` | `POST /api/v1/auth/accept-invitation/` | accounts | — |
+| `crm.api.auth.oauth_providers` | GET/POST | guest | `crm_app/api/auth.py:oauth_providers` | `GET /api/v1/auth/oauth-providers/` | accounts | — |
+| `crm.api.get_user_signature` | GET/POST | auth | `crm_app/api/misc.py:get_user_signature` | `GET /api/v1/users/signature/` | accounts | — |
+| `crm.api.invite_by_email` | GET/POST | auth | `crm_app/api/misc.py:invite_by_email` | `POST /api/v1/invitations/invite-by-email/` | accounts | — |
+| `crm.api.session.get_user_info` | GET/POST | auth | `crm_app/api/session.py:get_user_info` | `GET /api/v1/users/info/`, `POST /api/v1/users/info/` (a list of up to 200 names) | accounts | — |
+| `crm.api.session.get_users` | GET/POST | auth | `crm_app/api/session.py:get_users` | `GET /api/v1/users/directory/` | accounts | — |
+| `crm.api.user.add_existing_users` | GET/POST | auth | `crm_app/api/user.py:add_existing_users` | `POST /api/v1/users/add-existing/` | accounts | — |
+| `crm.api.user.change_password` | GET/POST | auth | `crm_app/api/user.py:change_password` | `POST /api/v1/auth/change-password/` | accounts | — |
+| `crm.api.user.remove_crm_roles_from_user` | GET/POST | auth | `crm_app/api/user.py:remove_crm_roles_from_user` | `POST /api/v1/users/<user>/remove-crm-roles/` (`user` in the URL) | accounts | — |
+| `crm.api.user.update_user_role` | GET/POST | auth | `crm_app/api/user.py:update_user_role` | `POST /api/v1/users/<user>/update-role/` (`user` in the URL) | accounts | — |
+| `frappe.core.doctype.user.user.get_timezones` | GET/POST | auth | `crm_app/api/desk.py:get_timezones` | `GET /api/v1/users/timezones/` | accounts | — |
+| `frappe.core.doctype.user.user.reset_password` | POST | guest | `crm_app/api/auth_pages.py:reset_password` | `POST /api/v1/auth/reset-password/` | accounts | — |
+| `frappe.core.doctype.user.user.update_password` | POST | guest | `crm_app/api/auth_pages.py:update_password` | `POST /api/v1/auth/update-password/` | accounts | — |
 
 ## CONFIGURATION
 
