@@ -19,3 +19,11 @@ def test_the_test_run_has_inline_tasks_local_mail_and_no_config_account():
     assert settings.CELERY_TASK_ALWAYS_EAGER is True
     assert settings.EMAIL_BACKEND == "django.core.mail.backends.locmem.EmailBackend"
     assert settings.EMAIL_HOST == ""
+
+
+def test_tasks_land_on_the_old_default_queue():
+    """A worker started as the old one is (`-Q default`) receives backend_v2's tasks."""
+    from config.celery import app
+
+    assert settings.CELERY_TASK_DEFAULT_QUEUE == "default"
+    assert app.conf.task_default_queue == "default"

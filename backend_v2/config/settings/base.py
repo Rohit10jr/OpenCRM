@@ -187,6 +187,9 @@ CELERY_RESULT_BACKEND = env(
 )
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_ENABLE_UTC = True
+# The queue the old backend's tasks and beat entries use (backend/config/settings/base.py:317),
+# so a worker started the way the old one is receives these too.
+CELERY_TASK_DEFAULT_QUEUE = "default"
 
 CHANNEL_LAYERS = {
     "default": {

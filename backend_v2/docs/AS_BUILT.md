@@ -120,10 +120,9 @@ that wants the mail at once patches `accounts.models.transaction` (see
 `core/mail.py`: today only the settings-configured account (`EMAIL_HOST`), which
 CONFIGURATION extends with saved Email Accounts tried first. `accounts.tasks.BEAT_SCHEDULE`
 runs `expire_invitations` at 00:00 and `flush_expired_tokens` at 01:00. No beat entry or
-task names a queue, and the settings set no `CELERY_TASK_DEFAULT_QUEUE`, so every
-`backend_v2` task lands on Celery's own default queue, `celery`; the old backend routes its
-entries to a queue named `default` (`backend/config/settings/base.py:317`,
-`config/celery.py:28`). A worker must consume `celery` until that is decided.
+task names a queue; `CELERY_TASK_DEFAULT_QUEUE = "default"` in the base settings puts
+every `backend_v2` task on the queue the old backend uses
+(`backend/config/settings/base.py:317`), so a worker started the old way receives them.
 
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
