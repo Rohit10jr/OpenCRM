@@ -53,11 +53,11 @@ def _repoint_dynamic_links(doctype: str, old: str, new: str) -> None:
 
 def _repoint_text_links(model, old: str, new: str) -> None:
     # PE-5 (approved 17 Nov 2026): the old backend left these dangling.
-    label = model._meta.label
     for other_model in apps.get_models():
         text_links = getattr(other_model, "TEXT_LINK_FIELDS", None) or {}
         for fieldname, (target_label, _) in text_links.items():
-            if target_label != label:
+            # Resolved as core.links resolves it, so the label's case does not matter.
+            if apps.get_model(target_label) is not model:
                 continue
             other_model._default_manager.filter(**{fieldname: old}).update(
                 **{fieldname: new}

@@ -159,8 +159,10 @@ comparison skips that block.
   `backend/crm_app/tasks.py:321-345`). A user disabled after queuing still has the job run
 - **backend_v2:** both workers refuse a requester who is missing or disabled; bulk update
   fails every document; bulk delete refuses the batch as it refuses a missing requester
-  (the job raises `PermissionError`, `No permission to delete <DocType> <name>`) and
-  deletes nothing
+  and deletes nothing. When the batch names at least one existing document the job raises
+  `PermissionError` (`No permission to delete <DocType> <name>`); an empty or
+  already-deleted batch returns `"success"`, as for any requester
+  (`backend_v2/core/mixins/bulk_delete.py:authorize_bulk_delete`)
   (`backend_v2/core/tasks.py`, `bulk_update_docs` and `delete_bulk_docs`)
 - **Why:** a queued job outlives its request; disabling an account should revoke what it
   queued. Other users can see the difference (records not updated or deleted), so only

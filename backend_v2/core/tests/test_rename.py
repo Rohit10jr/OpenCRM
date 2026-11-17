@@ -137,6 +137,25 @@ def test_rename_repoints_declared_text_links_only_where_they_match(
     assert unrelated.widget_name == "Mrs"
 
 
+def test_rename_resolves_a_text_link_label_regardless_of_case(
+    auth_api, alice, monkeypatch
+):
+    """core.links accepts any case in the declared label, so rename must too (A-20)."""
+    monkeypatch.setattr(
+        TextLinkDocument,
+        "TEXT_LINK_FIELDS",
+        {"widget_name": ("tests_support.widget", "Widget")},
+    )
+    target = widget(alice, "Lower Label")
+    document = save(TextLinkDocument(widget_name=target.pk), alice)
+
+    response = rename(auth_api, target.pk, "Lower Label Renamed")
+
+    assert response.status_code == 200
+    document.refresh_from_db()
+    assert document.widget_name == "Lower Label Renamed"
+
+
 def test_rename_parks_and_restores_a_non_key_unique_value(auth_api, alice):
     original = widget(alice, "Unique Widget", external_id="external-1")
 
