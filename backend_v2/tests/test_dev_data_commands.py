@@ -207,3 +207,36 @@ def test_the_test_settings_keep_it_on_for_the_scratch_database():
     from django.conf import settings
 
     assert settings.DEV_DATA_ALLOWED is True
+
+
+# --- ACCOUNTS milestone 3: clear deletes only what the seed created (DECISIONS 9) -------
+
+
+def test_clear_deletes_only_the_accounts_the_seed_created(make_user, passwords):
+    from core.models import DevDataRecord
+
+    pre_existing = make_user("ada@example.com", first_name="Real Ada")
+
+    call_command("seed_dev_data", stdout=io.StringIO())
+    recorded = set(DevDataRecord.objects.values_list("object_pk", flat=True))
+    assert recorded == {"grace@example.com", "alan@example.com"}
+
+    call_command("clear_dev_data", stdout=io.StringIO())
+
+    assert User.objects.filter(pk=pre_existing.pk).exists(), "never created by the seed"
+    assert not User.objects.filter(pk__in=["grace@example.com", "alan@example.com"]).exists()
+    assert User.objects.filter(pk="Administrator").exists()
+    assert not DevDataRecord.objects.exists()
+
+
+def test_a_second_seed_keeps_the_first_seeds_record(passwords):
+    from core.models import DevDataRecord
+
+    call_command("seed_dev_data", stdout=io.StringIO())
+    call_command("seed_dev_data", stdout=io.StringIO())
+
+    assert DevDataRecord.objects.count() == 3
+    call_command("clear_dev_data", stdout=io.StringIO())
+    assert not User.objects.filter(
+        pk__in=["ada@example.com", "grace@example.com", "alan@example.com"]
+    ).exists()

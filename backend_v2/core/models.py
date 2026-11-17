@@ -61,6 +61,28 @@ class NamingSeriesCounter(models.Model):
         return f"{self.prefix}{self.current}"
 
 
+class DevDataRecord(models.Model):
+    """One row `seed_dev_data` created, so `clear_dev_data` deletes only those (owner,
+    DECISIONS 9): a row that existed before the seed is never deleted. Not a document:
+    nothing serves it."""
+
+    step = models.CharField(max_length=60)
+    model_label = models.CharField(max_length=120)
+    object_pk = models.CharField(max_length=255)
+    creation = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Dev Data Record"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["model_label", "object_pk"], name="core_devdatarecord_unique_row"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.step}: {self.model_label} {self.object_pk}"
+
+
 class BaseDocument(models.Model):
     NAME_STRATEGY = None
     DOCTYPE = None

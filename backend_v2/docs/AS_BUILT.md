@@ -229,12 +229,14 @@ routed model, or for an unrouted model with an explicit `ROW_RULES` provider.
 `seed_dev_data` and `clear_dev_data` run the one explicit step list in
 `core.dev_data.STEPS`. FOUNDATION's account step creates or restores Administrator,
 ada, grace, and alan from four environment passwords; every seed restores enabled
-state, the exact groups, and the password, while clear removes only the three seeded
-non-built-in users. Both commands are atomic and report counts without printing a
+state, the exact groups, and the password. The seed records each row it creates in
+`core.models.DevDataRecord` (`core/dev_records.py`), and clear deletes only recorded rows,
+then forgets them: an account that existed before the seed is never deleted. Both commands are atomic and report counts without printing a
 password. `--demo` is accepted but deliberately adds nothing until later units append
 their own explicit steps.
-Both commands refuse to run unless `DEV_DATA_ALLOWED` is true. It defaults off in base
-settings and is enabled only by the local-development and test settings modules.
+Both commands refuse to run unless `DEV_DATA_ALLOWED` is true. The base settings read it
+from the environment, default off: it belongs in the `.env` of the database it names
+(DECISIONS 9). Only the test settings turn it on, for the scratch test database.
 
 `scripts/build_http_suite.py` parses all 15 old `docs/http/*.http` files and deterministically
 regenerates their REST copies in `backend_v2/http/` from `PORT_MAP.md`. It keeps waiting
