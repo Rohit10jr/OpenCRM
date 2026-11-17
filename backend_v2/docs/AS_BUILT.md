@@ -87,6 +87,22 @@ stores its own `creation` and `modified` timestamps, exposes `enabled` as Django
 also has the Administrator role. `UserManager.create_superuser` grants System Manager,
 because CRM authority does not come from Django's `is_superuser` flag.
 
+ACCOUNTS routes `User` (`specs/ACCOUNTS.md` §4.1) without making it a `BaseDocument`: it
+has none of the standard fields. It declares `DOCTYPE = "User"`, so `model_for_doctype`,
+the delete-time dynamic-link check, the DocType search and the delete cascade find it
+(`core.children.connect_cascades` connects every non-child model with a `DOCTYPE`).
+`User.save()` accepts and ignores the resource recipe's `user=` actor and, like
+`BaseDocument`, forces an insert on create, so a name differing only by case is a
+duplicate (409, the raw body: `User` has no naming strategy), never an update.
+`UserViewSet` (`/api/v1/users/`) carries the old static rules, emits `user_emails: []`
+until CONFIGURATION, ignores a `name` sent on update (PE-7, proposed), and opts in to
+search only — never export, rename, bulk update or bulk delete. Its directory and role
+actions (`directory/`, `info/`, `add-existing/`, `<name>/update-role/`,
+`<name>/remove-crm-roles/`) read `User` directly, as the old endpoints did; the two
+per-user role actions never load the target through `get_object()`.
+`CRMSalesHierarchy` (`/api/v1/sales-hierarchies/`) is a `TreeDocument` parented by
+`reports_to`; System Manager alone writes it.
+
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
 disabled, and there are no bulk actions.
@@ -184,7 +200,8 @@ every production document model to be routed or named in `core.withheld`, reject
 unreviewed direct manager reads, keep concrete built route-map entries in lockstep with
 the production URLconf, require explicit credential and child-field declarations, and
 prove that resource writes stamp the authenticated caller. `Version` is the sole
-withheld document type; the `User` resource and its row rules wait for ACCOUNTS.
+withheld document type. The served-or-withheld guard covers every model that declares a
+`DOCTYPE`, not only `BaseDocument`s, so `User` (routed by ACCOUNTS) is held to it too.
 `core.resources.rules_for(model)` now exposes independently callable row rules for a
 routed model, or for an unrouted model with an explicit `ROW_RULES` provider.
 
@@ -319,7 +336,10 @@ Apply a flat endpoint limit directly to a view method with
 callable taking the merged input dictionary, plus `normalise` when equivalent spellings
 must share a bucket. The decorator resolves the request from the view-method arguments;
 named and callable keys receive the same query-plus-body inputs as the view, with the
-body winning and `cmd` removed.
+body winning and `cmd` removed. With `pass_user=True` a callable key is called as
+`key(inputs, user)`, `user` being the request's authenticated user or `None`, for a
+bucket on the signed-in account (ACCOUNTS' `update_password`). A key that raises falls
+back to the IP-wide bucket, never to no limit.
 
 Every view is authenticated by default. A guest endpoint declares
 `permission_classes = [AllowAny]`; JWT authentication still runs first when the request
@@ -375,10 +395,11 @@ GET and POST at `<resource>/search/`, reads through `get_queryset()`, and delibe
 ignores `ignore_user_permissions`.
 
 Override `search_filters(self, filters, flags, user)` only for a resource's standard
-query branch. ACCOUNTS' User override must copy `filters`, default `enabled` to 1, and
-exclude `Website User` unless `flags["ignore_user_type"]` is true and the passed user is
-a System User; it does not use ambient request state and does not call the base disabled
-filter (`backend/crm_app/api/client.py:45-60,683-691`). CONTACTS' Address override must
+query branch. ACCOUNTS' User override (built) copies `filters`, defaults `enabled` to 1,
+and excludes `Website User` unless `flags["ignore_user_type"]` is true and the passed
+user is a System User; it does not use ambient request state and does not call the base
+disabled filter (`backend/crm_app/api/client.py:45-60,683-691`). A list-shaped `filters`
+gets the same two conditions appended (the old code answered 500 there). CONTACTS' Address override must
 pop `link_doctype` and `link_name`, find matching Address parents through Dynamic Link
 rows, add those names as a `name in [...]` filter, then call the base hook so the normal
 disabled rule still applies (`backend/crm_app/api/client.py:63-81,692-696`).
