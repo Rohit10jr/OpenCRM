@@ -186,6 +186,21 @@ comparison skips that block.
   `rename_doc`, which `User` does not serve here
 - **Recorded by:** ACCOUNTS, 18 Nov 2026
 
+### PE-8. CRM Invitation is created by `invite_by_email` alone
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-24, DECISIONS 27, 18 Nov 2026); built as described
+- **Where:** `POST /api/v1/invitations/` and `PATCH /api/v1/invitations/<name>/` (old
+  `/api/resource/CRM Invitation`). No `.http` block found
+- **Old backend:** the manager pair may create and change an invitation through the
+  resource (`backend/crm_app/permissions/platform_docs.py:403-407`)
+- **backend_v2:** CRM Invitation cannot be created or changed through its resource;
+  invitations are created by `invite_by_email` alone. Listing, reading and deleting stay
+  with the manager pair
+- **Why:** the frontend only lists, deletes and calls `invite_by_email`
+  (`InviteUserPage.vue:175-205`, `:86`), and `invite_by_email` holds the role checks
+- **Recorded by:** ACCOUNTS, 18 Nov 2026
+
 ---
 
 ## Candidates — not exceptions yet

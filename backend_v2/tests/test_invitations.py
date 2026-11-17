@@ -212,21 +212,85 @@ def test_the_email_is_queued_only_once_the_row_is_committed(
     assert [message.to for message in mail.outbox] == [["later@example.com"]]
 
 
-def test_a_managers_direct_resource_create_sends_too(make_user, api_as, _send_on_commit_now):
-    manager = make_user("mgr@example.com", roles=["Sales Manager"])
+def test_a_rolled_back_create_sends_nothing(administrator, django_capture_on_commit_callbacks):
+    from django.db import transaction
+
+    mail.outbox.clear()
+    with django_capture_on_commit_callbacks(execute=True) as callbacks:
+        try:
+            with transaction.atomic():
+                _invitation("rolled.back@example.com", administrator=administrator)
+                raise RuntimeError("roll back")
+        except RuntimeError:
+            pass
+
+    assert callbacks == []
+    assert mail.outbox == []
+    assert not CRMInvitation.objects.filter(email="rolled.back@example.com").exists()
+
+
+# --- PE-8 (proposed): created by invite_by_email alone, never changed through the resource ---
+
+
+@pytest.mark.parametrize("roles", [["Sales Manager"], ["System Manager"]])
+def test_no_caller_creates_an_invitation_through_the_resource(make_user, api_as, roles):
+    caller = make_user("caller@example.com", roles=roles)
     mail.outbox.clear()
 
-    response = api_as(manager).post(
+    response = api_as(caller).post(
         "/api/v1/invitations/",
         {"email": "direct@example.com", "role": "Sales User", "status": "Pending"},
         format="json",
     )
 
-    assert response.status_code == 200, response.json()
-    assert [message.to for message in mail.outbox] == [["direct@example.com"]]
-    assert CRMInvitation.objects.get(email="direct@example.com").key == "", (
-        "the model never mints a key; only invite_by_email does"
+    assert response.status_code == 403
+    assert not CRMInvitation.objects.filter(email="direct@example.com").exists()
+    assert mail.outbox == []
+
+
+def test_administrator_cannot_create_one_through_the_resource_either(administrator, api_as):
+    response = api_as(administrator).post(
+        "/api/v1/invitations/",
+        {"email": "direct@example.com", "role": "Sales User", "status": "Pending"},
+        format="json",
     )
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize("roles", [["Sales Manager"], ["System Manager"]])
+@pytest.mark.parametrize(
+    "change",
+    [{"role": "System Manager"}, {"email": "someone.else@example.com"}, {"status": "Pending"}],
+)
+def test_no_caller_changes_an_invitation_through_the_resource(
+    make_user, administrator, api_as, roles, change
+):
+    invitation = _invitation("held@example.com", status="Expired", administrator=administrator)
+    caller = make_user("caller@example.com", roles=roles)
+
+    response = api_as(caller).patch(
+        f"/api/v1/invitations/{invitation.pk}/", change, format="json"
+    )
+
+    assert response.status_code == 403
+    invitation.refresh_from_db()
+    assert (invitation.role, invitation.email, invitation.status) == (
+        "Sales User",
+        "held@example.com",
+        "Expired",
+    )
+
+
+def test_a_manager_still_lists_reads_and_deletes(make_user, administrator, api_as):
+    invitation = _invitation("listed@example.com", administrator=administrator)
+    client = api_as(make_user("mgr2@example.com", roles=["Sales Manager"]))
+
+    assert [row["name"] for row in client.get("/api/v1/invitations/").json()["message"]] == [
+        invitation.pk
+    ]
+    assert client.get(f"/api/v1/invitations/{invitation.pk}/").status_code == 200
+    assert client.delete(f"/api/v1/invitations/{invitation.pk}/").status_code == 200
+    assert not CRMInvitation.objects.filter(pk=invitation.pk).exists()
 
 
 # --- invite_by_email (new; specs/ACCOUNTS.md 4.6) ------------------------------------------

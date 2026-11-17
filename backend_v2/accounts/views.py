@@ -288,6 +288,11 @@ class CRMInvitationViewSet(DocumentViewSet):
 
     @staticmethod
     def has_object_rule(user, document, ptype):
+        # PE-8 (proposed): invitations are created by invite_by_email alone and never
+        # changed through the resource, for every caller; list, read and delete stay
+        # with the manager pair.
+        if ptype in ("create", "write"):
+            return False
         return _is_invitation_manager(user)
 
     @action(detail=False, methods=("post",), url_path="invite-by-email")
