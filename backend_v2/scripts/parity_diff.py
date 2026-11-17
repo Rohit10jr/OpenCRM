@@ -86,24 +86,31 @@ def body_difference(left, right, rules: list[IgnoreRule], path: str = "$") -> st
 def response_difference(old_response, new_response, rules: list[IgnoreRule]) -> str | None:
     if old_response.status_code != new_response.status_code:
         return f"$.status: {old_response.status_code} != {new_response.status_code}"
+    differences = []
     for header in CONTRACT_HEADERS:
         old_present = header in old_response.headers
         new_present = header in new_response.headers
+        if header == "Allow":
+            # The method sets differ by design (S7, PE-1); the contract promises only that
+            # a 405 carries an Allow header (API_CONTRACT.md), so only that is compared.
+            if old_response.status_code == 405 and old_present != new_present:
+                differences.append(f"$.headers.Allow: present {old_present} != {new_present}")
+            continue
         old_value = old_response.headers.get(header)
         new_value = new_response.headers.get(header)
-        if header == "Allow" and old_present and new_present:
-            old_value = sorted({method.strip().upper() for method in old_value.split(",")})
-            new_value = sorted({method.strip().upper() for method in new_value.split(",")})
         if old_present != new_present or old_value != new_value:
-            return f"$.headers.{header}: {old_value!r} != {new_value!r}"
+            differences.append(f"$.headers.{header}: {old_value!r} != {new_value!r}")
+    # A header difference does not hide the body: one block can report both.
     try:
         old_body = old_response.json()
         new_body = new_response.json()
     except ValueError:
         if old_response.text != new_response.text:
-            return "$: response text differs"
-        return None
-    return body_difference(old_body, new_body, rules)
+            differences.append("$: response text differs")
+    else:
+        if body := body_difference(old_body, new_body, rules):
+            differences.append(body)
+    return "; ".join(differences) or None
 
 
 def block_key(block: HttpBlock) -> str | None:

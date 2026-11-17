@@ -114,6 +114,39 @@ def test_allow_header_method_order_is_ignored():
     ) is None
 
 
+def test_allow_methods_may_differ_by_design():
+    """S7 gives each new route its own methods (A-25): only a 405's Allow is promised."""
+    assert response_difference(
+        response(200, '{"message":"same"}', {"Allow": "GET, HEAD, OPTIONS, POST, PUT"}),
+        response(200, '{"message":"same"}', {"Allow": "OPTIONS, POST"}),
+        [],
+    ) is None
+    assert response_difference(
+        response(405, '{"message":"same"}', {"Allow": "GET, POST, PUT"}),
+        response(405, '{"message":"same"}', {"Allow": "POST"}),
+        [],
+    ) is None
+
+
+def test_a_405_without_allow_is_reported():
+    difference = response_difference(
+        response(405, '{"message":"same"}', {"Allow": "GET"}),
+        response(405, '{"message":"same"}'),
+        [],
+    )
+    assert difference == "$.headers.Allow: present True != False"
+
+
+def test_a_header_difference_does_not_hide_the_body():
+    difference = response_difference(
+        response(401, '{"message":"old"}', {"WWW-Authenticate": "Bearer"}),
+        response(401, '{"message":"new"}'),
+        [],
+    )
+    assert difference.startswith("$.headers.WWW-Authenticate: 'Bearer' != None; ")
+    assert "$.message" in difference
+
+
 def test_real_body_difference_reports_short_json_path(temporary_path: Path):
     old, new = write_pair(temporary_path, "### 1.1 request -> 200\nGET http://old.test/value\n", "### 1.1 request -> 200\nGET http://new.test/value\n")
     output = []
