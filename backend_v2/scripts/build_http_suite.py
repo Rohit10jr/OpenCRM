@@ -8,7 +8,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 try:  # Imported by pytest from backend_v2, or executed directly from scripts/.
     from scripts.http_parser import HttpBlock, HttpParseError, parse_http, resolve_variables
@@ -347,6 +347,9 @@ def _rewrite_resource(
         raise SuiteBuildError(f"line {block.start_line}: no {new_method} route for {doctype}")
     if name is not None:
         target = target.replace("<name>", name)
+    # A list's own query (`fields`, `limit_page_length`, …) keeps its meaning on the new route.
+    if query := urlsplit(block.request[1]).query:
+        target = f"{target}?{query}"
     _, body = block.headers_and_body()
     parsed_body = json.loads(body) if body else None
     _replace_request(block, new_method, "{{host}}" + target, parsed_body)
@@ -357,6 +360,62 @@ def _rewrite_resource(
         block.separator = "### " + block.title
     _annotate(block, "# @resource-envelope {\"data\"}/201 -> {\"message\"}/200")
     return block.name
+
+
+def _query_string(payload: dict) -> str:
+    """A body as query parameters; `{{variables}}` stay readable for the runner."""
+    parts = []
+    for key, value in payload.items():
+        if not isinstance(value, str):
+            value = json.dumps(value, separators=(",", ":"))
+        parts.append(f"{quote(str(key), safe='')}={quote(value, safe='{}')}")
+    return "&".join(parts)
+
+
+def _url_key(entry: RouteEntry) -> str | None:
+    """The input a route moves into its `<name>`, as the route map writes it."""
+    match = re.search(r"`(\w+)` in the URL", entry.new_route)
+    return match.group(1) if match else None
+
+
+def _rewrite_method(block: HttpBlock, method: str, url: str, entry: RouteEntry) -> None:
+    """A built method path. Its route map row may reshape two inputs (S8): an old POST
+    body moves into the query of a route served by GET alone, and a named input moves
+    into the URL's `<name>`."""
+    allowed = {verb for verb, _ in entry.routes}
+    new_method = method
+    if method not in allowed:
+        if method == "POST" and allowed == {"GET"}:
+            new_method = "GET"
+        else:
+            _negative(block, method, entry.routes[0][1])
+            return
+    route = next(path for verb, path in entry.routes if verb == new_method)
+    payload = _payload(block, url)
+    if "<name>" in route:
+        key = _url_key(entry)
+        if key is None or key not in payload:
+            raise SuiteBuildError(
+                f"line {block.start_line}: no input for <name> in {route}"
+            )
+        route = route.replace("<name>", str(payload.pop(key)))
+    if new_method == "GET":
+        query = _query_string(payload)
+        _replace_request(block, "GET", "{{host}}" + route + (f"?{query}" if query else ""))
+        _drop_body(block)
+    elif "<name>" in entry.new_route:
+        _replace_request(block, new_method, "{{host}}" + route, payload)
+    else:
+        _replace_request(block, new_method, "{{host}}" + route)
+
+
+def _drop_body(block: HttpBlock) -> None:
+    index = block.request_index
+    assert index is not None
+    headers, _ = block.headers_and_body()
+    block.lines = block.lines[: index + 1] + [
+        line for line in headers if not line.lower().startswith("content-type")
+    ]
 
 
 def _negative(block: HttpBlock, method: str, route: str) -> None:
@@ -415,13 +474,7 @@ def rewrite_http(text: str, route_map: RouteMap, filename: str = "fixture.http")
                 else:
                     _rewrite_generic(block, path, resolved_url, entry, route_map)
             elif entry.built and entry.routes:
-                allowed = {verb for verb, _ in entry.routes}
-                route = entry.routes[0][1]
-                if method not in allowed:
-                    _negative(block, method, route)
-                else:
-                    route = next(path for verb, path in entry.routes if verb == method)
-                    _replace_request(block, method, "{{host}}" + route)
+                _rewrite_method(block, method, resolved_url, entry)
             else:
                 _annotate(block, f"# @waiting {entry.unit}")
         elif "/api/resource/" in resolved_url:
@@ -470,19 +523,6 @@ def rewrite_http(text: str, route_map: RouteMap, filename: str = "fixture.http")
                 "/api/v1/auth/token/refresh/",
             ),
         )
-        runnable = {
-            *(f"1.{number}" for number in range(1, 12)),
-            "1.13",
-            *(f"2.{number}" for number in range(1, 11)),
-        }
-        for block in document.blocks:
-            number = (block.title or "").split(" ", 1)[0]
-            if block.request and number not in runnable and "# @negative" not in block.lines:
-                _annotate(block, "# @waiting ACCOUNTS")
-    elif filename == "99_lockout.http":
-        for block in document.blocks:
-            if block.request and (block.title or "").startswith("3.1 "):
-                _annotate(block, "# @waiting ACCOUNTS")
     return document.render()
 
 

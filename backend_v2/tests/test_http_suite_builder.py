@@ -218,23 +218,85 @@ def test_real_foundation_blocks_are_runnable_and_later_blocks_wait():
     lockout = rewrite_http(
         (root / "docs/http/99_lockout.http").read_text(encoding="utf-8"), routes, "99_lockout.http"
     )
-    runnable_auth = {
-        *(f"1.{number}" for number in range(1, 12)),
-        "1.13",
-        *(f"2.{number}" for number in range(1, 11)),
-    }
+    # The route map alone decides (specs/ACCOUNTS.md section 7): a block whose method
+    # path is built runs on its new route, and one whose path is not waits on its unit.
     for block in parse_http(auth).blocks:
         if not block.request:
             continue
         number = (block.title or "").split(" ", 1)[0]
-        if number in runnable_auth:
+        if number in {f"1.{n}" for n in range(1, 12)} | {"1.13"}:
             assert "# @waiting" not in block.lines
-            assert "/api/v1/auth/" in block.request[1]
+        if any(line.startswith("# @waiting") for line in block.lines):
+            assert "/api/method/" in block.request[1]
         else:
-            assert "# @waiting ACCOUNTS" in block.lines or "# @negative" in block.lines
+            assert "/api/v1/" in block.request[1]
     for block in parse_http(lockout).blocks:
         if block.request and (block.title or "").startswith(("1.", "2.")):
             assert "# @waiting" not in block.lines
             assert "/api/v1/auth/login/" in block.request[1]
         elif block.request:
             assert "# @waiting ACCOUNTS" in block.lines
+
+
+ACCOUNTS_ROUTE_MAP = ROUTE_MAP_TEXT + """
+## ACCOUNTS
+### Method paths
+| Dotted path | Verbs | Access | Old source | New route | New app | Status |
+|---|---|---|---|---|---|---|
+| `crm.api.session.get_users` | GET/POST | auth | `session.py:get_users` | `GET /api/v1/users/directory/` | accounts | built |
+| `crm.api.user.update_user_role` | GET/POST | auth | `user.py:update_user_role` | `POST /api/v1/users/<name>/update-role/` (`user` in the URL) | accounts | built |
+| `crm.api.accept_invitation` | GET/POST | guest | `auth_pages.py:accept_invitation` | `POST /api/v1/auth/accept-invitation/` | accounts | built |
+"""
+
+
+def test_a_post_body_moves_into_the_query_of_a_get_only_route():
+    source = """\
+### 1.1 get users -> 200
+POST http://localhost:8000/api/method/crm.api.session.get_users
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"include_all": 1, "label": "{{who}}"}
+"""
+    result = rewrite_http(source, parse_route_map(ACCOUNTS_ROUTE_MAP))
+    request = next(block for block in parse_http(result).blocks if block.request).request
+    assert request == ("GET", "{{host}}/api/v1/users/directory/?include_all=1&label={{who}}")
+    assert "Authorization: Bearer {{token}}" in result
+    assert '"include_all"' not in result
+    assert "# @negative" not in result
+
+
+def test_a_named_body_input_moves_into_the_url():
+    source = """\
+### 3.2 update role -> 200
+POST http://localhost:8000/api/method/crm.api.user.update_user_role
+Content-Type: application/json
+
+{"user": "ada@example.com", "new_role": "Sales User"}
+"""
+    result = rewrite_http(source, parse_route_map(ACCOUNTS_ROUTE_MAP))
+    block = next(block for block in parse_http(result).blocks if block.request)
+    assert block.request == ("POST", "{{host}}/api/v1/users/ada@example.com/update-role/")
+    assert block.headers_and_body()[1] == '{"new_role": "Sales User"}'
+
+
+def test_a_get_on_a_post_only_route_is_still_a_negative_405():
+    source = """\
+### 5.3 accept by GET -> 200
+GET http://localhost:8000/api/method/crm.api.accept_invitation?key=abc
+"""
+    result = rewrite_http(source, parse_route_map(ACCOUNTS_ROUTE_MAP))
+    assert "# @negative" in result
+    assert "GET {{host}}/api/v1/auth/accept-invitation/" in result
+
+
+def test_a_url_input_missing_from_the_body_is_an_error():
+    source = """\
+### 3.x -> 200
+POST http://localhost:8000/api/method/crm.api.user.update_user_role
+Content-Type: application/json
+
+{"new_role": "Sales User"}
+"""
+    with pytest.raises(SuiteBuildError, match="no input for <name>"):
+        rewrite_http(source, parse_route_map(ACCOUNTS_ROUTE_MAP))
