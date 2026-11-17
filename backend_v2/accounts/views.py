@@ -5,7 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from accounts import directory, services
+from accounts import directory, services, user_roles
 from accounts.roles import ADMINISTRATOR, GUEST, ROLE_SYSTEM_MANAGER
 from accounts.serializers import CRMSalesHierarchySerializer, UserSerializer
 from core.access import Access
@@ -72,6 +72,35 @@ class UserViewSet(LinkSearchMixin, DocumentViewSet):
         inputs = build_payload(request)
         result = directory.get_user_info(request.user, inputs.get("users"))
         return Response(Envelope(result, "message"))
+
+    @action(detail=False, methods=("post",), url_path="add-existing")
+    def add_existing(self, request):
+        """`crm.api.user.add_existing_users`."""
+        inputs = build_payload(request)
+        user_roles.add_existing_users(
+            request.user, inputs.get("users"), inputs.get("role") or "Sales User"
+        )
+        return Response(Envelope(None, "message"))
+
+    # The two per-user actions take the user from the URL but never load it through
+    # get_object(): the old code applies no object rule to the target (spec 4.2).
+    @action(detail=True, methods=("post",), url_path="update-role")
+    def update_role(self, request, **kwargs):
+        """`crm.api.user.update_user_role`."""
+        inputs = build_payload(request)
+        user_roles.update_user_role(
+            request.user, self._url_name(), inputs.get("new_role")
+        )
+        return Response(Envelope(None, "message"))
+
+    @action(detail=True, methods=("post",), url_path="remove-crm-roles")
+    def remove_crm_roles(self, request, **kwargs):
+        """`crm.api.user.remove_crm_roles_from_user`."""
+        message = user_roles.remove_crm_roles_from_user(request.user, self._url_name())
+        return Response(Envelope(message, "message"))
+
+    def _url_name(self):
+        return self.kwargs[self.lookup_url_kwarg or self.lookup_field]
 
     def search_filters(self, filters, flags, user):
         """Frappe's `user_query` (old `crm_app/api/client.py:45-60`, FINDINGS 46):

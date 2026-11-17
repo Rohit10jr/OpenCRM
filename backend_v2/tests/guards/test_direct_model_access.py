@@ -31,6 +31,31 @@ DIRECT_MANAGER_READS = {
         "get_user_info returns five public fields for named users, including built-in "
         "and disabled ones, as the old one does (session.py:151-155); CRM role required."
     ),
+    ("accounts/user_roles.py", "_set_roles", "Group.objects"): (
+        "Role names resolve to their groups after the manager-pair and role checks."
+    ),
+    ("accounts/user_roles.py", "_remove_roles", "Group.objects"): (
+        "Role names resolve to their groups after the manager-pair and role checks."
+    ),
+    ("accounts/user_roles.py", "update_user_role", "User._default_manager"): (
+        "The old action loads the target directly after the manager-pair check and "
+        "applies no User object rule (crm_app/api/user.py:139-147; spec 4.2)."
+    ),
+    ("accounts/user_roles.py", "update_user_role", "CRMSalesHierarchy._default_manager"): (
+        "The demotion guard reads the target's node and whether it has reports, as the "
+        "old action does (user.py:164-177); the chart is readable by everyone."
+    ),
+    ("accounts/user_roles.py", "remove_crm_roles_from_user", "User._default_manager"): (
+        "As update_user_role: a direct load after the manager-pair check (user.py:197)."
+    ),
+    (
+        "accounts/user_roles.py",
+        "remove_crm_roles_from_user",
+        "CRMSalesHierarchy._default_manager",
+    ): (
+        "Removing CRM roles deletes the user's chart node, as the old action does "
+        "(user.py:215), after the manager-pair and System Manager checks."
+    ),
     ("accounts/services.py", "login", "get_user_model()._default_manager"): (
         "Authentication must locate the account before a request user exists; lockout "
         "and password verification protect this lookup."
