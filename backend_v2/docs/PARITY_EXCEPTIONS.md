@@ -129,6 +129,43 @@ comparison skips that block.
   version, briefly built in brief 07) would have kept accepting a corrupt hierarchy
 - **Recorded by:** FOUNDATION, 13 Nov 2026
 
+### PE-5. Rename also repoints Links stored as plain text
+
+- **Status:** proposed — parked for the owner (`temp` A-9, 16 Nov 2026). The parity
+  version (no repointing) is what is built until this says `approved`
+- **Where:** the rename mixin (`frappe.client.rename_doc` →
+  `POST /api/v1/<resource>/<name>/rename/`), on any resource another model names through a
+  `TEXT_LINK_FIELDS` column. No `.http` block found
+- **Old backend:** repoints Django foreign keys, polymorphic child parents and seven
+  hard-coded doctype/name pairs (`backend/frappe_core/rename.py:30-38, 48-80`), but never
+  a Link held in a plain text column (`frappe_core/links.py:1-19` says such columns exist;
+  rename never calls it). After a rename those columns keep the old name, which now names
+  nothing
+- **backend_v2:** also rewrites every declared `TEXT_LINK_FIELDS` column that names the
+  old name, in the same transaction
+- **Why:** a dangling reference users can see (the old name shown, the link broken). The
+  per-model declarations make it a small change. It changes what users see, so only the
+  owner approves it
+- **Recorded by:** SHARED_ACTIONS, 16 Nov 2026
+
+### PE-6. Both queued bulk workers refuse a missing or disabled requester
+
+- **Status:** proposed — parked for the owner (`temp` A-11 finding 1, DECISIONS 16,
+  16 Nov 2026)
+- **Where:** the queued halves of bulk update (`core.bulk_update_docs`, 20–500 documents)
+  and bulk delete (`core.delete_bulk_docs`, more than ten). No `.http` block found
+- **Old backend:** neither worker checks `enabled`: each binds the requesting user and
+  re-checks the row rules as that user (`backend/crm_app/bulk_update.py:111-134`,
+  `backend/crm_app/tasks.py:321-345`). A user disabled after queuing still has the job run
+- **backend_v2:** both workers refuse a requester who is missing or disabled; bulk update
+  fails every document, bulk delete deletes nothing. **Today only the bulk-update worker
+  does this** (`core/tasks.py`, built before the divergence was noticed) — an unapproved
+  difference until this entry is decided; bulk delete keeps the old behaviour
+- **Why:** a queued job outlives its request; disabling an account should revoke what it
+  queued. Other users can see the difference (records not updated or deleted), so only
+  the owner approves it
+- **Recorded by:** SHARED_ACTIONS, 16 Nov 2026
+
 ---
 
 ## Candidates — not exceptions yet

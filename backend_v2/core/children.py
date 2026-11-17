@@ -308,6 +308,18 @@ def delete_polymorphic_children(instance) -> int:
     return removed
 
 
+def delete_polymorphic_children_batch(model, names: list[str]) -> int:
+    """Delete each declared polymorphic child table once for a parent batch."""
+    removed = 0
+    declarations = getattr(model, "POLYMORPHIC_CHILD_TABLES", {}) or {}
+    for child_model in {_model(label) for label in declarations.values()}:
+        count, _ = child_model._default_manager.filter(
+            parent__in=names, parenttype=doctype_of(model)
+        ).delete()
+        removed += count
+    return removed
+
+
 # ACTIVITIES extends this table with ToDo, Comment, File, and Communication when those
 # models exist. Communication uses ``clear``; the other reference rows use ``delete``.
 _REFERENCE_CLEANUP: tuple[tuple[str, str, str, str], ...] = (
@@ -317,6 +329,9 @@ _REFERENCE_CLEANUP: tuple[tuple[str, str, str, str], ...] = (
 REFERENCE_DOCTYPES = frozenset(row[0] for row in _REFERENCE_CLEANUP)
 _REFERENCES_HANDLED = contextvars.ContextVar(
     "core.children.references_handled", default=False
+)
+_CHILDREN_AND_REFERENCES_HANDLED = contextvars.ContextVar(
+    "core.children.children_and_references_handled", default=False
 )
 
 
@@ -348,7 +363,7 @@ def delete_references(instance) -> int:
 
 @contextmanager
 def references_handled():
-    """Stand down per-row cleanup when a caller already cleaned a whole batch."""
+    """Stand down per-row reference cleanup after a caller cleaned a batch."""
     token = _REFERENCES_HANDLED.set(True)
     try:
         yield
@@ -356,7 +371,19 @@ def references_handled():
         _REFERENCES_HANDLED.reset(token)
 
 
+@contextmanager
+def children_and_references_handled():
+    """Stand down both per-row cleanups after a caller cleaned both batches."""
+    token = _CHILDREN_AND_REFERENCES_HANDLED.set(True)
+    try:
+        yield
+    finally:
+        _CHILDREN_AND_REFERENCES_HANDLED.reset(token)
+
+
 def _on_parent_delete(sender, instance, **kwargs):
+    if _CHILDREN_AND_REFERENCES_HANDLED.get():
+        return
     delete_polymorphic_children(instance)
     if not _REFERENCES_HANDLED.get():
         delete_references(instance)
