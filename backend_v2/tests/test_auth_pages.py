@@ -464,4 +464,214 @@ def test_changing_a_password_kills_any_outstanding_reset_link(api, make_user):
 
     assert password_reset.resolve_key(raw).message == password_reset.INVALID_MESSAGE
 
+# ---------------------------------------------------------------------------
+# accept_invitation: ported from backend/tests/test_auth_pages.py:486-673 (ACCOUNTS AC13).
+# `with session_user(...): objects.create(...)` becomes `create_for_user(user=...)`, and
+# auth_pages.accept is accounts.invitations._accept. The invitation email is queued after
+# commit; `_send_on_commit_now` runs it at once here, as the old post_save did, and
+# tests/test_invitations.py proves the deferral itself.
+# ---------------------------------------------------------------------------
 
+from accounts import invitations  # noqa: E402
+
+ACCEPT = "/api/v1/auth/accept-invitation/"
+
+
+@pytest.fixture(autouse=True)
+def _send_on_commit_now(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        "accounts.models.transaction",
+        SimpleNamespace(on_commit=lambda func, *args, **kwargs: func()),
+    )
+
+
+def test_the_invitation_email_links_to_a_page_not_the_api(administrator, settings):
+    """**The finding my own end-to-end walk missed.**
+
+    The link went to `/api/method/crm.api.accept_invitation`, which answers with JSON — so
+    an invitee clicking it landed on raw JSON rather than a page. Upstream can link to its
+    endpoint because that one answers a GET with an HTTP redirect into the Desk; ours does
+    not, and I walked the *endpoint* rather than the *URL a person clicks*.
+    """
+    from accounts.models import CRMInvitation
+
+    settings.FRONTEND_ORIGIN = "https://crm.example.com"
+    django_mail.outbox.clear()
+
+    CRMInvitation.objects.create_for_user(
+        user=administrator,
+            email="linked@example.com", role="Sales User", status="Pending", key="k-link"
+        )
+
+    body = django_mail.outbox[0].body
+    assert "https://crm.example.com/crm/accept-invitation?key=k-link" in body
+    assert "/api/method/" not in body, "the email must not send a person to a JSON endpoint"
+
+
+def test_an_invitation_cannot_be_claimed_twice_even_under_a_race(api, invitation):
+    """The claim is a conditional UPDATE, so exactly one caller wins.
+
+    Both callers pass the `status == "Pending"` read; only one changes a row.
+    """
+    from accounts.models import CRMInvitation
+
+    first = invitations._accept(CRMInvitation.objects.get(pk=invitation.pk))
+    assert first is True
+
+    # A second caller holding the same row as it was before the claim.
+    stale = CRMInvitation(pk=invitation.pk, status="Pending", key="invite-key-1",
+                          email=invitation.email, role=invitation.role)
+    from core.exceptions import ValidationError
+
+    with pytest.raises(ValidationError):
+        invitations._accept(stale)
+
+
+# ---------------------------------------------------------------------------
+# accept_invitation
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def invitation(administrator):
+    from accounts.models import CRMInvitation
+
+    return CRMInvitation.objects.create_for_user(
+        user=administrator,
+            email="newcomer@example.com", role="Sales User", status="Pending", key="invite-key-1"
+        )
+
+
+def test_accepting_creates_the_user_and_returns_a_set_password_link(api, invitation):
+    from accounts.models import User
+
+    response = _post(api, ACCEPT, {"key": "invite-key-1"})
+
+    assert response.status_code == 200
+    body = response.json()["message"]
+    assert body["status"] == "set_password"
+    assert "/crm/update-password?key=" in body["redirect_to"]
+
+    account = User.objects.get(pk="newcomer@example.com")
+    assert account.enabled is True
+    assert not account.has_usable_password(), "a new account must have no password yet"
+
+
+def test_the_link_it_returns_actually_sets_a_password(api, invitation):
+    """The two halves joined: accept, then redeem what accept handed back."""
+    from accounts.models import User
+
+    body = _post(api, ACCEPT, {"key": "invite-key-1"}).json()["message"]
+    raw_key = body["redirect_to"].split("key=")[1]
+
+    response = _post(api, UPDATE, {"key": raw_key, "new_password": "Str0ng!Passw0rd"})
+    assert response.status_code == 200
+
+    account = User.objects.get(pk="newcomer@example.com")
+    assert account.check_password("Str0ng!Passw0rd")
+
+
+def test_accepting_grants_the_role_and_the_ones_it_implies(api, administrator):
+    """`crm_invitation.py:66-72`. A System Manager who did not also get Sales User would be
+    unable to see a lead."""
+    from accounts.models import CRMInvitation
+    from accounts.models import User
+
+    CRMInvitation.objects.create_for_user(
+        user=administrator,
+            email="boss@example.com", role="System Manager", status="Pending", key="k-boss"
+        )
+
+    _post(api, ACCEPT, {"key": "k-boss"})
+
+    account = User.objects.get(pk="boss@example.com")
+    assert account.get_roles() >= {"System Manager", "Sales Manager", "Sales User"}
+
+
+def test_accepting_marks_the_invitation_and_clears_its_key(api, invitation):
+    from accounts.models import CRMInvitation
+
+    _post(api, ACCEPT, {"key": "invite-key-1"})
+
+    row = CRMInvitation.objects.get(pk=invitation.pk)
+    assert row.status == "Accepted"
+    assert row.accepted_at is not None
+    assert row.key == "", "the key must not survive redemption"
+
+
+def test_an_invitation_cannot_be_accepted_twice(api, invitation):
+    first = _post(api, ACCEPT, {"key": "invite-key-1"})
+    second = _post(api, ACCEPT, {"key": "invite-key-1"})
+
+    assert first.status_code == 200
+    assert second.status_code == 417
+    assert "Invalid or expired key" in second.json()["message"]
+
+
+def test_an_unknown_key_is_refused(api, db):
+    response = _post(api, ACCEPT, {"key": "never-issued"})
+    assert response.status_code == 417
+    assert "Invalid or expired key" in response.json()["message"]
+
+
+def test_an_absent_key_is_refused(api, db):
+    response = _post(api, ACCEPT, {})
+    assert response.status_code == 417
+
+
+def test_an_expired_invitation_is_refused(api, administrator):
+    from accounts.models import CRMInvitation
+
+    CRMInvitation.objects.create_for_user(
+        user=administrator,
+            email="late@example.com", role="Sales User", status="Expired", key="k-late"
+        )
+
+    response = _post(api, ACCEPT, {"key": "k-late"})
+    assert response.status_code == 417
+
+
+def test_an_existing_user_is_logged_in_rather_than_asked_for_a_password(api, alice, administrator):
+    from accounts.models import CRMInvitation
+
+    CRMInvitation.objects.create_for_user(
+        user=administrator,
+            email=alice.pk, role="Sales Manager", status="Pending", key="k-existing"
+        )
+
+    body = _post(api, ACCEPT, {"key": "k-existing"}).json()["message"]
+
+    assert body["status"] == "logged_in"
+    assert body["access"] and body["refresh"]
+    alice.refresh_from_db()
+    assert "Sales Manager" in alice.get_roles()
+
+
+def test_the_invitation_key_still_never_reaches_the_wire(api, auth_api, invitation, alice):
+    """Bug #21, and `KNOWN_ISSUES.md` §2: *"do not remove it to make redemption easier."*
+
+    This is the test that would fail if a future change made the endpoint more convenient
+    by exposing the key.
+    """
+    from core.field_access import sensitive_fields
+
+    from accounts.models import CRMInvitation
+
+    assert "key" in sensitive_fields(CRMInvitation)
+
+    response = auth_api.get("/api/v1/invitations/")
+    # A Sales User cannot even list them; if that ever loosens, the key must still be gone.
+    if response.status_code == 200:
+        for row in response.json()["message"]:
+            assert "key" not in row
+
+
+def test_accept_is_rate_limited(api, administrator):
+    """The key is a bearer token, so an unlimited endpoint is a guessing machine."""
+    for _ in range(10):
+        _post(api, ACCEPT, {"key": "wrong"})
+
+    response = _post(api, ACCEPT, {"key": "wrong"})
+    assert response.status_code == 429
