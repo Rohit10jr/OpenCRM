@@ -57,9 +57,15 @@ def ignored(path: str, rules: list[IgnoreRule]) -> bool:
 #: A `Hash(10)` document name, as both backends generate it. Generated names legitimately
 #: differ between two servers (API_CONTRACT.md), also inside a message that names one.
 GENERATED_NAME_RE = re.compile(r"(?<![0-9a-z])[0-9a-f]{10}(?![0-9a-z])")
+#: An ISO 8601 timestamp, which API_CONTRACT.md lists beside generated names as differing
+#: legitimately between two servers.
+TIMESTAMP_RE = re.compile(
+    r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?"
+)
 
 
 def normalise_generated(value: str) -> str:
+    value = TIMESTAMP_RE.sub("<timestamp>", value)
     return GENERATED_NAME_RE.sub("<generated>", value)
 
 

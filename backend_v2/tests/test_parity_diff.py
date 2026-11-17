@@ -273,3 +273,12 @@ def test_other_differences_survive_the_normalisation():
     old = response(403, '{"message": "No permission for CRM Sales Hierarchy fef8ae3c71"}')
     new = response(403, '{"message": "No permission to read CRM Sales Hierarchy bc9dfbeae8"}')
     assert response_difference(old, new, []).startswith("$.message:")
+
+
+def test_timestamps_are_normalised_but_not_other_values():
+    """API_CONTRACT lists timestamps beside generated names (A-25)."""
+    old = response(200, '{"message": {"creation": "2026-11-17T23:22:26.313641Z", "role": "Sales User"}}')
+    new = response(200, '{"message": {"creation": "2026-11-17T23:22:30.702068Z", "role": "Sales User"}}')
+    assert response_difference(old, new, []) is None
+    changed = response(200, '{"message": {"creation": "2026-11-17T23:22:30.702068Z", "role": "Sales Manager"}}')
+    assert response_difference(old, changed, []).startswith("$.message.role:")
