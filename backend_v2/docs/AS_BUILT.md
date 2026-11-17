@@ -103,6 +103,22 @@ per-user role actions never load the target through `get_object()`.
 `CRMSalesHierarchy` (`/api/v1/sales-hierarchies/`) is a `TreeDocument` parented by
 `reports_to`; System Manager alone writes it.
 
+The front door (ACCOUNTS milestone 2) is guest-reachable and lives in
+`accounts/front_door.py` and `accounts/invitations.py`: `auth/reset-password/` answers
+one sentence on every branch; `auth/update-password/` sets a password by reset key (410
+`LinkNoLongerValid` for a dead link) or old password (through the login lockout, 401
+`WrongPassword`) and answers login's token pair, with `logout_all_sessions` as the only
+revocation trigger besides a save while disabled; `auth/accept-invitation/` redeems by
+key. Reset keys (`accounts/password_reset.py`) are SHA-256 at rest and claimed by one
+conditional update. `CRMInvitation` (`/api/v1/invitations/`) is manager-pair only with
+`key` sensitive; only `invitations/invite-by-email/` mints a key. Its `save()` queues
+`accounts.send_invitation_email` with `transaction.on_commit` on every insert — a test
+that wants the mail at once patches `accounts.models.transaction` (see
+`tests/test_invitations.py`), and one test proves the deferral. System mail goes through
+`core/mail.py`: today only the settings-configured account (`EMAIL_HOST`), which
+CONFIGURATION extends with saved Email Accounts tried first. `accounts.tasks.BEAT_SCHEDULE`
+runs `expire_invitations` at 00:00 and `flush_expired_tokens` at 01:00.
+
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
 disabled, and there are no bulk actions.
