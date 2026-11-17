@@ -1,4 +1,3 @@
-import json
 from unittest.mock import Mock
 
 import pytest
@@ -8,7 +7,6 @@ from django.test.utils import CaptureQueriesContext
 
 from core.exceptions import PermissionError
 from core.mixins.bulk_delete import authorize_bulk_delete, perform_bulk_delete
-from core.models import Version
 from core.resources import PRODUCTION_URLCONF
 from core.tasks import delete_bulk_docs
 from tests_support.models import (

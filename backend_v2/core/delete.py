@@ -115,7 +115,6 @@ def check_dynamic_links_batch(instances) -> None:
             if row is None:
                 continue
             target_name = str(getattr(row, name_field))
-            instance = targets[target_name]
             fields = {field.name for field in target_model._meta.get_fields()}
             if "enabled" in fields or "disabled" in fields:
                 raise LinkExistsError(
