@@ -155,6 +155,11 @@ POST {{host}}/api/method/login
     assert "GET {{host}}/api/v1/auth/token/refresh/" in result
     assert "GET {{host}}/api/v1/auth/logout/" in result
     assert result.count("-> 405") == 4
+    # A-25: the added case on a route that is not guest carries the bearer token, so it
+    # reaches the method check (405) instead of failing authentication (401).
+    blocks = {(block.title or "").split(" ")[0]: block for block in parse_http(result).blocks}
+    assert "Authorization: Bearer {{token}}" in blocks["1.12a"].lines
+    assert not any(line.startswith("Authorization") for line in blocks["2.11a"].lines)
 
 
 def test_pe3_filter_get_blocks_are_comments_not_requests():

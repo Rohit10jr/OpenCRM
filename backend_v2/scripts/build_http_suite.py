@@ -46,6 +46,7 @@ class RouteEntry:
     unit: str
     status: str
     new_route: str = ""
+    access: str = ""
 
     @property
     def built(self) -> bool:
@@ -119,7 +120,7 @@ def parse_route_map(text: str) -> RouteMap:
                     raise SuiteBuildError(
                         f"malformed built New route at line {index + 1}: {route}"
                     )
-                entry = RouteEntry(key, unit, status, route)
+                entry = RouteEntry(key, unit, status, route, _plain(values.get("Access", "")))
                 target = methods if key_column == "Dotted path" else doctypes
                 if key in target:
                     raise SuiteBuildError(f"duplicate route-map row {key!r} at line {index + 1}")
@@ -437,16 +438,27 @@ def _negative(block: HttpBlock, method: str, route: str) -> None:
     block.separator = "### " + block.title
 
 
-def _added_negative(title: str, method: str, route: str) -> HttpBlock:
-    return HttpBlock(
-        title=title,
-        separator="### " + title,
-        lines=[
-            "# @negative",
-            "# @expect $.exc_type == MethodNotAllowed",
-            f"{method} {{{{host}}}}{route}",
-        ],
+def _route_is_guest(route_map: RouteMap, route: str) -> bool:
+    return any(
+        entry.access == "guest" and route in {path for _, path in entry.routes}
+        for entry in route_map.methods.values()
     )
+
+
+def _added_negative(
+    title: str, method: str, route: str, route_map: RouteMap, token: str = "{{token}}"
+) -> HttpBlock:
+    """A wrong-verb case the old file lacks. A route that is not guest gets the file's
+    bearer token, so the request passes authentication and reaches the method check
+    (DRF authenticates first; without a token the answer is 401, A-25)."""
+    lines = [
+        "# @negative",
+        "# @expect $.exc_type == MethodNotAllowed",
+        f"{method} {{{{host}}}}{route}",
+    ]
+    if not _route_is_guest(route_map, route):
+        lines.append(f"Authorization: Bearer {token}")
+    return HttpBlock(title=title, separator="### " + title, lines=lines)
 
 
 def _section(block: HttpBlock) -> str | None:
@@ -560,6 +572,7 @@ def rewrite_http(text: str, route_map: RouteMap, filename: str = "fixture.http")
                 "1.12a POST is refused on who-am-I -> 405",
                 "POST",
                 "/api/v1/auth/me/",
+                route_map,
             ),
         )
         insertion = next(
@@ -573,6 +586,7 @@ def rewrite_http(text: str, route_map: RouteMap, filename: str = "fixture.http")
                 "2.11a GET is refused on token refresh -> 405",
                 "GET",
                 "/api/v1/auth/token/refresh/",
+                route_map,
             ),
         )
     return document.render()
