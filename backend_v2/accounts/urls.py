@@ -6,12 +6,16 @@ from accounts.views import (
     LogoutView,
     RefreshTokenView,
     UserViewSet,
+    CRMSalesHierarchyViewSet,
 )
 from core.routers import DocumentRouter
 
 
 router = DocumentRouter()
 router.register("users", UserViewSet, basename="user")
+router.register(
+    "sales-hierarchies", CRMSalesHierarchyViewSet, basename="sales-hierarchy"
+)
 
 urlpatterns = [
     re_path(r"^auth/login/?$", LoginView.as_view(), name="auth-login"),

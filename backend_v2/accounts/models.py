@@ -5,6 +5,9 @@ from django.contrib.auth.models import PermissionsMixin
 from django.db import models
 from django.utils import timezone
 
+from core.models import TreeDocument
+from core.naming import Hash
+
 from .roles import ADMINISTRATOR, GUEST, ROLE_ADMINISTRATOR, ROLE_SYSTEM_MANAGER
 
 
@@ -142,3 +145,30 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def has_role(self, role: str) -> bool:
         return role in self.get_roles()
+
+
+class CRMSalesHierarchy(TreeDocument):
+    """The org chart the sales row rules walk (old `crm_app/models/metadata.py:257-290`)."""
+
+    DOCTYPE = "CRM Sales Hierarchy"
+    NAME_STRATEGY = Hash()
+    PARENT_FIELD = "reports_to"
+    FETCH_FROM = {"full_name": ("user", "full_name")}
+
+    full_name = models.CharField(max_length=280, blank=True, default="")
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="hierarchy_nodes",
+        db_index=True,
+    )
+    reports_to = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="reports"
+    )
+    old_parent = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    is_group = models.BooleanField(default=False)
+
+    class Meta(TreeDocument.Meta):
+        ordering = ["lft"]

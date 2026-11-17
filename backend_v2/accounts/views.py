@@ -6,7 +6,7 @@ from rest_framework.response import Response
 
 from accounts import services
 from accounts.roles import ADMINISTRATOR, GUEST, ROLE_SYSTEM_MANAGER
-from accounts.serializers import UserSerializer
+from accounts.serializers import CRMSalesHierarchySerializer, UserSerializer
 from core.access import Access
 from core.mixins import LinkSearchMixin
 from core.security import resolve_ip
@@ -98,3 +98,25 @@ class LogoutView(BaseAPIView):
 class LoggedUserView(BaseAPIView):
     def get(self, request):
         return Response(request.user.name)
+
+
+class CRMSalesHierarchyViewSet(DocumentViewSet):
+    """Everyone reads the chart; System Manager alone writes it — not the manager pair,
+    since the chart decides what a manager can see (old `platform_docs.py:346-361`)."""
+
+    access = Access.ruled()
+    serializer_class = CRMSalesHierarchySerializer
+    readable_fields = CRMSalesHierarchySerializer.Meta.fields
+    filterable_fields = CRMSalesHierarchySerializer.Meta.fields
+    sortable_fields = CRMSalesHierarchySerializer.Meta.fields
+    searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        return None
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        if user.name == ADMINISTRATOR or ptype == "read":
+            return True
+        return user.has_role(ROLE_SYSTEM_MANAGER)

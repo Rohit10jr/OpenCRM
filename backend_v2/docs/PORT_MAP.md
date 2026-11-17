@@ -135,7 +135,7 @@ with Email Account (`temp` A-21 D-D).
 | DocType | Kind | Naming | Old protection | Declared fields | Old model | New route | New app | Status |
 |---|---|---|---|---|---|---|---|---|
 | CRM Invitation | main | `Hash(10)` | ruled: list rule, object rule | S: `key` | `crm_app.CRMInvitation` | `GET /api/v1/invitations/`, `POST /api/v1/invitations/`, `GET /api/v1/invitations/value/`, `GET /api/v1/invitations/<name>/`, `PATCH /api/v1/invitations/<name>/`, `DELETE /api/v1/invitations/<name>/`, `GET /api/v1/invitations/<name>/permissions/` | accounts | — |
-| CRM Sales Hierarchy | main | `Hash(10)` | ruled: list rule, object rule |  | `crm_app.CRMSalesHierarchy` | `GET /api/v1/sales-hierarchies/`, `POST /api/v1/sales-hierarchies/`, `GET /api/v1/sales-hierarchies/value/`, `GET /api/v1/sales-hierarchies/<name>/`, `PATCH /api/v1/sales-hierarchies/<name>/`, `DELETE /api/v1/sales-hierarchies/<name>/`, `GET /api/v1/sales-hierarchies/<name>/permissions/` | accounts | — |
+| CRM Sales Hierarchy | main | `Hash(10)` | ruled: list rule, object rule |  | `crm_app.CRMSalesHierarchy` | `GET /api/v1/sales-hierarchies/`, `POST /api/v1/sales-hierarchies/`, `GET /api/v1/sales-hierarchies/value/`, `GET /api/v1/sales-hierarchies/<name>/`, `PATCH /api/v1/sales-hierarchies/<name>/`, `DELETE /api/v1/sales-hierarchies/<name>/`, `GET /api/v1/sales-hierarchies/<name>/permissions/` | accounts | built |
 
 ### Method paths (13)
 

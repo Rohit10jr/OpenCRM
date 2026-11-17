@@ -2,7 +2,36 @@
 
 from core.serializers import DocumentSerializer
 
-from .models import User
+from .models import CRMSalesHierarchy, User
+
+DOCUMENT_FIELDS = (
+    "name",
+    "owner",
+    "modified_by",
+    "creation",
+    "modified",
+    "idx",
+    "docstatus",
+    "_assign",
+    "_liked_by",
+    "_comments",
+    "_user_tags",
+)
+
+
+class CRMSalesHierarchySerializer(DocumentSerializer):
+    class Meta:
+        model = CRMSalesHierarchy
+        fields = (
+            *DOCUMENT_FIELDS,
+            "full_name",
+            "user",
+            "reports_to",
+            "old_parent",
+            "lft",
+            "rgt",
+            "is_group",
+        )
 
 
 class UserSerializer(DocumentSerializer):
