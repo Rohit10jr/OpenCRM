@@ -77,11 +77,28 @@ class UserViewSet(LinkSearchMixin, DocumentViewSet):
         """Frappe's `user_query` (old `crm_app/api/client.py:45-60`, FINDINGS 46):
         enabled accounts only, and no Website Users unless a System User asked with
         `ignore_user_type`."""
+        hide_website = not (
+            flags["ignore_user_type"] and user.user_type == "System User"
+        )
+        if isinstance(filters, list):
+            # The old code turned a list into a 500 (dict() of a list); the same rules
+            # apply in list form instead (supervisor, 18 Nov 2026).
+            def fieldname(condition):
+                if isinstance(condition, (list, tuple)) and len(condition) >= 3:
+                    return condition[-3]
+                return None
+
+            result = list(filters)
+            if "enabled" not in {fieldname(condition) for condition in result}:
+                result.append(["enabled", "=", 1])
+            if hide_website:
+                result.append(["user_type", "!=", "Website User"])
+            return result
         if not isinstance(filters, (dict, type(None))):
             return filters
         result = dict(filters or {})
         result.setdefault("enabled", 1)
-        if not (flags["ignore_user_type"] and user.user_type == "System User"):
+        if hide_website:
             result["user_type"] = ["!=", "Website User"]
         return result
 

@@ -44,3 +44,25 @@ def test_a_website_user_asking_with_the_flag_still_sees_no_website_users(make_us
 def test_search_hides_the_built_ins_from_a_normal_user(auth_api):
     response = auth_api.get(SEARCH, {"txt": "Admin"})
     assert "Administrator" not in [r["value"] for r in response.json()["message"]]
+
+
+def test_list_shaped_filters_get_the_same_rules(auth_api, alice, make_user):
+    """The old code answered 500 here; the rules apply in list form instead."""
+    make_user("portal@example.com", user_type="Website User")
+    make_user("off@example.com", enabled=False)
+
+    response = auth_api.get(SEARCH, {"filters": json.dumps([["name", "like", "%example%"]])})
+
+    assert response.status_code == 200, response.content[:300]
+    names = [row["value"] for row in response.json()["message"]]
+    assert alice.name in names
+    assert "portal@example.com" not in names
+    assert "off@example.com" not in names
+
+
+def test_a_list_naming_enabled_keeps_its_own_condition(auth_api, make_user):
+    make_user("off@example.com", enabled=False)
+
+    response = auth_api.get(SEARCH, {"filters": json.dumps([["enabled", "=", 0]])})
+
+    assert [row["value"] for row in response.json()["message"]] == ["off@example.com"]
