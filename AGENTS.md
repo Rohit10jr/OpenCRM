@@ -170,6 +170,8 @@ once, and counts every password check toward the lockout.
 * **If you cannot read this repository, say so and stop.** Make the first line
   `REVIEW NOT PERFORMED` and the reason. Do not ask for files to be pasted or review from
   memory.
+* **If you cannot run terminal commands**, review from the diff file named in the prompt
+  and read the rest with your file tools.
 * **Do not run anything** in a review, and never say a test passes or fails. Name the test
   or `.http` block that would settle a finding.
 * **One block per finding, most severe first:** Severity (high, medium, low); Where
