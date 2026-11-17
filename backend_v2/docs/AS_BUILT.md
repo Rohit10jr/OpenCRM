@@ -422,9 +422,9 @@ old order, 417 status, and wording before `core.naming.validate_name` runs.
 `core.rename.rename_document` locks the original and completes the rename in one
 transaction. It inserts a hook-free copy under the new primary key, temporarily parks
 non-key unique values, repoints every reverse FK/O2O (including hidden through-table
-relations), declared polymorphic child parent, and declared `DYNAMIC_LINK_FIELDS` pair,
-then deletes the old row and restores the unique values. `TEXT_LINK_FIELDS` deliberately
-keep the old name for parity while PE-5 remains proposed. The dynamic-link declaration
+relations), declared polymorphic child parent, declared `DYNAMIC_LINK_FIELDS` pair, and
+(PE-5, approved) every model's declared `TEXT_LINK_FIELDS` column that targets the renamed
+model and holds the old name, then deletes the old row and restores the unique values. The dynamic-link declaration
 guard scans every concrete, managed model in project apps, including `tests_support`;
 like the direct-manager guard, it identifies project apps by their path directly under
 `backend_v2/`, excluding Django and third-party apps. It covers the old seven pair shapes

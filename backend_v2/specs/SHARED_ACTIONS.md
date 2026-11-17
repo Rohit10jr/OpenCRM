@@ -176,10 +176,9 @@ old endpoint used list visibility, an object rule, both, or silent skipping:
   `DYNAMIC_LINK_FIELDS` declares them (`core/models.py:74`). That equals the old seven
   pairs only if every model with one of those column shapes declares it, so **a guard test
   requires every `*_doctype` + `*_name`/`*_docname`/`*_doc` pair to be declared** (A-9).
-  Plain-text Link columns (`TEXT_LINK_FIELDS`) are **not** repointed, as in the old code
-  (rename never calls `links.py`): parity. Repointing them is PE-5, `proposed` and parked
-  for the owner (A-9, `backend_v2/docs/PARITY_EXCEPTIONS.md`; the root
-  `specs/KNOWN_ISSUES.md` is read-only here, so PE-5 is the record).
+  Plain-text Link columns (`TEXT_LINK_FIELDS`) are **also** repointed: PE-5, approved by
+  the owner on 17 Nov 2026 (`backend_v2/docs/PARITY_EXCEPTIONS.md`). The old code never
+  does (rename never calls `links.py`); upstream's `rename_doc` does.
 - `merge` raises rather than being ignored. The four refusals and the merge refusal are
   417 `ValidationError`s in `validate_rename`'s wording (`client.py:478-493`).
 

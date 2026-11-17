@@ -131,8 +131,7 @@ comparison skips that block.
 
 ### PE-5. Rename also repoints Links stored as plain text
 
-- **Status:** proposed — parked for the owner (`temp` A-9, 16 Nov 2026). The parity
-  version (no repointing) is what is built until this says `approved`
+- **Status:** approved — owner, 17 Nov 2026 (proposed 16 Nov 2026)
 - **Where:** the rename mixin (`frappe.client.rename_doc` →
   `POST /api/v1/<resource>/<name>/rename/`), on any resource another model names through a
   `TEXT_LINK_FIELDS` column. No `.http` block found
@@ -142,10 +141,12 @@ comparison skips that block.
   rename never calls it). After a rename those columns keep the old name, which now names
   nothing
 - **backend_v2:** also rewrites every declared `TEXT_LINK_FIELDS` column that names the
-  old name, in the same transaction
+  old name, in the same transaction (`backend_v2/core/rename.py:_repoint_text_links`)
 - **Why:** a dangling reference users can see (the old name shown, the link broken). The
   per-model declarations make it a small change. It changes what users see, so only the
-  owner approves it
+  owner approves it. The gap is the port's, not Frappe's: upstream's `rename_doc` repoints
+  every Link field, all of them text columns (`git show
+  version-15:frappe/model/rename_doc.py`, `:171-172` and `update_link_field_values` `:412`)
 - **Recorded by:** SHARED_ACTIONS, 16 Nov 2026
 
 ### PE-6. Both queued bulk workers refuse a missing or disabled requester
