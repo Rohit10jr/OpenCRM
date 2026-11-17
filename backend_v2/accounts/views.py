@@ -5,9 +5,13 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from accounts import directory, front_door, services, user_roles
+from accounts import directory, front_door, invitations, services, user_roles
 from accounts.roles import ADMINISTRATOR, GUEST, ROLE_SYSTEM_MANAGER
-from accounts.serializers import CRMSalesHierarchySerializer, UserSerializer
+from accounts.serializers import (
+    CRMInvitationSerializer,
+    CRMSalesHierarchySerializer,
+    UserSerializer,
+)
 from core.access import Access
 from core.inputs import build_payload
 from core.mixins import LinkSearchMixin
@@ -257,3 +261,51 @@ class UpdatePasswordView(BaseAPIView):
                 self.get_inputs(request), user, resolve_ip(request)
             )
         )
+
+
+INVITATION_MANAGER_ROLES = {"System Manager", "Sales Manager"}
+
+
+def _is_invitation_manager(user) -> bool:
+    return user.name == ADMINISTRATOR or bool(user.get_roles() & INVITATION_MANAGER_ROLES)
+
+
+class CRMInvitationViewSet(DocumentViewSet):
+    """System Manager and Sales Manager for every operation; everyone else a deny-all list
+    (old `platform_docs.py:394-407`). Stricter than upstream, whose Sales User read is what
+    made a pending key redeemable by the wrong person (upstream bug #21)."""
+
+    access = Access.ruled()
+    serializer_class = CRMInvitationSerializer
+    readable_fields = CRMInvitationSerializer.Meta.fields
+    filterable_fields = CRMInvitationSerializer.Meta.fields
+    sortable_fields = CRMInvitationSerializer.Meta.fields
+    searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        return None if _is_invitation_manager(user) else Q(pk__in=[])
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        return _is_invitation_manager(user)
+
+    @action(detail=False, methods=("post",), url_path="invite-by-email")
+    def invite_by_email(self, request):
+        """`crm.api.invite_by_email`."""
+        inputs = build_payload(request)
+        result = invitations.invite_by_email(
+            request.user, inputs.get("emails") or "", inputs.get("role")
+        )
+        return Response(Envelope(result, "message"))
+
+
+class AcceptInvitationView(BaseAPIView):
+    """`crm.api.accept_invitation`: guest, 10 per hour per IP."""
+
+    permission_classes = (AllowAny,)
+
+    @rate_limit(limit=10, seconds=60 * 60)
+    def post(self, request):
+        inputs = self.get_inputs(request)
+        return Response(invitations.accept_invitation(inputs.get("key") or ""))

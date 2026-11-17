@@ -1,6 +1,8 @@
 from django.urls import re_path
 
 from accounts.views import (
+    AcceptInvitationView,
+    CRMInvitationViewSet,
     ChangePasswordView,
     LoggedUserView,
     LoginView,
@@ -17,6 +19,7 @@ from core.routers import DocumentRouter
 
 router = DocumentRouter()
 router.register("users", UserViewSet, basename="user")
+router.register("invitations", CRMInvitationViewSet, basename="invitation")
 router.register(
     "sales-hierarchies", CRMSalesHierarchyViewSet, basename="sales-hierarchy"
 )
@@ -49,6 +52,11 @@ urlpatterns = [
         r"^auth/update-password/?$",
         UpdatePasswordView.as_view(),
         name="auth-update-password",
+    ),
+    re_path(
+        r"^auth/accept-invitation/?$",
+        AcceptInvitationView.as_view(),
+        name="auth-accept-invitation",
     ),
     *router.urls,
 ]
