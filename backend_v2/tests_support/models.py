@@ -84,6 +84,8 @@ class DataImportDocument(BaseDocument):
 class Widget(BaseDocument):
     DOCTYPE = "Foundation Widget"
     NAME_STRATEGY = NamingSeries("WIDGET-.YYYY.-")
+    SEARCH_FIELD = "widget_name"
+    SHOW_TITLE_FIELD_IN_LINK = False
     POLYMORPHIC_CHILD_TABLES = {"poly_rows": "tests_support.WidgetNote"}
     widget_name = models.CharField(max_length=140, blank=True, default="")
     status = models.CharField(max_length=50, blank=True, default="Open")
@@ -92,6 +94,7 @@ class Widget(BaseDocument):
     active = models.BooleanField(default=True)
     due_date = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True, default="")
+    external_id = models.CharField(max_length=140, null=True, blank=True, unique=True)
     widget_owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -99,6 +102,14 @@ class Widget(BaseDocument):
         null=True,
         blank=True,
     )
+
+
+class SearchableDocument(BaseDocument):
+    DOCTYPE = "Foundation Searchable Document"
+    NAME_STRATEGY = Hash()
+    SEARCH_FIELD = "title"
+    title = models.CharField(max_length=140, blank=True, default="")
+    disabled = models.BooleanField(default=False)
 
 
 class WidgetRow(BaseDocument):

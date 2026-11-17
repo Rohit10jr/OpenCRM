@@ -202,6 +202,7 @@ class Version(BaseDocument):
 
     DOCTYPE = "Version"
     NAME_STRATEGY = naming.Hash(10)
+    DYNAMIC_LINK_FIELDS = (("ref_doctype", "docname"),)
 
     ref_doctype = models.CharField(max_length=140, db_index=True)
     docname = models.CharField(max_length=140, db_index=True)

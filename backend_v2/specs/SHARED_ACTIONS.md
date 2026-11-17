@@ -1,6 +1,6 @@
 # SHARED_ACTIONS — bulk delete, linked documents, bulk update, rename, link search, export, and the conditions evaluator
 
-**Status: Running** — rewritten 16 Nov 2026 against `backend_v2/docs/AS_BUILT.md` and the
+**Status: Done** — gate passed 16 Nov 2026 (PRs #67, #68). Rewritten 16 Nov 2026 against `backend_v2/docs/AS_BUILT.md` and the
 spec check (`tasks/SHARED_ACTIONS_00_spec_check_verdict.md`, 15 findings). Paths are from
 the repository root. Open questions are at §6; the ones not yet answered are marked.
 
@@ -51,7 +51,7 @@ name as input.
 |---|---|---|
 | Bulk delete, linked documents, unlink | Lead, Deal, Contact, Organization, Task, Call Log (`frontend/src/components/ListBulkActions.vue:17-30,107-121`) | SALES, CONTACTS, ACTIVITIES |
 | Bulk update | Lead, Deal, Contact, Organization, Task; Call Log hides it (`CallLogsListView.vue:175-183`) | SALES, CONTACTS, ACTIVITIES |
-| Rename | Organization, SLA, Assignment Rule, Email Account, Email Template (`pages/Organization.vue:304-310`, `SlaPolicyView.vue:438-445`, `AssignmentRuleView.vue:735-743`, `EmailEdit.vue:191-196`, `EditEmailTemplate.vue:223-231`) | CONTACTS, SLA, ACTIVITIES, INTEGRATIONS |
+| Rename | Organization, SLA, Assignment Rule, Email Account, Email Template (`pages/Organization.vue:304-310`, `SlaPolicyView.vue:438-445`, `AssignmentRuleView.vue:735-743`, `EmailEdit.vue:191-196`, `EditEmailTemplate.vue:223-231`) | CONTACTS, SLA, ACTIVITIES, CONFIGURATION (Email Account, A-12) |
 | Link search | every Link control's target | every unit, per resource |
 | Export | every list using `ViewControls.vue:569-588` | every unit with a list view |
 

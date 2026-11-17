@@ -7,6 +7,7 @@ from tests_support.models import (
     FieldDocument,
     PointingDocument,
     PromptDocument,
+    SearchableDocument,
     SecuredDocument,
     SingletonDocument,
     Widget,
@@ -67,6 +68,12 @@ class WidgetSerializer(DocumentSerializer):
             "rows",
             "poly_rows",
         )
+
+
+class SearchableDocumentSerializer(DocumentSerializer):
+    class Meta:
+        model = SearchableDocument
+        fields = (*STANDARD_FIELDS, "title", "disabled")
 
 
 class PointingDocumentSerializer(DocumentSerializer):

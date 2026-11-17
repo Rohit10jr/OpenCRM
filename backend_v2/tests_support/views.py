@@ -5,15 +5,24 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from core.access import Access
-from core.mixins import BulkDeleteMixin, BulkUpdateMixin, LinkedDocumentsMixin
+from core.mixins import (
+    BulkDeleteMixin,
+    BulkUpdateMixin,
+    LinkedDocumentsMixin,
+    LinkSearchMixin,
+    ListExportMixin,
+    RenameMixin,
+)
 from core.renderers import Envelope
 from core.views import DocumentViewSet, SingletonViewSet
+from tests_support.export import placeholder_export_field_info
 from tests_support.serializers import (
     AutoIncrementDocumentSerializer,
     DynamicReferenceSerializer,
     FieldDocumentSerializer,
     PointingDocumentSerializer,
     PromptDocumentSerializer,
+    SearchableDocumentSerializer,
     SecuredDocumentSerializer,
     SingletonDocumentSerializer,
     WidgetSerializer,
@@ -21,8 +30,15 @@ from tests_support.serializers import (
 
 
 class WidgetViewSet(
-    BulkDeleteMixin, BulkUpdateMixin, LinkedDocumentsMixin, DocumentViewSet
+    BulkDeleteMixin,
+    BulkUpdateMixin,
+    LinkedDocumentsMixin,
+    LinkSearchMixin,
+    ListExportMixin,
+    RenameMixin,
+    DocumentViewSet,
 ):
+    export_field_info = staticmethod(placeholder_export_field_info)
     access = Access.ruled()
     serializer_class = WidgetSerializer
     readable_fields = WidgetSerializer.Meta.fields
@@ -32,6 +48,7 @@ class WidgetViewSet(
         "status",
         "amount",
         "quantity",
+        "notes",
         "widget_owner",
         "_assign",
     )
@@ -52,6 +69,17 @@ class WidgetViewSet(
         if ptype == "write":
             return document.status != "Locked"
         return None
+
+
+class SearchableDocumentViewSet(LinkSearchMixin, DocumentViewSet):
+    access = Access.open(
+        reason="A disabled-row search fixture with no confidential or protected data."
+    )
+    serializer_class = SearchableDocumentSerializer
+    readable_fields = SearchableDocumentSerializer.Meta.fields
+    filterable_fields = ("name", "title", "disabled")
+    sortable_fields = ("name", "title", "modified")
+    searchable_fields = ("title",)
 
 
 class PointingDocumentViewSet(DocumentViewSet):
@@ -105,7 +133,8 @@ class FieldDocumentViewSet(DocumentViewSet):
         return Response(Envelope(self.get_object().pk, "message"))
 
 
-class SecuredDocumentViewSet(DocumentViewSet):
+class SecuredDocumentViewSet(ListExportMixin, DocumentViewSet):
+    export_field_info = staticmethod(placeholder_export_field_info)
     access = Access.ruled()
     serializer_class = SecuredDocumentSerializer
     readable_fields = SecuredDocumentSerializer.Meta.fields

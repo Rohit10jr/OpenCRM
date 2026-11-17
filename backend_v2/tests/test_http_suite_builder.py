@@ -44,6 +44,36 @@ Content-Type: application/json
     assert "{{$dotenv ADMIN_PWD}}" in result
 
 
+def test_doctype_search_rewrites_without_claiming_resource_searches():
+    route_map = parse_route_map(
+        ROUTE_MAP_TEXT
+        + """
+## SHARED_ACTIONS
+| Dotted path | New route | Status |
+|---|---|---|
+| `frappe.desk.search.search_link` | `GET /api/v1/doctypes/search/`, `POST /api/v1/doctypes/search/` | built |
+"""
+    )
+    source = """\
+### doctypes -> 200
+POST http://localhost:8000/api/method/frappe.desk.search.search_link
+Content-Type: application/json
+
+{"doctype": "DocType", "txt": "CRM"}
+### users -> 200
+POST http://localhost:8000/api/method/frappe.desk.search.search_link
+Content-Type: application/json
+
+{"doctype": "User", "txt": "Ada"}
+"""
+
+    result = rewrite_http(source, route_map)
+
+    assert "POST {{host}}/api/v1/doctypes/search/" in result
+    assert '{"txt": "CRM"}' in result
+    assert "# @waiting SHARED_ACTIONS" in result
+
+
 def test_set_value_becomes_patch_with_field_value_body():
     source = """\
 @host = http://localhost:8000

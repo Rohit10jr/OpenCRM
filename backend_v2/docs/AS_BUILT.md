@@ -358,6 +358,30 @@ guard resolves every project model's declaration. There is no implicit fallback.
 Django's `core.E001` system check refuses one model served by two different ViewSet
 classes; registering the same class at several prefixes is valid.
 
+### Opting a resource in to a shared action
+
+Add the action's mixin before `DocumentViewSet` in the resource ViewSet's bases. The
+mixin then uses that ViewSet's `get_queryset()`, access rules, serializer model, and
+field allowlists; registering the ViewSet writes the action route explicitly through
+the same resource router. Record that concrete route in `PORT_MAP.md` when a production
+resource opts in.
+
+For Link autocomplete, add `LinkSearchMixin`. The model may declare `SEARCH_FIELD` and
+`SHOW_TITLE_FIELD_IN_LINK` as class attributes. `name`, the search field, and
+`modified` must be present in the corresponding readable, filterable, and sortable
+allowlists; an `enabled` or `disabled` field must also be filterable. The action accepts
+GET and POST at `<resource>/search/`, reads through `get_queryset()`, and deliberately
+ignores `ignore_user_permissions`.
+
+Override `search_filters(self, filters, flags, user)` only for a resource's standard
+query branch. ACCOUNTS' User override must copy `filters`, default `enabled` to 1, and
+exclude `Website User` unless `flags["ignore_user_type"]` is true and the passed user is
+a System User; it does not use ambient request state and does not call the base disabled
+filter (`backend/crm_app/api/client.py:45-60,683-691`). CONTACTS' Address override must
+pop `link_doctype` and `link_name`, find matching Address parents through Dynamic Link
+rows, add those names as a `name in [...]` filter, then call the base hook so the normal
+disabled rule still applies (`backend/crm_app/api/client.py:63-81,692-696`).
+
 The base serves list, create, retrieve, PATCH, and delete with the client-reference
 `{"message": ...}` envelope and status 200, including create. It never serves PUT.
 Every serializer receives `request.user` in its context and every save receives the
@@ -388,6 +412,27 @@ use `class LeadViewSet(BulkUpdateMixin, DocumentViewSet)`. This writes only that
 resource's `POST <resource>/bulk-update/` collection action; the app still registers the
 resource explicitly and records the concrete route in `PORT_MAP.md` when it opts in.
 No production resource opts in yet; `tests_support.WidgetViewSet` proves the mechanism.
+
+`RenameMixin` writes `POST <resource>/<name>/rename/`. It reads only `new_name` and
+`merge`; the URL supplies the old name and surplus body keys are ignored. The lookup
+starts from the model's default manager so list-invisible rows still reach the static
+object-write rule. Merge, missing, unchanged, taken, and write-denied refusals keep the
+old order, 417 status, and wording before `core.naming.validate_name` runs.
+
+`core.rename.rename_document` locks the original and completes the rename in one
+transaction. It inserts a hook-free copy under the new primary key, temporarily parks
+non-key unique values, repoints every reverse FK/O2O (including hidden through-table
+relations), declared polymorphic child parent, and declared `DYNAMIC_LINK_FIELDS` pair,
+then deletes the old row and restores the unique values. `TEXT_LINK_FIELDS` deliberately
+keep the old name for parity while PE-5 remains proposed. The dynamic-link declaration
+guard scans every concrete, managed model in project apps, including `tests_support`;
+like the direct-manager guard, it identifies project apps by their path directly under
+`backend_v2/`, excluding Django and third-party apps. It covers the old seven pair shapes
+and same-stem `*_doctype` plus `*_name`/`*_docname`/`*_doc` columns;
+`Version` declares `ref_doctype`/`docname` while remaining in `IGNORE_LINKS_ON_DELETE`.
+No production resource opts in yet; the test
+Widget resource proves the action, permission path, slash-bearing names, and every
+reference shape.
 
 `LinkedDocumentsMixin` writes `GET` and `POST <resource>/<name>/linked-documents/`.
 The GET first uses the resource's `_object_by_name("read")`, then calls the batched
@@ -446,6 +491,15 @@ then checks every target for remaining dynamic links. It batch-removes reference
 stands down per-row reference cleanup, and deletes all targets with one queryset.
 `bulk_delete_remove_contact = True` selects the old Contact-specific clearing hook;
 it defaults off. No production resource opts in yet; the test Widget resource does.
+
+`ListExportMixin` writes `GET` and `POST <resource>/export/`, merges query and body
+inputs, reads through the resource queryset and field allowlists, and returns the raw
+CSV/XLSX `HttpResponse`. Selection replaces both filter sets; client paging is ignored
+and the query fetches every matching row. An opting-in ViewSet must define a callable
+`export_field_info(fields)` provider that returns `fieldname`, `label`, and `fieldtype`
+for each column. CONFIGURATION's field metadata is intended to supply the production
+provider. Django's `core.E002` check rejects a routed production ViewSet with no provider
+or with the field-name/`Data` placeholder, which lives only in `tests_support`.
 
 ### Carrying a document name with slashes in a route
 

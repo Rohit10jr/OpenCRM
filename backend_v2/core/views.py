@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.delete import check_dynamic_links
-from core.doctypes import doctype_of
+from core.doctypes import declared_doctypes, doctype_of
 from core.exceptions import (
     DoesNotExistError,
     PermissionError,
@@ -71,6 +71,65 @@ class BaseAPIView(APIView):
                 payload = payload.message
             response.data = Envelope(payload, self.envelope_key, extra=extra)
         return super().finalize_response(request, response, *args, **kwargs)
+
+
+def _name_conditions(filters):
+    conditions = []
+    if isinstance(filters, dict):
+        value = filters.get("name")
+        if isinstance(value, (list, tuple)) and len(value) == 2:
+            conditions.append((str(value[0]).lower(), value[1]))
+        elif value not in (None, ""):
+            conditions.append(("=", value))
+    elif isinstance(filters, (list, tuple)):
+        for condition in filters:
+            if not isinstance(condition, (list, tuple)):
+                continue
+            parts = list(condition[-3:]) if len(condition) >= 3 else []
+            if len(parts) == 3 and parts[0] == "name":
+                conditions.append((str(parts[1]).lower(), parts[2]))
+    return conditions
+
+
+def _name_matches(name, operator, value):
+    if operator in ("=", "=="):
+        return name == value
+    if operator == "!=":
+        return name != value
+    if operator == "in":
+        return name in (value or [])
+    if operator == "not in":
+        return name not in (value or [])
+    if operator == "like":
+        return str(value).replace("%", "").lower() in name.lower()
+    if operator == "not like":
+        return str(value).replace("%", "").lower() not in name.lower()
+    return True
+
+
+class DoctypeSearchView(BaseAPIView):
+    """Search every declared document type for Dynamic Link controls."""
+
+    def _search(self, request):
+        inputs = self.get_inputs(request)
+        filters = parse_json_param(inputs.get("filters"), None)
+        names = sorted(declared_doctypes())
+        for operator, value in _name_conditions(filters):
+            names = [name for name in names if _name_matches(name, operator, value)]
+        needle = str(inputs.get("txt", "") or "").strip().lower()
+        if needle:
+            names = [name for name in names if needle in name.lower()]
+            names.sort(key=lambda name: (name.lower().find(needle), name.lower()))
+        page_length = int(inputs.get("page_length") or 10)
+        return self.envelope(
+            [{"value": name, "description": ""} for name in names[:page_length]]
+        )
+
+    def get(self, request):
+        return self._search(request)
+
+    def post(self, request):
+        return self._search(request)
 
 
 class DocumentViewSet(

@@ -108,3 +108,24 @@ convention this unit sets and records in `AS_BUILT.md`.
 
 None. Where a CRM app declares its list definition is settled with FOUNDATION's
 questions (FOUNDATION section 6).
+
+## 7. Carried from SHARED_ACTIONS
+
+Opt the resources below in to the `core/mixins/` actions (AS_BUILT §2, "Opting a
+resource in to a shared action"), write each generated route's row in `PORT_MAP.md`,
+and port the real-doctype cases SHARED_ACTIONS left (its §3 table). Their generic
+mechanism is tested on `tests_support`; the cases below prove it on real records.
+
+- **List export's column labels and fieldtypes.** `core/mixins/export.py:field_info`
+  uses field names and `Data` as a marked placeholder: `backend_v2` has no source
+  for the old DocType labels (`backend/crm_app/api/reportview.py:field_info` reads
+  `frappe_core.field_meta`). The field metadata this unit builds must replace it, and
+  Duration formatting then activates. No resource should opt in to export before.
+- `test_bulk_edit_fields.py` (`crm.api.doc.get_fields`) is this unit's, not
+  SHARED_ACTIONS'.
+- Email Account opts in to rename (`EmailEdit.vue:191-196`; moved here from
+  INTEGRATIONS by the milestone-2 review, A-12): its `PORT_MAP.md` row, an allowed
+  and a write-denied rename case on real Email Accounts.
+- Language keeps `language_name` (its `SEARCH_FIELD`) in its readable and filterable
+  fields: link search drops a `SEARCH_FIELD` that is hidden or outside the
+  allowlists (A-12).

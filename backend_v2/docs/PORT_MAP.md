@@ -211,19 +211,27 @@ The mixins live in `core` (REBUILD_PLAN S24); each resource opts in.
 
 ### Method paths (7)
 
-| Dotted path | Verbs | Access | Old source | New app | Status |
-|---|---|---|---|---|---|
-| `crm.api.doc.delete_bulk_docs` | GET/POST | auth | `crm_app/api/doc.py:delete_bulk_docs` | core | — |
-| `crm.api.doc.get_linked_docs_of_document` | GET/POST | auth | `crm_app/api/doc.py:get_linked_docs_of_document` | core | — |
-| `crm.api.doc.remove_linked_doc_reference` | GET/POST | auth | `crm_app/api/doc.py:remove_linked_doc_reference` | core | — |
-| `frappe.client.rename_doc` | POST | auth | `crm_app/api/client.py:client_rename_doc` | core | — |
-| `frappe.desk.doctype.bulk_update.bulk_update.submit_cancel_or_update_docs` | POST | auth | `crm_app/api/bulk_update.py:submit_cancel_or_update_docs` | core | — |
-| `frappe.desk.reportview.export_query` | GET/POST | auth | `crm_app/api/reportview.py:export_query` | core | — |
-| `frappe.desk.search.search_link` | GET/POST | auth | `crm_app/api/client.py:search_link` | core | — |
+| Dotted path | Verbs | Access | Old source | New route | New app | Status |
+|---|---|---|---|---|---|---|
+| `crm.api.doc.delete_bulk_docs` | GET/POST | auth | `crm_app/api/doc.py:delete_bulk_docs` |  | core | — |
+| `crm.api.doc.get_linked_docs_of_document` | GET/POST | auth | `crm_app/api/doc.py:get_linked_docs_of_document` |  | core | — |
+| `crm.api.doc.remove_linked_doc_reference` | GET/POST | auth | `crm_app/api/doc.py:remove_linked_doc_reference` |  | core | — |
+| `frappe.client.rename_doc` | POST | auth | `crm_app/api/client.py:client_rename_doc` |  | core | — |
+| `frappe.desk.doctype.bulk_update.bulk_update.submit_cancel_or_update_docs` | POST | auth | `crm_app/api/bulk_update.py:submit_cancel_or_update_docs` |  | core | — |
+| `frappe.desk.reportview.export_query` | GET/POST | auth | `crm_app/api/reportview.py:export_query` |  | core | — |
+| `frappe.desk.search.search_link` | GET/POST | auth | `crm_app/api/client.py:search_link` | `GET /api/v1/doctypes/search/`, `POST /api/v1/doctypes/search/` (the `DocType` case; resource routes opt in separately) | core | built |
 
 SA2 builds the linked-document scan and both opt-in actions. These two rows remain `—`
 until a production resource unit adds and records its concrete routes; only the
 `tests_support` Widget ViewSet opts in today.
+
+SA5 builds the rename service and opt-in action. Its row remains `—` until a production
+resource unit adds and records a concrete `<resource>/<name>/rename/` route; only the
+`tests_support` Widget ViewSet opts in today.
+
+SA7 builds the list-export mixin. Its row remains `—` until a production resource unit
+adds and records a concrete `<resource>/export/` route; only test-support ViewSets opt in
+today. CONFIGURATION still owns the field labels and fieldtypes used by export headers.
 
 ## CONTACTS
 
