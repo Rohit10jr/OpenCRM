@@ -604,17 +604,13 @@ Content-Type: application/json
 {"docname": "x", "new_name": "y"}
 
 ### 5.8 search_link on User is permission-filtered: a Sales User never sees Administrator
-# @waiting FOUNDATION
 # @expect $.message excludes "Administrator"
 # @expect $.message contains ada@example.com
-POST {{host}}/api/method/frappe.desk.search.search_link
+POST {{host}}/api/v1/users/search/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
-{"doctype": "User", "txt": "a", "page_length": 50}
-
-# ---- teardown ------------------------------------------------------------------------------------------
-
+{"txt": "a", "page_length": 50}
 ### 6.1 delete files -> 200
 # @waiting ACTIVITIES
 DELETE {{file}}/{{pub}}

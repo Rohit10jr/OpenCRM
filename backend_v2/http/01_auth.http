@@ -295,12 +295,14 @@ Content-Type: application/json
 {"usr": "{{sales}}", "old_password": "{{sales_pwd}}", "new_password": "{{temp_pwd}}"}
 
 ### 4.8 the old password no longer logs in -> 401
+# @waiting ACCOUNTS
 POST {{host}}/api/v1/auth/login/
 Content-Type: application/json
 
 {"usr": "{{sales}}", "pwd": "{{sales_pwd}}"}
 
 ### 4.9 the new one does -> 200
+# @waiting ACCOUNTS
 # @expect $.message.user == ada@example.com
 POST {{host}}/api/v1/auth/login/
 Content-Type: application/json
@@ -316,6 +318,7 @@ Content-Type: application/json
 {"usr": "{{sales}}", "old_password": "{{temp_pwd}}", "new_password": "{{sales_pwd}}"}
 
 ### 4.11 and the original works again -> 200
+# @waiting ACCOUNTS
 # @expect $.message.user == ada@example.com
 POST {{host}}/api/v1/auth/login/
 Content-Type: application/json
