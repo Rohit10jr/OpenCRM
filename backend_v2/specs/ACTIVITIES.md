@@ -155,3 +155,12 @@ mechanism is tested on `tests_support`; the cases below prove it on real records
   with the route rows and real-doctype export tests (A-12).
 - FCRM Note keeps `title` (its `SEARCH_FIELD`) in its readable and filterable
   fields, or link search stops matching on it (A-12).
+
+## 9. Carried from ASSIGNMENTS
+
+- **Route Assignment Rule and lift its temporary withholding** (owner, 17 Nov 2026):
+  ASSIGNMENTS lists Assignment Rule in `core/withheld.py` with `ROW_RULES` or an explicit
+  link-scan ignore, because its routes are this unit's. When this unit adds the routes,
+  remove that entry and the guard's withheld-set member, and give the ViewSet its static
+  `list_rule` / `has_object_rule` and `access` declaration (AS_BUILT "Writing a row
+  rule"), matching `backend/`'s permission rule for Assignment Rule.

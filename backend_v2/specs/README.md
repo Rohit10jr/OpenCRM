@@ -4,7 +4,7 @@
 doctype) lives in `backend_v2/docs/PORT_MAP.md`. **Paths are from the repository root.**
 
 A **unit** is one piece of the rebuild with its own gate and pull request: usually one
-Django app, built as a series of Codex briefs. Units are named for what they build, never
+Django app, built as a series of briefs. Units are named for what they build, never
 numbered — the order below can change without renaming anything.
 
 ## Status values
@@ -12,8 +12,8 @@ numbered — the order below can change without renaming anything.
 | Status | Meaning |
 |---|---|
 | **Provisional** | Written before the code it depends on exists. Its scope is right; its details are guesses. **Rewrite it against `AS_BUILT.md` before building it** |
-| **Ready** | Rewritten against what exists, spec-checked, and reviewed by the owner. Its briefs can be written |
-| **Running** | Its briefs are being built by Codex and reviewed |
+| **Ready** | Rewritten against what exists, spec-checked, and reviewed by the supervising session (with Codex/agy); the owner gets a summary in `temp\SPEC_REVIEWS.md` and may overturn it (owner, 17 Nov 2026). Its briefs can be written |
+| **Running** | Its briefs are being built by Claude and reviewed |
 | **Done** | Gate passed. `AS_BUILT.md` updated, `PORT_MAP.md` rows marked, the unit's pull request merged with its progress report |
 
 Flip the status in this table in the same commit that changes the fact. A spec whose
@@ -23,10 +23,10 @@ status is wrong is worse than no status at all.
 
 | Unit | Spec | Apps | Depends on | Status |
 |---|---|---|---|---|
-| FOUNDATION | [`FOUNDATION.md`](FOUNDATION.md) | `core`, and the first part of `accounts` | — | **Done** — gate passed 16 Nov 2026 (PRs #64, #65, milestone 3) |
+| FOUNDATION | [`FOUNDATION.md`](FOUNDATION.md) | `core`, and the first part of `accounts` | — | **Done** — gate passed 16 Nov 2026 (PRs #64, #65, #66) |
 | ACCOUNTS | [`ACCOUNTS.md`](ACCOUNTS.md) | `accounts` | FOUNDATION | Provisional |
 | CONFIGURATION | [`CONFIGURATION.md`](CONFIGURATION.md) | `configuration` | FOUNDATION | Provisional |
-| SHARED_ACTIONS | [`SHARED_ACTIONS.md`](SHARED_ACTIONS.md) | `core` (the mixins in `core/mixins/`, the conditions evaluator) X
+| SHARED_ACTIONS | [`SHARED_ACTIONS.md`](SHARED_ACTIONS.md) | `core` (the mixins in `core/mixins/`, the conditions evaluator) | FOUNDATION | **Done** — gate passed 16 Nov 2026 (PRs #67, #68; #67 landed via #71) |
 | CONTACTS | [`CONTACTS.md`](CONTACTS.md) | `contacts` | ACCOUNTS, SHARED_ACTIONS | Provisional |
 | NOTIFICATIONS | [`NOTIFICATIONS.md`](NOTIFICATIONS.md) | `notifications` | ACCOUNTS | Provisional |
 | ASSIGNMENTS | [`ASSIGNMENTS.md`](ASSIGNMENTS.md) | `activities` (ToDo, Assignment Rule, the engine), `core` (`render_template`) | ACCOUNTS, NOTIFICATIONS, SHARED_ACTIONS | Provisional |
@@ -38,14 +38,14 @@ status is wrong is worse than no status at all.
 | DATA_IMPORT | [`DATA_IMPORT.md`](DATA_IMPORT.md) | `core` (`core/data_import/`) | SALES, CONTACTS, ACTIVITIES | Provisional |
 
 **Units and apps are a starting point, not final** (REBUILD_PLAN section 4). Work may be
-merged, split or moved with a proper reason — raised in the spec check before the code
-and recorded in the progress report after — and this table, `PORT_MAP.md` and
-REBUILD_PLAN section 4 are updated with it.
+merged, split or moved with a proper reason — raised in the spec check before the code,
+**flagged to the owner when decided**, and recorded in the progress report after — and
+this table, `PORT_MAP.md` and REBUILD_PLAN section 4 are updated with it.
 
 ### Build order
 
-One unit at a time: Codex runs one brief at a time on this machine, so nothing is built
-in parallel. Each unit depends only on units above it.
+One unit at a time, one brief at a time: this machine runs one heavy job at a time, so
+nothing is built in parallel. Each unit depends only on units above it.
 
 | # | Unit | Why here |
 |---|---|---|
@@ -76,17 +76,23 @@ waiting on a later unit are listed in its progress report, not hidden.
 ## How a unit is run
 
 ```
-spec (Provisional)  ──►  rewrite against AS_BUILT, owner review (Ready)
-        ──►  spec check            the first brief: Codex, read-only, checks the spec
-                                   against backend/ and reports what is stale or wrong
-        ──►  briefs in tasks/      one per commit, written by Claude from the spec
-        ──►  Codex builds each brief; Claude reviews against backend/ and commits
-        ──►  gate: tests, the unit's .http blocks, the body diff, review
+spec (Provisional)
+        ──►  spec check            the supervising session, read-only with Codex/agy,
+                                   checks the spec against backend/ and reports what is
+                                   stale or wrong
+        ──►  rewrite               the rebuild session rewrites the spec against AS_BUILT
+                                   and the findings
+        ──►  spec review (Ready)   the supervising session reviews the rewrite; the owner
+                                   gets a summary in temp\SPEC_REVIEWS.md
+        ──►  briefs in tasks/      one per commit plan, written by Claude from the spec
+        ──►  Claude builds each brief, reviews it against backend/ and commits; the
+             supervisor reads each commit's diff
+        ──►  gate: tests, ruff, the unit's .http blocks, the body diff, review
         ──►  pull request          its description is the unit's progress report
 ```
 
-**Codex builds and Claude reviews** (root `CLAUDE.md` and `AGENTS.md`). Briefs are
-git-ignored.
+**Claude builds; the supervising session reviews with Codex or agy** (root `CLAUDE.md`,
+"Building and reviewing"; owner, 17 Nov 2026). Briefs are git-ignored.
 
 **The spec check comes first because specs go stale.** In the old backend, the check
 before each phase found four or five false claims in its spec; finding none is more
@@ -95,7 +101,7 @@ owner, before the first build brief.
 
 **If the gate fails twice, stop** and report to the owner — unless the second failure's
 cause is confirmed and its fix is small and plainly right; then make a third attempt and
-report it (root `CLAUDE.md`, Codex section). A unit with a known hole,
+report it (root `CLAUDE.md`, "Building and reviewing"). A unit with a known hole,
 honestly reported, costs less than every later unit built on one believed sound.
 
 **The progress report is the unit's pull request description:** what was built, by app;
@@ -115,4 +121,4 @@ warning sign.
 5. **Acceptance** — the ported tests passing with their expected answers unchanged, new
    tests where none existed, `.http` files or blocks, the body diff
 6. **Questions for the owner** — answered after the spec check, before the spec becomes
-   Ready; Codex builds what is decided and decides nothing itself
+   Ready; the builder builds what is decided and decides nothing itself

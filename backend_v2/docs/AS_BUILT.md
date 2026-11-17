@@ -501,6 +501,9 @@ for each column. CONFIGURATION's field metadata is intended to supply the produc
 provider. Django's `core.E002` check rejects a routed production ViewSet with no provider
 or with the field-name/`Data` placeholder, which lives only in `tests_support`.
 
+**Export always fetches `owner`**, as the old code does (`backend/crm_app/api/reportview.py`).
+Keep `owner` in an opting-in resource's readable fields, or every export of it is refused.
+
 ### Carrying a document name with slashes in a route
 
 Use `DocumentRouter`, whose document lookup is `.+?` and whose trailing slash is
@@ -545,12 +548,33 @@ test changes group membership in place; `user.refresh_from_db()` clears it autom
 
 ### Writing a row rule
 
-Override `list_rule(user)` on the resource ViewSet and return a Django `Q`, or `None`
-for no narrowing. `get_queryset()` applies this rule before client filters. Record
+**Before adding any model, decide which of these it is** (owner, 17 Nov 2026; DECISIONS
+15, A-10). In the old backend a model with no permission hook was silently *allowed*
+(`backend/frappe_core/permissions.py:34-43`) and a missing helper made checks pass
+silently (`backend/frappe_core/registry.py:198-205`); here each case has a guard that
+fails instead, and this list is how to stay clear of them:
+
+1. **Routed** (it has a ViewSet): write `list_rule(user)` and
+   `has_object_rule(user, document, ptype)` as **`@staticmethod`s** on the ViewSet —
+   they may not read the request; the user comes in as an argument — and declare
+   `access = Access.ruled()` or `Access.open(reason=...)` (D-1).
+2. **A child table** (`IS_CHILD_TABLE`): no rules of its own. Its rows are checked
+   through the parent's `has_object_rule` (`read` to show, `write` to unlink), never the
+   parent's `list_rule`. Declare its parent link so each row's parent can be found.
+3. **Neither** (e.g. ToDo, Data Import Log): add it to `IGNORE_LINKS_ON_DELETE` with the
+   reason, or declare `ROW_RULES = "<app>.permissions.<name>"` whose `list_rule` and
+   `has_object_rule` are static. Also list it in `core/withheld.py` and update the exact
+   withheld set in `tests/guards/test_resource_access.py`.
+4. **Never two ViewSets for one model** in the production routes (`core.E001`).
+5. **Every `*_doctype` + `*_name` column pair** goes in `DYNAMIC_LINK_FIELDS`.
+6. **Run `tests/guards/`** before committing.
+
+Write `list_rule(user)` as a static method on the resource ViewSet and return a Django
+`Q`, or `None` for no narrowing. `get_queryset()` applies this rule before client filters. Record
 lookup instead starts from the model's default manager and then applies the object rule:
 list and object rules may intentionally differ, so exclusion from a list is not a 404.
 
-Override `has_object_rule(user, document, ptype)` for the record decision, returning
+Write `has_object_rule(user, document, ptype)`, also static, for the record decision, returning
 `True`, `False`, or `None`; `None` means no additional restriction. The base calls it
 with `read`, `write`, `delete`, or `create`. Create receives an unsaved candidate built
 from the payload's plain concrete fields, falling back to an empty instance only when

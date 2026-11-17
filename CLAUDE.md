@@ -16,11 +16,12 @@ commits behind upstream `main` on 3 Nov 2026) and translations are separate late
 (`specs/KNOWN_ISSUES.md` §11; owner, 12 Nov 2026).
 
 **Before the rebuild merges into `main`, split this file and `AGENTS.md`** (owner, 12 Nov
-2026). They are written for the owner's machine and workflow — local paths, Codex builder
-mode, the long-run rule — which does not belong in a public repository. The tracked files
-become short and general: the project, the stack, how to run the tests, the contract
-rules. Everything personal moves to gitignored local files: `CLAUDE.local.md` for Claude,
-and for Codex whatever local override the installed codex-cli supports (check it then).
+2026). They are written for the owner's machine and workflow — local paths, the
+builder/reviewer setup, the long-run rule — which does not belong in a public repository.
+The tracked files become short and general: the project, the stack, how to run the tests,
+the contract rules. Everything personal moves to gitignored local files: `CLAUDE.local.md`
+for Claude, and for Codex/agy whatever local override each CLI supports (agy reads
+`AGENTS.md` and `GEMINI.md`; check both CLIs then).
 
 ## What to read, and when
 
@@ -123,10 +124,11 @@ report. Much of what happens on save, rename or delete is in the framework.
 
 ## Tests
 
-Codex runs the test files it touched, singly (`AGENTS.md` "When building"). Otherwise
-Claude runs no tests unasked. **Before a pull request, ask the owner** whether they run
-the full suite and the `.http` suite or Claude runs them; when Claude does, "Long runs"
-below applies.
+**After each brief, Claude runs the test files it touched and their neighbours**, singly
+or in one run, before committing (owner, 15 Nov 2026). **Once per milestone**, before its
+review request, Claude runs the full suite in the background with a JUnit file, and
+`ruff check .` in `backend_v2/` (CI runs both; owner, 17 Nov 2026); "Long runs" below
+applies. Otherwise no tests unasked.
 
 **Old API tests are ported, not rewritten** (S14, changed 12 Nov 2026): about 50 files in
 `backend/tests/` call the API, and their expected answers come from the old backend, so a
@@ -134,9 +136,9 @@ misreading by the author cannot creep into both code and test. In review, a new 
 an old one exists is a finding, and so is a changed expectation without an approved
 exception.
 
-## Long runs: the test suite, Codex and subagents
+## Long runs: the test suite, reviews and subagents
 
-When Claude runs the full suite, a Codex build or review, or a long subagent task, it runs
+When Claude runs the full suite, a review (Codex or agy) or a long subagent task, it runs
 in the background with output to a log, and Claude reads the log. (Owner, 12 Nov 2026.)
 
 * **Never stop a run abruptly**, and never on time alone.
@@ -144,7 +146,7 @@ in the background with output to a log, and Claude reads the log. (Owner, 12 Nov
   and judge whether it is still making progress.
 * **45 minutes is the upper limit for that routine.** Past it, decide from the result and
   the evidence: what the run has done, whether it is still progressing, what stopping
-  would lose. Stop only a run that is stuck or has wandered, and say why. A stuck Codex
+  would lose. Stop only a run that is stuck or has wandered, and say why. A stuck review
   run is re-run once with a narrower prompt before escalating a tier.
 * **Do not report a result the log does not contain.**
 
@@ -163,33 +165,44 @@ each with its own database, Redis databases, `.env` and virtualenv (S18, REBUILD
 
 ---
 
-# Codex (see the codex skill)
+# Building and reviewing (see the codex skill for the reviewers)
 
-**Builder mode (owner, 15 Oct 2026; confirmed for the rebuild 12 Nov 2026):** Codex
-writes `backend_v2` from briefs in `tasks/`; Claude plans, reviews and commits, and does
-not write feature code. Codex's side is `AGENTS.md` "When building".
+**Claude builds; the supervising session reviews with Codex or agy** (owner, 17 Nov
+2026; replaces Codex builder mode of 15 Oct and 12 Nov 2026). In the rebuild session,
+Claude writes `backend_v2` from its own briefs in `tasks/`, reviews each diff against
+`backend/` and commits. **The rebuild session never runs Codex or agy.** The supervising
+session runs every review — spec checks, spec reviews, milestone reviews, second
+opinions — with Codex (`gpt-5.6-sol`) or agy (Antigravity CLI, `gemini-3.8-flash-high`),
+read-only; how they work together is `temp\RULES.md`. `AGENTS.md` "When reviewing" is
+what both reviewers read; its "When building" section is dormant while Claude builds.
 
-- **Each unit starts with a spec check:** a read-only Codex brief that checks the unit's
-  spec against `backend/` and reports what is stale or wrong. Fix the spec, or settle it
-  with the owner, before the first build brief (`backend_v2/specs/README.md`).
+- **Each unit starts with a spec check:** the supervising session checks the unit's spec
+  against `backend/` (read-only, Codex/agy) and reports what is stale or wrong; ask for it
+  as a "Spec check request". Rewrite the spec from the findings, then ask for a "Spec
+  review request": **no build brief starts until the supervisor's verdict is in**
+  (owner, 17 Nov 2026). The owner gets a summary in `temp\SPEC_REVIEWS.md` and may
+  overturn it.
 - A brief names the unit and its spec, the `PORT_MAP.md` rows, the old backend's files
   and functions, the decisions already taken, the one change to make, and the tests.
 - **Two failures of a brief or a unit's gate (review or tests): stop — unless the cause
-  is known.** If the second failure's root cause is found and confirmed from the
+  is known.** If the failure's root cause is found and confirmed from the
   evidence (the error, the code, a reproduction) and the fix is small and plainly right,
-  make a **third attempt** without waiting: write the fix brief, then tell the owner and
+  make a **third attempt** without waiting: make the fix, then tell the owner and
   record it in `STATUS.md` / the progress report. Stop and report instead when the cause
   is a guess, the fix is large, it would change a decision or the contract, or the
   third attempt fails too. (Owner, 14 Nov 2026: stopping on a known cause with a known
   fix only wastes time.)
 - **The unit's pull request description is its progress report**; the list of what it
   holds is in `backend_v2/specs/README.md`.
-- Run builds with `network_access=true`, so tests can reach PostgreSQL.
 - **Commits: one concern each, with its own tests, about 250–300 lines at most** (owner,
-  13 Nov 2026). Briefs stay feature-sized; Codex leaves a **commit plan** in
-  `tasks/COMMIT_MSG` — file groups in order, each with its message (`AGENTS.md` "When
-  building"). Review the whole diff first, then commit group by group, staging by path;
-  a file split across groups is staged by patch (`git apply --cached`). Read each subject
-  before committing. One pull request per milestone.
+  13 Nov 2026). Briefs stay feature-sized. Before building a brief, write its **commit
+  plan**: file groups in order, **file-disjoint**, each with its message. Review the whole
+  diff, then commit group by group, staging by path, and **run each group's tests on its
+  own before its commit** — a group that cannot pass alone is merged with the next one
+  (owner, 17 Nov 2026: two commits in #67 failed alone). Read each subject before
+  committing. One pull request per milestone.
+- **Each milestone's gate** includes the full suite (JUnit), `ruff check .` in
+  `backend_v2/`, and the supervisor's milestone review; the results go in the PR
+  description.
 - Review the diff against `backend/`, not against the spec: the spec and the author can
   share a misunderstanding. For a tier-3 review, point the subagent at `backend/` too.
