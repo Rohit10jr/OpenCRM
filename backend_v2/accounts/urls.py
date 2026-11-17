@@ -1,7 +1,17 @@
 from django.urls import re_path
 
-from accounts.views import LoggedUserView, LoginView, LogoutView, RefreshTokenView
+from accounts.views import (
+    LoggedUserView,
+    LoginView,
+    LogoutView,
+    RefreshTokenView,
+    UserViewSet,
+)
+from core.routers import DocumentRouter
 
+
+router = DocumentRouter()
+router.register("users", UserViewSet, basename="user")
 
 urlpatterns = [
     re_path(r"^auth/login/?$", LoginView.as_view(), name="auth-login"),
@@ -12,4 +22,5 @@ urlpatterns = [
     ),
     re_path(r"^auth/logout/?$", LogoutView.as_view(), name="auth-logout"),
     re_path(r"^auth/me/?$", LoggedUserView.as_view(), name="auth-me"),
+    *router.urls,
 ]

@@ -1,11 +1,72 @@
-"""The four explicit authentication endpoints."""
+"""The authentication endpoints and the accounts resources."""
 
+from django.db.models import Q
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from accounts import services
+from accounts.roles import ADMINISTRATOR, GUEST, ROLE_SYSTEM_MANAGER
+from accounts.serializers import UserSerializer
+from core.access import Access
+from core.mixins import LinkSearchMixin
 from core.security import resolve_ip
-from core.views import BaseAPIView
+from core.views import BaseAPIView, DocumentViewSet
+
+BUILTIN_USERS = (ADMINISTRATOR, GUEST)
+
+
+def _is_user_admin(user) -> bool:
+    # System Manager alone administers users (platform_docs.py:47 ADMIN_ROLES).
+    return user.name == ADMINISTRATOR or user.has_role(ROLE_SYSTEM_MANAGER)
+
+
+class UserViewSet(LinkSearchMixin, DocumentViewSet):
+    """`User`, ruled as `backend/crm_app/permissions/platform_docs.py:90-136` rules it."""
+
+    access = Access.ruled()
+    serializer_class = UserSerializer
+    readable_fields = UserSerializer.Meta.fields
+    filterable_fields = UserSerializer.Meta.fields
+    sortable_fields = UserSerializer.Meta.fields
+    searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        # Everyone sees colleagues (kanban builds a column per user); only the literal
+        # Administrator sees the built-ins.
+        if user.name == ADMINISTRATOR:
+            return None
+        return ~Q(pk__in=BUILTIN_USERS)
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        if user.name == ADMINISTRATOR:
+            return True
+        if ptype == "create":
+            return _is_user_admin(user)
+        name = getattr(document, "pk", None)
+        if name is None:
+            return _is_user_admin(user)
+        if str(name) in BUILTIN_USERS:
+            return False
+        if _is_user_admin(user):
+            return True
+        if ptype == "read":
+            return True
+        # Your own row only, and never delete: it would orphan everything you own.
+        return ptype == "write" and str(name) == str(user.name)
+
+    def search_filters(self, filters, flags, user):
+        """Frappe's `user_query` (old `crm_app/api/client.py:45-60`, FINDINGS 46):
+        enabled accounts only, and no Website Users unless a System User asked with
+        `ignore_user_type`."""
+        if not isinstance(filters, (dict, type(None))):
+            return filters
+        result = dict(filters or {})
+        result.setdefault("enabled", 1)
+        if not (flags["ignore_user_type"] and user.user_type == "System User"):
+            result["user_type"] = ["!=", "Website User"]
+        return result
 
 
 class LoginView(BaseAPIView):
