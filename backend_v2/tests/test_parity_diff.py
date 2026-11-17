@@ -244,3 +244,32 @@ def test_the_lockout_file_runs_each_backend_in_turn(temporary_path: Path, name, 
     )
     assert runner.run_pair(old, new)
     assert order == expected
+
+
+# --- A-25: the resource envelope and generated names ------------------------------------
+
+
+def test_a_resource_envelope_block_compares_old_data_with_new_message():
+    old = response(201, '{"data": {"name": "x", "title": "A"}}')
+    new = response(200, '{"message": {"name": "x", "title": "A"}}')
+    assert response_difference(old, new, [], resource_envelope=True) is None
+    different = response(200, '{"message": {"name": "x", "title": "B"}}')
+    assert "$.message.title" in response_difference(old, different, [], resource_envelope=True)
+
+
+def test_without_the_marker_the_envelope_still_differs():
+    old = response(201, '{"data": {"name": "x"}}')
+    new = response(200, '{"message": {"name": "x"}}')
+    assert response_difference(old, new, []) == "$.status: 201 != 200"
+
+
+def test_generated_names_are_normalised_inside_messages():
+    old = response(403, '{"message": "No permission for CRM Sales Hierarchy fef8ae3c71"}')
+    new = response(403, '{"message": "No permission for CRM Sales Hierarchy bc9dfbeae8"}')
+    assert response_difference(old, new, []) is None
+
+
+def test_other_differences_survive_the_normalisation():
+    old = response(403, '{"message": "No permission for CRM Sales Hierarchy fef8ae3c71"}')
+    new = response(403, '{"message": "No permission to read CRM Sales Hierarchy bc9dfbeae8"}')
+    assert response_difference(old, new, []).startswith("$.message:")

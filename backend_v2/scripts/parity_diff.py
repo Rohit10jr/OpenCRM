@@ -54,6 +54,15 @@ def ignored(path: str, rules: list[IgnoreRule]) -> bool:
     return False
 
 
+#: A `Hash(10)` document name, as both backends generate it. Generated names legitimately
+#: differ between two servers (API_CONTRACT.md), also inside a message that names one.
+GENERATED_NAME_RE = re.compile(r"(?<![0-9a-z])[0-9a-f]{10}(?![0-9a-z])")
+
+
+def normalise_generated(value: str) -> str:
+    return GENERATED_NAME_RE.sub("<generated>", value)
+
+
 def body_difference(left, right, rules: list[IgnoreRule], path: str = "$") -> str | None:
     if type(left) is not type(right):
         return f"{path}: type {type(left).__name__} != {type(right).__name__}"
@@ -76,6 +85,8 @@ def body_difference(left, right, rules: list[IgnoreRule], path: str = "$") -> st
             if difference := body_difference(old_value, new_value, rules, f"{path}[{index}]"):
                 return difference
         return None
+    if isinstance(left, str) and normalise_generated(left) == normalise_generated(right):
+        return None
     if left != right:
         old_value = json.dumps(left, ensure_ascii=False)[:80]
         new_value = json.dumps(right, ensure_ascii=False)[:80]
@@ -83,8 +94,16 @@ def body_difference(left, right, rules: list[IgnoreRule], path: str = "$") -> st
     return None
 
 
-def response_difference(old_response, new_response, rules: list[IgnoreRule]) -> str | None:
-    if old_response.status_code != new_response.status_code:
+def response_difference(
+    old_response, new_response, rules: list[IgnoreRule], resource_envelope: bool = False
+) -> str | None:
+    """With `resource_envelope` (a block marked `# @resource-envelope`), the old
+    `/api/resource/` answer — `{"data": ...}` and 201 on create — is compared with the
+    REST copy's `{"message": ...}` and 200, the shape the route answers by design."""
+    old_status = old_response.status_code
+    if resource_envelope and old_status == 201:
+        old_status = 200
+    if old_status != new_response.status_code:
         return f"$.status: {old_response.status_code} != {new_response.status_code}"
     differences = []
     for header in CONTRACT_HEADERS:
@@ -108,6 +127,10 @@ def response_difference(old_response, new_response, rules: list[IgnoreRule]) -> 
         if old_response.text != new_response.text:
             differences.append("$: response text differs")
     else:
+        if resource_envelope and isinstance(old_body, dict) and "data" in old_body:
+            old_body = {"message": old_body["data"], **{
+                key: value for key, value in old_body.items() if key != "data"
+            }}
         if body := body_difference(old_body, new_body, rules):
             differences.append(body)
     return "; ".join(differences) or None
@@ -199,8 +222,11 @@ class ParityRunner:
                 old_results.append(self.old.run_block(old_block, check=False))
                 new_results.append(self.new.run_block(new_block, check=False))
 
-        for (_, old_block, _, _), old_result, new_result in zip(plan, old_results, new_results):
-            self._compare(old_block, old_result, new_result, counts)
+        for (_, old_block, _, new_block), old_result, new_result in zip(
+            plan, old_results, new_results
+        ):
+            envelope = marked(new_block, "# @resource-envelope")
+            self._compare(old_block, old_result, new_result, counts, envelope)
         self.output(
             f"  {counts['same']} same, {counts['differs']} differs, {counts['skipped']} skipped"
         )
@@ -214,7 +240,9 @@ class ParityRunner:
             results.append(runner.run_block(block, check=False))
         return results
 
-    def _compare(self, old_block: HttpBlock, old_result, new_result, counts: dict) -> None:
+    def _compare(
+        self, old_block: HttpBlock, old_result, new_result, counts: dict, envelope: bool = False
+    ) -> None:
         if old_result and new_result and old_result.outcome == new_result.outcome == "skipped":
             counts["skipped"] += 1
             self.output(f"  [skipped] {old_block.title} -- cleanup reference unavailable")
@@ -230,7 +258,9 @@ class ParityRunner:
         if old_result is None or new_result is None or old_result.response is None or new_result.response is None:
             difference = "$: response missing"
         else:
-            difference = response_difference(old_result.response, new_result.response, self.rules)
+            difference = response_difference(
+                old_result.response, new_result.response, self.rules, envelope
+            )
         outcome = "differs" if difference else "same"
         counts[outcome] += 1
         detail = f" -- {difference}" if difference else ""
