@@ -152,8 +152,12 @@ class ParityRunner:
         old_blocks = parse_http(old_path.read_text(encoding="utf-8")).blocks
         new_blocks = parse_http(new_path.read_text(encoding="utf-8")).blocks
         new_by_key = {block_key(block): index for index, block in enumerate(new_blocks) if block_key(block)}
-        old_cursor = new_cursor = 0
+        # 99_lockout runs against each backend in turn (ACCOUNTS spec section 7, A-18):
+        # alternating the two servers spreads the failed logins past the lockout window,
+        # so neither would lock.
+        sequential = new_path.name == "99_lockout.http"
         counts = {"same": 0, "differs": 0, "skipped": 0}
+        plan = []
         for old_index, old_block in enumerate(old_blocks):
             if old_block.request is None or not (key := block_key(old_block)):
                 continue
@@ -163,8 +167,6 @@ class ParityRunner:
                 self.output(f"  [differs] {old_block.title} -- REST copy is missing")
                 continue
             new_block = new_blocks[new_index]
-            old_cursor = self._advance_variables(old_blocks, old_cursor, old_index, self.old)
-            new_cursor = self._advance_variables(new_blocks, new_cursor, new_index, self.new)
             reason = None
             if marked(new_block, "# @waiting"):
                 reason = "waiting for its unit"
@@ -176,32 +178,56 @@ class ParityRunner:
                 counts["skipped"] += 1
                 self.output(f"  [skipped] {old_block.title} -- {reason}")
                 continue
-            old_result = self.old.run_block(old_block, check=False)
-            new_result = self.new.run_block(new_block, check=False)
-            if old_result and new_result and old_result.outcome == new_result.outcome == "skipped":
-                counts["skipped"] += 1
-                self.output(f"  [skipped] {old_block.title} -- cleanup reference unavailable")
-                continue
-            failure = next(
-                (result.detail for result in (old_result, new_result) if result and result.outcome == "fail"),
-                None,
-            )
-            if failure:
-                counts["differs"] += 1
-                self.output(self.old.redact(f"  [differs] {old_block.title} -- {failure}"))
-                continue
-            if old_result is None or new_result is None or old_result.response is None or new_result.response is None:
-                difference = "$: response missing"
-            else:
-                difference = response_difference(old_result.response, new_result.response, self.rules)
-            outcome = "differs" if difference else "same"
-            counts[outcome] += 1
-            detail = f" -- {difference}" if difference else ""
-            self.output(self.old.redact(f"  [{outcome}] {old_block.title}{detail}"))
+            plan.append((old_index, old_block, new_index, new_block))
+
+        if sequential:
+            old_results = self._run_in_turn(old_blocks, [(i, b) for i, b, _, _ in plan], self.old)
+            new_results = self._run_in_turn(new_blocks, [(i, b) for _, _, i, b in plan], self.new)
+        else:
+            old_results, new_results = [], []
+            old_cursor = new_cursor = 0
+            for old_index, old_block, new_index, new_block in plan:
+                old_cursor = self._advance_variables(old_blocks, old_cursor, old_index, self.old)
+                new_cursor = self._advance_variables(new_blocks, new_cursor, new_index, self.new)
+                old_results.append(self.old.run_block(old_block, check=False))
+                new_results.append(self.new.run_block(new_block, check=False))
+
+        for (_, old_block, _, _), old_result, new_result in zip(plan, old_results, new_results):
+            self._compare(old_block, old_result, new_result, counts)
         self.output(
             f"  {counts['same']} same, {counts['differs']} differs, {counts['skipped']} skipped"
         )
         return counts["differs"] == 0
+
+    def _run_in_turn(self, blocks: list[HttpBlock], indexed, runner: HttpRunner) -> list:
+        cursor = 0
+        results = []
+        for index, block in indexed:
+            cursor = self._advance_variables(blocks, cursor, index, runner)
+            results.append(runner.run_block(block, check=False))
+        return results
+
+    def _compare(self, old_block: HttpBlock, old_result, new_result, counts: dict) -> None:
+        if old_result and new_result and old_result.outcome == new_result.outcome == "skipped":
+            counts["skipped"] += 1
+            self.output(f"  [skipped] {old_block.title} -- cleanup reference unavailable")
+            return
+        failure = next(
+            (result.detail for result in (old_result, new_result) if result and result.outcome == "fail"),
+            None,
+        )
+        if failure:
+            counts["differs"] += 1
+            self.output(self.old.redact(f"  [differs] {old_block.title} -- {failure}"))
+            return
+        if old_result is None or new_result is None or old_result.response is None or new_result.response is None:
+            difference = "$: response missing"
+        else:
+            difference = response_difference(old_result.response, new_result.response, self.rules)
+        outcome = "differs" if difference else "same"
+        counts[outcome] += 1
+        detail = f" -- {difference}" if difference else ""
+        self.output(self.old.redact(f"  [{outcome}] {old_block.title}{detail}"))
 
 
 def selected_files(paths: list[Path], include_lockout: bool) -> list[Path]:

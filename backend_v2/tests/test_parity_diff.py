@@ -170,3 +170,44 @@ def test_lockout_must_be_explicit_when_combined_and_is_sorted_last():
     with pytest.raises(ValueError, match="--include-lockout"):
         selected_files([lockout, normal], include_lockout=False)
     assert selected_files([lockout, normal], include_lockout=True) == [normal, lockout]
+
+
+LOCKOUT_TEXT = """\
+### 1.1 wrong password -> 401
+POST {host}/login
+### 1.2 wrong password -> 401
+POST {host}/login
+### 1.3 now locked -> 403
+POST {host}/login
+"""
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("99_lockout.http", ["old", "old", "old", "new", "new", "new"]),
+        ("01_auth.http", ["old", "new", "old", "new", "old", "new"]),
+    ],
+)
+def test_the_lockout_file_runs_each_backend_in_turn(temporary_path: Path, name, expected):
+    """ACCOUNTS spec section 7 (A-18): interleaving the two servers spreads the failed
+    logins past the lockout window, so 99_lockout runs all of one side, then the other."""
+    old = temporary_path / "old" / name
+    new = temporary_path / "new" / name
+    for path, host in ((old, "http://old.test"), (new, "http://new.test")):
+        path.parent.mkdir()
+        path.write_text(LOCKOUT_TEXT.format(host=host), encoding="utf-8")
+    order = []
+
+    def transport(side):
+        def request(method, url, **kwargs):
+            order.append(side)
+            return response(401, '{"message":"no"}')
+        return request
+
+    runner = ParityRunner(
+        rules=[], old_request=transport("old"), new_request=transport("new"),
+        output=lambda line: None,
+    )
+    assert runner.run_pair(old, new)
+    assert order == expected
