@@ -145,7 +145,10 @@ Moved here by ACCOUNTS' spec rewrite (`temp` A-21 D-D, 18 Nov 2026; flagged for 
 - **The outgoing-account lookup**: add the Email Account steps of
   `backend/crm_app/communication.py:find_outgoing_account` (`:400-440`) to the carrier
   ACCOUNTS built in `core`, tried **before** the settings-configured account, in the old
-  order.
+  order; and replace the carrier's small settings object with the unsaved `EmailAccount`
+  the old backend builds (`backend/crm_app/communication.py:372-398`). Port
+  `test_mail_config_account.py:262` and `test_phase5_async.py:377` here (both need a
+  saved Email Account).
 - **`User.default_list_data`** (the User list view, old `:309-318`), with the other list
   views.
 - `test_language.py:65` and `test_onboarding_status.py` write `User` through ACCOUNTS'

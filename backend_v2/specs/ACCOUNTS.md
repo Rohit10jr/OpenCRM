@@ -1,8 +1,8 @@
 # ACCOUNTS — users, roles, password reset, invitations, the sales hierarchy
 
-**Status: Provisional — rewritten 18 Nov 2026** against `backend_v2/docs/AS_BUILT.md` and
-the spec check (`tasks\ACCOUNTS_00_spec_check_verdict.md`, `temp` A-21), waiting for its
-spec review. Paths are from the repository root; `backend/` is read at `main` `8f5ff1b`.
+**Status: Ready — rewritten 18 Nov 2026** against `backend_v2/docs/AS_BUILT.md` and
+the spec check (`tasks\ACCOUNTS_00_spec_check_verdict.md`, `temp` A-21); spec review
+approved with fixes (A-22), made here. Paths are from the repository root; `backend/` is read at `main` `8f5ff1b`.
 
 ## 1. Scope
 
@@ -12,11 +12,11 @@ FOUNDATION `User` row, which this unit marks built).
 
 **Resources (3)** — plain CRUD; none opts in to a shared action except `User` to search:
 
-| DocType | New route | Old protection |
+| DocType | New routes (each written out in its `PORT_MAP.md` row) | Old protection |
 |---|---|---|
-| User | `/api/v1/users/`, `/api/v1/users/<name>/` (GET, POST, PATCH, DELETE) | §4.1 |
-| CRM Invitation | `/api/v1/invitations/`, `/api/v1/invitations/<name>/` | §4.5 |
-| CRM Sales Hierarchy | `/api/v1/sales-hierarchies/`, `/api/v1/sales-hierarchies/<name>/` | §4.6 |
+| User | `/api/v1/users/` (GET, POST), `users/value/` (GET), `users/search/` (GET, POST), `users/<name>/` (GET, PATCH, DELETE), `users/<name>/permissions/` (GET) | §4.1 |
+| CRM Invitation | `/api/v1/invitations/` as `users/` without `search/` | §4.6 |
+| CRM Sales Hierarchy | `/api/v1/sales-hierarchies/` as `users/` without `search/` | §4.7 |
 
 The frontend uses only list, read, insert, `set_value` and delete on CRM Invitation
 (`frontend/src/components/Settings/InviteUserPage.vue:198-205`, `:86`) and CRM Sales
@@ -25,7 +25,9 @@ and reads and saves the session user's own `User` document (`ProfileSettings.vue
 `PreferencesSettings.vue:106`, `UserEmailSettings.vue:136`, `EmailEditor.vue:241`).
 
 **Method paths (13)** — REBUILD_PLAN S25; inputs keep their names, and only the user
-moves into the URL for the two per-user role actions:
+moves into the URL for the two per-user role actions (`<name>` in the route map). For a
+route served by `GET` alone, an old `POST` body moves into the query string — a reshaped
+input, recorded in the route map:
 
 | Old path | New route | Frontend caller |
 |---|---|---|
@@ -37,15 +39,16 @@ moves into the URL for the two per-user role actions:
 | `crm.api.session.get_users` | `GET /api/v1/users/directory/` (`include_all`) | `stores/users.js:17-22,48-53` |
 | `crm.api.session.get_user_info` | `GET` and `POST /api/v1/users/info/` (`users`; POST because 200 names do not fit a URL, S25 (4)) | `stores/users.js:99-102` |
 | `crm.api.user.add_existing_users` | `POST /api/v1/users/add-existing/` (`users`, `role`) | `Modals/AddExistingUserModal.vue:98-103` |
-| `crm.api.user.update_user_role` | `POST /api/v1/users/<user>/update-role/` (`new_role`) | `Settings/Users.vue:255` |
-| `crm.api.user.remove_crm_roles_from_user` | `POST /api/v1/users/<user>/remove-crm-roles/` | `Settings/Users.vue:274` |
+| `crm.api.user.update_user_role` | `POST /api/v1/users/<name>/update-role/` (`new_role`) | `Settings/Users.vue:255` |
+| `crm.api.user.remove_crm_roles_from_user` | `POST /api/v1/users/<name>/remove-crm-roles/` | `Settings/Users.vue:274` |
 | `crm.api.get_user_signature` | `GET /api/v1/users/signature/` | `CommunicationArea.vue:156-160` |
 | `frappe.core.doctype.user.user.get_timezones` | `GET /api/v1/users/timezones/` | `Settings/PreferencesSettings.vue:130-138` |
 | `crm.api.invite_by_email` | `POST /api/v1/invitations/invite-by-email/` (`emails`, `role`) | `Settings/InviteUserPage.vue:175-182` |
 
-Action routes are matched before `<name>` (S25 (8)); user names are email addresses or
-`Administrator`/`Guest`, so none collides with `directory`, `info`, `add-existing`,
-`signature` or `timezones`.
+Action routes are matched before `<name>` (S25 (8)). Nothing enforces that a user's name
+is an email address (`accounts/models.py:45,98-101`): a user named `info`, `directory`,
+`add-existing`, `signature`, `timezones`, `search` or `value` cannot be reached by its
+document route — the known S25 (8) limit.
 
 **Not served:** `frappe.client.rename_doc` for `User` (the old backend serves it behind
 the write rule, `backend/crm_app/api/client.py:493`); `User` does not opt in to rename
@@ -106,9 +109,9 @@ their minimum form here and carried (§8):
 | `test_token_version.py` | port `:64`, `:79`, `:114`, `:126`, `:278`, `:283`, `:289` | the other 9 are in v2; `:236` is ACTIVITIES' |
 | `test_security.py` | port `:182`, `:190`, `:205` | |
 | `test_desk_plumbing.py` | port `:108`, `:125` (`get_timezones`) | |
-| `test_phase5_async.py` | port `:138-191`, `:368-428` (both jobs, the invitation email) | |
+| `test_phase5_async.py` | port `:138-191`, `:368-428` (both jobs, the invitation email), except `:377` | `:377` creates an Email Account: CONFIGURATION |
 | `test_platform_models.py` | port `:119` (needs the `User` route) | |
-| `test_mail_config_account.py` | port | the carrier lives here (§4.8) |
+| `test_mail_config_account.py` | port the cases §4.8 lists | the rest carried (§4.8) |
 | `test_disable_user.py` | — | all 9 cases already in `backend_v2/tests/test_disable_user.py` |
 | `test_user_emails.py` | — | CONFIGURATION (§8.1) |
 
@@ -142,7 +145,7 @@ filterable and sortable; `enabled` and `user_type` filterable
 **How `User` fits the resource recipe (decided A-21 D-A; A-13 closed).** `User` stays an
 `AbstractBaseUser` and gets **none** of the standard fields (`owner`, `modified_by`, `idx`,
 `docstatus`, `_assign`, `_liked_by`, `_comments`, `_user_tags`): `backend/` returns none
-of them (`frappe_platform/models.py:117-120,178-179`; `tests/test_platform_models.py:354`)
+of them (`frappe_platform/models.py:119-120,179-180`; `tests/test_platform_models.py:354`)
 and no `frontend/src` file reads them on a User. No parity exception is used. Instead:
 - `DOCTYPE = "User"`, so `core.doctypes.declared_doctypes()` and `model_for_doctype`
   know it (today `doctype_of` answers "User" only by its class-name fallback, and
@@ -155,16 +158,19 @@ and no `frontend/src` file reads them on a User. No parity exception is used. In
 - **Delete** keeps the old path: `check_dynamic_links` runs (`backend/frappe_core/
   views.py:236`; v2's `core/delete.py:44,98` returns early without `DOCTYPE`), and the
   reference/polymorphic-child cascade is connected for `User` as for every registered
-  non-child doctype (`backend/crm_app/apps.py:30-34`; v2's `core/children.py:393-409`
-  skips non-`BaseDocument` models — include `User`).
+  non-child doctype (`User` is registered, `frappe_platform/models.py:110`, and
+  `backend/crm_app/apps.py:30-34` connects every registered non-child doctype;
+  `registry.py:198-205` only lets the cleanup ask its doctype). v2's
+  `core/children.py:393-409` skips non-`BaseDocument` models — include `User`. The
+  wiring has nothing to clean up until ACTIVITIES (v2's cleanup table holds only
+  `Version`, `core/children.py:326-328`, and `User` writes none); ACTIVITIES proves it
+  (§8).
 - **Link scan:** in `backend/`, every FK to `User` (`owner`, `modified_by`, …) is a link
   source for target "User" (`crm_app/api/doc.py:_link_sources`, via the registry patch).
   `User` does not opt in to linked documents or bulk delete, so the scan never runs with
-  `User` as its target; once `DOCTYPE` is declared, `tests/guards/test_link_scan_rules.py`
-  classifies those FKs, and every source model it names must already have rules.
+  `User` as its target. `User` has no outgoing FK, so it is never a link source itself.
 - **Guards cover `User`:** served-or-withheld (`tests/guards/test_resource_access.py:
-  149-188`) and the link-scan guard (`test_link_scan_rules.py:51`) skip
-  non-`BaseDocument` models today; extend them to `User`. The write-stamp guard
+  149-188`) skips non-`BaseDocument` models today; extend it to `User`. The write-stamp guard
   (`test_write_stamps.py`) does not apply (no stamps). Each new direct `User` or
   invitation read gets a reviewed entry in `test_direct_model_access.py`.
 - **Opt-ins:** search only (§4.3). Never export (it always fetches `owner`,
@@ -203,7 +209,15 @@ refuses it too (`frappe/model/document.py:850-859`). Tested.
   cannot remove yourself." (403), removes the CRM roles (System Manager only by a System
   Manager), **deletes the user's hierarchy node with no reports guard**, and answers
   "User {user} has been removed from CRM roles.". `add_existing_users` accepts `users` as
-  a JSON string or a single name.
+  a JSON string or a single name; `role` defaults to "Sales User" (`user.py:111`).
+- **No object rule on the two per-user actions** (A-22): the old code checks only the
+  manager pair (`user.py:139,192`), so a Sales Manager changes another user's role
+  (`09` 3.2), which `User`'s write rule would refuse. `update-role` and
+  `remove-crm-roles` therefore load the user **directly** by the URL's name (a reviewed
+  entry in `test_direct_model_access.py`), never through the ViewSet's object lookup, and
+  keep the old check order: manager pair, then the role value ("Cannot assign this role"),
+  then the user — a missing user is 417 "User {user} not found" (`:142-147`, `09` 3.16),
+  not the base 404/403.
 
 ### 4.3 Search
 
@@ -226,15 +240,19 @@ enabled / Website User rules (`backend/crm_app/api/client.py:45-60`, FINDINGS 46
   (`:250-259`); it answers `login`'s exact shape, 401 and 410 for its two failures
   (`:441-455`; the frontend reads 410 as a dead link). The account comes from `usr`,
   `user` or the token's user (`:177-190`); the old-password path lowercases the name
-  before `authenticate` (`:190,253`) — copied as is.
+  before `authenticate` (`:190,253`) — copied as is. Refusals, verbatim: "New password is
+  required" (`:133`); "Password size exceeded the maximum allowed size." above 512
+  characters (`:42,136`); "Provide either a reset key or your current password" (`:147`);
+  401 "Invalid password" (`:248,257`); the two 410 sentences (`password_reset.py:56-57`).
 - **Revocation (finding 11):** `token_version` bumps in exactly two places — a save while
   disabled (built in FOUNDATION) and `update_password` with a truthy
   `logout_all_sessions`, which also blacklists every outstanding refresh token
   (`:275-305`). The bump runs **before** the new pair is issued (`:169-174`), so the
   returned tokens are valid. `change_password` and a plain reset revoke nothing
   (`backend/tests/test_token_version.py:114`).
-- **`change_password`** (`user.py:54-107`): Guest → 401 "You must be logged in to change
-  your password"; the account lockout (`LoginAttemptTracker(user)`), "Too many failed
+- **`change_password`** (`user.py:54-107`): its Guest branch (401 "You must be logged in
+  to change your password") is unreachable — the route is not guest, so an anonymous
+  caller is refused before the view; not tested. The account lockout (`LoginAttemptTracker(user)`), "Too many failed
   attempts. Please try again after some time."; "New password cannot be the same as
   current password. Please choose a different password."; "Incorrect current password.
   Please try again." (counts a failure); weak password → "Password is too weak. " plus
@@ -264,18 +282,23 @@ v2's `core.security.rate_limit` hands a callable key only the merged inputs
   through the resource has an empty key, which `accept_invitation` refuses
   (`auth_pages.py:340-344`) — that is what stops a Sales Manager posting a System Manager
   invitation. **The model must not generate a key.**
-- `invite_by_email` (`misc.py:75-123`): role checks first — "You are not allowed to invite
+- `invite_by_email` (`misc.py:75-123`): the manager pair first, 403 "Not permitted"
+  (`:86`, `09` 4.1); then the role checks — "You are not allowed to invite
   System Managers", "You are not allowed to invite Sales Managers", "Cannot invite for this
   role" (403); then `null` for an empty or wholly invalid `emails`; existing members by
   email and existing invitations **of any status** (an expired or accepted one blocks a
   re-invite) are skipped; answers `{"existing_members", "existing_invites", "to_invite"}`.
   `to_invite` comes from a set, so its order is not stable: the body diff compares it as
   a set.
-- **The invitation email is sent on any creation of an invitation row**, by `post_save`
-  and a Celery task (`async_signals.py:208-218`, `tasks.py:219-284`): `invite_by_email`
-  and a manager's direct resource create both send. Subject "You have been invited to
+- **The invitation email is sent on any creation of an invitation row** (old: `post_save`
+  and a Celery task, `async_signals.py:208-218`, `tasks.py:219-284`): `invite_by_email`
+  and a manager's direct resource create both send. In v2 **the CRM Invitation model's
+  save, on insert, queues the email task after commit** (A-22; REBUILD_PLAN §5: no signal
+  where a direct call reaches) — covering `invite_by_email`, the resource create and the
+  walk script's model create. Subject "You have been invited to
   join Open CRM"; link `{FRONTEND_ORIGIN}/crm/accept-invitation?key=<key>`.
-- `accept_invitation` claims the row with one conditional update (`auth_pages.py:392-396`),
+- `accept_invitation`: every refusal is 417 "Invalid or expired key"
+  (`auth_pages.py:344,348,386,396`). It claims the row with one conditional update (`:392-396`),
   grants the role plus its implied roles (`:311-315`), never removes a role, and reuses an
   existing account (`:409-421`). New user → `{"status": "set_password", "redirect_to":
   <frontend update-password link with a reset key>}`; existing user →
@@ -300,7 +323,16 @@ v2's `core.security.rate_limit` hands a callable key only the merged inputs
 - **The minimum carrier, in `core`:** the settings-configured outgoing account — step 4
   of `find_outgoing_account` (`communication.py:400-440`), `None` unless `EMAIL_HOST` is
   set (`:375-377`); with none, sending raises "Please setup default outgoing Email
-  Account…" (`mail.py:66-70`). Ported with `test_mail_config_account.py`.
+  Account…" (`mail.py:66-70`). The old config account is an **unsaved `EmailAccount`**
+  built from the `EMAIL_*` settings (`communication.py:372-398`) and marked
+  `from_site_config`, which `open_backend` reads to use Django's own connection
+  (`:617`). v2 has no Email Account yet, so the carrier in `core` returns a small object
+  with the account name, the sender address, the SMTP settings and that flag; CONFIGURATION
+  replaces it with the unsaved Email Account (§8).
+- Ported here from `test_mail_config_account.py`: `:140`, `:147` (without the class
+  check), `:179`, `:188`, `:221`, `:314`, `:331`, `:341`, `:367`, `:378`. Carried:
+  `:262` and `test_phase5_async.py:377` to CONFIGURATION (a saved Email Account);
+  `:233`, `:250`, `:282` to ACTIVITIES (a lead or a Communication).
 
 ### 4.9 Scheduled jobs
 
@@ -322,12 +354,15 @@ an empty schedule today.
 - pytest: every case in §3's table passing with its expected answers unchanged, and new
   tests for each §4 item no old test covers, each shown failing without its protection.
 - `.http` blocks (finding 16 of the spec check):
-  - **This unit's:** `01_auth` 2.12, 3.1-3.3, 4.1-4.11, 5.1-5.3; `09_users_and_invitations`
+  - **This unit's:** `01_auth` 2.12, 3.1-3.3, 4.1-4.11, 5.1-5.2; `09_users_and_invitations`
     0.4-0.7, 1.1-1.6, 2.1-2.13, 3.1-3.16, 4.1-4.11, 5.1-5.3, 5.5, 6.1-6.4, 8.2-8.4;
     `99_lockout` 3.1; `00_walkthrough` 4.8; `11_permissions_matrix` 0.6-0.9, 5.1-5.8,
     6.12, 7.1-7.2; `13_bulk_and_misc` 5.1, 9.3. The 17 `User` blocks in
     `backend_v2/http/09_users_and_invitations.http` tagged `# @waiting FOUNDATION`
-    (0.4, 2.1-2.6, 2.8-2.13, 6.2, 6.4, 8.3, 8.4) are retagged to ACCOUNTS.
+    (0.4, 2.1-2.6, 2.8-2.13, 6.2, 6.4, 8.3, 8.4) become runnable when the FOUNDATION `User`
+    row is marked built with its New route (`scripts/build_http_suite.py:338-340`).
+    `01_auth` 5.3 (a GET on `accept_invitation`) becomes a negative case: the new route is
+    POST only.
   - **Already pass from FOUNDATION:** `01_auth` 1.1-2.11a; `09` 0.1-0.3, 5.4; `99` 1.1-2.2.
   - **Wait for later units:** `09` 0.8-0.9, 7.1, 8.1 (SALES); 6.5 (CONFIGURATION); 6.6,
     7.2-7.6 (ACTIVITIES).
@@ -362,6 +397,14 @@ because D-B is a decision to build the read-only `name` and flag it.
   (`:214-260`) (`FRONTEND_ORIGIN` exists already, `backend_v2/config/settings/base.py:132`); in the test settings
   `CELERY_TASK_ALWAYS_EAGER` and the locmem mail backend (old `test.py:20,22`). Never
   print `.env`.
+- **The `.http` generator** (`backend_v2/scripts/build_http_suite.py`, milestone 1): it
+  pastes a new route literally (`:425`) and marks a block `# @negative` when the old verb
+  is not among the new route's (`:418-425`). Teach it, with
+  `tests/test_http_suite_builder.py` cases, to (a) move an old `POST` body into the query
+  string for a route served by `GET` alone (`09` 1.1-1.4, 2.7, 3.3, 3.8, 3.15, 6.1, 6.3
+  POST to `get_users` and `get_user_signature`), and (b) move a named body key into the
+  URL's `<name>` (the per-user role actions); and remove the hard-coded `01_auth` runnable
+  set and `99_lockout` 3.1 waiting tag (`:461-486`) so the route map decides.
 - **`rate_limit` sees the user:** extend `core.security.rate_limit` so a callable key
   receives the request's authenticated user (one small commit, tested).
 - Port the change-password, reset and logout-all-sessions cases of `test_security.py` and
@@ -391,9 +434,10 @@ because D-B is a decision to build the read-only `name` and flag it.
   `accounts/dev_data.py` `SEEDED_USERS`, run it read-only and post the result; (2) a
   one-off script under `backend/`'s own settings and models sets **only** the role
   memberships of ada, grace and alan to `SEEDED_USERS`' (`groups.set(...)`, no `save()`,
-  no password, no other row). It writes to a database that is not a test one: run only
-  with the owner's go-ahead in chat. If (1) shows profile columns differ, ask before
-  widening it.
+  no password, no other row). The owner approved resetting those roles once before the
+  gate (DECISIONS 19); this script is narrower than what they approved, so it runs after
+  (1)'s result and the script are posted and the supervisor answers (A-22). If (1) shows
+  profile columns differ, that part waits for the owner.
 - **Correct FOUNDATION's wording:** `specs/FOUNDATION.md` and `AS_BUILT.md` give ACCOUNTS
   "the password-change and password-reset revocation triggers"; there is one trigger
   (§4.4), fixed in this rewrite's commit.
@@ -408,8 +452,12 @@ because D-B is a decision to build the read-only `name` and flag it.
 **Handed on** (each written into the receiving spec in this rewrite's commit):
 1. CONFIGURATION: User Email (model, Email Account hook, `PRIVILEGED_WRITE_FIELDS`,
    `test_user_emails.py`); the signature's Email Account fallback; `User.default_list_data`;
-   the Email Account step of the outgoing-account lookup, before the config account.
-2. ACTIVITIES: the same lookup order wherever mail is sent from a document.
+   the Email Account step of the outgoing-account lookup, before the config account, and
+   the carrier's object replaced by the unsaved Email Account;
+   `test_mail_config_account.py:262`, `test_phase5_async.py:377`.
+2. ACTIVITIES: the same lookup order wherever mail is sent from a document;
+   `test_mail_config_account.py:233`, `:250`, `:282`; proving the delete cascade on a
+   deleted `User` once File, Comment and ToDo join the cleanup table.
 3. INTEGRATIONS: `get_users`' `is_telephony_agent` from CRM Telephony Agent.
 
 ## 9. Milestones
@@ -418,11 +466,13 @@ because D-B is a decision to build the read-only `name` and flag it.
    with the user; the `User` resource (DOCTYPE, seam, forced insert, read-only `name`,
    `user_emails: []`, delete path, guards, search); CRM Sales Hierarchy; `get_users`,
    `get_user_info`; the three role actions; `change_password`; `get_timezones`,
-   `oauth_providers`, `get_user_signature`; the 17 `.http` retags and this milestone's
-   PORT_MAP rows.
+   `oauth_providers`, `get_user_signature`; the `.http` generator changes (§7); this
+   milestone's PORT_MAP rows marked built. Tests placed here besides §3's: the PE-4
+   hierarchy test, the PE-7 test, `test_token_version.py:278`, `:283`, `:289`.
 2. **`rebuild/accounts-2` — the front door and invitations:** the mail carrier; reset-key
-   hashing; `reset_password`, `update_password`, `accept_invitation`; CRM Invitation,
-   `invite_by_email` and its email task; both scheduled jobs.
+   hashing and its storage test; `reset_password`, `update_password`,
+   `accept_invitation`; CRM Invitation, `invite_by_email` and its email task; both
+   scheduled jobs. Tests placed here: `test_token_version.py:64`, `:79`, `:114`, `:126`.
 3. **`rebuild/accounts-3` — tooling and the gate:** dev-data safety; `parity_diff.py`;
    the `opencrm` check and role script; the `walk_auth_flow.py` equivalent; the `.http`
    and body-diff acceptance.
