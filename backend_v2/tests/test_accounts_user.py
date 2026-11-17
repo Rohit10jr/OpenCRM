@@ -88,3 +88,52 @@ def test_seed_migration_creates_roles_and_builtin_users():
     assert guest.has_usable_password() is False
     assert administrator.get_roles() == {ROLE_ADMINISTRATOR, ROLE_SYSTEM_MANAGER}
     assert guest.get_roles() == set()
+
+
+# ACCOUNTS AC2: User fits the resource recipe (specs/ACCOUNTS.md section 4.1).
+
+
+def test_user_declares_its_doctype_for_the_shared_lookups():
+    from core.doctypes import model_for_doctype
+
+    assert model_for_doctype("User") is User
+
+
+def test_save_accepts_and_ignores_the_resource_actor(administrator):
+    user = User(name="actor@example.com", email="actor@example.com")
+
+    user.save(user=administrator)
+
+    assert User.objects.filter(name="actor@example.com").exists()
+
+
+def test_a_create_differing_only_by_case_never_updates_the_existing_row(alice):
+    from django.db import IntegrityError, transaction
+
+    alice.first_name = "Original"
+    alice.save(update_fields=["first_name"])
+    clone = User(name=alice.name.upper(), first_name="Clone")
+
+    with pytest.raises(IntegrityError), transaction.atomic():
+        clone.save(user=alice)
+
+    alice.refresh_from_db()
+    assert alice.first_name == "Original"
+
+
+def test_deleting_a_user_named_by_a_dynamic_link_is_refused(alice, bob):
+    from core.delete import check_dynamic_links
+    from core.exceptions import LinkExistsError
+    from tests_support.models import DynamicReference
+
+    DynamicReference(reference_doctype="User", reference_name=bob.name).save(user=alice)
+
+    with pytest.raises(LinkExistsError):
+        check_dynamic_links(bob)
+
+
+def test_the_delete_cascade_is_connected_for_user():
+    from django.db.models.signals import post_delete
+
+    uids = {key[0] for key, *_ in post_delete.receivers}
+    assert "core.children.cascade.accounts.User" in uids

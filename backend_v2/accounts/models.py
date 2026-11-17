@@ -38,6 +38,11 @@ class UserManager(BaseUserManager):
 class User(AbstractBaseUser, PermissionsMixin):
     """Frappe User, whose primary key is normally its normalized email address."""
 
+    # Not a BaseDocument (Django needs AbstractBaseUser), but a doctype like any other:
+    # the old registry gave it one (backend/frappe_core/registry.py:198-205), and the
+    # delete check, the cascade and the DocType search look it up by this name.
+    DOCTYPE = "User"
+
     # Declared now; nothing enforces these until field access and email validation land.
     EMAIL_FIELDS = ("email",)
     ATTACH_FIELDS = ("user_image",)
@@ -89,7 +94,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self) -> str:
         return str(self.name)
 
-    def save(self, *args, **kwargs):
+    def save(self, *args, user=None, **kwargs):
+        # The resource recipe passes the actor (`save(user=...)`); `User` keeps no
+        # owner/modified_by stamps (specs/ACCOUNTS.md section 4.1), so it is ignored.
+        del user
+        if self._state.adding:
+            # As BaseDocument does: a create never turns into an update of a row whose
+            # name differs only by case once lowercased below.
+            kwargs.setdefault("force_insert", True)
         if not self.full_name:
             self.full_name = " ".join(
                 part for part in (self.first_name, self.last_name) if part
