@@ -226,10 +226,11 @@ def test_real_foundation_blocks_are_runnable_and_later_blocks_wait():
         number = (block.title or "").split(" ", 1)[0]
         if number in {f"1.{n}" for n in range(1, 12)} | {"1.13"}:
             assert "# @waiting" not in block.lines
-        if any(line.startswith("# @waiting") for line in block.lines):
-            assert "/api/method/" in block.request[1]
-        else:
+        if not any(line.startswith("# @waiting") for line in block.lines):
             assert "/api/v1/" in block.request[1]
+        if number in {"4.8", "4.9", "4.11"}:
+            # They follow update_password's 4.7 and 4.10 in the same story (A-23).
+            assert "# @waiting ACCOUNTS" in block.lines
     for block in parse_http(lockout).blocks:
         if block.request and (block.title or "").startswith(("1.", "2.")):
             assert "# @waiting" not in block.lines
@@ -300,3 +301,74 @@ Content-Type: application/json
 """
     with pytest.raises(SuiteBuildError, match="no input for <name>"):
         rewrite_http(source, parse_route_map(ACCOUNTS_ROUTE_MAP))
+
+
+def test_a_block_after_a_waiting_block_in_its_section_waits_too():
+    source = """\
+### 4.7 change by old password -> 200
+POST http://localhost:8000/api/method/future.method
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"usr": "{{sales}}", "new_password": "{{temp_pwd}}"}
+
+### 4.8 log in with the old password -> 401
+POST http://localhost:8000/api/method/login
+Content-Type: application/json
+
+{"usr": "{{sales}}", "pwd": "old"}
+
+### 4.9 wrong verb -> 405
+GET http://localhost:8000/api/method/login
+
+### 4.10 unrelated check sharing only the token -> 200
+POST http://localhost:8000/api/method/login
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"usr": "other", "pwd": "x"}
+
+### 5.1 another section -> 200
+POST http://localhost:8000/api/method/login
+Content-Type: application/json
+
+{"usr": "ada", "pwd": "x"}
+"""
+    blocks = {
+        (block.title or "").split(" ")[0]: block
+        for block in parse_http(rewrite_http(source, parse_route_map(ROUTE_MAP_TEXT))).blocks
+    }
+    assert "# @waiting FOUNDATION" in blocks["4.7"].lines
+    assert "# @waiting FOUNDATION" in blocks["4.8"].lines
+    assert "# @waiting FOUNDATION" not in blocks["4.9"].lines
+    assert "# @waiting FOUNDATION" not in blocks["4.10"].lines
+    assert "# @waiting FOUNDATION" not in blocks["5.1"].lines
+
+
+def test_a_built_resource_search_runs_on_its_own_search_route():
+    route_map = parse_route_map(
+        ROUTE_MAP_TEXT
+        + """
+## SHARED_ACTIONS
+| Dotted path | New route | Status |
+|---|---|---|
+| `frappe.desk.search.search_link` | `GET /api/v1/doctypes/search/`, `POST /api/v1/doctypes/search/` | built |
+
+## ACCOUNTS
+| DocType | New route | Status |
+|---|---|---|
+| User | `GET /api/v1/users/`, `GET /api/v1/users/search/`, `POST /api/v1/users/search/` | built |
+"""
+    )
+    source = """\
+### 5.8 user search -> 200
+POST http://localhost:8000/api/method/frappe.desk.search.search_link
+Content-Type: application/json
+
+{"doctype": "User", "txt": "ada"}
+"""
+    result = rewrite_http(source, route_map)
+    block = next(block for block in parse_http(result).blocks if block.request)
+    assert block.request == ("POST", "{{host}}/api/v1/users/search/")
+    assert block.headers_and_body()[1] == '{"txt": "ada"}'
+    assert "# @waiting" not in result

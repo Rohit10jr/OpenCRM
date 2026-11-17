@@ -240,8 +240,18 @@ def _rewrite_search_link(
     doctype = payload.get("doctype")
     if doctype != "DocType":
         resource = routes.doctypes.get(doctype) if isinstance(doctype, str) else None
-        _annotate(block, f"# @waiting {(resource or entry).unit}")
-        return
+        searches = [
+            (verb, path)
+            for verb, path in (resource.routes if resource and resource.built else [])
+            if path.rstrip("/").endswith("/search")
+        ]
+        if not searches:
+            _annotate(block, f"# @waiting {(resource or entry).unit}")
+            return
+        # A built resource that opts in to search answers on its own search/ route.
+        entry = RouteEntry(resource.key, resource.unit, resource.status, " ".join(
+            f"`{verb} {path}`" for verb, path in searches
+        ))
     allowed = {verb for verb, _ in entry.routes}
     route = entry.routes[0][1]
     if method not in allowed:
@@ -439,6 +449,46 @@ def _added_negative(title: str, method: str, route: str) -> HttpBlock:
     )
 
 
+def _section(block: HttpBlock) -> str | None:
+    match = re.match(r"(\d+)\.", block.title or "")
+    return match.group(1) if match else None
+
+
+VARIABLE_USE_RE = re.compile(r"\{\{\s*([A-Za-z_]\w*)")
+
+
+def _story_variables(block: HttpBlock) -> set[str]:
+    """The variables a request reads, less the host and the bearer tokens every block
+    shares."""
+    request_lines = [line for line in block.lines if not line.startswith(("#", "@"))]
+    names = set(VARIABLE_USE_RE.findall("\n".join(request_lines)))
+    return {name for name in names if name != "host" and not name.endswith("token")}
+
+
+def _wait_after_waiting(blocks: list[HttpBlock]) -> None:
+    """A block that reads the state an earlier waiting block of its numbered section was
+    to set up waits too, on the same unit: 01_auth 4.8 logs in with the password 4.7 was
+    to change (A-23). "Reads the same state" is approximated by sharing a variable other
+    than the host or a token, so an unrelated check in the same section (13 5.8) still
+    runs. Negative and cleanup blocks always run."""
+    waiting: dict[str, list[tuple[str, set[str]]]] = {}
+    for block in blocks:
+        section = _section(block)
+        if section is None or block.request is None:
+            continue
+        variables = _story_variables(block)
+        marker = next((line for line in block.lines if line.startswith("# @waiting ")), None)
+        if marker is None and not {"# @negative", "# @cleanup"} & set(block.lines):
+            marker = next(
+                (earlier for earlier, used in waiting.get(section, []) if used & variables),
+                None,
+            )
+            if marker:
+                _annotate(block, marker)
+        if marker:
+            waiting.setdefault(section, []).append((marker, variables))
+
+
 def rewrite_http(text: str, route_map: RouteMap, filename: str = "fixture.http") -> str:
     document = parse_http(text)
     _mark_cleanup_blocks(document.blocks)
@@ -480,6 +530,8 @@ def rewrite_http(text: str, route_map: RouteMap, filename: str = "fixture.http")
         elif "/api/resource/" in resolved_url:
             if name := _rewrite_resource(block, method, resolved_url, route_map):
                 resource_names.add(name)
+
+    _wait_after_waiting(document.blocks)
 
     for block in document.blocks:
         block.lines = [
