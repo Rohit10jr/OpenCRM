@@ -48,17 +48,17 @@ DELETE {{org}}/ZZ%20Grammar%20Gamma
 Authorization: Bearer {{token}}
 
 ### 0.5 cleanup industry -> 200|404
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{host}}/api/resource/CRM%20Industry/ZZ%20Grammar%20Industry
+DELETE {{host}}/api/v1/industries/ZZ%20Grammar%20Industry/
 Authorization: Bearer {{token}}
 
 # ---- fixture ---------------------------------------------------------------------------
 
-### 1.1 create the industry -> 201
-# @waiting CONTACTS
-# @expect $.data.name == ZZ Grammar Industry
-POST {{host}}/api/resource/CRM%20Industry
+### 1.1 create the industry -> 200
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.name == ZZ Grammar Industry
+POST {{host}}/api/v1/industries/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -528,10 +528,10 @@ Content-Type: application/json
 {"organization_name": "ZZ Grammar Alpha"}
 
 ### 10.11 deleting a row another row links to -> 417 LinkExistsError (delete_doc.py:452)
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == LinkExistsError
 # @expect $.message == Cannot delete or cancel because CRM Industry ZZ Grammar Industry is linked with CRM Organization ZZ Grammar Alpha
-DELETE {{host}}/api/resource/CRM%20Industry/ZZ%20Grammar%20Industry
+DELETE {{host}}/api/v1/industries/ZZ%20Grammar%20Industry/
 Authorization: Bearer {{token}}
 
 ### 10.12 DELETE a name that does not exist -> 404
@@ -573,8 +573,8 @@ DELETE {{org}}/ZZ%20Grammar%20Gamma
 Authorization: Bearer {{token}}
 
 ### 11.4 delete the industry, now unreferenced -> 200
-# @waiting CONTACTS
-DELETE {{host}}/api/resource/CRM%20Industry/ZZ%20Grammar%20Industry
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/industries/ZZ%20Grammar%20Industry/
 Authorization: Bearer {{token}}
 
 ### 11.5 nothing left behind -> 200, empty

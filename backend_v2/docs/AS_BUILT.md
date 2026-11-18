@@ -234,6 +234,14 @@ check `configuration.E001`), 0 each until ACTIVITIES names its own. Only `tests_
 opts in so far, so `get_data`'s route-map row stays unbuilt until SALES, ACTIVITIES and
 CONTACTS opt their resources in; `07` 5.8 runs as the generic 404.
 
+CONTACTS (`specs/CONTACTS.md`) starts with two changes to the shared actions in `core`
+(milestone 0, PE-25, PE-26; §2's bulk delete paragraph). Its first milestone adds the
+reference data in the `contacts` app: `salutations/` and `genders/` (everyone reads,
+System Manager or Administrator writes; the rows written by a data migration) and
+`industries/` (open to every signed-in user), each with `search/`. The lists are in
+`contacts/reference_rows.py`; `contacts/dev_data.py` adds two `seed_dev_data` steps,
+one putting back a deleted salutation or gender and one writing the 51 industries.
+
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
 disabled, and there are no bulk actions.
