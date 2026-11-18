@@ -174,3 +174,40 @@ def test_translations_are_empty_for_a_guest(api):
 
 def test_a_roleless_user_is_refused_clear_demo_data_too(api_as, roleless):
     assert api_as(roleless).post(CLEAR_DEMO, {}, format="json").status_code == 403
+
+
+# --- A-29: Administrator passes by name, not by its groups; guests are refused ---------
+
+
+@pytest.fixture
+def bare_administrator(administrator):
+    """Administrator with every group removed: the pass must come from the name."""
+    administrator.groups.clear()
+    administrator.clear_roles_cache()
+    return administrator
+
+
+def test_administrator_without_groups_still_gets_the_crm_app(api_as, bare_administrator):
+    assert api_as(bare_administrator).get(GET_APPS).json()["message"] == [CRM_ENTRY]
+
+
+def test_administrator_without_groups_still_gets_site_info(api_as, bare_administrator):
+    assert api_as(bare_administrator).get(SITE_INFO).status_code == 200
+
+
+def test_administrator_without_groups_may_still_clear_demo_data(api_as, bare_administrator):
+    assert api_as(bare_administrator).post(CLEAR_DEMO, {}, format="json").status_code == 200
+
+
+def test_current_site_info_refuses_a_sales_manager(api_as, sales_manager):
+    response = api_as(sales_manager).get(SITE_INFO)
+    assert response.status_code == 403
+    assert response.json()["message"] == "Not permitted"
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [("get", GET_APPS), ("get", SITE_INFO), ("get", BOOT_CONFIG), ("post", CLEAR_DEMO)],
+)
+def test_a_guest_is_refused_the_authenticated_routes(api, method, path):
+    assert getattr(api, method)(path).status_code == 401
