@@ -135,6 +135,11 @@ FRONTEND_ORIGIN = env("FRONTEND_ORIGIN", default="http://localhost:8080")
 CORS_ALLOWED_ORIGINS = [FRONTEND_ORIGIN]
 CORS_ALLOW_CREDENTIALS = True
 
+# Telemetry: on only when both are set (old backend/config/settings/base.py); the
+# frontend reads boot_config's `enabled` to decide whether to show the persona wizard.
+POSTHOG_PROJECT_ID = env("POSTHOG_PROJECT_ID", default="")
+POSTHOG_HOST = env("POSTHOG_HOST", default="")
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},

@@ -494,10 +494,8 @@ Content-Type: application/json
 
 {"email_signature": "", "mobile_no": ""}
 ### 6.5 get_translations is guest-callable and returns the (empty) catalogue -> 200, {}
-# @waiting CONFIGURATION
 # @expect $.message count 0
-GET {{host}}/api/method/crm.api.get_translations
-
+GET {{host}}/api/v1/translations/
 ### 6.6 get_file_uploader_defaults -> the upload limits the file picker reads
 # @waiting ACTIVITIES
 # @expect $.message.allowed_file_types contains PDF

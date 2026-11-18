@@ -668,50 +668,38 @@ Authorization: Bearer {{token}}
 # endpoint has.
 
 ### 9.1 get_apps as Administrator -> 200, the CRM's own add_to_apps_screen entry (this is a one-app site)
-# @waiting CONFIGURATION
 # @expect $.message count 1
 # @expect $.message[0].name == crm
-GET {{host}}/api/method/frappe.apps.get_apps
+GET {{host}}/api/v1/desk/apps/
 Authorization: Bearer {{token}}
-
 ### 9.2 ...and for a Sales User too: check_app_permission passes on FCRM module access -> 200
-# @waiting CONFIGURATION
 # @expect $.message count 1
 # @expect $.message[0].route == /crm
-GET {{host}}/api/method/frappe.apps.get_apps
+GET {{host}}/api/v1/desk/apps/
 Authorization: Bearer {{stoken}}
-
 ### 9.3 get_timezones -> 200, the options PreferencesSettings.vue puts in the dropdown
 # @expect $.message.timezones contains Asia/Kolkata
 GET {{host}}/api/v1/users/timezones/
 Authorization: Bearer {{token}}
 ### 9.4 current_site_info as Administrator -> 200, and empty: this port is never a Frappe Cloud site
-# @waiting CONFIGURATION
 # @expect $.message exists
-GET {{host}}/api/method/frappe.integrations.frappe_providers.frappecloud_billing.current_site_info
+GET {{host}}/api/v1/desk/site-info/
 Authorization: Bearer {{token}}
-
 ### 9.5 ...but System Manager only, so the Sales User -> 403 (only_for with message=False)
-# @waiting CONFIGURATION
 # @expect $.message == Not permitted
-GET {{host}}/api/method/frappe.integrations.frappe_providers.frappecloud_billing.current_site_info
+GET {{host}}/api/v1/desk/site-info/
 Authorization: Bearer {{stoken}}
-
 ### 9.6 boot_config -> 200, off until POSTHOG_PROJECT_ID and POSTHOG_HOST are both set
-# @waiting CONFIGURATION
 # @expect $.message.enabled == false
-GET {{host}}/api/method/frappe.utils.telemetry.pulse.client.boot_config
+GET {{host}}/api/v1/desk/telemetry-config/
 Authorization: Bearer {{token}}
-
 ### 9.7 clear_demo_data as Administrator -> 200, and a no-op: no demo state is ever recorded here
-# @waiting CONFIGURATION
-POST {{host}}/api/method/crm.demo.api.clear_demo_data
+POST {{host}}/api/v1/demo/clear/
 Authorization: Bearer {{token}}
 
 ### 9.8 ...Sales Manager or System Manager only, so the Sales User -> 403 (only_for with message=True)
-# @waiting CONFIGURATION
 # @expect $.message == This action is only allowed for <strong>Sales Manager</strong>, <strong>System Manager</strong>
-POST {{host}}/api/method/crm.demo.api.clear_demo_data
+POST {{host}}/api/v1/demo/clear/
 Authorization: Bearer {{stoken}}
 
 ### 9.9 get_context_for_dev with no token -> 200: the boot values, guest-allowed because the first visit has none yet

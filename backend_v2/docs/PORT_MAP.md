@@ -191,10 +191,10 @@ alone, an old `POST` body moves into the query string: a reshaped input
 | `crm.api.doc.sort_options` | GET/POST | auth | `crm_app/api/doc.py:sort_options` | `GET /api/v1/meta/sort-options/` (`doctype` kept as input) | configuration | — |
 | `crm.api.doc.update_quick_filters` | GET/POST | auth | `crm_app/api/doc.py:update_quick_filters` | `POST /api/v1/meta/quick-filters/update/` (`doctype` kept as input) | configuration | — |
 | `crm.api.exchange_rate.get_exchange_rate` | GET/POST | auth | `crm_app/api/exchange_rate.py:get_exchange_rate` | `GET /api/v1/exchange-rate/` | configuration | — |
-| `crm.api.get_translations` | GET/POST | guest | `crm_app/api/misc.py:get_translations` | `GET /api/v1/translations/` | configuration | — |
+| `crm.api.get_translations` | GET/POST | guest | `crm_app/api/misc.py:get_translations` | `GET /api/v1/translations/` | configuration | built |
 | `crm.api.settings.create_email_account` | GET/POST | auth | `crm_app/api/settings.py:create_email_account` | `POST /api/v1/email-accounts/setup/` | configuration | — |
 | `crm.api.views.get_views` | GET/POST | auth | `crm_app/api/views.py:get_views` | `GET /api/v1/views/` (`doctype` kept as input) | configuration | — |
-| `crm.demo.api.clear_demo_data` | POST | auth | `crm_app/api/demo.py:clear_demo_data` | `POST /api/v1/demo/clear/` | configuration | — |
+| `crm.demo.api.clear_demo_data` | POST | auth | `crm_app/api/demo.py:clear_demo_data` | `POST /api/v1/demo/clear/` | configuration | built |
 | `crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout` | GET/POST | auth | `crm_app/api/fields_layout.py:get_fields_layout` | `GET /api/v1/fields-layouts/layout/` (`doctype` kept as input) | configuration | — |
 | `crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections` | GET/POST | auth | `crm_app/api/fields_layout.py:get_sidepanel_sections` | `GET /api/v1/fields-layouts/sidepanel-sections/` (`doctype` kept as input) | configuration | — |
 | `crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.save_fields_layout` | POST | auth | `crm_app/api/fields_layout.py:save_fields_layout` | `POST /api/v1/fields-layouts/save/` (`doctype` kept as input) | configuration | — |
@@ -207,14 +207,14 @@ alone, an old `POST` body moves into the query string: a reshaped input
 | `crm.fcrm.doctype.crm_view_settings.crm_view_settings.set_as_default` | POST | auth | `crm_app/api/view_settings.py:set_as_default` | `POST /api/v1/view-settings/<name>/set-as-default/` (`name` in the URL) | configuration | — |
 | `crm.fcrm.doctype.crm_view_settings.crm_view_settings.update` | POST/PUT | auth | `crm_app/api/view_settings.py:update` | `POST /api/v1/view-settings/update-view/` (the view, with its `name`, in the body) | configuration | — |
 | `crm.www.crm.get_context_for_dev` | POST | guest | `crm_app/api/boot.py:get_context_for_dev` | `POST /api/v1/boot/` | configuration | — |
-| `frappe.apps.get_apps` | GET/POST | auth | `crm_app/api/desk.py:get_apps` | `GET /api/v1/desk/apps/` | configuration | — |
+| `frappe.apps.get_apps` | GET/POST | auth | `crm_app/api/desk.py:get_apps` | `GET /api/v1/desk/apps/` | configuration | built |
 | `frappe.desk.form.load.getdoctype` | GET/POST | auth | `crm_app/api/form_load.py:getdoctype` | `GET /api/v1/meta/doctype/` (`doctype` kept as input) | configuration | — |
-| `frappe.integrations.frappe_providers.frappecloud_billing.current_site_info` | GET/POST | auth | `crm_app/api/desk.py:current_site_info` | `GET /api/v1/desk/site-info/` | configuration | — |
+| `frappe.integrations.frappe_providers.frappecloud_billing.current_site_info` | GET/POST | auth | `crm_app/api/desk.py:current_site_info` | `GET /api/v1/desk/site-info/` | configuration | built |
 | `frappe.model.utils.user_settings.get` | GET/POST | auth | `crm_app/api/user_settings.py:get` | `GET /api/v1/user-settings/` (`doctype` kept as input) | configuration | — |
 | `frappe.model.utils.user_settings.save` | GET/POST | auth | `crm_app/api/user_settings.py:save` | `POST /api/v1/user-settings/` (`doctype` kept as input) | configuration | — |
 | `frappe.onboarding.get_onboarding_status` | GET/POST | auth | `crm_app/api/onboarding.py:get_onboarding_status` | `GET /api/v1/onboarding/status/` | configuration | — |
 | `frappe.onboarding.update_user_onboarding_status` | GET/POST | auth | `crm_app/api/onboarding.py:update_user_onboarding_status` | `POST /api/v1/onboarding/status/` | configuration | — |
-| `frappe.utils.telemetry.pulse.client.boot_config` | GET/POST | auth | `crm_app/api/desk.py:boot_config` | `GET /api/v1/desk/telemetry-config/` | configuration | — |
+| `frappe.utils.telemetry.pulse.client.boot_config` | GET/POST | auth | `crm_app/api/desk.py:boot_config` | `GET /api/v1/desk/telemetry-config/` | configuration | built |
 
 ## SHARED_ACTIONS
 
