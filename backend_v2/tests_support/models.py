@@ -270,3 +270,115 @@ class DynamicReference(BaseDocument):
     DYNAMIC_LINK_FIELDS = (("reference_doctype", "reference_name"),)
     reference_doctype = models.CharField(max_length=140)
     reference_name = models.CharField(max_length=140)
+
+
+class ContactHolder(BaseDocument):
+    """A document linking a Widget, with a `contact` field and its own `contacts` table,
+    as a deal has (CONTACTS milestone 0, PE-25). `locked` refuses its delete to all but
+    Administrator, and `frozen` refuses its write (PE-26)."""
+
+    DOCTYPE = "Foundation Contact Holder"
+    NAME_STRATEGY = Hash()
+    widget = models.ForeignKey(
+        Widget, on_delete=models.PROTECT, related_name="+", null=True, blank=True
+    )
+    contact = models.CharField(max_length=140, null=True, blank=True)
+    locked = models.BooleanField(default=False)
+    frozen = models.BooleanField(default=False)
+
+
+class HolderGuard(BaseDocument):
+    """Protects a ContactHolder from deletion (PE-26: another row protects the item)."""
+
+    DOCTYPE = "Foundation Holder Guard"
+    NAME_STRATEGY = Hash()
+    ROW_RULES = "tests_support.permissions.OpenRows"
+    holder = models.ForeignKey(ContactHolder, on_delete=models.PROTECT, related_name="+")
+
+
+class PolyContactHolder(BaseDocument):
+    """A document whose `contacts` table is polymorphic, declared on the model (PE-25)."""
+
+    DOCTYPE = "Foundation Poly Contact Holder"
+    NAME_STRATEGY = Hash()
+    POLYMORPHIC_CHILD_TABLES = {"contacts": "tests_support.PolyContactRow"}
+    widget = models.ForeignKey(
+        Widget, on_delete=models.PROTECT, related_name="+", null=True, blank=True
+    )
+
+
+class PolyContactRow(BaseDocument):
+    DOCTYPE = "Foundation Poly Contact Row"
+    NAME_STRATEGY = Hash()
+    IS_CHILD_TABLE = True
+    CHILD_FIELDS = (
+        "name",
+        "owner",
+        "modified_by",
+        "creation",
+        "modified",
+        "idx",
+        "docstatus",
+        "_assign",
+        "_liked_by",
+        "_comments",
+        "_user_tags",
+        "parent",
+        "parenttype",
+        "parentfield",
+        "value",
+    )
+    parent = models.CharField(max_length=140)
+    parenttype = models.CharField(max_length=140)
+    parentfield = models.CharField(max_length=140)
+    value = models.CharField(max_length=140, blank=True, default="")
+
+
+class NotNullContactHolder(BaseDocument):
+    """A `contact` column that cannot be empty: "remove contact" leaves it (PE-25)."""
+
+    DOCTYPE = "Foundation Not Null Contact Holder"
+    NAME_STRATEGY = Hash()
+    ROW_RULES = "tests_support.permissions.OpenRows"
+    widget = models.ForeignKey(
+        Widget, on_delete=models.PROTECT, related_name="+", null=True, blank=True
+    )
+    contact = models.CharField(max_length=140, default="kept")
+
+
+class ContactHolderRow(BaseDocument):
+    DOCTYPE = "Foundation Contact Holder Row"
+    NAME_STRATEGY = Hash()
+    IS_CHILD_TABLE = True
+    CHILD_FIELDS = (
+        "name",
+        "owner",
+        "modified_by",
+        "creation",
+        "modified",
+        "idx",
+        "docstatus",
+        "_assign",
+        "_liked_by",
+        "_comments",
+        "_user_tags",
+        "holder",
+        "parentfield",
+        "parenttype",
+        "value",
+    )
+    holder = models.ForeignKey(ContactHolder, on_delete=models.CASCADE, related_name="contacts")
+    parentfield = models.CharField(max_length=140, default="contacts")
+    parenttype = models.CharField(max_length=140, default="Foundation Contact Holder")
+    value = models.CharField(max_length=140, blank=True, default="")
+
+
+class StrayContact(BaseDocument):
+    """Reaches a PointingDocument under the reverse name `contacts`, which is not that
+    document's table (CONTACTS milestone 0, PE-25)."""
+
+    DOCTYPE = "Foundation Stray Contact"
+    NAME_STRATEGY = Hash()
+    pointer = models.ForeignKey(
+        PointingDocument, on_delete=models.CASCADE, related_name="contacts"
+    )

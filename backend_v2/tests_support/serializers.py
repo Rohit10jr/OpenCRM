@@ -3,13 +3,16 @@
 from core.serializers import DocumentSerializer
 from tests_support.models import (
     AutoIncrementDocumentFixture,
+    ContactHolder,
     DynamicReference,
     FieldDocument,
     PointingDocument,
+    PolyContactHolder,
     PromptDocument,
     SearchableDocument,
     SecuredDocument,
     SingletonDocument,
+    StrayContact,
     Widget,
     WidgetNote,
     WidgetRow,
@@ -81,6 +84,26 @@ class PointingDocumentSerializer(DocumentSerializer):
     class Meta:
         model = PointingDocument
         fields = (*STANDARD_FIELDS, "widget", "widget_status")
+
+
+class ContactHolderSerializer(DocumentSerializer):
+    CHILD_TABLES = {"contacts": ("tests_support.ContactHolderRow", "holder")}
+
+    class Meta:
+        model = ContactHolder
+        fields = (*STANDARD_FIELDS, "widget", "contact", "locked", "frozen", "contacts")
+
+
+class PolyContactHolderSerializer(DocumentSerializer):
+    class Meta:
+        model = PolyContactHolder
+        fields = (*STANDARD_FIELDS, "widget", "contacts")
+
+
+class StrayContactSerializer(DocumentSerializer):
+    class Meta:
+        model = StrayContact
+        fields = (*STANDARD_FIELDS, "pointer")
 
 
 class DynamicReferenceSerializer(DocumentSerializer):

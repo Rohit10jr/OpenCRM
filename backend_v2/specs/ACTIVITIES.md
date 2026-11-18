@@ -175,3 +175,14 @@ mechanism is tested on `tests_support`; the cases below prove it on real records
 - **The delete cascade on `User`:** ACCOUNTS connects it, but v2's cleanup table holds only
   `Version` until File, Comment and ToDo join it here. Prove then that deleting a `User`
   cleans up the rows that reference it, as `backend/` does (`crm_app/apps.py:30-34`).
+
+## 11. Carried from CONTACTS
+
+From CONTACTS' spec rewrite (`temp` A-42); `CONTACTS.md` §9.
+
+- **Dynamic Link** is built by CONTACTS (milestone 2, with Address); CRM Call Log's
+  `links` uses it (`backend/frappe_platform/models.py:1574-1575`).
+- **Attach-on-save** for `Contact.image` and `CRMOrganization.organization_logo`
+  (`backend/crm_app/api/files.py:202-272`; `test_attach_on_save.py:44-47`).
+- **Tests** `CONTACTS.md` §3 hands on: `test_attach_on_save.py:44-47`,
+  `test_phase5_async.py:292-304`, `test_rename.py:70-92` (with SALES).

@@ -13,7 +13,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.delete import check_dynamic_links
+from core.delete import delete_document, may_delete
 from core.doctypes import declared_doctypes, doctype_of
 from core.exceptions import (
     DoesNotExistError,
@@ -196,7 +196,12 @@ class DocumentViewSet(
             raise DoesNotExistError(
                 _("{0} {1} not found").format(self.document_type, name)
             )
-        if self.has_object_rule(self.request.user, document, ptype) is False:
+        if ptype == "delete":
+            # The same answer the shared actions' linked delete asks (PE-26).
+            allowed = may_delete(type(self), self.request.user, document)
+        else:
+            allowed = self.has_object_rule(self.request.user, document, ptype) is not False
+        if not allowed:
             raise PermissionError(
                 _("No permission for {0} {1}").format(self.document_type, name),
                 title=_("Not Permitted"),
@@ -337,8 +342,7 @@ class DocumentViewSet(
     def destroy(self, request, *args, **kwargs):
         document = self._object_by_name("delete")
         with transaction.atomic():
-            check_dynamic_links(document)
-            document.delete()
+            delete_document(document)
         return Response(Envelope(None, "message"))
 
 

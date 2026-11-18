@@ -10,15 +10,16 @@ from core.children import (
     delete_polymorphic_children_batch,
     delete_references_batch,
 )
-from core.delete import check_dynamic_links, check_dynamic_links_batch
+from core.delete import check_dynamic_links_batch
 from core.doctypes import doctype_of
-from core.exceptions import LinkExistsError, PermissionError, throw
+from core.exceptions import PermissionError, throw
 from core.inputs import build_payload
 from core.mixins.bulk_update import viewset_path
 from core.mixins.linked import (
     _clear_contact,
     _clear_link_fields,
     _clear_reference,
+    delete_if_permitted,
     linked_documents,
 )
 from core.query import parse_json_param
@@ -88,17 +89,13 @@ def perform_bulk_delete(
             ):
                 continue
             if viewset_class.bulk_delete_remove_contact:
-                _clear_contact(instance)
+                _clear_contact(instance, urlconf)
             else:
                 _clear_reference(instance)
                 for target in targets:
                     _clear_link_fields(instance, model, target)
             if delete_linked:
-                try:
-                    check_dynamic_links(instance)
-                except LinkExistsError:
-                    continue
-                instance.delete()
+                delete_if_permitted(rules, user, instance)
 
         target_instances = list(model._default_manager.filter(pk__in=targets))
         check_dynamic_links_batch(target_instances)
