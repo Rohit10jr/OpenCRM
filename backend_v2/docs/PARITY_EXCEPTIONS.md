@@ -442,7 +442,10 @@ comparison skips that block.
   the owner (`temp` A-39, DECISIONS 51, 18 Nov 2026); built in `f7c4ea5`
 - **Where:** `POST /api/v1/view-settings/set-as-default/` and
   `POST /api/v1/view-settings/<name>/kanban-columns/` (old `set_as_default` and
-  `fetch_and_update_kanban_columns`)
+  `fetch_and_update_kanban_columns`); and, with CONFIGURATION milestone 8, the named
+  view's `load_default_columns` that `<resource>/list-view/` reads (old `get_data`,
+  `backend/frappe_core/api/doc.py:176-186,343-348`): a view the caller may not read
+  counts as missing
 - **Old backend:** checks neither (`backend/crm_app/api/view_settings.py:246-270,318-347`)
 - **backend_v2:** `set_as_default` with a name acts on the caller's own view (403 "Not
   permitted" otherwise, 404 for a missing one), and `fetch_and_update_kanban_columns` on
@@ -480,6 +483,49 @@ comparison skips that block.
   is not an object is skipped; a resource write of `filters`, `columns`, `rows`,
   `kanban_columns` or `kanban_fields` that is not valid JSON is 417 "<Label> must be
   valid JSON" (for example "Kanban Columns must be valid JSON")
+- **Why:** replaces a crash with an error
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-22. `get_data` is served for the resources that opt in to a list view
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-40, 18 Nov 2026); to be built in CONFIGURATION milestone 8
+- **Where:** `GET` and `POST /api/v1/<resource>/list-view/` (old `crm.api.doc.get_data`)
+- **Old backend:** answers it for any registered doctype
+  (`backend/frappe_core/api/doc.py:229`), and builds a kanban column list from every row
+  of a link target that has no row rule (`:438-443`)
+- **backend_v2:** `get_data` is served for the resources that opt in to a list view; a
+  child table, a withheld doctype and a settings record have none, and the URL answers
+  the generic 404. A kanban column list is built from a link target only where that
+  target is itself served
+- **Why:** each list screen has its own resource; no screen lists a child table, a
+  withheld doctype or a settings record
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-23. A list view takes at most `MAX_PAGE_LENGTH` kanban columns
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-40, 18 Nov 2026); to be built in CONFIGURATION milestone 8
+- **Where:** `GET` and `POST /api/v1/<resource>/list-view/` with `kanban_columns`
+- **Old backend:** accepts any number of sent columns
+  (`backend/frappe_core/api/doc.py:484-526`)
+- **backend_v2:** a sent `kanban_columns` list longer than `MAX_PAGE_LENGTH` is 417. A
+  column's `page_length` of 0 still means no limit, and `page_length=0` every row, as
+  before
+- **Why:** the same limit as a list page's length
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-12e. List-view crashes answer as errors
+
+- **Status:** approved — decided by the supervisor on the owner's behalf (`temp` A-40,
+  18 Nov 2026; it only replaces a crash); to be built in CONFIGURATION milestone 8
+- **Where:** `GET` and `POST /api/v1/<resource>/list-view/` (old `crm.api.doc.get_data`)
+- **Old backend:** a `columns` or `kanban_columns` entry that is not an object, a `rows`
+  or `kanban_fields` entry that is not a string, or a column's `order` that is not a list
+  raises (`backend/frappe_core/api/doc.py:296-303,460-462,485-524`); a
+  `custom_view_name` that is not an integer raises in `filter(pk=…)` (`:176-186`)
+- **backend_v2:** each of the first three is 417; a `custom_view_name` that is not an
+  integer counts as no view
 - **Why:** replaces a crash with an error
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
