@@ -453,10 +453,30 @@ def _url_key(entry: RouteEntry) -> str | None:
     return match.group(1) if match else None
 
 
-def _rewrite_method(block: HttpBlock, method: str, url: str, entry: RouteEntry) -> None:
+def _waits_for_its_doctype(
+    block: HttpBlock, url: str, entry: RouteEntry, routes: RouteMap | None
+) -> bool:
+    """A field-metadata route (`meta/...`) asked about a doctype whose resource is not
+    built yet waits for that unit: it would answer 404 until then. An unknown doctype is
+    left alone, since its 404 is what the block expects (CONFIGURATION milestone 5)."""
+    if routes is None or not any("/api/v1/meta/" in path for _, path in entry.routes):
+        return False
+    doctype = _payload(block, url).get("doctype")
+    resource = routes.doctypes.get(unquote(doctype)) if isinstance(doctype, str) else None
+    if resource is None or resource.built:
+        return False
+    _annotate(block, f"# @waiting {resource.unit}")
+    return True
+
+
+def _rewrite_method(
+    block: HttpBlock, method: str, url: str, entry: RouteEntry, routes: RouteMap | None = None
+) -> None:
     """A built method path. Its route map row may reshape two inputs (S8): an old POST
     body moves into the query of a route served by GET alone, and a named input moves
     into the URL's `<name>`."""
+    if _waits_for_its_doctype(block, url, entry, routes):
+        return
     allowed = {verb for verb, _ in entry.routes}
     new_method = method
     if method not in allowed:
@@ -613,7 +633,7 @@ def rewrite_http(text: str, route_map: RouteMap, filename: str = "fixture.http")
                 else:
                     _rewrite_generic(block, path, resolved_url, entry, route_map)
             elif entry.built and entry.routes:
-                _rewrite_method(block, method, resolved_url, entry)
+                _rewrite_method(block, method, resolved_url, entry, route_map)
             else:
                 _annotate(block, f"# @waiting {entry.unit}")
         elif "/api/resource/" in resolved_url:
