@@ -50,3 +50,41 @@ def check_export_field_info_viewsets(app_configs, **kwargs):
             )
         )
     return errors
+
+
+@register()
+def check_mail_account_provider(app_configs, **kwargs):
+    """`MAIL_ACCOUNT_PROVIDER` must resolve to a module exposing the two calls, so a typo
+    never falls back quietly to the config account (spec CONFIGURATION section 4.4)."""
+    from importlib import import_module
+
+    from django.conf import settings
+
+    path = getattr(settings, "MAIL_ACCOUNT_PROVIDER", "") or ""
+    if not path:
+        return []
+    try:
+        module = import_module(path)
+    except ImportError as exc:
+        return [
+            Error(
+                f"MAIL_ACCOUNT_PROVIDER {path!r} does not resolve: {exc}",
+                hint="Name the module that provides the saved Email Account lookups.",
+                id="core.E003",
+            )
+        ]
+    missing = [
+        name
+        for name in ("saved_outgoing_account", "default_signature")
+        if not callable(getattr(module, name, None))
+    ]
+    if missing:
+        return [
+            Error(
+                f"MAIL_ACCOUNT_PROVIDER {path!r} lacks {', '.join(missing)}",
+                hint="Expose saved_outgoing_account(sender=None, reference_doctype=None) "
+                "and default_signature().",
+                id="core.E003",
+            )
+        ]
+    return []
