@@ -201,6 +201,22 @@ are `seed_dev_data` steps in `configuration/dev_data.py`, from
 the owner). The `.http` generator also makes a layout call about an unbuilt doctype
 wait, and `WAITS_WITH` names the blocks that read rows an earlier waiting block writes.
 
+Its seventh milestone (§4.7) adds saved views. `view-settings/` is CRM View Settings
+(integer names, no `TRACKED_FIELDS`, a guard says so); `configuration/view_settings.py`
+holds the read and write rules the resource and the calls share, and the calls:
+`create-view/`, `update-view/`, `standard-view/`, `set-as-default/`, and on a view
+`delete-view/`, `pin/`, `public/`, `kanban-columns/`; `GET views/` is `get_views`. On
+the resource `user`, `public`, `is_standard` and `is_default` are `READONLY_FIELDS` and a
+create stamps the caller (PE-19); `public` also applies the read rule (PE-20);
+`set_as_default` with a name and the kanban refresh act on the caller's own or readable
+view (PE-21); crashes are 417 or 404 (PE-12d). No view call checks the doctype.
+`configuration/list_views.py` holds the seam milestone 8 fills: `list_definition_for(dt)`
+answers the ViewSet's `list_view_class`, else the base `ListView` (Name and Last
+Modified), and nothing for an unknown, child or withheld doctype. A kanban's default
+columns come from the metadata file, a Link target's rows through that target's own list
+rule. The `.http` generator gained `SPLIT_EXPECTS`, `WAITS_FOR_UNIT` and `WAITS_ALONE`
+for `07`'s view blocks.
+
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
 disabled, and there are no bulk actions.

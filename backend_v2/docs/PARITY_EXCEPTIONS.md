@@ -410,8 +410,7 @@ comparison skips that block.
 ### PE-19. A saved view's owner and flags are set by the dedicated calls
 
 - **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-39, DECISIONS 49, 18 Nov 2026); to be built in CONFIGURATION
-  milestone 7
+  the owner (`temp` A-39, DECISIONS 49, 18 Nov 2026); built in `c590ac3`
 - **Where:** `POST` and `PATCH /api/v1/view-settings/...` (old
   `/api/resource/CRM View Settings`)
 - **Old backend:** accepts `user`, `public`, `is_standard` and `is_default` as written
@@ -426,8 +425,7 @@ comparison skips that block.
 ### PE-20. `public` acts on a view the caller may read
 
 - **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-39, DECISIONS 50, 18 Nov 2026); to be built in CONFIGURATION
-  milestone 7
+  the owner (`temp` A-39, DECISIONS 50, 18 Nov 2026); built in `f7c4ea5`
 - **Where:** `POST /api/v1/view-settings/<name>/public/` (old
   `crm.fcrm.doctype.crm_view_settings.crm_view_settings.public`)
 - **Old backend:** checks the caller's role only
@@ -440,8 +438,7 @@ comparison skips that block.
 ### PE-21. `set_as_default` and the kanban column refresh act on views the caller may use
 
 - **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-39, DECISIONS 51, 18 Nov 2026); to be built in CONFIGURATION
-  milestone 7
+  the owner (`temp` A-39, DECISIONS 51, 18 Nov 2026); built in `f7c4ea5`
 - **Where:** `POST /api/v1/view-settings/set-as-default/` and
   `POST /api/v1/view-settings/<name>/kanban-columns/` (old `set_as_default` and
   `fetch_and_update_kanban_columns`)
@@ -457,7 +454,7 @@ comparison skips that block.
 ### PE-12d. Saved-view crashes answer as errors
 
 - **Status:** approved — decided by the supervisor on the owner's behalf (`temp` A-39,
-  18 Nov 2026; it only replaces a crash); to be built in CONFIGURATION milestone 7
+  18 Nov 2026; it only replaces a crash); built in `c590ac3`, `b744875`, `f7c4ea5`, `8f5c569`
 - **Where:** `create-view/`, `standard-view/`, `update-view/` and `set-as-default/` under
   `/api/v1/view-settings/`, the resource's create and PATCH, and `GET /api/v1/views/`
 - **Old backend:** `create` or `create_or_update_standard_view` without a `doctype`
