@@ -2,6 +2,7 @@
 
 import copy
 
+from django.core.exceptions import FieldDoesNotExist
 from django.db import transaction
 from django.db.models import Q
 from django.http import JsonResponse
@@ -17,6 +18,7 @@ from core.doctypes import declared_doctypes, doctype_of
 from core.exceptions import (
     DoesNotExistError,
     PermissionError,
+    ValidationError,
     build_error_body,
 )
 from core.field_access import is_hidden
@@ -380,6 +382,8 @@ class SingletonViewSet(DocumentViewSet):
     @action(detail=False, methods=("get",), url_path="value")
     def value(self, request):
         field = request.query_params.get("field")
+        if not field:
+            raise ValidationError(_("Field {0!r} is not readable").format(field))
         document = self.document_model._default_manager.filter(
             pk=self.document_model.singleton_name()
         ).first()
@@ -391,4 +395,13 @@ class SingletonViewSet(DocumentViewSet):
             )
         if is_hidden(self.document_model, field, request.user):
             raise PermissionError(_("Field {0!r} is not readable").format(field))
-        return Response(Envelope(getattr(document, field, None), "message"))
+        # Outside the resource's list: refused, not a 500 on an unknown or unrenderable
+        # attribute (A-31 finding 8).
+        if field not in self.readable_fields:
+            raise ValidationError(_("Field {0!r} is not readable").format(field))
+        # A link answers the stored name (`owner` -> "Administrator"), not the row.
+        try:
+            attname = self.document_model._meta.get_field(field).attname
+        except FieldDoesNotExist:
+            attname = field
+        return Response(Envelope(getattr(document, attname, None), "message"))
