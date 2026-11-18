@@ -1,8 +1,7 @@
 # CONFIGURATION — CRM settings, email accounts, saved views, layouts and the list engine
 
-**Status: Provisional — rewritten 18 Nov 2026** from the spec check
-(`tasks\CONFIGURATION_00_spec_check_verdict.md`, `temp` A-27), waiting for its spec
-review. **Approval is staged** (A-27, DECISIONS 30, flagged for the owner): the facts and
+**Status: Ready for milestones 1-2 — rewritten 18 Nov 2026** from the spec check
+(`tasks\CONFIGURATION_00_spec_check_verdict.md`, `temp` A-27); spec review A-28. **Approval is staged** (A-27, DECISIONS 30, flagged for the owner): the facts and
 the route map below cover the whole unit, but the spec review approves **milestones 1
 and 2 only**; each later milestone needs the decisions marked "open" in §6 settled and a
 short spec-review addendum before its first brief. Paths are from the repository root;
