@@ -578,14 +578,17 @@ comparison skips that block.
 ### PE-26. Deleting a linked document needs its delete rule
 
 - **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-42, DECISIONS 59, 19 Nov 2026); built in `c1490cd`
+  the owner (`temp` A-42, A-45, DECISIONS 59, 19 Nov 2026); built in `c1490cd`,
+  `a39108f`
 - **Where:** `POST /api/v1/<resource>/<name>/linked-documents/` with `delete`, and
   `POST /api/v1/<resource>/bulk-delete/` with `delete_linked`
-- **Old backend:** checks the write rule
+- **Old backend:** checks the write rule. Upstream's unlink answers 403 and rolls the
+  request back when a linked document may not be deleted; its bulk delete leaves the
+  item in place
 - **backend_v2:** the unlink action's delete and bulk delete's `delete_linked` delete
   only the linked documents the caller may delete; one the caller may not delete is
   skipped, like every other refusal in those loops, and its link is still cleared
-- **Why:** deleting a document is the delete rule's decision on every door
+- **Why:** the linked delete asks what the record route asks
 - **Recorded by:** CONTACTS, 19 Nov 2026
 
 ---
