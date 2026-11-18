@@ -592,6 +592,7 @@ what `backend/` tracks, decided at milestone 7 (decision 14).
 | 14 | `TRACKED_FIELDS` on CRM View Settings | **open — at milestone 7**, following what `backend/` tracks |
 | 6 | Kanban badge counts before ACTIVITIES | **open — before milestone 8** |
 | — | `get_data` on a withheld or child doctype | **open — before milestone 8** [default: refused, as the contract says] |
+| — | The standard filter, group-by and sort entries a model lacks (on User: `owner`, `modified_by`, the `_`-prefixed fields; `tests/guards/test_field_helper_names.py`) | **open — before milestone 8**, where the User list view is built [today: offered, as `backend/`; the alternative is a parity exception dropping them] |
 
 Departures from `backend/` in any of these are flagged for the owner and recorded in
 `PARITY_EXCEPTIONS.md` before they are built. `API_CONTRACT.md:209` (404 for a child table)
