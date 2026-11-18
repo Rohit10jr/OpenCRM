@@ -216,6 +216,61 @@ comparison skips that block.
   reads the key
 - **Recorded by:** ACCOUNTS, 18 Nov 2026
 
+### PE-10. `get_exchange_rate` accepts only a known date and currency shape
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-30, DECISIONS 33, 18 Nov 2026); to be built in CONFIGURATION
+  milestone 3
+- **Where:** `GET /api/v1/exchange-rate/` (old `crm.api.exchange_rate.get_exchange_rate`)
+- `get_exchange_rate` accepts `date` only as `latest` or an ISO date and currencies only
+  as three-letter codes; the old backend passes them through.
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-11. A settings record has no list route
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-30, DECISIONS 35, 18 Nov 2026); to be built in CONFIGURATION
+  milestone 3
+- **Where:** `GET /api/v1/crm-settings/` (old `GET /api/resource/FCRM Settings` with
+  `fields` or `filters`). Seen in `docs/http/12_settings_singletons.http` 1.3-1.5 and
+  `backend/tests/test_settings_access.py` `test_the_key_cannot_be_probed_by_filtering`
+- **Old backend:** answers list-shaped reads of a settings record
+- **backend_v2:** a settings record has no list route; list-shaped reads of it are not
+  served. `12` 1.3 maps to 1.2's check on `GET crm-settings/`, 1.4 to 1.11
+  (`value/?field=access_key`); 1.5 and the filter test retire
+- **Why:** the settled singleton routes (S25 (3)) serve one record at the resource root,
+  with GET, PATCH and `value/`
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-12. Two exchange-rate crashes answer as ordinary results
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf (`temp` A-30,
+  DECISIONS 34, 18 Nov 2026; it only replaces a 500); to be built in CONFIGURATION
+  milestone 3
+- **Where:** `GET /api/v1/exchange-rate/` (old `crm.api.exchange_rate.get_exchange_rate`)
+- **Old backend:** a missing `from_currency` or `to_currency` raises TypeError in the
+  dispatch (500); a transport error or malformed JSON from a paid provider is not caught
+  (`backend/crm_app/api/exchange_rate.py:168-186`, 500)
+- **backend_v2:** a missing currency answers `1`, as an empty one does (`:56`); the paid
+  providers' failure falls through to the generic 417 sentence
+- **Why:** each replaces a 500 with the answer the old code gives the neighbouring case
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-13. A settings record's `value/` refuses a field it does not list
+
+- **Status:** approved — decided by the supervisor on the owner's behalf (`temp` A-31, 18
+  Nov 2026); no client sends such a field; built in `ecbec60`
+- **Where:** `GET /api/v1/<settings>/value/` (old `frappe.client.get_single_value`), for
+  every `SingletonViewSet`. No `.http` block found
+- **Old backend:** `field` is a required argument, and a field the record does not have
+  answers `null` (`getattr(instance, field, None)`, `backend/crm_app/api/client.py:282-295`)
+- **backend_v2:** a missing field, or one outside the resource's readable list, answers
+  417 "Field ... is not readable"; a sensitive or restricted field is still 403; a link
+  answers its stored name
+- **Why:** in `backend_v2` a missing field and a link field were 500s; refusing anything
+  outside the resource's readable list keeps the answer within the fields it lists
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
 ---
 
 ## Candidates — not exceptions yet

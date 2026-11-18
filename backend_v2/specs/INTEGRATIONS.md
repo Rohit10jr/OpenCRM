@@ -96,7 +96,7 @@ timeline).
 - pytest: the ported tests passing with their expected answers unchanged, and new tests
   for each item in section 4 — the webhooks with real signed requests, external APIs
   faked at the HTTP boundary.
-- `docs/http/12_settings_singletons.http` in full.
+- `docs/http/12_settings_singletons.http` sections 2-4 (section 1 is CONFIGURATION's FCRM Settings).
 - The body comparison over the same blocks.
 
 ## 6. Open questions
