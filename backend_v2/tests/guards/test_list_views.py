@@ -4,8 +4,8 @@
 A child table, a withheld doctype and a settings record have no list view (PE-22): a
 withheld doctype has no ViewSet at all, so the check is on child and singleton
 ViewSets. The engine reads a definition's columns, rows and kanban defaults, so each
-names only fields its resource lets the caller read. (That every resource opting in to
-`list-view/` has the seven standard fields readable comes with the mixin, CF8b.)
+names only fields its resource lets the caller read, and every resource opting in to
+`list-view/` has the seven standard fields the engine adds readable.
 """
 
 import json
@@ -55,6 +55,23 @@ def unreadable(viewsets) -> list[str]:
     return problems
 
 
+def lacking_standard_fields(viewsets) -> list[str]:
+    """The engine adds the seven standard fields to every answer's rows."""
+    from configuration.list_engine import STANDARD_FIELDS
+    from configuration.mixins import ListViewMixin
+
+    standard = {descriptor["fieldname"] for descriptor in STANDARD_FIELDS}
+    return [
+        f"{viewset.__qualname__}: {sorted(standard - set(viewset.readable_fields))}"
+        for viewset in viewsets
+        if issubclass(viewset, ListViewMixin) and not standard <= set(viewset.readable_fields)
+    ]
+
+
+def test_every_list_view_resource_reads_the_standard_fields():
+    assert lacking_standard_fields(_viewsets()) == []
+
+
 def test_no_child_or_singleton_resource_names_a_list_view():
     assert misplaced(_viewsets()) == []
 
@@ -76,6 +93,10 @@ def test_the_checks_catch_a_broken_definition():
     class ListedSingletonViewSet(SingletonDocumentViewSet):
         list_view_class = ListView
 
+    class NarrowWidgetViewSet(WidgetViewSet):
+        readable_fields = ("name", "widget_name")
+
     [problem] = unreadable([BrokenWidgetViewSet])
     assert problem.endswith("BrokenWidgetViewSet: ['no_such_field']")
     assert len(misplaced([ListedSingletonViewSet])) == 1
+    assert len(lacking_standard_fields([NarrowWidgetViewSet])) == 1

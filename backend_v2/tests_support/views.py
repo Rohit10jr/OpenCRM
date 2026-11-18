@@ -4,6 +4,7 @@ from django.db.models import Q
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from configuration.mixins import ListViewMixin
 from core.access import Access
 from core.mixins import (
     BulkDeleteMixin,
@@ -31,6 +32,7 @@ from tests_support.serializers import (
 
 
 class WidgetViewSet(
+    ListViewMixin,
     BulkDeleteMixin,
     BulkUpdateMixin,
     LinkedDocumentsMixin,
@@ -73,7 +75,7 @@ class WidgetViewSet(
         return None
 
 
-class SearchableDocumentViewSet(LinkSearchMixin, DocumentViewSet):
+class SearchableDocumentViewSet(ListViewMixin, LinkSearchMixin, DocumentViewSet):
     access = Access.open(
         reason="A disabled-row search fixture with no confidential or protected data."
     )

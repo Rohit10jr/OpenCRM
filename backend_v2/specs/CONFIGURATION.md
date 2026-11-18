@@ -779,9 +779,11 @@ Settings. Paths in this section are `backend/frappe_core/api/doc.py` unless name
   Filterable: `filters`, `default_filters`, and `column_field`, checked **before** any
   column is built. Sortable: `order_by`. The engine's own fixed clauses (`creation desc`
   and the `name in` / `not in` pair of a manual kanban order, `:540-557`) are not
-  checked against the caller's lists. Refusals use `core`'s existing texts ("Unknown
-  field 'x' for this document type", "Cannot order by unknown field 'x'", "Cannot
-  group by unknown field 'x'"). The engine adds names the caller never typed
+  checked against the caller's lists. Row keys the model lacks are named together in
+  the old `_selectable`'s 417 ("Unknown field 'x' for Foundation Widget", "Unknown
+  fields 'a', 'b' for …", `:375-402`); a known field the caller may not read, filter or
+  sort is refused with `core`'s existing texts ("Field 'x' is not readable", "Cannot
+  order by unknown field 'x'", "Cannot group by unknown field 'x'"). The engine adds names the caller never typed
   (`group_by_field` to `rows` in every view type; the screen always sends `owner`; the
   seven standard fields), so a guard checks that every resource that opts in has the
   seven standard fields readable, and that every definition and kanban default names
