@@ -189,9 +189,17 @@ CELERY_RESULT_BACKEND = env(
 )
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_ENABLE_UTC = True
-# The queue the old backend's tasks and beat entries use (backend/config/settings/base.py:317),
-# so a worker started the way the old one is receives these too.
+# As the old backend has them (backend/config/settings/base.py:316-326). The queue its
+# tasks and beat entries use, so a worker started the old way receives these too; late
+# acknowledgement with a prefetch of one, so a task a dying worker held is redelivered;
+# JSON only; results expire after a day.
 CELERY_TASK_DEFAULT_QUEUE = "default"
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_RESULT_EXPIRES = 60 * 60 * 24
 
 CHANNEL_LAYERS = {
     "default": {

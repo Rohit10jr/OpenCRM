@@ -27,3 +27,16 @@ def test_tasks_land_on_the_old_default_queue():
 
     assert settings.CELERY_TASK_DEFAULT_QUEUE == "default"
     assert app.conf.task_default_queue == "default"
+
+
+def test_the_celery_settings_match_the_old_backend():
+    """backend/config/settings/base.py:316-326 (A-26)."""
+    from config.celery import app
+
+    assert app.conf.task_acks_late is True
+    assert app.conf.worker_prefetch_multiplier == 1
+    assert app.conf.task_serializer == "json"
+    assert app.conf.result_serializer == "json"
+    assert list(app.conf.accept_content) == ["json"]
+    expires = app.conf.result_expires
+    assert getattr(expires, "total_seconds", lambda: expires)() == 60 * 60 * 24
