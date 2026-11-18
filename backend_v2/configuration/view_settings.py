@@ -19,13 +19,15 @@ from django.db.models import Q
 from accounts.roles import ADMINISTRATOR, ROLE_SALES_MANAGER, ROLE_SYSTEM_MANAGER
 from configuration import field_meta
 from configuration.list_views import list_definition_for
+from configuration.metadata import served_model
 from configuration.models import CRMViewSettings
 from configuration.serializers import CRMViewSettingsSerializer
 from core.doctypes import declared_doctypes
 from core.exceptions import DoesNotExistError, PermissionError, ValidationError
+from core.field_access import hidden_from
 from core.inputs import parse_json_param
 from core.query import wire_json_text
-from core.resources import rules_for
+from core.resources import routed_rule_map
 
 VIEW_SETTINGS = "CRM View Settings"
 NOT_PERMITTED = "Not permitted"
@@ -91,9 +93,9 @@ def default_rows(doctype) -> list:
 
 def kanban_link_columns(target: str, user) -> list[dict]:
     """A Link column field's values: the target's rows the caller may list, oldest
-    modified first; none when the target has no row rules."""
+    modified first; none when the target is not served by a resource of its own."""
     model = declared_doctypes().get(target)
-    rules = rules_for(model) if model is not None else None
+    rules = routed_rule_map().get(model) if model is not None else None
     if rules is None:
         return []
     queryset = model._default_manager.all()
@@ -111,6 +113,8 @@ def default_columns(view: dict, user) -> list:
     if definition is None:
         return []
     if view.get("type") == "kanban" and view.get("column_field"):
+        if view["column_field"] in hidden_from(served_model(doctype), user):
+            return []  # PE-16: a field the caller may not read gives no columns
         field = field_meta.get_field(doctype, view["column_field"])
         if not field:
             return []
@@ -126,13 +130,26 @@ def default_columns(view: dict, user) -> list:
 
 
 def _normalise(view) -> dict:
-    """The five JSON-ish fields, parsed; blank becomes `{}` for filters, else `[]`."""
-    parsed = dict(parse_json_param(view, {}) or {})
+    """The five JSON-ish fields, parsed; blank becomes `{}` for filters, else `[]`.
+    What the old code would crash on is 417 (PE-12d): a view that is not an object,
+    `rows` or `columns` that is not a list, a row that is not a fieldname, a `type` that
+    is not text."""
+    parsed = parse_json_param(view, {}) or {}
+    if not isinstance(parsed, dict):
+        raise ValidationError("View must be an object")
+    parsed = dict(parsed)
     for key in JSON_KEYS:
         value = parse_json_param(parsed.get(key), None)
         if value in (None, ""):
             value = {} if key == "filters" else []
         parsed[key] = value
+    for key in ("rows", "columns"):
+        if not isinstance(parsed[key], list):
+            raise ValidationError(f"{key.capitalize()} must be a list")
+    if any(not isinstance(row, str) for row in parsed["rows"]):
+        raise ValidationError("Rows must be fieldnames")
+    if parsed.get("type") is not None and not isinstance(parsed["type"], str):
+        raise ValidationError("Type must be text")
     return parsed
 
 
@@ -169,8 +186,8 @@ def _fill_default_columns(view: dict, user) -> None:
 
 
 def _require_doctype(doctype) -> None:
-    """PE-12d: the route name is built from it."""
-    if not doctype:
+    """PE-12d: the route name is built from it, so it is non-empty text."""
+    if not doctype or not isinstance(doctype, str):
         raise ValidationError("DocType is required")
 
 
@@ -182,6 +199,8 @@ def create_view(view, *, user) -> dict:
     parsed = _normalise(view)
     doctype = parsed.get("doctype")
     _require_doctype(doctype)
+    if parsed.get("label") is None:
+        raise ValidationError("Label is required")
     _merge_default_rows(parsed, doctype)
     _fill_default_columns(parsed, user)
     doc = CRMViewSettings(dt=doctype, user=user, label=parsed.get("label"))
@@ -198,6 +217,7 @@ def update_view(view, *, user) -> dict:
         raise not_found(parsed.get("name"))
     require_write(user, doc)
     doctype = parsed.get("doctype") or doc.dt
+    _require_doctype(doctype)
     _merge_default_rows(parsed, doctype)
     _apply(doc, parsed, doctype=doctype)
     doc.save(user=user)
@@ -316,7 +336,12 @@ def fetch_and_update_kanban_columns(name, *, user):
     current = default_columns(
         {"dt": doc.dt, "type": doc.type, "column_field": doc.column_field}, user
     )
-    existing = parse_json_param(doc.kanban_columns, []) or []
+    stored = parse_json_param(doc.kanban_columns, []) or []
+    # A stored value of the wrong shape counts as no columns, a wrong entry is skipped
+    # (PE-12d): the old code crashes on both.
+    if not isinstance(stored, list):
+        stored = []
+    existing = [column for column in stored if isinstance(column, dict)]
     existing_names = [column.get("name") for column in existing]
     for column in current:
         if column.get("name") not in existing_names:

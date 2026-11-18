@@ -5,7 +5,10 @@ private view is invisible to another user in the list and by name, a public one 
 visible to everyone, another user's view cannot be edited. The old
 `/api/resource/CRM View Settings` is `/api/v1/view-settings/`, answering under
 `message` (API_CONTRACT); the old PUT is PATCH, and
-`:804` makes its public view with the model, the `public` call being CF7b's. New: the
+`:804` makes its public view with the model, the `public` call being CF7b's.
+`:551` (the eight calls are registered) is covered by `tests/guards/test_route_map.py`
+over the built route-map rows, and ``test_permissions.py:777`` (the doctype has a row
+rule) by `tests/guards/test_resource_access.py` (`Access.ruled()`). New: the
 rules for managers, PE-19 (the four fields the dedicated calls set) and PE-12d (a JSON
 column that is not JSON).
 """
@@ -175,10 +178,11 @@ def test_pe12d_a_json_column_that_is_not_json_is_refused(alice, auth_api, fieldn
     response = auth_api.post(VIEWS, {"dt": "CRM Lead", fieldname: "[not json"}, format="json")
     assert response.status_code == 417
     assert response.json()["message"] == f"{label} must be valid JSON"
-    view = make_view(alice)
+    view = make_view(alice, **{fieldname: "[]"})
     response = auth_api.patch(f"{VIEWS}{view.pk}/", {fieldname: "{"}, format="json")
     assert response.status_code == 417
     assert not CRMViewSettings.objects.exclude(pk=view.pk).exists()
+    assert getattr(CRMViewSettings.objects.get(pk=view.pk), fieldname) == "[]"
 
 
 def test_pe12d_valid_json_and_blank_are_stored_as_written(auth_api):

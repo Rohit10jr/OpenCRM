@@ -230,6 +230,56 @@ def test_a_kanban_on_a_link_field_gets_the_rows_the_caller_may_list(alice, bob, 
     assert "Administrator" in [c["name"] for c in kanban_link_columns("User", administrator)]
 
 
-def test_a_kanban_link_target_with_no_rules_gives_no_columns(alice):
-    assert kanban_link_columns("DocType", alice) == []
+def test_a_kanban_link_target_no_resource_serves_gives_no_columns(alice, administrator):
+    """Version is declared and withheld: its names are never listed (A-43 fixes 4, 5)."""
+    assert kanban_link_columns("Version", administrator) == []
     assert kanban_link_columns("No Such Doctype", alice) == []
+
+
+def test_a_kanban_on_a_field_the_caller_may_not_read_gets_no_columns(auth_api, monkeypatch):
+    """PE-16: the hidden field is stood in for by `type`; no tests_support or
+    CONFIGURATION doctype has a restricted Select or Link field."""
+    import configuration.view_settings as view_settings
+
+    monkeypatch.setattr(view_settings, "hidden_from", lambda model, user: {"type"})
+    view = create(auth_api, doctype="CRM Fields Layout", type="kanban", column_field="type", label="K")
+    assert json.loads(view["kanban_columns"]) == []
+
+
+# --- new: PE-12d, the remaining crashes (A-43 fix 1) -------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("view", "message"),
+    [
+        (["not", "an", "object"], "View must be an object"),
+        (5, "View must be an object"),
+        ("not json", "View must be an object"),
+        ({"doctype": "CRM Lead", "label": "x", "rows": "name"}, "Rows must be a list"),
+        ({"doctype": "CRM Lead", "label": "x", "columns": {"a": 1}}, "Columns must be a list"),
+        ({"doctype": "CRM Lead", "label": "x", "rows": [{"a": 1}]}, "Rows must be fieldnames"),
+        ({"doctype": ["CRM Lead"], "label": "x"}, "DocType is required"),
+        ({"doctype": "CRM Lead", "label": "x", "type": 5}, "Type must be text"),
+        ({"doctype": "CRM Lead"}, "Label is required"),
+    ],
+)
+def test_pe12d_a_view_that_would_crash_is_417(auth_api, view, message):
+    response = auth_api.post(CREATE, {"view": view}, format="json")
+    assert response.status_code == 417
+    assert response.json()["message"] == message
+    assert not CRMViewSettings.objects.exists()
+
+
+def test_pe12d_update_refuses_a_doctype_that_is_not_text(auth_api):
+    view = create(auth_api, label="Mine")
+    response = auth_api.post(
+        UPDATE, {"view": {"name": view["name"], "doctype": 5, "label": "x"}}, format="json"
+    )
+    assert response.status_code == 417
+    assert CRMViewSettings.objects.get(pk=view["name"]).label == "Mine"
+
+
+def test_set_as_default_with_neither_a_name_nor_a_doctype_is_417(auth_api):
+    response = auth_api.post("/api/v1/view-settings/set-as-default/", {}, format="json")
+    assert response.status_code == 417
+    assert response.json()["message"] == "DocType is required"

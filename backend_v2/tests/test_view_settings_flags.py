@@ -124,6 +124,13 @@ def test_pe20_public_acts_on_a_view_the_caller_may_read(alice, manager, api_as):
     assert (row(name).public, row(name).user_id) == (False, alice.name)
 
 
+def test_administrator_publishes_another_users_private_view(alice, administrator, api_as):
+    """Administrator reads every view, so PE-20's read rule lets it through."""
+    name = make(alice)
+    assert api_as(administrator).post(url(name, "public"), {"value": True}, format="json").status_code == 200
+    assert (row(name).public, row(name).user_id) == (True, None)
+
+
 def test_unpublishing_gives_the_view_to_the_caller(alice, manager, api_as):
     name = make(alice)
     CRMViewSettings.objects.filter(pk=name).update(public=True, user=None)
@@ -219,6 +226,17 @@ def test_pe21_a_reader_who_may_not_write_gets_the_columns_unsaved(alice, bob, ap
     assert response.status_code == 200
     assert {c["name"] for c in json.loads(response.json()["message"])} >= {alice.name, bob.name}
     assert row(name).kanban_columns == "[]"
+
+
+@pytest.mark.parametrize("stored", ['{"a": 1}', '["x", {"name": "kept"}]', "5"])
+def test_pe12d_stored_kanban_columns_of_the_wrong_shape_are_skipped(alice, auth_api, stored):
+    name = make(alice, doctype="CRM View Settings", type="kanban", column_field="user")
+    CRMViewSettings.objects.filter(pk=name).update(kanban_columns=stored)
+    response = auth_api.post(url(name, "kanban-columns"))
+    assert response.status_code == 200
+    columns = json.loads(response.json()["message"])
+    assert all(isinstance(column, dict) for column in columns)
+    assert alice.name in {column["name"] for column in columns}
 
 
 @pytest.mark.parametrize("name", [999999, "abc"])

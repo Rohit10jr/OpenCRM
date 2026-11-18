@@ -197,7 +197,7 @@ DIRECT_MANAGER_READS = {
     ),
     ("configuration/view_settings.py", "kanban_link_columns", "model._default_manager"): (
         "A saved kanban's columns are a link target's names, read through that target's "
-        "own list rule (old view_settings.py:91-100); a target with no rules gives none."
+        "own list rule (old view_settings.py:91-100); a target no resource serves gives none."
     ),
     ("core/mixins/rename.py", "RenameMixin.rename", "self.document_model._default_manager"): (
         "Rename must distinguish a missing row from one excluded by its list rule, then "
