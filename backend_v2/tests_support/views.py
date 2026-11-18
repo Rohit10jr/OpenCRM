@@ -21,6 +21,7 @@ from tests_support.list_views import WidgetListView
 from tests_support.serializers import (
     AutoIncrementDocumentSerializer,
     ContactHolderSerializer,
+    PolyContactHolderSerializer,
     StrayContactSerializer,
     DynamicReferenceSerializer,
     FieldDocumentSerializer,
@@ -106,7 +107,9 @@ class PointingDocumentViewSet(DocumentViewSet):
 
 
 class ContactHolderViewSet(DocumentViewSet):
-    """Everyone reads and writes a holder; a locked one may not be deleted (PE-26)."""
+    """Everyone reads a holder. A frozen one may not be written; a locked one may be
+    deleted by Administrator only, and an unlocked one by anyone (the rule answers
+    `None`, which allows) (PE-26)."""
 
     access = Access.ruled()
     serializer_class = ContactHolderSerializer
@@ -121,8 +124,18 @@ class ContactHolderViewSet(DocumentViewSet):
     @staticmethod
     def has_object_rule(user, document, ptype):
         if ptype == "delete":
-            return not document.locked
+            return user.name == "Administrator" if document.locked else None
+        if ptype == "write":
+            return not document.frozen
         return True
+
+
+class PolyContactHolderViewSet(DocumentViewSet):
+    access = Access.open(reason="A fixture with a polymorphic contacts table.")
+    serializer_class = PolyContactHolderSerializer
+    readable_fields = PolyContactHolderSerializer.Meta.fields
+    filterable_fields = ("name", "widget")
+    sortable_fields = ("name", "modified")
 
 
 class StrayContactViewSet(DocumentViewSet):

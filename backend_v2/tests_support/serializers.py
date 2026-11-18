@@ -7,6 +7,7 @@ from tests_support.models import (
     DynamicReference,
     FieldDocument,
     PointingDocument,
+    PolyContactHolder,
     PromptDocument,
     SearchableDocument,
     SecuredDocument,
@@ -90,7 +91,13 @@ class ContactHolderSerializer(DocumentSerializer):
 
     class Meta:
         model = ContactHolder
-        fields = (*STANDARD_FIELDS, "widget", "contact", "locked", "contacts")
+        fields = (*STANDARD_FIELDS, "widget", "contact", "locked", "frozen", "contacts")
+
+
+class PolyContactHolderSerializer(DocumentSerializer):
+    class Meta:
+        model = PolyContactHolder
+        fields = (*STANDARD_FIELDS, "widget", "contacts")
 
 
 class StrayContactSerializer(DocumentSerializer):
