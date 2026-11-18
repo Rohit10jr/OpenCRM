@@ -45,6 +45,14 @@ def test_the_seed_writes_the_frameworks_list_once():
     assert reference_rows.add_languages(apps) == 0
 
 
+def test_the_rows_keep_the_files_order():
+    """New (A-31 finding 3): one increasing stamp per row, in file order, as `backend/`
+    saved them one at a time."""
+    codes = [row["language_code"] for row in source_rows()]
+    newest_first = list(Language.objects.order_by("-modified").values_list("pk", flat=True))
+    assert newest_first == list(reversed(codes))
+
+
 def test_the_picker_offers_enabled_languages_by_name(auth_api):
     results = search(auth_api, txt="Engl")
     assert {"value": "en", "label": "English", "description": "en"} in results

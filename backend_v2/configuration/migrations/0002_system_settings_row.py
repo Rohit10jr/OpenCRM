@@ -37,14 +37,10 @@ def write_row(apps, schema_editor):
     )
 
 
-def remove_row(apps, schema_editor):
-    apps.get_model("configuration", "SystemSettings").objects.filter(pk=NAME).delete()
-
-
 class Migration(migrations.Migration):
     dependencies = [
         ("configuration", "0001_initial"),
         ("accounts", "0002_seed_roles_and_users"),
     ]
 
-    operations = [migrations.RunPython(write_row, remove_row)]
+    operations = [migrations.RunPython(write_row, migrations.RunPython.noop)]

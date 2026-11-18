@@ -13,6 +13,8 @@ import json
 from pathlib import Path
 
 from django.db import migrations
+from datetime import timedelta
+
 from django.utils import timezone
 
 DATA = Path(__file__).resolve().parents[1] / "data"
@@ -21,8 +23,10 @@ DATA = Path(__file__).resolve().parents[1] / "data"
 DEFAULT_ENABLED_CURRENCIES = ("INR", "USD", "GBP", "EUR", "AED", "AUD", "JPY", "CNY", "CHF")
 
 
-def _stamp():
-    now = timezone.now()
+def _stamp(offset=0):
+    """Administrator's stamp. `offset` microseconds keeps file order: `backend/` saved
+    countries and languages one at a time, and search sorts by `modified desc`."""
+    now = timezone.now() + timedelta(microseconds=offset)
     return {
         "owner_id": "Administrator",
         "modified_by_id": "Administrator",
@@ -36,7 +40,6 @@ def add_countries(apps):
     Country = apps.get_model("configuration", "Country")
     data = json.loads((DATA / "country_info.json").read_text(encoding="utf-8"))
     existing = set(Country.objects.values_list("pk", flat=True))
-    stamp = _stamp()
     rows = Country.objects.bulk_create(
         [
             Country(
@@ -46,9 +49,9 @@ def add_countries(apps):
                 date_format=info.get("date_format") or "dd-mm-yyyy",
                 time_format=info.get("time_format") or "HH:mm:ss",
                 time_zones="\n".join(info.get("timezones") or []),
-                **stamp,
+                **_stamp(index),
             )
-            for name, info in data.items()
+            for index, (name, info) in enumerate(data.items())
             if name not in existing
         ]
     )
@@ -87,7 +90,6 @@ def add_languages(apps):
     as the file says."""
     Language = apps.get_model("configuration", "Language")
     existing = set(Language.objects.values_list("pk", flat=True))
-    stamp = _stamp()
     with (DATA / "languages.csv").open(encoding="utf-8", newline="") as handle:
         rows = [
             Language(
@@ -95,9 +97,9 @@ def add_languages(apps):
                 language_code=row["language_code"],
                 language_name=row["language_name"],
                 enabled=str(row.get("enabled", "0")).strip() == "1",
-                **stamp,
+                **_stamp(index),
             )
-            for row in csv.DictReader(handle)
+            for index, row in enumerate(csv.DictReader(handle))
             if row["language_code"] not in existing
         ]
     Language.objects.bulk_create(rows)
@@ -110,15 +112,10 @@ def write_rows(apps, schema_editor):
     add_languages(apps)
 
 
-def remove_rows(apps, schema_editor):
-    for model in ("Country", "Currency", "Language"):
-        apps.get_model("configuration", model).objects.all().delete()
-
-
 class Migration(migrations.Migration):
     dependencies = [
         ("configuration", "0003_country_currency_language"),
         ("accounts", "0002_seed_roles_and_users"),
     ]
 
-    operations = [migrations.RunPython(write_rows, remove_rows)]
+    operations = [migrations.RunPython(write_rows, migrations.RunPython.noop)]
