@@ -292,6 +292,8 @@ class ParityRunner:
                 reason = "waiting for its unit"
             elif marked(new_block, "# @negative"):
                 reason = "negative method case"
+            elif marked(new_block, "# @retired"):
+                reason = "retired under PE-11"
             elif marked(new_block, "# @not-served") or new_block.request is None:
                 reason = "not served under PE-3"
             if reason:

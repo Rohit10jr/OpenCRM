@@ -72,14 +72,13 @@ Content-Type: application/json
 # ---- cleanup first -------------------------------------------------------------------------
 
 ### 0.5 hierarchy off, in case an earlier run died with it on -> 200
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-PUT {{settings}}
+PATCH {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"enable_sales_hierarchy": 0}
-
 ### 0.6 leftover tree rows -> 200
 # @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
@@ -582,14 +581,13 @@ Authorization: Bearer {{mtoken}}
 # ---- hierarchy ON: the tree now decides ----------------------------------------------------------------
 
 ### 6.1 switch it on (manager-writable setting, Administrator here) -> 200
-# @waiting CONFIGURATION
-# @expect $.data.enable_sales_hierarchy == true
-PUT {{settings}}
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.enable_sales_hierarchy == true
+PATCH {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"enable_sales_hierarchy": 1}
-
 ### 6.2 grace, now IN the tree, loses see-all: own + her subtree (ada) = 2, not alan's or Administrator's
 # @waiting SALES
 # @expect $.data count 2
@@ -673,14 +671,13 @@ Content-Type: application/json
 {"name": "total_leads", "type": "number", "from_date": "2026-01-01", "to_date": "2026-12-31"}
 
 ### 6.14 switch it off again -> 200
-# @waiting CONFIGURATION
-# @expect $.data.enable_sales_hierarchy == false
-PUT {{settings}}
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.enable_sales_hierarchy == false
+PATCH {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"enable_sales_hierarchy": 0}
-
 ### 6.15 -> grace is back to seeing everything: 4
 # @waiting SALES
 # @expect $.data count 4

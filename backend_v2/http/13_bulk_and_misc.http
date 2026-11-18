@@ -611,6 +611,9 @@ Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"txt": "a", "page_length": 50}
+
+# ---- teardown ------------------------------------------------------------------------------------------
+
 ### 6.1 delete files -> 200
 # @waiting ACTIVITIES
 DELETE {{file}}/{{pub}}

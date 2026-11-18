@@ -98,9 +98,9 @@ DELETE {{erp}}/{{old_erp.response.body.$.data[0].name}}
 Authorization: Bearer {{token}}
 
 ### 0.10 FCRM access_key cleared -> 200
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-PUT {{fcrm}}/FCRM%20Settings
+PATCH {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -109,99 +109,81 @@ Content-Type: application/json
 # ---- FCRM Settings: read for all, write for managers, one restricted field --------------------------
 
 ### 1.1 a Sales User reads the settings (the timeline needs them on every screen) -> 200
-# @waiting CONFIGURATION
-# @expect $.data.name == Settings
-# @expect $.data.enable_forecasting exists
-# @expect $.data.currency exists
-GET {{fcrm}}/FCRM%20Settings
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.name == Settings
+# @expect $.message.enable_forecasting exists
+# @expect $.message.currency exists
+GET {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{stoken}}
 
 ### 1.2 ...but access_key is not in her response (RESTRICTED_FIELDS, stricter than upstream: bug #20)
-# @waiting CONFIGURATION
-# @expect $.data.access_key absent
-GET {{fcrm}}/FCRM%20Settings
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.access_key absent
+GET {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{stoken}}
 
 ### 1.3 nor in a list with fields=["*"]
-# @waiting CONFIGURATION
 # @expect $.data[0].access_key absent
 # @expect $.data[0].brand_name exists
-GET {{fcrm}}?fields=["*"]
-Authorization: Bearer {{stoken}}
-
+# @retired PE-11: a settings record has no list route; covered by 1.2
 ### 1.4 naming it explicitly -> 417 "not readable"
-# @waiting CONFIGURATION
 # @expect $.message contains not readable
-GET {{fcrm}}?fields=["access_key"]
-Authorization: Bearer {{stoken}}
-
+# @retired PE-11: a settings record has no list route; covered by 1.11
 ### 1.5 filtering on it -> 400 (a filter would turn the row count into an oracle)
-# @waiting CONFIGURATION
 # @expect $.message contains Cannot filter
-GET {{fcrm}}?fields=["name"]&filters=[["access_key","like","a%25"]]
-Authorization: Bearer {{stoken}}
-
+# @retired PE-11: a settings record has no list route; no other block covers it
 ### 1.6 she may not write it -> 403
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == PermissionError
-PUT {{fcrm}}/FCRM%20Settings
+PATCH {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"brand_name": "ZZ hijacked"}
-
 ### 1.7 a Sales Manager may -> 200
-# @waiting CONFIGURATION
-# @expect $.data.brand_name == ZZ Brand
-PUT {{fcrm}}/FCRM%20Settings
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.brand_name == ZZ Brand
+PATCH {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{mtoken}}
 Content-Type: application/json
 
 {"brand_name": "ZZ Brand"}
-
 ### 1.8 and sees access_key -> present
-# @waiting CONFIGURATION
-# @expect $.data.access_key exists
-GET {{fcrm}}/FCRM%20Settings
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.access_key exists
+GET {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{mtoken}}
 
 ### 1.9 Administrator sets the FX key -> 200, and reads it back
-# @waiting CONFIGURATION
-# @expect $.data.access_key == ZZ-fx-key
-PUT {{fcrm}}/FCRM%20Settings
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.access_key == ZZ-fx-key
+PATCH {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"access_key": "ZZ-fx-key"}
-
 ### 1.10 get_single_value, the second door: a public field for a Sales User -> 200
-# @waiting CONFIGURATION
 # @expect $.message == ZZ Brand
-POST {{gsv}}
+GET {{host}}/api/v1/crm-settings/value/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
-{"doctype": "FCRM Settings", "field": "brand_name"}
-
+{"field": "brand_name"}
 ### 1.11 the restricted field through the same door -> 403 (this was open before the phase-7 review)
-# @waiting CONFIGURATION
 # @expect $.exc_type == PermissionError
 # @expect $.message contains not readable
-POST {{gsv}}
+GET {{host}}/api/v1/crm-settings/value/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
-{"doctype": "FCRM Settings", "field": "access_key"}
-
+{"field": "access_key"}
 ### 1.12 ...and for a manager -> the value
-# @waiting CONFIGURATION
 # @expect $.message == ZZ-fx-key
-POST {{gsv}}
+GET {{host}}/api/v1/crm-settings/value/
 Authorization: Bearer {{mtoken}}
 Content-Type: application/json
 
-{"doctype": "FCRM Settings", "field": "access_key"}
-
+{"field": "access_key"}
 ### 1.13 get_single_value on a doctype that is not a singleton -> 417
 # @waiting SALES
 # @expect $.message contains not a single DocType
@@ -212,23 +194,22 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "field": "status"}
 
 ### 1.14 a Sales User may not create a second settings row -> 403
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == PermissionError
-POST {{fcrm}}
+POST {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"brand_name": "ZZ second"}
-
 ### 1.15 nor delete the row -> 403
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == PermissionError
-DELETE {{fcrm}}/FCRM%20Settings
+DELETE {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{stoken}}
 
 ### 1.16 restore brand and key -> 200
-# @waiting CONFIGURATION
-PUT {{fcrm}}/FCRM%20Settings
+# @resource-envelope {"data"}/201 -> {"message"}/200
+PATCH {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 

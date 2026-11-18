@@ -175,7 +175,17 @@ def _replace_request(block: HttpBlock, method: str, url: str, body: dict | None 
         end += 1
     while end < len(block.lines) and not block.lines[end].strip():
         end += 1
-    block.lines = block.lines[: index + 1] + headers + ["", json.dumps(body)]
+    # Comments after the body (often the next section's heading) stay where they were.
+    tail_start = len(block.lines)
+    while tail_start > index + 1 and (
+        not block.lines[tail_start - 1].strip()
+        or block.lines[tail_start - 1].startswith(("#", "//"))
+    ):
+        tail_start -= 1
+    tail = block.lines[tail_start:]
+    if not any(line.strip() for line in tail):
+        tail = []
+    block.lines = block.lines[: index + 1] + headers + ["", json.dumps(body)] + tail
 
 
 def _payload(block: HttpBlock, url: str) -> dict:
@@ -211,7 +221,33 @@ def _doctype_from_generic(path: str, payload: dict) -> str | None:
     return value if isinstance(value, str) and "{{" not in value else None
 
 
+def _is_singleton(entry: RouteEntry) -> bool:
+    """A settings record served at its resource root (S25 (3)), with no name segment."""
+    return "(singleton" in entry.new_route
+
+
+#: PE-11: a list-shaped read of a settings record is retired, naming the block that
+#: covers it (A-30, A-31's follow-up). Absent: no other block covers it.
+RETIRED_COVERED_BY = {
+    ("12_settings_singletons.http", "1.3"): "1.2",
+    ("12_settings_singletons.http", "1.4"): "1.11",
+}
+
+
+def _retire_list_read(block: HttpBlock, filename: str) -> None:
+    number = (block.title or "").split(" ", 1)[0]
+    covered = RETIRED_COVERED_BY.get((filename, number))
+    cover = f"covered by {covered}" if covered else "no other block covers it"
+    index = block.request_index
+    assert index is not None
+    block.lines = block.lines[:index] + [
+        f"# @retired PE-11: a settings record has no list route; {cover}"
+    ]
+
+
 def _resource_path(entry: RouteEntry, method: str, has_name: bool) -> str | None:
+    if _is_singleton(entry):
+        has_name = False
     candidates = entry.routes
     for candidate_method, path in candidates:
         named = "<name>" in path
@@ -336,7 +372,11 @@ def _comment_not_served(block: HttpBlock) -> None:
 
 
 def _rewrite_resource(
-    block: HttpBlock, method: str, resolved_url: str, routes: RouteMap
+    block: HttpBlock,
+    method: str,
+    resolved_url: str,
+    routes: RouteMap,
+    filename: str = "fixture.http",
 ) -> str | None:
     match = RESOURCE_URL_RE.search(resolved_url)
     if not match:
@@ -353,6 +393,9 @@ def _rewrite_resource(
         _annotate(block, f"# @waiting {entry.unit}")
         return None
     new_method = "PATCH" if method == "PUT" else method
+    if _is_singleton(entry) and name is None and new_method == "GET":
+        _retire_list_read(block, filename)
+        return None
     target = _resource_path(entry, new_method, name is not None)
     if target is None:
         raise SuiteBuildError(f"line {block.start_line}: no {new_method} route for {doctype}")
@@ -551,7 +594,7 @@ def rewrite_http(text: str, route_map: RouteMap, filename: str = "fixture.http")
             else:
                 _annotate(block, f"# @waiting {entry.unit}")
         elif "/api/resource/" in resolved_url:
-            if name := _rewrite_resource(block, method, resolved_url, route_map):
+            if name := _rewrite_resource(block, method, resolved_url, route_map, filename):
                 resource_names.add(name)
 
     _wait_after_waiting(document.blocks)

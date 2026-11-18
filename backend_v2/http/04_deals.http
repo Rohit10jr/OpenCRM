@@ -30,14 +30,13 @@ Content-Type: application/json
 # ---- cleanup first ---------------------------------------------------------------------
 
 ### 0.2 forecasting off, in case an earlier run died with it on -> 200
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-PUT {{settings}}
+PATCH {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"enable_forecasting": 0}
-
 ### 0.3 find deals left by an earlier run -> 200
 # @waiting SALES
 # @cleanup
@@ -341,14 +340,13 @@ Content-Type: application/json
 @deal5 = {{deal5_req.response.body.$.data.name}}
 
 ### 4.2 turn forecasting ON (manager-only write on the settings singleton) -> 200
-# @waiting CONFIGURATION
-# @expect $.data.enable_forecasting == true
-PUT {{settings}}
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.enable_forecasting == true
+PATCH {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"enable_forecasting": 1}
-
 ### 4.3 now a deal without an expected value -> 417 MandatoryError, crm_deal.py:257 verbatim
 # @waiting SALES
 # @expect $.exc_type == MandatoryError
@@ -393,14 +391,13 @@ Content-Type: application/json
 {"next_step": "ZZ five edited"}
 
 ### 4.7 turn forecasting OFF again -> 200
-# @waiting CONFIGURATION
-# @expect $.data.enable_forecasting == false
-PUT {{settings}}
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.enable_forecasting == false
+PATCH {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"enable_forecasting": 0}
-
 ### 4.8 auto_update_expected_deal_value: products total overwrites a SET expected value -> 200
 # @waiting SALES
 # Upstream computes totals client-side and validate() sees them in the same save, so the
