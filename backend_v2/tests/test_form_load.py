@@ -40,7 +40,86 @@ def names(doc: dict) -> list[str]:
 def test_unknown_doctype_is_404(auth_api):
     response = load(auth_api, "No Such Doctype")
     assert response.status_code == 404
+    assert response.json()["exc_type"] == "DoesNotExistError"
     assert response.json()["message"] == "DocType No Such Doctype not found"
+
+
+# --- twins of the old cases on CRM Deal and CRM Contacts (A-36 finding 4) ----------------
+
+
+def generated() -> dict:
+    """The committed file read from disk, not through field_meta, as the old tests do."""
+    return json.loads(field_meta._DATA_FILE.read_text(encoding="utf-8"))
+
+
+def field_of(doc: dict, fieldname: str) -> dict:
+    return next(f for f in doc["fields"] if f["fieldname"] == fieldname)
+
+
+def test_doctype_properties_come_through(auth_api):
+    """Twin of `:99` on FCRM Settings: the values, defaults for what the file omits."""
+    meta = generated()["FCRM Settings"]
+    doc = load(auth_api, "FCRM Settings").json()["docs"][0]
+    assert (doc["name"], doc["istable"], doc["issingle"]) == ("FCRM Settings", 0, 1)
+    for key in ("autoname", "title_field"):
+        assert doc[key] == meta.get(key), key
+    assert doc["sort_field"] == meta.get("sort_field", "modified")
+    assert doc["sort_order"] == meta.get("sort_order", "DESC")
+    assert doc["is_submittable"] == 0
+    assert doc["editable_grid"] == meta.get("editable_grid", 0)
+    assert doc["translated_doctype"] == meta.get("translated_doctype", 0)
+
+
+def test_a_hidden_field_is_marked_hidden(api_as, make_user):
+    """Twin of `:148` on FCRM Settings' `persona_captured`."""
+    assert next(f for f in generated()["FCRM Settings"]["fields"] if f["fieldname"] == "persona_captured").get("hidden") == 1
+    manager = make_user("mgr@example.com", roles=["Sales Manager"])
+    doc = load(api_as(manager), "FCRM Settings").json()["docs"][0]
+    assert field_of(doc, "persona_captured")["hidden"] == 1
+
+
+def test_a_field_descriptor_carries_what_the_form_controls_read(auth_api):
+    """Twin of `:165` on FCRM Settings' `currency`: a Link with its target; `reqd` absent."""
+    currency = field_of(load(auth_api, "FCRM Settings").json()["docs"][0], "currency")
+    assert (currency["fieldtype"], currency["options"]) == ("Link", "Currency")
+    assert currency["label"] == next(
+        f for f in generated()["FCRM Settings"]["fields"] if f["fieldname"] == "currency"
+    )["label"]
+    assert "reqd" not in currency
+
+
+def test_layout_breaks_are_in_the_field_list(auth_api):
+    """Twin of `:181` on FCRM Settings."""
+    fieldtypes = {f["fieldtype"] for f in load(auth_api, "FCRM Settings").json()["docs"][0]["fields"]}
+    assert fieldtypes & {"Tab Break", "Section Break", "Column Break"}
+
+
+def test_in_list_view_marks_the_grid_columns(auth_api):
+    """Twin of `:189` on CRM Dropdown Item, the Home Actions grid's rows."""
+    meta = generated()["CRM Dropdown Item"]["fields"]
+    expected = {f["fieldname"] for f in meta if f.get("in_list_view")}
+    assert expected, "CRM Dropdown Item must declare grid columns for this to mean anything"
+    docs = load(auth_api, "FCRM Settings").json()["docs"]
+    items = next(doc for doc in docs if doc["name"] == "CRM Dropdown Item")
+    assert {f["fieldname"] for f in items["fields"] if f.get("in_list_view")} == expected
+    unmarked = next(f["fieldname"] for f in meta if f.get("fieldname") and not f.get("in_list_view"))
+    assert "in_list_view" not in field_of(items, unmarked)
+
+
+def test_depends_on_and_the_other_new_field_keys_survive_generation(auth_api):
+    """Twin of `:224` on CRM Dropdown Item's `route`."""
+    expected = next(f for f in generated()["CRM Dropdown Item"]["fields"] if f["fieldname"] == "route")
+    route = field_of(load(auth_api, "CRM Dropdown Item").json()["docs"][0], "route")
+    for key in ("depends_on", "mandatory_depends_on"):
+        assert route.get(key) == expected.get(key), key
+    assert expected.get("depends_on") or expected.get("mandatory_depends_on")
+
+
+def test_with_parent_on_a_normal_doctype_is_a_no_op(auth_api):
+    """Twin of `:271` on FCRM Settings."""
+    body = load(auth_api, "FCRM Settings", with_parent=1).json()
+    assert "parent_dt" not in body
+    assert body["docs"][0]["name"] == "FCRM Settings"
 
 
 def test_getdoctype_needs_a_session(api):
