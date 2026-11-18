@@ -42,11 +42,10 @@ def default_signature():
     `default_outgoing` and `add_signature`, whether or not outgoing is enabled; `None`
     when there is none or its signature is empty. Several default accounts can coexist,
     as in `backend/`; the newest wins."""
-    account = (
+    signature = (
         EmailAccount._default_manager.filter(default_outgoing=True, add_signature=True)
         .order_by("-modified")
+        .values_list("signature", flat=True)
         .first()
     )
-    if account is None or not account.signature:
-        return None
-    return account.signature
+    return signature or None

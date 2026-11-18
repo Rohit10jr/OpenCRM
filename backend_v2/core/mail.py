@@ -1,11 +1,14 @@
-"""Outbound system mail: who carries it, and what it says.
+"""Outbound mail: who carries it, what it says, and how a mail server is checked.
 
-The carrier is the old `crm_app.communication.find_outgoing_account()` reduced to its
-last step, the settings-configured account (`backend/crm_app/communication.py:372-398`,
-upstream `email_account.py:563-592`): `None` unless `EMAIL_HOST` is set. The saved Email
-Account steps, tried before it, and the unsaved `EmailAccount` this object stands in for
-arrive with CONFIGURATION (specs/ACCOUNTS.md section 4.8). The wording lives in
-`templates/emails/*.txt`, as `backend/crm_app/mail.py` keeps it.
+The carrier is the old `crm_app.communication.find_outgoing_account()`
+(`backend/crm_app/communication.py:400-440`): a saved Email Account first, found through
+the module `MAIL_ACCOUNT_PROVIDER` names (CONFIGURATION's `configuration.mail`, so `core`
+never imports it), then the settings-configured account, `ConfigAccount`
+(`:372-398`, upstream `email_account.py:563-592`), which is `None` unless `EMAIL_HOST` is
+set. `open_backend` sends a saved account through its own SMTP settings. The server
+checks (`smtp_settings`, `check_smtp`, `check_imap`, `validate_email_account`) are the old
+`backend/frappe_core/mail.py`. The wording lives in `templates/emails/*.txt`, as
+`backend/crm_app/mail.py` keeps it.
 """
 
 from __future__ import annotations
