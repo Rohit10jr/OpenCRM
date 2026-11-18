@@ -128,6 +128,84 @@ def test_pe15_the_side_panel_is_not_for_a_child_table(auth_api):
     assert auth_api.get(SIDEPANEL, {"doctype": "CRM Dropdown Item"}).status_code == 404
 
 
+@pytest.mark.parametrize("doctype", ["No Such Doctype", "Version"])
+def test_pe14_the_side_panel_refuses_an_unknown_or_withheld_doctype(auth_api, doctype):
+    response = auth_api.get(SIDEPANEL, {"doctype": doctype})
+    assert response.status_code == 404
+    assert response.json()["message"] == f"DocType {doctype} not found"
+
+
+def test_pe18_a_non_fieldname_entry_is_left_out_of_the_side_panel(auth_api, administrator):
+    CRMFieldsLayout(
+        dt="FCRM Settings",
+        type="Side Panel",
+        layout=json.dumps([{"label": "D", "columns": [{"fields": ["brand_name", {"fieldname": "x"}, 3]}]}]),
+    ).save(user=administrator)
+    sections = auth_api.get(SIDEPANEL, {"doctype": "FCRM Settings"}).json()["message"]
+    assert [f["fieldname"] for f in sections[0]["columns"][0]["fields"]] == ["brand_name"]
+
+
+def test_pe16_a_restricted_field_is_left_out_of_the_side_panel(auth_api, api_as, manager, administrator):
+    store(administrator, "FCRM Settings", "Side Panel", [{"label": "D", "columns": [{"fields": ["brand_name", "access_key"]}]}])
+
+    def panel(client):
+        sections = client.get(SIDEPANEL, {"doctype": "FCRM Settings"}).json()["message"]
+        return [f["fieldname"] for f in sections[0]["columns"][0]["fields"]]
+
+    assert panel(auth_api) == ["brand_name"]
+    assert panel(api_as(manager)) == ["brand_name", "access_key"]
+
+
+def test_pe16_a_restricted_field_is_left_out_of_the_required_fields_section(
+    auth_api, api_as, manager, monkeypatch
+):
+    """No served doctype has a required field yet, so two are marked required here."""
+    real = field_meta.get_fields
+
+    def with_required(doctype):
+        fields = [dict(f) for f in real(doctype)]
+        for field in fields:
+            if field["fieldname"] in ("brand_name", "access_key"):
+                field["reqd"] = 1
+        return fields
+
+    monkeypatch.setattr(field_meta, "get_fields", with_required)
+    params = {"doctype": "FCRM Settings", "type": "Required Fields"}
+    assert fieldnames(auth_api.get(LAYOUT, params).json()["message"]) == ["brand_name"]
+    assert fieldnames(api_as(manager).get(LAYOUT, params).json()["message"]) == ["brand_name", "access_key"]
+
+
+#: Parses, but walking its field lists passes the recursion limit (A-38 fix 8).
+DEEP = "[" * 2000 + "]" * 2000
+
+
+def test_pe12c_a_layout_too_deep_to_parse_is_invalid_json():
+    """The parser itself gives up at this depth; that is 417 too, not a 500."""
+    from configuration.layouts import parse_layout
+    from core.exceptions import ValidationError
+
+    with pytest.raises(ValidationError, match="Layout must be valid JSON"):
+        parse_layout("[" * 50000 + "]" * 50000)
+
+
+def test_pe12c_a_layout_nested_too_deep_is_refused_on_save(api_as, manager):
+    response = api_as(manager).post(
+        SAVE, {"doctype": "FCRM Settings", "type": "Quick Entry", "layout": DEEP}, format="json"
+    )
+    assert response.status_code == 417
+    assert response.json()["message"] == "Layout must be valid JSON"
+
+
+@pytest.mark.parametrize("url,type", [(LAYOUT, "Quick Entry"), (SIDEPANEL, "Side Panel")])
+def test_pe12c_a_stored_layout_that_is_not_json_answers_417_on_read(auth_api, administrator, url, type):
+    """Written around the save's check (the model save does not run it), as an old row
+    might be."""
+    CRMFieldsLayout(dt="FCRM Settings", type=type, layout=DEEP).save(user=administrator)
+    response = auth_api.get(url, {"doctype": "FCRM Settings", "type": type})
+    assert response.status_code == 417
+    assert response.json()["message"] == "Layout must be valid JSON"
+
+
 def test_get_field_obj_expands_select_options_and_marks_read_only():
     obj = get_field_obj({"fieldname": "t", "label": "T", "fieldtype": "Select", "options": "A\nB", "read_only": 1})
     assert obj["options"] == [{"label": "A", "value": "A"}, {"label": "B", "value": "B"}]

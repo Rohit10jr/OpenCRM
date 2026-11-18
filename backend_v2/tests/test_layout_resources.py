@@ -88,6 +88,24 @@ def test_a_sales_manager_cannot_write_a_form_script(api_as, manager):
     assert not CRMFormScript.objects.filter(pk="fine").exists()
 
 
+def test_a_sales_manager_cannot_change_or_delete_a_form_script(api_as, manager, administrator):
+    """PE-17 on the other two writes."""
+    make_script(administrator)
+    client = api_as(manager)
+    assert client.patch(f"{SCRIPTS}ok/", {"script": "other()"}, format="json").status_code == 403
+    assert client.delete(f"{SCRIPTS}ok/").status_code == 403
+    assert CRMFormScript.objects.get(pk="ok").script == "run()"
+
+
+def test_pe12c_a_layout_nested_too_deep_is_refused_by_the_resource(api_as, manager):
+    deep = "[" * 2000 + "]" * 2000
+    response = api_as(manager).post(
+        LAYOUTS, {"dt": "CRM Lead", "type": "Quick Entry", "layout": deep}, format="json"
+    )
+    assert response.status_code == 417
+    assert response.json()["message"] == "Layout must be valid JSON"
+
+
 def test_a_sales_user_cannot_write_a_fields_layout(auth_api):
     response = auth_api.post(
         LAYOUTS, {"dt": "CRM Lead", "type": "Quick Entry", "layout": "[]"}, format="json"

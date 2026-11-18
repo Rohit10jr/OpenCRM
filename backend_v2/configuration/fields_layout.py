@@ -10,7 +10,6 @@ the layout and its save, PE-15) and leaves out the fields the caller may not rea
 
 from __future__ import annotations
 
-import copy
 import json
 import secrets
 
@@ -99,7 +98,7 @@ def get_fields_layout(doctype, type, *, user, parent_doctype=None) -> list:
     row = CRMFieldsLayout.row_for(doctype, type)
     tabs = []
     if row is not None and row.layout:
-        tabs = keep_fieldnames_only(copy.deepcopy(parse_layout(row.layout)))
+        tabs = keep_fieldnames_only(parse_layout(row.layout))
 
     if not tabs and type != "Required Fields":
         tabs = get_default_layout(doctype)
@@ -188,7 +187,7 @@ def get_sidepanel_sections(doctype, *, user) -> list:
     if row is None or not row.layout:
         return []
 
-    layout = keep_fieldnames_only(copy.deepcopy(parse_layout(row.layout)))
+    layout = keep_fieldnames_only(parse_layout(row.layout))
     by_name = {
         f.get("fieldname"): f
         for f in _readable_fields(doctype, model, user)

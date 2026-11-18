@@ -26,7 +26,16 @@ def parse_layout(text):
         return []
     try:
         return json.loads(text)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):
+        raise ValidationError(INVALID_JSON) from None
+
+
+def _all_field_lists(layout) -> list[list]:
+    """Every `fields` list; a layout nested too deep to walk is 417 like invalid JSON
+    (PE-12c), not a 500."""
+    try:
+        return list(_field_lists(layout))
+    except RecursionError:
         raise ValidationError(INVALID_JSON) from None
 
 
@@ -45,7 +54,7 @@ def _field_lists(node):
 
 def check_fieldnames_only(layout) -> None:
     """PE-18 on save: every entry of every `fields` list is a string, else 417."""
-    for fields in _field_lists(layout):
+    for fields in _all_field_lists(layout):
         if any(not isinstance(entry, str) for entry in fields):
             raise ValidationError(FIELDNAMES_ONLY)
 
@@ -53,7 +62,7 @@ def check_fieldnames_only(layout) -> None:
 def keep_fieldnames_only(layout):
     """PE-18 on read: each `fields` list keeps its string entries only (in place on a
     parsed copy)."""
-    for fields in _field_lists(layout):
+    for fields in _all_field_lists(layout):
         fields[:] = [entry for entry in fields if isinstance(entry, str)]
     return layout
 
