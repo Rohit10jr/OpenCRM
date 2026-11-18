@@ -18,7 +18,7 @@ from accounts.roles import (
     ROLE_SALES_USER,
     ROLE_SYSTEM_MANAGER,
 )
-from configuration import email_accounts, exchange_rate, user_settings
+from configuration import email_accounts, exchange_rate, metadata, user_settings
 from configuration.models import SystemSettings
 from configuration.serializers import (
     DOCUMENT_FIELDS,
@@ -36,7 +36,7 @@ from core.inputs import build_payload
 from core.mixins import LinkSearchMixin
 from core.mixins.rename import RenameMixin
 from core.query import parse_json_param
-from core.renderers import Envelope
+from core.renderers import Envelope, WithResponseKeys
 from core.views import BaseAPIView, DocumentViewSet, SingletonViewSet
 
 #: The CRM's `add_to_apps_screen` entry (`crm/hooks.py:15-23`), verbatim.
@@ -374,3 +374,25 @@ class UserSettingsView(BaseAPIView):
                 inputs.get("doctype"), inputs.get("user_settings"), user=request.user
             )
         )
+
+
+def _truthy(value) -> bool:
+    return str(value).strip().lower() not in ("", "0", "false", "none", "null")
+
+
+class DocTypeMetaView(BaseAPIView):
+    """`frappe.desk.form.load.getdoctype`: `message` null with `docs` and `user_settings`
+    beside it, and `parent_dt` when a parent was found (frappe-ui hands the caller the
+    whole body when `docs` is present). Any signed-in caller (configuration/metadata.py)."""
+
+    def get(self, request):
+        inputs = self.get_inputs(request)
+        docs, settings_json, parent_dt = metadata.getdoctype(
+            inputs.get("doctype"),
+            with_parent=_truthy(inputs.get("with_parent", False)),
+            user=request.user,
+        )
+        keys = {"docs": docs, "user_settings": settings_json}
+        if parent_dt:
+            keys["parent_dt"] = parent_dt
+        return self.envelope(WithResponseKeys(None, **keys))

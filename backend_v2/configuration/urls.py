@@ -6,6 +6,7 @@ from configuration.views import (
     ClearDemoDataView,
     CountryViewSet,
     CurrencyViewSet,
+    DocTypeMetaView,
     EmailAccountViewSet,
     ExchangeRateView,
     FCRMSettingsViewSet,
@@ -32,6 +33,7 @@ urlpatterns = [
     re_path(r"^translations/?$", TranslationsView.as_view(), name="translations"),
     re_path(r"^exchange-rate/?$", ExchangeRateView.as_view(), name="exchange-rate"),
     re_path(r"^user-settings/?$", UserSettingsView.as_view(), name="user-settings"),
+    re_path(r"^meta/doctype/?$", DocTypeMetaView.as_view(), name="meta-doctype"),
     re_path(
         r"^onboarding/status/?$",
         OnboardingStatusView.as_view(),

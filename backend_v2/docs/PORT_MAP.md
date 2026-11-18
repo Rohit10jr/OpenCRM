@@ -213,7 +213,7 @@ per-view calls that require it.
 | `crm.fcrm.doctype.crm_view_settings.crm_view_settings.update` | POST/PUT | auth | `crm_app/api/view_settings.py:update` | `POST /api/v1/view-settings/update-view/` (the view, with its `name`, in the body) | configuration | — |
 | `crm.www.crm.get_context_for_dev` | POST | guest | `crm_app/api/boot.py:get_context_for_dev` | `POST /api/v1/boot/` | configuration | built |
 | `frappe.apps.get_apps` | GET/POST | auth | `crm_app/api/desk.py:get_apps` | `GET /api/v1/desk/apps/` | configuration | built |
-| `frappe.desk.form.load.getdoctype` | GET/POST | auth | `crm_app/api/form_load.py:getdoctype` | `GET /api/v1/meta/doctype/` (`doctype` kept as input) | configuration | — |
+| `frappe.desk.form.load.getdoctype` | GET/POST | auth | `crm_app/api/form_load.py:getdoctype` | `GET /api/v1/meta/doctype/` (`doctype` kept as input) | configuration | built |
 | `frappe.integrations.frappe_providers.frappecloud_billing.current_site_info` | GET/POST | auth | `crm_app/api/desk.py:current_site_info` | `GET /api/v1/desk/site-info/` | configuration | built |
 | `frappe.model.utils.user_settings.get` | GET/POST | auth | `crm_app/api/user_settings.py:get` | `GET /api/v1/user-settings/` (`doctype` kept as input) | configuration | built |
 | `frappe.model.utils.user_settings.save` | GET/POST | auth | `crm_app/api/user_settings.py:save` | `POST /api/v1/user-settings/` (`doctype` kept as input) | configuration | built |
