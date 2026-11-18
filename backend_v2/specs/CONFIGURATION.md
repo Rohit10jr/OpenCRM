@@ -692,9 +692,11 @@ Settings. Paths in this section are `backend/frappe_core/api/doc.py` unless name
 - **The route.** `get_data` is `GET` and `POST /api/v1/<resource>/list-view/`, a mixin a
   resource opts in to (`PORT_MAP.md:191`, S24); `doctype` leaves the input. It is served
   only where a resource opts in: a child table, a withheld doctype and a settings record
-  have no list-view route, and the URL answers the generic 404 (**PE-22**; `backend/`
-  answers any registered doctype, `:229`). A guard checks that no child, withheld or
-  singleton ViewSet opts in. It reads through the resource's own queryset and field
+  have no list-view route, and the URL answers the generic 404 (**PE-22**; the old
+  backend answers `get_data` for any registered doctype, `:229`). A guard checks that no
+  child or singleton ViewSet opts in or names a definition (a withheld doctype has no
+  ViewSet). On a resource that opts in, a record named `list-view` cannot be reached by
+  its document route (S25 (8)). It reads through the resource's own queryset and field
   rules (root `CLAUDE.md` rule 11).
 - **The list-view convention** (FOUNDATION Q6, `specs/FOUNDATION.md:349`): a class in
   each app's `list_views.py`, named by the ViewSet's `list_view_class`.
@@ -740,7 +742,11 @@ Settings. Paths in this section are `backend/frappe_core/api/doc.py` unless name
      **model** (`:426-450`): a forward foreign key gives the target's rows through the
      target's list rule, ordered by `modified` (else `pk`), and **a target no resource
      serves gives no columns** (the routed rule map, as milestone 7's lookup after A-43;
-     PE-22; `backend/` gives every row there); a field with choices gives its choices. `title_field` defaults to the
+     PE-22: the old backend builds the column list whether or not the link target is
+     served); a field with choices gives its choices. A `column_field` the model lacks
+     gives an empty board without sent columns and "Unknown field 'x' for this document
+     type" with them, as `backend/`; one it has but the caller may not filter on is
+     "Cannot filter on 'x'". `title_field` defaults to the
      definition's (else `name`) and joins `rows`; `kanban_fields` default to the
      definition's (a JSON string parsed), else `["name"]`, and join `rows`. Only an
      equality filter on `column_field` pre-selects a column (`:468-482`): every other
@@ -782,13 +788,16 @@ Settings. Paths in this section are `backend/frappe_core/api/doc.py` unless name
   and the `name in` / `not in` pair of a manual kanban order, `:540-557`) are not
   checked against the caller's lists. Row keys the model lacks are named together in
   the old `_selectable`'s 417 ("Unknown field 'x' for Foundation Widget", "Unknown
-  fields 'a', 'b' for …", `:375-402`); a known field the caller may not read, filter or
-  sort is refused with `core`'s existing texts ("Field 'x' is not readable", "Cannot
-  order by unknown field 'x'", "Cannot group by unknown field 'x'"). The engine adds names the caller never typed
-  (`group_by_field` to `rows` in every view type; the screen always sends `owner`; the
-  seven standard fields), so a guard checks that every resource that opts in has the
+  fields 'a', 'b' for …", `:375-402`; a number or null in `rows` too); a known field the
+  caller may not read, filter or sort is refused with `core`'s existing texts ("Field
+  'x' is not readable", for a group-by field too; "Cannot filter on 'x'"; "Cannot order
+  by 'x'"). A manual card order's names are read as the key field holds them; one the
+  key cannot hold (a word on an integer key, an object, null) names no card, as the old
+  filter builder coerced them. The engine adds names the caller never typed
+  (`group_by_field` to `rows` in the list and group-by views; the screen always sends
+  `owner`; the seven standard fields), so a guard checks that every resource that opts in has the
   seven standard fields readable, and that every definition and kanban default names
-  only readable fields. Group-by here checks the **readable** list, unlike
+  only readable fields and no restricted one. Group-by here checks the **readable** list, unlike
   `core.query.resolve_group_by` (sortable) and milestone 5's guard (filterable); the
   difference is recorded, not unified now.
 - **Standard entries a model lacks** (on User: `owner`, `modified_by`, the
