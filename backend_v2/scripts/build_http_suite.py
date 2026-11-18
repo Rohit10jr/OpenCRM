@@ -611,6 +611,30 @@ def _wait_after_waiting(blocks: list[HttpBlock]) -> None:
             waiting.setdefault(section, []).append((marker, variables))
 
 
+#: A block that reads rows an earlier block writes, with no variable between them to
+#: show it, waits with that block: (file, block) -> the block it waits with
+#: (CONFIGURATION section 4.6). 8.5 deletes the row 2.5 reads, in another section.
+WAITS_WITH = {
+    ("07_views_and_metadata.http", "2.5"): "2.3",
+    ("07_views_and_metadata.http", "6.7"): "6.5",
+    ("07_views_and_metadata.http", "8.5"): "2.5",
+}
+
+
+def _wait_with_named(blocks: list[HttpBlock], filename: str) -> None:
+    """Each block in `WAITS_WITH` takes the waiting marker of the block it names, if
+    that block waits; in file order, so a chain follows."""
+    markers: dict[str, str] = {}
+    for block in blocks:
+        number = (block.title or "").split(" ", 1)[0]
+        named = WAITS_WITH.get((filename, number))
+        if named in markers and not any(line.startswith("# @waiting ") for line in block.lines):
+            _annotate(block, markers[named])
+        marker = next((line for line in block.lines if line.startswith("# @waiting ")), None)
+        if marker:
+            markers[number] = marker
+
+
 def rewrite_http(text: str, route_map: RouteMap, filename: str = "fixture.http") -> str:
     document = parse_http(text)
     _mark_cleanup_blocks(document.blocks)
@@ -654,6 +678,7 @@ def rewrite_http(text: str, route_map: RouteMap, filename: str = "fixture.http")
                 resource_names.add(name)
 
     _wait_after_waiting(document.blocks)
+    _wait_with_named(document.blocks, filename)
 
     for block in document.blocks:
         block.lines = [

@@ -576,6 +576,41 @@ Content-Type: application/json
     assert "GET {{host}}/api/v1/meta/doctype/?doctype=No%20Such%20Doctype" in unknown
 
 
+def test_a_block_named_in_waits_with_follows_the_block_it_names(monkeypatch):
+    """CONFIGURATION 4.6: a read of rows an earlier waiting block writes waits with it,
+    across sections too; a block whose named block runs is left alone."""
+    import scripts.build_http_suite as builder
+
+    monkeypatch.setattr(
+        builder,
+        "WAITS_WITH",
+        {("f.http", "1.2"): "1.1", ("f.http", "2.1"): "1.2", ("f.http", "3.1"): "2.1"},
+    )
+    source = """\
+@host = http://localhost:8000
+### 1.1 writes -> 200
+POST {{host}}/api/method/crm.api.unbuilt.thing
+
+### 1.2 reads -> 200
+GET {{host}}/api/method/crm.api.other.thing
+
+### 2.1 deletes -> 200
+GET {{host}}/api/method/crm.api.other.thing
+
+### 3.1 a later read -> 200
+GET {{host}}/api/method/crm.api.other.thing
+"""
+    blocks = [block for block in parse_http(source).blocks if block.title]
+    assert len(blocks) == 4
+    builder._annotate(blocks[0], "# @waiting SALES")
+    builder._wait_with_named(blocks, "f.http")
+    assert all("# @waiting SALES" in block.lines for block in blocks)
+
+    blocks = [block for block in parse_http(source).blocks if block.title]
+    builder._wait_with_named(blocks, "f.http")
+    assert not any("# @waiting SALES" in block.lines for block in blocks)
+
+
 def test_a_layout_call_waits_for_an_unbuilt_doctype():
     """CONFIGURATION milestone 6: any route whose row keeps `doctype` as input waits the
     same way, outside meta/ too (the layout save stays a POST)."""
