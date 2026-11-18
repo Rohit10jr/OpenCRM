@@ -578,7 +578,9 @@ Spec-review addendum: `temp` A-37 (DECISIONS 44-47).
   Tests also: `test_phase3_endpoints.py:1054`, `:1106-1115`, `:160`, `:214-217`;
   `test_crm_behaviour.py:270` (the five layout types); `test_permissions.py:778`;
   `test_route_surface.py:77`; `test_phase4_metadata.py:880` rewritten for PE-17.
-  `test_phase4_metadata.py:317-339` is milestone 8's. `.http` `07` 2.5, 6.7 and 8.5 read
+  `test_phase4_metadata.py:317-339` is milestone 8's. `test_seed_defaults.py:131-147` is
+  ported against the data file; `:105`, `:176` and `:162` (the methods the seeded scripts
+  call are served) wait for SALES. `.http` `07` 2.5, 6.7, 8.5 and 8.6 read or delete
   rows that 2.3 and 6.5 write on CRM Task, so they wait.
 
 ### 4.7 Saved views (milestone 7)

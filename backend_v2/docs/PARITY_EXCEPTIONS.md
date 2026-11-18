@@ -357,39 +357,51 @@ comparison skips that block.
 
 ### PE-12c. A broken layout or quick-filter entry is refused or skipped
 
-- **Status:** approved — decided by the supervisor on the owner's behalf (`temp` A-37, 18
-  Nov 2026; it only replaces a crash); to be built in CONFIGURATION milestone 6
+- **Status:** approved — decided by the supervisor on the owner's behalf (`temp` A-37,
+  A-38, 18 Nov 2026; it only replaces a crash); built in `17241b1`, `90fa788`, `816bcb7`,
+  `20e7989`
 - **Where:** `save_fields_layout` and the CRM Fields Layout resource's create and PATCH;
-  `get_quick_filters`
+  `get_fields_layout` and `get_sidepanel_sections` on a stored layout; `get_quick_filters`
 - **Old backend:** a `layout` that is not valid JSON is stored, and that layout then
-  fails for every viewer (`backend/crm_app/api/fields_layout.py:123,220`); a quick-filter
-  `json` entry that is not a string fails the call for every later caller
-  (`backend/crm_app/api/doc.py:173-177`)
-- **backend_v2:** invalid layout JSON is 417 on save; a quick-filter entry that is not a
-  string is skipped on read
-- **Why:** replaces a crash with an error
+  fails `layout/` and `sidepanel-sections/` for every viewer
+  (`backend/crm_app/api/fields_layout.py:123,220`). A quick-filter `json` entry that is
+  a list or a dict fails the call for every later caller; a number entry is skipped
+  (`backend/crm_app/api/doc.py:173-177`). A stored `json` that is a dict, or a string
+  that parses to one, has its keys read as fieldnames (`:170-177`)
+- **backend_v2:** a layout that is not valid JSON, or is nested too deep to read, is 417
+  "Layout must be valid JSON" on save and on read. A quick-filter entry that is not a
+  string is skipped, and a stored `json` that is not a list (or a string that does not
+  parse to one) counts as no entries
+- **Why:** replaces a crash with an error; the screen only ever stores a list of
+  fieldnames
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
 ### PE-17. CRM Form Script is written by System Manager or Administrator
 
 - **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-37, DECISIONS 45, 18 Nov 2026); to be built in CONFIGURATION
-  milestone 6
+  the owner (`temp` A-37, A-38, DECISIONS 45, 18 Nov 2026); built in `17241b1`
 - **Where:** `POST`, `PATCH` and `DELETE /api/v1/form-scripts/...` (old
   `/api/resource/CRM Form Script`)
-- CRM Form Script is created, changed and deleted by System Manager or Administrator; the
-  old backend also allows Sales Manager.
+- **Old backend:** System Manager, Sales Manager or Administrator create, change and
+  delete a form script (`backend/crm_app/permissions/metadata_docs.py:99-113`)
+- **backend_v2:** System Manager or Administrator create, change and delete a form
+  script; everyone lists and reads one, as before
+- **Why:** upstream's role table gives write to System Manager alone
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
 ### PE-18. A layout's field lists hold fieldnames
 
 - **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-37, DECISIONS 46, 18 Nov 2026); to be built in CONFIGURATION
-  milestone 6
+  the owner (`temp` A-37, A-38, DECISIONS 46, 18 Nov 2026); built in `17241b1`,
+  `8c04d80`
 - **Where:** `save_fields_layout`, the CRM Fields Layout resource's create and PATCH,
   `get_fields_layout`, `get_sidepanel_sections`
-- A layout's field lists hold fieldnames; anything else is refused on save and left out
-  on read. The old backend passes such entries through.
+- **Old backend:** an entry of a layout's field list that is not a fieldname is stored,
+  and passed through on read (`backend/crm_app/api/fields_layout.py:156-158,232-234`)
+- **backend_v2:** a layout's field lists hold fieldnames; anything else is refused on
+  save (417 "A layout's field lists hold fieldnames only") and left out on read
+- **Why:** every editor saves fieldnames, and the field's properties come from the
+  doctype's own metadata
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
 ---

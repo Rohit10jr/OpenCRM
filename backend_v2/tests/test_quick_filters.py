@@ -128,6 +128,13 @@ def test_pe12c_a_stored_string_that_is_not_a_list_counts_as_no_entries(auth_api,
 
 
 @pytest.mark.django_db
+def test_pe12c_a_stored_dict_counts_as_no_entries(auth_api, administrator):
+    """`backend/` reads a dict's keys as fieldnames (`doc.py:170-177`); v2 answers []."""
+    store(administrator, "CRM Fields Layout", {"dt": 1, "type": 2})
+    assert auth_api.get(GET, {"doctype": "CRM Fields Layout"}).json() == {"message": []}
+
+
+@pytest.mark.django_db
 def test_pe16_a_restricted_field_is_left_out_for_a_non_manager(auth_api, api_as, manager, administrator):
     store(administrator, "FCRM Settings", ["brand_name", "access_key"])
     assert names(auth_api.get(GET, {"doctype": "FCRM Settings"})) == ["brand_name"]
