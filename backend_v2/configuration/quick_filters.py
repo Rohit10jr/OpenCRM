@@ -10,6 +10,8 @@ excluded (PE-14, PE-15), and leave out the fields the caller may not read (PE-16
 
 from __future__ import annotations
 
+import json
+
 from configuration.field_meta import frappe_fieldtype, link_target
 from configuration.metadata import model_or_404
 from configuration.models import CRMGlobalSettings
@@ -52,6 +54,17 @@ def _field_descriptor(field) -> dict:
     }
 
 
+def _stored_list(value) -> list:
+    """The stored list. A string is parsed, as old `doc.py:171-172`; one that does not
+    parse to a list counts as no entries (PE-12c)."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value or "[]")
+        except ValueError:
+            return []
+    return value if isinstance(value, list) else []
+
+
 def _stored_row(doctype: str):
     return CRMGlobalSettings.first_row(doctype, QUICK_FILTERS)
 
@@ -71,7 +84,7 @@ def get_quick_filters(doctype, *, user, cached=True) -> list[dict]:
     row = _stored_row(doctype)
     fields: list[dict] = []
     if row is not None:
-        selected = row.json if isinstance(row.json, list) else []
+        selected = _stored_list(row.json)
         for fieldname in selected:
             if not isinstance(fieldname, str):
                 continue
