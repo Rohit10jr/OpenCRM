@@ -156,19 +156,56 @@ def test_group_by_lists_an_empty_value_sorted_with_the_rest(widgets, alice, auth
 # --- PE-12e ------------------------------------------------------------------------------
 
 
+KANBAN = {"view_type": "kanban"}
+
+
 @pytest.mark.parametrize(
     ("inputs", "message"),
     [
         ({"columns": ["widget_name"]}, "Columns must be objects"),
         ({"rows": [{"a": 1}]}, "Rows must be fieldnames"),
-        ({"kanban_columns": ["Open"]}, "Kanban columns must be objects"),
-        ({"kanban_fields": [1]}, "Kanban fields must be fieldnames"),
+        ({"view": {"view_type": "group_by", "group_by_field": 5}}, "Group by field must be a fieldname"),
+        ({"view": KANBAN, "kanban_columns": ["Open"]}, "Kanban columns must be objects"),
+        ({"view": KANBAN, "kanban_fields": [[1]]}, "Kanban fields must be fieldnames"),
+        ({"view": KANBAN, "title_field": 5}, "Title field must be a fieldname"),
     ],
 )
-def test_pe12e_an_entry_of_the_wrong_shape_is_417(widgets, auth_api, inputs, message):
+def test_pe12e_an_entry_the_old_code_crashes_on_is_417(widgets, auth_api, inputs, message):
     response = auth_api.post(URL, inputs, format="json")
     assert response.status_code == 417
     assert response.json()["message"] == message
+
+
+@pytest.mark.parametrize(
+    "inputs",
+    [
+        {"rows": [5]},
+        {"view": KANBAN, "kanban_columns": [{"name": "Open"}], "kanban_fields": [5]},
+    ],
+)
+def test_a_number_as_a_fieldname_keeps_the_old_answer(widgets, auth_api, inputs):
+    """Only what the old code crashes on is PE-12e's (A-44 fix 2)."""
+    response = auth_api.post(URL, inputs, format="json")
+    assert response.status_code == 417
+    assert response.json()["message"] == "Unknown field 5 for Foundation Widget"
+
+
+def test_kanban_lists_are_not_read_by_a_list_view(widgets, auth_api):
+    """The screen sends them on every list call (`ViewControls.vue:507-512`)."""
+    result = call(auth_api, kanban_columns=["Open"], kanban_fields=[[1]])
+    assert result["kanban_columns"] == ["Open"]
+
+
+def test_columns_are_not_read_by_a_kanban_view(widgets, auth_api):
+    result = call(auth_api, view=KANBAN, columns=["anything"], kanban_columns=[{"name": "x"}])
+    assert result["columns"] == ["anything"]
+
+
+def test_group_by_options_of_mixed_types_are_sorted_by_their_text(widgets, auth_api):
+    """A Check field: a false row is empty, so "" comes first (PE-12e: the old sort fails)."""
+    Widget.objects.filter(widget_name="Alpha").update(active=False)
+    result = call(auth_api, view={"view_type": "group_by", "group_by_field": "active"})
+    assert result["group_by_field"]["options"] == ["", True]
 
 
 def test_pe12e_a_stored_view_of_the_wrong_shape_is_417(widgets, alice, auth_api):

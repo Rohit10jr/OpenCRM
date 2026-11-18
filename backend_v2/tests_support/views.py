@@ -166,7 +166,7 @@ class PromptDocumentViewSet(DocumentViewSet):
     sortable_fields = ("name", "label", "modified")
 
 
-class AutoIncrementDocumentViewSet(DocumentViewSet):
+class AutoIncrementDocumentViewSet(ListViewMixin, DocumentViewSet):
     access = Access.open(
         reason="An integer-naming fixture with no confidential rows or protected fields."
     )

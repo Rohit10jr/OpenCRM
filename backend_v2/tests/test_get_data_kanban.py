@@ -160,7 +160,7 @@ def test_pe23_more_kanban_columns_than_a_page_holds_is_417(auth_api):
 
 def test_pe12e_a_column_order_that_is_not_a_list_is_417(widgets, auth_api):
     response = auth_api.post(
-        URL, {"view": KANBAN, "column_field": "status", "kanban_columns": [{"name": "Open", "order": "x"}]}, format="json"
+        URL, {"view": KANBAN, "column_field": "status", "kanban_columns": [{"name": "Open", "order": 5}]}, format="json"
     )
     assert response.status_code == 417
     assert response.json()["message"] == "A column's order must be a list"

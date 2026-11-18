@@ -8,6 +8,7 @@ rule 11). Its list definition is the ViewSet's `list_view_class`.
 
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import ForeignKey, OneToOneField
 
 from configuration import view_settings
@@ -16,7 +17,7 @@ from configuration.kanban_counts import add_counts
 from configuration.list_views import ListView
 from core.doctypes import doctype_of
 from core.exceptions import ValidationError
-from core.field_access import hidden_from
+from core.field_access import hidden_from, is_hidden
 from core.filters import normalize_filters, resolve_me_tokens
 from core.inputs import parse_json_param
 from core.exceptions import FilterError
@@ -129,16 +130,33 @@ def doctype_fields(model) -> list[dict]:
     ]
 
 
-def check_shapes(columns, rows, kanban_columns=(), kanban_fields=()) -> None:
-    """PE-12e: what the old code would crash on is 417."""
+def _unhashable(value) -> bool:
+    return isinstance(value, (list, dict))
+
+
+def check_list_shapes(columns, rows) -> None:
+    """PE-12e, the list and group-by path: only what the old code crashes on is 417. A
+    row that is a number or null keeps the old answer, "Unknown field 5 for X"."""
     if any(not isinstance(column, dict) for column in columns):
         raise ValidationError("Columns must be objects")
-    if any(not isinstance(row, str) for row in rows):
+    if any(_unhashable(row) for row in rows):
+        raise ValidationError("Rows must be fieldnames")
+
+
+def check_kanban_shapes(rows, kanban_columns, kanban_fields) -> None:
+    """PE-12e, the kanban path; `columns` is echoed there unread, as the old code."""
+    if any(_unhashable(row) for row in rows):
         raise ValidationError("Rows must be fieldnames")
     if any(not isinstance(column, dict) for column in kanban_columns):
         raise ValidationError("Kanban columns must be objects")
-    if any(not isinstance(field, str) for field in kanban_fields):
+    if any(_unhashable(field) for field in kanban_fields):
         raise ValidationError("Kanban fields must be fieldnames")
+
+
+def check_fieldname(value, label: str) -> None:
+    """PE-12e: a `title_field` or `group_by_field` that is not text is 417."""
+    if value and not isinstance(value, str):
+        raise ValidationError(f"{label} must be a fieldname")
 
 
 def group_by_options(fields: list, group_by_field: str, data: list, order_by):
@@ -154,13 +172,15 @@ def group_by_options(fields: list, group_by_field: str, data: list, order_by):
         options = [value for value in {row.get(group_by_field) for row in data} if value]
         if has_empty:
             options.append("")
+        # Sorted by their text, so values of mixed types (a Check's true and false, say)
+        # do not fail the sort as in the old code (PE-12e); "" still comes first.
         order_by_text = str(order_by or "")
         if group_by_field in order_by_text:
             clauses = [clause.strip().split(" ") for clause in order_by_text.split(",")]
             pairs = {(clause[0], clause[1]) for clause in clauses if len(clause) > 1}
-            options.sort(reverse=(group_by_field, "desc") in pairs)
+            options.sort(key=str, reverse=(group_by_field, "desc") in pairs)
         else:
-            options.sort()
+            options.sort(key=str)
     return {
         "label": descriptor.get("label"),
         "fieldname": descriptor.get("fieldname"),
@@ -212,10 +232,26 @@ def selectable(model, rows: list) -> list:
 # --- kanban (old `:405-561`) -------------------------------------------------------------
 
 
+def _order_keys(model, order) -> list:
+    """The names in a manual order as the key field holds them; an entry the key cannot
+    hold (a word on an integer key, an object, null) names no card, as the old filter
+    builder coerced it (`backend/frappe_core/filters.py:365-401`; `core.query.by_name`)."""
+    keys = []
+    for entry in list(order):
+        if entry is None:
+            continue
+        try:
+            keys.append(model._meta.pk.to_python(entry))
+        except (DjangoValidationError, ValueError, TypeError):
+            continue
+    return keys
+
+
 def _records_in_order(viewset, queryset, fields, filters, page_length, order, user):
     """Old `:531-561`: the cards named in `order` first, newest created first, then the
     rest to fill the page; both through the caller's rules. The engine's own clauses
     (`name in` / `not in`, `creation desc`) are not checked against the caller's lists."""
+    model = queryset.model
     common = {
         "user": user,
         "fields": fields,
@@ -227,11 +263,13 @@ def _records_in_order(viewset, queryset, fields, filters, page_length, order, us
     }
     # As the old code: a page length of 0 takes no named card and stops (`:540-550`).
     records = fetch_rows(
-        queryset.filter(pk__in=list(order)[:page_length]), limit_page_length=page_length, **common
+        queryset.filter(pk__in=_order_keys(model, list(order)[:page_length])),
+        limit_page_length=page_length,
+        **common,
     )
     if len(records) < page_length:
         records += fetch_rows(
-            queryset.exclude(pk__in=list(order)),
+            queryset.exclude(pk__in=_order_keys(model, order)),
             limit_page_length=page_length - len(records),
             **common,
         )
@@ -243,8 +281,16 @@ def kanban(viewset, model, definition, queryset, *, filters, order_by, rows, col
     """The kanban branch: one entry per column, each with its cards and counts."""
     if len(kanban_columns) > MAX_PAGE_LENGTH:
         raise ValidationError(f"At most {MAX_PAGE_LENGTH} kanban columns")  # PE-23
-    if column_field and column_field not in viewset.filterable_fields:
-        raise FilterError(f"Cannot filter on {column_field!r}")
+    check_kanban_shapes(rows, kanban_columns, kanban_fields)
+    check_fieldname(title_field, "Title field")
+    if column_field:
+        # Checked before any column is built. A field the model lacks keeps the old
+        # answers: an empty board without sent columns, the filter's refusal with them.
+        if column_field not in concrete_field_names(model):
+            if kanban_columns:
+                raise FilterError(f"Unknown field {column_field!r} for this document type")
+        elif is_hidden(model, column_field, user) or column_field not in viewset.filterable_fields:
+            raise FilterError(f"Cannot filter on {column_field!r}")
     settings = definition.default_kanban_settings()
 
     if not kanban_columns and column_field:
@@ -281,8 +327,10 @@ def kanban(viewset, model, definition, queryset, *, filters, order_by, rows, col
                 column_filters.append([column_field, "=", column.get("name")])
             page_length = coerce_page_length(column.get("page_length"), 20)
             order = column.get("order")
-            if order is not None and not isinstance(order, list):
-                raise ValidationError("A column's order must be a list")  # PE-12e
+            # A string order is read as its characters, as the old code reads it; any
+            # other non-list crashes there (PE-12e).
+            if order is not None and not isinstance(order, (list, str)):
+                raise ValidationError("A column's order must be a list")
             if order:
                 cards = _records_in_order(viewset, queryset, fields, column_filters, page_length, order, user)
                 cards.sort(key=lambda row: order.index(row["name"]) if row.get("name") in order else len(order))
@@ -327,7 +375,6 @@ def get_data(viewset, inputs: dict, *, user) -> dict:
     view_type = view.get("view_type")
     group_by_field = view.get("group_by_field")
     custom_view_name = view.get("custom_view_name")
-    check_shapes(columns, rows, kanban_columns, kanban_fields)
 
     # 1-2. @me, then default_filters over filters.
     filters = resolve_me_tokens(filters, user)
@@ -339,6 +386,8 @@ def get_data(viewset, inputs: dict, *, user) -> dict:
     default_rows = definition.default_rows() if has_list_data else []
 
     if view_type != "kanban":
+        check_list_shapes(columns, rows)
+        check_fieldname(group_by_field, "Group by field")
         # 3. Columns and rows, in the old order.
         custom_view = bool(columns or rows)
         if custom_view:
@@ -354,7 +403,7 @@ def get_data(viewset, inputs: dict, *, user) -> dict:
             # The caller's own standard view (old `:267-274`).
             columns = as_list(saved["columns"]) or ListView.default_columns()
             rows = as_list(saved["rows"]) or list(FALLBACK_ROWS)
-            check_shapes(columns, rows)
+            check_list_shapes(columns, rows)
             is_default = False
         elif not custom_view or (is_default and has_list_data):
             # The old clause, dead as written (`:275`), ported as it is.
