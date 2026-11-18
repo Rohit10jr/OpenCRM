@@ -57,53 +57,53 @@ Content-Type: application/json
 # ---- cleanup first ---------------------------------------------------------------------
 
 ### 0.4 leftover ZZ views -> 200
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
 # @name old_views
-GET {{views}}?fields=["name"]&filters=[["label","like","ZZ%25"]]
+GET {{host}}/api/v1/view-settings/?fields=["name"]&filters=[["label","like","ZZ%25"]]
 Authorization: Bearer {{token}}
 
 ### 0.5 -> 200|404
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{views}}/{{old_views.response.body.$.data[0].name}}
+DELETE {{host}}/api/v1/view-settings/{{old_views.response.body.$.message[0].name}}/
 Authorization: Bearer {{token}}
 
 ### 0.6 -> 200|404
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{views}}/{{old_views.response.body.$.data[1].name}}
+DELETE {{host}}/api/v1/view-settings/{{old_views.response.body.$.message[1].name}}/
 Authorization: Bearer {{token}}
 
 ### 0.7 -> 200|404
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{views}}/{{old_views.response.body.$.data[2].name}}
+DELETE {{host}}/api/v1/view-settings/{{old_views.response.body.$.message[2].name}}/
 Authorization: Bearer {{token}}
 
 ### 0.8 -> 200|404
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{views}}/{{old_views.response.body.$.data[3].name}}
+DELETE {{host}}/api/v1/view-settings/{{old_views.response.body.$.message[3].name}}/
 Authorization: Bearer {{token}}
 
 ### 0.9 a standard CRM Lead view for Administrator, if an earlier run left one -> 200
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
 # @name old_std
-GET {{views}}?fields=["name"]&filters=[["dt","=","CRM Lead"],["is_standard","=",1],["user","=","Administrator"]]
+GET {{host}}/api/v1/view-settings/?fields=["name"]&filters=[["dt","=","CRM Lead"],["is_standard","=",1],["user","=","Administrator"]]
 Authorization: Bearer {{token}}
 
 ### 0.10 -> 200|404
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{views}}/{{old_std.response.body.$.data[0].name}}
+DELETE {{host}}/api/v1/view-settings/{{old_std.response.body.$.message[0].name}}/
 Authorization: Bearer {{token}}
 
 ### 0.11 -> 200|404
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{views}}/{{old_std.response.body.$.data[1].name}}
+DELETE {{host}}/api/v1/view-settings/{{old_std.response.body.$.message[1].name}}/
 Authorization: Bearer {{token}}
 
 ### 0.12 leftover quick-filter override for CRM Task -> 200
@@ -254,16 +254,13 @@ Authorization: Bearer {{token}}
 # ---- saved views ----------------------------------------------------------------------------------
 
 ### 3.1 create a private view with no columns: the controller defaults are synced in -> 200
-# @waiting CONFIGURATION
 # @name view1_req
 # @expect $.message.name exists
 # @expect $.message.label == ZZ Hot leads
 # @expect $.message.user == Administrator
 # @expect $.message.public == false
-# @expect $.message.columns contains lead_name
-# @expect $.message.rows contains lead_owner
 # @expect $.message.route_name == Leads
-POST {{host}}/api/method/{{vs}}.create
+POST {{host}}/api/v1/view-settings/create-view/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -272,24 +269,26 @@ Content-Type: application/json
 ###
 @view1 = {{view1_req.response.body.$.message.name}}
 
+### 3.1a the view 3.1 made holds CRM Lead's default columns and rows -> 200
+# @waiting SALES
+# @expect $.message.columns contains lead_name
+# @expect $.message.rows contains lead_owner
+GET {{host}}/api/v1/view-settings/{{view1}}/
+Authorization: Bearer {{token}}
+
 ### 3.2 update it -> 200, the label changed
-# @waiting CONFIGURATION
 # @expect $.message.label == ZZ Hot leads (renamed)
 # @expect $.message.filters contains Contacted
-POST {{host}}/api/method/{{vs}}.update
+POST {{host}}/api/v1/view-settings/update-view/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"view": {"name": "{{view1}}", "doctype": "CRM Lead", "label": "ZZ Hot leads (renamed)", "type": "list", "filters": {"status": "Contacted"}, "columns": [{"label": "Full Name", "type": "Data", "key": "lead_name", "width": "12rem"}], "rows": ["name", "lead_name"]}}
 
 ### 3.3 get_views lists the caller's own and the global (ownerless) views -> contains it
-# @waiting CONFIGURATION
 # @expect $.message contains ZZ Hot leads (renamed)
-POST {{host}}/api/method/crm.api.views.get_views
+GET {{host}}/api/v1/views/?doctype=CRM%20Lead
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{"doctype": "CRM Lead"}
 
 ### 3.4 get_data with explicit columns is a custom view: is_default false, columns as given
 # @waiting CONFIGURATION
@@ -307,75 +306,69 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "filters": {}, "columns": [{"label": "Full Name", "type": "Data", "key": "lead_name", "width": "12rem"}], "rows": ["name", "lead_name"], "page_length": 5, "view": {"view_type": "list", "custom_view_name": "{{view1}}"}}
 
 ### 3.5 pin -> 200
-# @waiting CONFIGURATION
-POST {{host}}/api/method/{{vs}}.pin
+POST {{host}}/api/v1/view-settings/{{view1}}/pin/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"name": "{{view1}}", "value": 1}
+{"value": 1}
 
 ### 3.6 -> pinned
-# @waiting CONFIGURATION
-# @expect $.data.pinned == true
-GET {{views}}/{{view1}}
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.pinned == true
+GET {{host}}/api/v1/view-settings/{{view1_req.response.body.$.message.name}}/
 Authorization: Bearer {{token}}
 
 ### 3.7 a Sales User may not make a view public -> 403 "Not permitted" (crm_view_settings.py:133)
-# @waiting CONFIGURATION
 # @expect $.exc_type == PermissionError
 # @expect $.message == Not permitted
-POST {{host}}/api/method/{{vs}}.public
+POST {{host}}/api/v1/view-settings/{{view1}}/public/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
-{"name": "{{view1}}", "value": 1}
+{"value": 1}
 
 ### 3.8 Administrator makes it public -> 200; the owner is cleared and the pin is dropped
-# @waiting CONFIGURATION
-POST {{host}}/api/method/{{vs}}.public
+POST {{host}}/api/v1/view-settings/{{view1}}/public/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"name": "{{view1}}", "value": 1}
+{"value": 1}
 
 ### 3.9 -> public, no user, unpinned
-# @waiting CONFIGURATION
-# @expect $.data.public == true
-# @expect $.data.user == null
-# @expect $.data.pinned == false
-GET {{views}}/{{view1}}
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.public == true
+# @expect $.message.user == null
+# @expect $.message.pinned == false
+GET {{host}}/api/v1/view-settings/{{view1_req.response.body.$.message.name}}/
 Authorization: Bearer {{token}}
 
 ### 3.10 a Sales User sees the public view on the resource route -> 200
-# @waiting CONFIGURATION
-# @expect $.data.public == true
-GET {{views}}/{{view1}}
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.public == true
+GET {{host}}/api/v1/view-settings/{{view1_req.response.body.$.message.name}}/
 Authorization: Bearer {{stoken}}
 
 ### 3.11 ...but may not edit it -> 403 (not the owner, not a manager)
-# @waiting CONFIGURATION
 # @expect $.exc_type == PermissionError
-POST {{host}}/api/method/{{vs}}.update
+POST {{host}}/api/v1/view-settings/update-view/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"view": {"name": "{{view1}}", "doctype": "CRM Lead", "label": "ZZ hijacked", "type": "list", "filters": {}, "columns": [], "rows": []}}
 
 ### 3.12 a Sales Manager may edit a public view -> 200
-# @waiting CONFIGURATION
 # @expect $.message.label == ZZ Hot leads (manager edit)
-POST {{host}}/api/method/{{vs}}.update
+POST {{host}}/api/v1/view-settings/update-view/
 Authorization: Bearer {{mtoken}}
 Content-Type: application/json
 
 {"view": {"name": "{{view1}}", "doctype": "CRM Lead", "label": "ZZ Hot leads (manager edit)", "type": "list", "filters": {}, "columns": [], "rows": []}}
 
 ### 3.13 the Sales User creates her own private view -> 200, owned by her
-# @waiting CONFIGURATION
 # @name view2_req
 # @expect $.message.user == ada@example.com
 # @expect $.message.public == false
-POST {{host}}/api/method/{{vs}}.create
+POST {{host}}/api/v1/view-settings/create-view/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
@@ -385,59 +378,53 @@ Content-Type: application/json
 @view2 = {{view2_req.response.body.$.message.name}}
 
 ### 3.14 a Sales Manager may NOT edit somebody's private view -> 403
-# @waiting CONFIGURATION
 # @expect $.exc_type == PermissionError
-POST {{host}}/api/method/{{vs}}.update
+POST {{host}}/api/v1/view-settings/update-view/
 Authorization: Bearer {{mtoken}}
 Content-Type: application/json
 
 {"view": {"name": "{{view2}}", "doctype": "CRM Deal", "label": "ZZ touched", "type": "list", "filters": {}, "columns": [], "rows": []}}
 
 ### 3.15 nor pin it -> 403
-# @waiting CONFIGURATION
 # @expect $.exc_type == PermissionError
-POST {{host}}/api/method/{{vs}}.pin
+POST {{host}}/api/v1/view-settings/{{view2}}/pin/
 Authorization: Bearer {{mtoken}}
 Content-Type: application/json
 
-{"name": "{{view2}}", "value": 1}
+{"value": 1}
 
 ### 3.16 the Sales Manager does not even see it in the list -> the resource route hides private views of others
-# @waiting CONFIGURATION
-# @expect $.data count 0
-GET {{views}}?fields=["name"]&filters=[["name","=",{{view2}}]]
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message count 0
+GET {{host}}/api/v1/view-settings/?fields=["name"]&filters=[["name","=",{{view2}}]]
 Authorization: Bearer {{mtoken}}
 
 ### 3.17 the owner may edit her own -> 200
-# @waiting CONFIGURATION
 # @expect $.message.label == ZZ Ada's deals (edited)
-POST {{host}}/api/method/{{vs}}.update
+POST {{host}}/api/v1/view-settings/update-view/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"view": {"name": "{{view2}}", "doctype": "CRM Deal", "label": "ZZ Ada's deals (edited)", "type": "list", "filters": {"deal_owner": "@me"}, "columns": [], "rows": []}}
 
 ### 3.18 a Sales User may not delete a public view -> 403
-# @waiting CONFIGURATION
 # @expect $.exc_type == PermissionError
-POST {{host}}/api/method/{{vs}}.delete
+POST {{host}}/api/v1/view-settings/{{view1}}/delete-view/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
-{"name": "{{view1}}"}
+{}
 
 ### 3.19 deleting a view that does not exist is silent -> 200 (crm_view_settings.py:123 guards with db.exists)
-# @waiting CONFIGURATION
-POST {{host}}/api/method/{{vs}}.delete
+POST {{host}}/api/v1/view-settings/999999999/delete-view/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"name": 999999999}
+{}
 
 ### 3.20 update on a view that does not exist -> 404
-# @waiting CONFIGURATION
 # @expect $.exc_type == DoesNotExistError
-POST {{host}}/api/method/{{vs}}.update
+POST {{host}}/api/v1/view-settings/update-view/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -446,44 +433,43 @@ Content-Type: application/json
 # ---- default views and the standard view ---------------------------------------------------------
 
 ### 4.1 set_as_default on a named view -> 200
-# @waiting CONFIGURATION
-POST {{host}}/api/method/{{vs}}.set_as_default
+POST {{host}}/api/v1/view-settings/set-as-default/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"name": "{{view2}}"}
 
 ### 4.2 -> is_default true
-# @waiting CONFIGURATION
-# @expect $.data.is_default == true
-GET {{views}}/{{view2}}
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.is_default == true
+GET {{host}}/api/v1/view-settings/{{view2_req.response.body.$.message.name}}/
 Authorization: Bearer {{stoken}}
 
 ### 4.3 set_as_default with a type and doctype creates the caller's STANDARD view for it -> 200
-# @waiting CONFIGURATION
-POST {{host}}/api/method/{{vs}}.set_as_default
+POST {{host}}/api/v1/view-settings/set-as-default/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"type": "list", "doctype": "CRM Lead"}
 
 ### 4.4 -> one standard CRM Lead list view for Administrator, default, with the controller's columns
-# @waiting CONFIGURATION
+# @waiting SALES
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @name std_req
-# @expect $.data count 1
-# @expect $.data[0].is_default == true
-# @expect $.data[0].label == List
-# @expect $.data[0].columns contains lead_name
-GET {{views}}?fields=["name","is_default","label","columns","rows"]&filters=[["dt","=","CRM Lead"],["is_standard","=",1],["user","=","Administrator"],["type","=","list"]]
+# @expect $.message count 1
+# @expect $.message[0].is_default == true
+# @expect $.message[0].label == List
+# @expect $.message[0].columns contains lead_name
+GET {{host}}/api/v1/view-settings/?fields=["name","is_default","label","columns","rows"]&filters=[["dt","=","CRM Lead"],["is_standard","=",1],["user","=","Administrator"],["type","=","list"]]
 Authorization: Bearer {{token}}
 
 ###
-@std = {{std_req.response.body.$.data[0].name}}
+@std = {{std_req.response.body.$.message[0].name}}
 
 ### 4.5 only one default per user: view1 was public and never default, the new one is -> 200
-# @waiting CONFIGURATION
-# @expect $.data count 1
-GET {{views}}?fields=["name"]&filters=[["user","=","Administrator"],["is_default","=",1]]
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message count 1
+GET {{host}}/api/v1/view-settings/?fields=["name"]&filters=[["user","=","Administrator"],["is_default","=",1]]
 Authorization: Bearer {{token}}
 
 ### 4.6 get_data now loads the standard view (step 3 of get_data): is_default false, saved columns
@@ -497,13 +483,13 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "filters": {}, "page_length": 5, "view": {"view_type": "list"}}
 
 ### 4.7 create_or_update_standard_view for a kanban syncs the columns from CRM Lead Status -> 200
-# @waiting CONFIGURATION
+# @waiting SALES
 # @name kstd_req
 # @expect $.message.type == kanban
 # @expect $.message.column_field == status
 # @expect $.message.kanban_columns contains New
 # @expect $.message.kanban_columns contains Junk
-POST {{host}}/api/method/{{vs}}.create_or_update_standard_view
+POST {{host}}/api/v1/view-settings/standard-view/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -513,23 +499,23 @@ Content-Type: application/json
 @kstd = {{kstd_req.response.body.$.message.name}}
 
 ### 4.8 fetch_and_update_kanban_columns: nothing new, so the same columns come back -> 200
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message contains New
 # @expect $.message excludes "delete"
-POST {{host}}/api/method/{{vs}}.fetch_and_update_kanban_columns
+POST {{host}}/api/v1/view-settings/{{kstd}}/kanban-columns/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"name": "{{kstd}}"}
+{}
 
 ### 4.9 calling it on a list view returns nothing -> 200, null
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message == null
-POST {{host}}/api/method/{{vs}}.fetch_and_update_kanban_columns
+POST {{host}}/api/v1/view-settings/{{std}}/kanban-columns/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"name": "{{std}}"}
+{}
 
 # ---- get_data in its three modes ------------------------------------------------------------------
 
@@ -910,29 +896,29 @@ Content-Type: application/json
 # ---- teardown -------------------------------------------------------------------------------------------
 
 ### 8.1 delete the views -> 200
-# @waiting CONFIGURATION
-POST {{host}}/api/method/{{vs}}.delete
+POST {{host}}/api/v1/view-settings/{{view1}}/delete-view/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"name": "{{view1}}"}
+{}
 
 ### 8.2 -> 200
-# @waiting CONFIGURATION
-POST {{host}}/api/method/{{vs}}.delete
+POST {{host}}/api/v1/view-settings/{{view2}}/delete-view/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
-{"name": "{{view2}}"}
+{}
 
 ### 8.3 delete Administrator's standard list and kanban views for CRM Lead -> 200
-# @waiting CONFIGURATION
-DELETE {{views}}/{{std}}
+# @waiting SALES
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/view-settings/{{std_req.response.body.$.message[0].name}}/
 Authorization: Bearer {{token}}
 
 ### 8.4 -> 200
-# @waiting CONFIGURATION
-DELETE {{views}}/{{kstd}}
+# @waiting SALES
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/view-settings/{{kstd_req.response.body.$.message.name}}/
 Authorization: Bearer {{token}}
 
 ### 8.5 delete the quick-filter override -> 200
@@ -953,7 +939,7 @@ DELETE {{host}}/api/v1/form-scripts/ZZ%20Lead%20Script/
 Authorization: Bearer {{token}}
 
 ### 8.8 nothing left behind -> 200, empty
-# @waiting CONFIGURATION
-# @expect $.data count 0
-GET {{views}}?fields=["name"]&filters=[["label","like","ZZ%25"]]
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message count 0
+GET {{host}}/api/v1/view-settings/?fields=["name"]&filters=[["label","like","ZZ%25"]]
 Authorization: Bearer {{token}}

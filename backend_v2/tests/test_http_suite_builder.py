@@ -622,6 +622,79 @@ def test_07s_deletes_wait_with_the_blocks_whose_rows_they_remove():
     assert "# @waiting ACTIVITIES" in block
 
 
+def test_split_expects_moves_checks_into_an_added_waiting_block(monkeypatch):
+    """CONFIGURATION 4.7: the moved checks wait in a block after the variable's block."""
+    import scripts.build_http_suite as builder
+
+    monkeypatch.setattr(
+        builder,
+        "SPLIT_EXPECTS",
+        {("f.http", "1.1"): ("1.1a later -> 200", "SALES", "thing", "GET {{host}}/x/{{thing}}/", ("$.a == 1",))},
+    )
+    source = """\
+@host = http://localhost:8000
+### 1.1 makes -> 200
+# @name thing_req
+# @expect $.a == 1
+# @expect $.b == 2
+GET {{host}}/api/method/crm.api.other.thing
+
+###
+@thing = {{thing_req.response.body.$.message}}
+
+### 1.2 next -> 200
+GET {{host}}/api/method/crm.api.other.thing
+"""
+    blocks = parse_http(source).blocks
+    builder._split_expects(blocks, "f.http")
+    titles = [block.title for block in blocks if block.title]
+    assert titles == ["1.1 makes -> 200", "1.1a later -> 200", "1.2 next -> 200"]
+    first, added = (block for block in blocks if block.title and block.title.startswith("1.1"))
+    assert "# @expect $.a == 1" not in first.lines and "# @expect $.b == 2" in first.lines
+    assert added.lines[:3] == ["# @waiting SALES", "# @expect $.a == 1", "GET {{host}}/x/{{thing}}/"]
+
+
+def test_a_block_in_waits_alone_passes_its_wait_on_to_nobody(monkeypatch):
+    import scripts.build_http_suite as builder
+
+    source = """\
+@host = http://localhost:8000
+### 1.1 reads -> 200
+GET {{host}}/api/method/crm.api.other.thing?x={{view}}
+
+### 1.2 writes the same view -> 200
+GET {{host}}/api/method/crm.api.other.thing?x={{view}}
+"""
+    blocks = [block for block in parse_http(source).blocks if block.title]
+    builder._annotate(blocks[0], "# @waiting CONFIGURATION")
+    monkeypatch.setattr(builder, "WAITS_ALONE", {("f.http", "1.1")})
+    builder._wait_after_waiting(blocks, "f.http")
+    assert not any(line.startswith("# @waiting") for line in blocks[1].lines)
+    monkeypatch.setattr(builder, "WAITS_ALONE", set())
+    builder._wait_after_waiting(blocks, "f.http")
+    assert "# @waiting CONFIGURATION" in blocks[1].lines
+
+
+def test_07s_saved_view_blocks_wait_as_the_spec_says():
+    """CONFIGURATION 4.7's gating: CRM Lead's defaults and status board wait for SALES,
+    `get_data` for milestone 8; the view calls themselves run."""
+    generated = (Path(__file__).resolve().parents[1] / "http" / "07_views_and_metadata.http")
+    blocks = {
+        block.title.split(" ", 1)[0]: block.lines
+        for block in parse_http(generated.read_text(encoding="utf-8")).blocks
+        if block.title
+    }
+
+    def waits(number):
+        return any(line.startswith("# @waiting") for line in blocks[number])
+
+    for number in ("3.1a", "3.4", "4.4", "4.6", "4.7", "4.8", "4.9", "8.3", "8.4"):
+        assert waits(number), number
+    for number in ("3.1", "3.2", "3.3", "3.5", "3.8", "3.12", "3.18", "4.1", "4.3", "4.5", "8.1", "8.2"):
+        assert not waits(number), number
+    assert "# @expect $.message.columns contains lead_name" not in blocks["3.1"]
+
+
 def test_a_layout_call_waits_for_an_unbuilt_doctype():
     """CONFIGURATION milestone 6: any route whose row keeps `doctype` as input waits the
     same way, outside meta/ too (the layout save stays a POST)."""
