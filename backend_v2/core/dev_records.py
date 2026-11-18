@@ -7,6 +7,8 @@ never deleted. A future setup wizard loading demo data on a real site needs exac
 
 from __future__ import annotations
 
+from django.utils import timezone
+
 from core.models import DevDataRecord
 
 
@@ -16,6 +18,14 @@ def record_created(step: str, instance) -> None:
         object_pk=str(instance.pk),
         defaults={"step": step},
     )
+
+
+def refresh_record(step: str, instance) -> None:
+    """The seed replaced a row on its record (a forced rewrite): the record now
+    describes the new row, so `still_seeded` keeps counting it as the seed's."""
+    DevDataRecord.objects.filter(
+        step=step, model_label=instance._meta.label, object_pk=str(instance.pk)
+    ).update(creation=timezone.now())
 
 
 def recorded_pks(step: str, model) -> list[str]:
