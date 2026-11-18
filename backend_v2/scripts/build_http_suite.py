@@ -454,6 +454,8 @@ def _url_key(entry: RouteEntry) -> str | None:
 
 
 #: Routes answering 404 for a doctype that is not served (configuration/metadata.py).
+#: `save/` checks the caller's roles first, so a refused save (07 6.4) would answer its
+#: 403 now; it waits anyway, and pytest covers that 403 (A-38).
 DOCTYPE_CHECKING_PREFIXES = (
     "/api/v1/meta/",
     "/api/v1/fields-layouts/layout/",
@@ -613,11 +615,13 @@ def _wait_after_waiting(blocks: list[HttpBlock]) -> None:
 
 #: A block that reads rows an earlier block writes, with no variable between them to
 #: show it, waits with that block: (file, block) -> the block it waits with
-#: (CONFIGURATION section 4.6). 8.5 deletes the row 2.5 reads, in another section.
+#: (CONFIGURATION section 4.6). 8.5 and 8.6 delete the rows 2.5 reads and 6.5 writes, in
+#: another section (0.14 deletes 6.5's row at the start of every run).
 WAITS_WITH = {
     ("07_views_and_metadata.http", "2.5"): "2.3",
     ("07_views_and_metadata.http", "6.7"): "6.5",
     ("07_views_and_metadata.http", "8.5"): "2.5",
+    ("07_views_and_metadata.http", "8.6"): "6.5",
 }
 
 

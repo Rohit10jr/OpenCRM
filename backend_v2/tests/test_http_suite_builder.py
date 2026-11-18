@@ -611,6 +611,17 @@ GET {{host}}/api/method/crm.api.other.thing
     assert not any("# @waiting SALES" in block.lines for block in blocks)
 
 
+def test_07s_deletes_wait_with_the_blocks_whose_rows_they_remove():
+    """A-38 fix 1: 0.14 removes 6.5's row each run, so 8.6's delete waits with 6.5."""
+    from scripts.build_http_suite import WAITS_WITH
+
+    assert WAITS_WITH[("07_views_and_metadata.http", "8.6")] == "6.5"
+    generated = (Path(__file__).resolve().parents[1] / "http" / "07_views_and_metadata.http")
+    text = generated.read_text(encoding="utf-8")
+    block = text.split("### 8.6", 1)[1].split("###", 1)[0]
+    assert "# @waiting ACTIVITIES" in block
+
+
 def test_a_layout_call_waits_for_an_unbuilt_doctype():
     """CONFIGURATION milestone 6: any route whose row keeps `doctype` as input waits the
     same way, outside meta/ too (the layout save stays a POST)."""

@@ -942,6 +942,7 @@ DELETE {{host}}/api/v1/global-settings/{{qf.response.body.$.message[0].name}}/
 Authorization: Bearer {{token}}
 
 ### 8.6 delete the task layout -> 200
+# @waiting ACTIVITIES
 # @resource-envelope {"data"}/201 -> {"message"}/200
 DELETE {{host}}/api/v1/fields-layouts/CRM%20Task-Quick%20Entry/
 Authorization: Bearer {{token}}
