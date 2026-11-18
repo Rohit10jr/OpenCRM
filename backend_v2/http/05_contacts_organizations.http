@@ -433,7 +433,7 @@ Content-Type: application/json
 @deal = {{deal_req.response.body.$.data.name}}
 
 ### 4.2 get_linked_deals -> the one deal, with the nine fields crm/api/contact.py:47-57 lists
-# @waiting CONTACTS
+# @waiting SALES
 # @expect $.message count 1
 # @expect $.message[0].name == {{deal}}
 # @expect $.message[0].deal_owner == Administrator
@@ -445,7 +445,7 @@ Content-Type: application/json
 {"contact": "ZZ Jane Roe"}
 
 ### 4.3 a contact with no deals -> empty list
-# @waiting CONTACTS
+# @waiting SALES
 # @expect $.message count 0
 POST {{host}}/api/method/crm.api.contact.get_linked_deals
 Authorization: Bearer {{token}}
@@ -464,7 +464,7 @@ Content-Type: application/json
 @sales_token = {{sales_login.response.body.$.message.access}}
 
 ### 4.5 get_linked_deals hides deals she cannot read -> empty (deliberate divergence)
-# @waiting CONTACTS
+# @waiting SALES
 # Upstream reads each deal with get_cached_doc, which ignores permissions, and would hand
 # her the deal value. The port reads through the permission layer. Recorded in
 # docs/internal/PROGRESS_PHASE_3.md.

@@ -253,27 +253,29 @@ today. CONFIGURATION still owns the field labels and fieldtypes used by export h
 
 ### Doctypes (9)
 
-| DocType | Kind | Naming | Old protection | Declared fields | Old model | New app | Status |
-|---|---|---|---|---|---|---|---|
-| Address | main | default | ruled: list rule, object rule |  | `frappe_platform.Address` | contacts | — |
-| CRM Industry | main | `FieldValue('industry')` | reviewed-open — reference data - industry vocabulary, shown on organisation forms |  | `crm_app.CRMIndustry` | contacts | — |
-| CRM Organization | main | `FieldValue('organization_name')` | reviewed-open — upstream's role table gives every CRM role read, write, create and delete, and upstream adds no row-level hook (hooks.py). Holds shared customer organisations. |  | `crm_app.CRMOrganization` | contacts | — |
-| Contact | main | default | ruled: list rule, object rule |  | `frappe_platform.Contact` | contacts | — |
-| Gender | main | `FieldValue('gender')` | ruled: list rule, object rule |  | `frappe_platform.Gender` | contacts | — |
-| Salutation | main | `FieldValue('salutation')` | ruled: list rule, object rule |  | `frappe_platform.Salutation` | contacts | — |
-| Contact Email | child | `Hash(10)` | n/a |  | `frappe_platform.ContactEmail` | contacts | — |
-| Contact Phone | child | `Hash(10)` | n/a |  | `frappe_platform.ContactPhone` | contacts | — |
-| Dynamic Link | child | `Hash(10)` | n/a |  | `frappe_platform.DynamicLink` | contacts | — |
+| DocType | Kind | Naming | Old protection | Declared fields | Old model | New route | New app | Status |
+|---|---|---|---|---|---|---|---|---|
+| Address | main | controller (`<title>-<type>` + number) | ruled: list rule, object rule |  | `frappe_platform.Address` | `GET /api/v1/addresses/`, `POST /api/v1/addresses/`, `GET /api/v1/addresses/value/`, `GET /api/v1/addresses/search/`, `POST /api/v1/addresses/search/`, `GET /api/v1/addresses/<name>/`, `PATCH /api/v1/addresses/<name>/`, `DELETE /api/v1/addresses/<name>/`, `GET /api/v1/addresses/<name>/permissions/` | contacts | — |
+| CRM Industry | main | `FieldValue('industry')` | reviewed-open — reference data - industry vocabulary, shown on organisation forms |  | `crm_app.CRMIndustry` | `GET /api/v1/industries/`, `POST /api/v1/industries/`, `GET /api/v1/industries/value/`, `GET /api/v1/industries/search/`, `POST /api/v1/industries/search/`, `GET /api/v1/industries/<name>/`, `PATCH /api/v1/industries/<name>/`, `DELETE /api/v1/industries/<name>/`, `GET /api/v1/industries/<name>/permissions/` | contacts | — |
+| CRM Organization | main | `FieldValue('organization_name')` | reviewed-open — upstream's role table gives every CRM role read, write, create and delete, and upstream adds no row-level hook (hooks.py). Holds shared customer organisations. |  | `crm_app.CRMOrganization` | `GET /api/v1/organizations/`, `POST /api/v1/organizations/`, `GET /api/v1/organizations/value/`, `GET /api/v1/organizations/search/`, `POST /api/v1/organizations/search/`, `GET /api/v1/organizations/<name>/`, `PATCH /api/v1/organizations/<name>/`, `DELETE /api/v1/organizations/<name>/`, `GET /api/v1/organizations/<name>/permissions/`; the shared actions of `CONTACTS.md` §8 when built | contacts | — |
+| Contact | main | controller (full name + `append_number_if_name_exists`) | ruled: list rule, object rule |  | `frappe_platform.Contact` | `GET /api/v1/contacts/`, `POST /api/v1/contacts/`, `GET /api/v1/contacts/value/`, `GET /api/v1/contacts/search/`, `POST /api/v1/contacts/search/`, `GET /api/v1/contacts/<name>/`, `PATCH /api/v1/contacts/<name>/`, `DELETE /api/v1/contacts/<name>/`, `GET /api/v1/contacts/<name>/permissions/`; the shared actions of `CONTACTS.md` §8 when built | contacts | — |
+| Gender | main | `FieldValue('gender')` | ruled: list rule, object rule |  | `frappe_platform.Gender` | `GET /api/v1/genders/`, `POST /api/v1/genders/`, `GET /api/v1/genders/value/`, `GET /api/v1/genders/search/`, `POST /api/v1/genders/search/`, `GET /api/v1/genders/<name>/`, `PATCH /api/v1/genders/<name>/`, `DELETE /api/v1/genders/<name>/`, `GET /api/v1/genders/<name>/permissions/` | contacts | — |
+| Salutation | main | `FieldValue('salutation')` | ruled: list rule, object rule |  | `frappe_platform.Salutation` | `GET /api/v1/salutations/`, `POST /api/v1/salutations/`, `GET /api/v1/salutations/value/`, `GET /api/v1/salutations/search/`, `POST /api/v1/salutations/search/`, `GET /api/v1/salutations/<name>/`, `PATCH /api/v1/salutations/<name>/`, `DELETE /api/v1/salutations/<name>/`, `GET /api/v1/salutations/<name>/permissions/` | contacts | — |
+| Contact Email | child | `Hash(10)` | n/a |  | `frappe_platform.ContactEmail` | `PATCH /api/v1/contacts/<name>/email-ids/<row>/`, `DELETE /api/v1/contacts/<name>/email-ids/<row>/` (old `frappe.client.set_value` and `delete` on the row; the value moves into the body as `{"<fieldname>": <value>}`) | contacts | — |
+| Contact Phone | child | `Hash(10)` | n/a |  | `frappe_platform.ContactPhone` | `PATCH /api/v1/contacts/<name>/phone-nos/<row>/`, `DELETE /api/v1/contacts/<name>/phone-nos/<row>/` (as Contact Email) | contacts | — |
+| Dynamic Link | child | `Hash(10)` | n/a |  | `frappe_platform.DynamicLink` | none (rows of their parent) | contacts | — |
 
-### Method paths (5)
+### Method paths (4)
 
-| Dotted path | Verbs | Access | Old source | New app | Status |
-|---|---|---|---|---|---|
-| `crm.api.contact.create_new` | GET/POST | auth | `crm_app/api/contact.py:create_new` | contacts | — |
-| `crm.api.contact.get_linked_deals` | GET/POST | auth | `crm_app/api/contact.py:get_linked_deals` | contacts | — |
-| `crm.api.contact.search_emails` | GET/POST | auth | `crm_app/api/contact.py:search_emails` | contacts | — |
-| `crm.api.contact.set_as_primary` | GET/POST | auth | `crm_app/api/contact.py:set_as_primary` | contacts | — |
-| `crm.api.session.get_organizations` | GET/POST | auth | `crm_app/api/session.py:get_organizations` | contacts | — |
+`crm.api.contact.get_linked_deals` moved to SALES (`temp` A-41, DECISIONS 56; flagged for
+the owner).
+
+| Dotted path | Verbs | Access | Old source | New route | New app | Status |
+|---|---|---|---|---|---|---|
+| `crm.api.contact.create_new` | GET/POST | auth | `crm_app/api/contact.py:create_new` | `POST /api/v1/contacts/<name>/create-new/` (`contact` in the URL; `field`, `value` in the body) | contacts | — |
+| `crm.api.contact.search_emails` | GET/POST | auth | `crm_app/api/contact.py:search_emails` | `GET /api/v1/contacts/search-emails/` (`txt` kept as input) | contacts | — |
+| `crm.api.contact.set_as_primary` | GET/POST | auth | `crm_app/api/contact.py:set_as_primary` | `POST /api/v1/contacts/<name>/set-as-primary/` (`contact` in the URL; `field`, `value` in the body) | contacts | — |
+| `crm.api.session.get_organizations` | GET/POST | auth | `crm_app/api/session.py:get_organizations` | `GET /api/v1/organizations/directory/` | contacts | — |
 
 ## NOTIFICATIONS
 
@@ -338,10 +340,11 @@ routes are ACTIVITIES'.
 | CRM Products | child | `Hash(10)` | n/a |  | `crm_app.CRMProducts` | sales | — |
 | CRM Status Change Log | child | `Hash(10)` | n/a |  | `crm_app.CRMStatusChangeLog` | sales | — |
 
-### Method paths (8)
+### Method paths (9)
 
 | Dotted path | Verbs | Access | Old source | New app | Status |
 |---|---|---|---|---|---|
+| `crm.api.contact.get_linked_deals` | GET/POST | auth | `crm_app/api/contact.py:get_linked_deals` (moved from CONTACTS, `temp` A-41; flagged for the owner) | sales | — |
 | `crm.api.onboarding.get_first_deal` | GET/POST | auth | `crm_app/api/onboarding.py:get_first_deal` | sales | — |
 | `crm.api.onboarding.get_first_lead` | GET/POST | auth | `crm_app/api/onboarding.py:get_first_lead` | sales | — |
 | `crm.fcrm.doctype.crm_deal.api.get_deal_contacts` | GET/POST | auth | `crm_app/api/deal.py:get_deal_contacts` | sales | — |

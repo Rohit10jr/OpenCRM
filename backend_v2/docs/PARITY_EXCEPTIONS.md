@@ -542,6 +542,24 @@ comparison skips that block.
 - **Why:** replaces a crash with an error
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
+### PE-24. Rename is served for the resources that opt in
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-41, A-42, DECISIONS 57, 19 Nov 2026); to be built in CONTACTS
+- **Where:** `POST /api/v1/<resource>/<name>/rename/` (old `frappe.client.rename_doc`),
+  for Address, CRM Industry, Salutation and Gender; and the Contact Email and Contact
+  Phone row routes, `PATCH /api/v1/contacts/<name>/email-ids/<row>/` and
+  `.../phone-nos/<row>/` (old `frappe.client.set_value` on the row)
+- **Old backend:** the rename call accepts any doctype
+  (`backend/crm_app/api/client.py:462-495`); the row edit writes the underscore caches
+  of the row (`:421-446`)
+- **backend_v2:** rename is served for the resources that opt in; Contact and CRM
+  Organization do, Address, CRM Industry, Salutation and Gender do not. A child-row
+  write never writes the underscore caches
+- **Why:** each resource serves the actions its screens use (S24), and the caches are
+  written by their own calls (`API_CONTRACT.md:239`)
+- **Recorded by:** CONTACTS, 19 Nov 2026
+
 ---
 
 ## Candidates — not exceptions yet

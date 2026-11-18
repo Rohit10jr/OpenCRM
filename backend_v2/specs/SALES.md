@@ -116,3 +116,25 @@ mechanism is tested on `tests_support`; the cases below prove it on real records
   (with NOTIFICATIONS).
 - Lead keeps `lead_name` and Deal `organization` (their `SEARCH_FIELD`s) in their
   readable and filterable fields, or link search stops matching on them (A-12).
+
+## 9. Carried from CONTACTS
+
+Moved here by CONTACTS' spec rewrite (`temp` A-41, A-42; DECISIONS 56, flagged for the
+owner). `CONTACTS.md` §9 has the detail.
+
+- **`crm.api.contact.get_linked_deals`** (`backend/crm_app/api/contact.py:44-72`;
+  `docs/http/05_contacts_organizations.http` 4.2-4.5): the contact check first (a
+  missing or refused contact is 403 "Not permitted", not the base 404); the deals read
+  through the caller's Deal row rule, stricter than upstream on purpose
+  (`contact.py:48-53`); the fields `name, organization, currency, deal_value, status,
+  email, mobile_no, deal_owner, modified`; list-shaped values. SALES proposes its route.
+- **`CRMContacts.contact` CASCADE and `CRMDeal.contact` SET_NULL**
+  (`core_sales.py:1120-1122`, `:836-842`): deleting a contact removes its rows on deals
+  and clears `contact`, leaving the deal's `email` and `mobile_no`; upstream refuses the
+  delete, and SALES records the difference.
+- **`CRMDeal.organization` PROTECT**, and the Lead and Deal PROTECT foreign keys to CRM
+  Industry.
+- **Tests** `CONTACTS.md` §3 hands on: `test_rename.py` (all of it),
+  `test_contact_rules.py:121-133`, `:136-147`, `:183-191`,
+  `test_salutation_gender.py:76-87`, `:128-140`, and the Contact and Organization cases of
+  `test_delete_dialog_links.py` and `test_unlink_linked_docs.py`.
