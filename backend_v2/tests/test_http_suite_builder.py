@@ -700,6 +700,15 @@ def test_07s_saved_view_blocks_wait_as_the_spec_says():
     assert "# @expect $.message.columns contains lead_name" in blocks["4.4a"]
 
 
+def test_07_5_8_asks_an_unserved_list_view_and_expects_the_generic_404():
+    """CONFIGURATION 4.8: no v2 URL names an unknown doctype's list view (PE-22)."""
+    generated = (Path(__file__).resolve().parents[1] / "http" / "07_views_and_metadata.http")
+    block = generated.read_text(encoding="utf-8").split("### 5.8", 1)[1].split("###", 1)[0]
+    assert "POST {{host}}/api/v1/no-such-doctypes/list-view/" in block
+    assert "# @negative" in block and "# @expect $.exc_type == DoesNotExistError" in block
+    assert "# @waiting" not in block and "{\"doctype\"" not in block
+
+
 def test_two_splits_in_one_file_each_land_after_their_own_block(monkeypatch):
     """A-43 fix 3: the split loop walks the live list, so the first insertion does not
     shift the second."""

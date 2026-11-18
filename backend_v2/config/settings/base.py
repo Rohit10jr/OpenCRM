@@ -238,3 +238,7 @@ CHANNEL_LAYERS = {
 # The module that finds saved Email Accounts for core.mail (spec CONFIGURATION 4.4); empty
 # means the settings-configured account only.
 MAIL_ACCOUNT_PROVIDER = "configuration.mail"
+
+# The module giving a kanban card's four badge counts (spec CONFIGURATION 4.8); empty
+# means 0 for each, until ACTIVITIES names its own.
+KANBAN_COUNTS_PROVIDER = ""

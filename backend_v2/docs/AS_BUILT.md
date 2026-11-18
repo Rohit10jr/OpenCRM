@@ -217,6 +217,23 @@ columns come from the metadata file, a Link target's rows through that target's 
 rule. The `.http` generator gained `SPLIT_EXPECTS`, `WAITS_FOR_UNIT` and `WAITS_ALONE`
 for `07`'s view blocks.
 
+Its eighth milestone (§4.8) adds the list engine. `configuration/mixins.py`'s
+`ListViewMixin` serves `GET` and `POST <resource>/list-view/` (the old `get_data`) on a
+resource that opts in; `configuration/list_engine.py` runs it on that resource's
+row-ruled queryset and its readable, filterable and sortable lists: the list and
+group-by path (the caller's saved standard view, the definition's columns, rows, hidden
+fields and `parse`, the `fields` block with the old types, PE-16 last), `is_default`
+from a named view under the read rule, group-by options, and the kanban branch (columns
+from a served Link target or a field's choices, the definition's kanban defaults, a
+manual card order, `all_count`, PE-23's cap). A resource names its definition as
+`list_view_class`, a class in its app's `list_views.py` (FOUNDATION Q6): the base
+`ListView` is the old fallback, `accounts/list_views.py` holds `UserListView` (User has
+no list-view route), and `tests_support` defines Widget's. A card's four badge counts
+come from the module `KANBAN_COUNTS_PROVIDER` names (`configuration/kanban_counts.py`,
+check `configuration.E001`), 0 each until ACTIVITIES names its own. Only `tests_support`
+opts in so far, so `get_data`'s route-map row stays unbuilt until SALES, ACTIVITIES and
+CONTACTS opt their resources in; `07` 5.8 runs as the generic 404.
+
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
 disabled, and there are no bulk actions.

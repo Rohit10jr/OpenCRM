@@ -733,6 +733,15 @@ def _wait_with_named(blocks: list[HttpBlock], filename: str) -> None:
             markers[number] = marker
 
 
+#: A block whose old call names something no v2 URL can (CONFIGURATION section 4.8): 07
+#: 5.8 asks `get_data` about an unknown doctype; a list view is a resource's own route,
+#: so the request goes to a resource no one serves and answers the generic 404 (PE-1,
+#: PE-22). (file, block) -> (method, route).
+UNKNOWN_PATH_BLOCKS = {
+    ("07_views_and_metadata.http", "5.8"): ("POST", "/api/v1/no-such-doctypes/list-view/"),
+}
+
+
 def rewrite_http(text: str, route_map: RouteMap, filename: str = "fixture.http") -> str:
     document = parse_http(text)
     _mark_cleanup_blocks(document.blocks)
@@ -746,6 +755,10 @@ def rewrite_http(text: str, route_map: RouteMap, filename: str = "fixture.http")
             continue
         method, raw_url = request
         resolved_url = resolve_variables(raw_url, variables)
+        if unknown := UNKNOWN_PATH_BLOCKS.get((filename, _number(block))):
+            _unknown_path(block, *unknown)
+            _drop_body(block)
+            continue
         if match := METHOD_URL_RE.search(resolved_url):
             path = unquote(match.group(1))
             entry = route_map.methods.get(path)

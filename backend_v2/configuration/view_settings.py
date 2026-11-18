@@ -261,6 +261,30 @@ def create_or_update_standard_view(view, *, user) -> dict:
     return serialised(doc, user)
 
 
+def saved_standard_view(doctype, view_type, *, user):
+    """`get_data`'s step 3 (old `crm_app/metadata_hooks.py:27-51`): the caller's own
+    standard view for the doctype and view type, newest first, as `{columns, rows}`;
+    `None` when there is none or both its lists are empty."""
+    doc = CRMViewSettings.own_standard_view(doctype, view_type or "list", user)
+    if doc is None:
+        return None
+    columns = parse_json_param(doc.columns, []) or []
+    rows = parse_json_param(doc.rows, []) or []
+    if not columns and not rows:
+        return None
+    return {"columns": columns, "rows": rows}
+
+
+def loads_default_columns(name, *, user) -> bool:
+    """`load_default_columns` of a named view (old `frappe_core/api/doc.py:176-186`),
+    read under the read rule (PE-21): a view the caller may not read, or a name that is
+    not an integer (PE-12e), counts as no view."""
+    doc = CRMViewSettings.named(name)
+    if doc is None or not can_read(user, doc):
+        return False
+    return bool(doc.load_default_columns)
+
+
 def get_views(doctype, *, user) -> list[dict]:
     """`crm.api.views.get_views` (old `crm_app/api/views.py:12-36`): the read rule, then
     ownerless views and the caller's own, of `doctype` when it is truthy (the store sends

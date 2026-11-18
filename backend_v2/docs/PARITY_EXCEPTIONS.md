@@ -352,7 +352,8 @@ comparison skips that block.
   `meta/group-by-fields/`, `meta/sort-options/`; with milestone 6, the layout and
   quick-filter calls (the Required Fields section and the default layout included); with
   milestone 7, a saved kanban's default columns (a `column_field` the caller may not
-  read gives none); and later `get_data`'s `fields` block
+  read gives none); and with milestone 8, `get_data`'s `fields` block (built in
+  `717fdd3`)
 - **Old backend:** lists every field name
 - **backend_v2:** metadata answers list only the fields the caller may read. The fields
   that remain keep their original `idx`; gaps are allowed
@@ -442,7 +443,10 @@ comparison skips that block.
   the owner (`temp` A-39, DECISIONS 51, 18 Nov 2026); built in `f7c4ea5`
 - **Where:** `POST /api/v1/view-settings/set-as-default/` and
   `POST /api/v1/view-settings/<name>/kanban-columns/` (old `set_as_default` and
-  `fetch_and_update_kanban_columns`)
+  `fetch_and_update_kanban_columns`); and, with CONFIGURATION milestone 8, the named
+  view's `load_default_columns` that `<resource>/list-view/` reads (old `get_data`,
+  `backend/frappe_core/api/doc.py:176-186,343-348`): a view the caller may not read
+  counts as missing
 - **Old backend:** checks neither (`backend/crm_app/api/view_settings.py:246-270,318-347`)
 - **backend_v2:** `set_as_default` with a name acts on the caller's own view (403 "Not
   permitted" otherwise, 404 for a missing one), and `fetch_and_update_kanban_columns` on
@@ -480,6 +484,61 @@ comparison skips that block.
   is not an object is skipped; a resource write of `filters`, `columns`, `rows`,
   `kanban_columns` or `kanban_fields` that is not valid JSON is 417 "<Label> must be
   valid JSON" (for example "Kanban Columns must be valid JSON")
+- **Why:** replaces a crash with an error
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-22. `get_data` is served for the resources that opt in to a list view
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-40, 18 Nov 2026); built in `717fdd3`, `f743a80`
+- **Where:** `GET` and `POST /api/v1/<resource>/list-view/` (old `crm.api.doc.get_data`)
+- **Old backend:** answers `get_data` for any registered doctype, and builds the column
+  list whether or not the link target is served (`backend/frappe_core/api/doc.py:229`,
+  `:438-443`)
+- **backend_v2:** `get_data` is served for the resources that opt in to a list view; a
+  child table, a withheld doctype and a settings record have none, and the URL answers
+  the generic 404. A kanban column list is built from a link target only where that
+  target is itself served
+- **Why:** each list screen has its own resource; no screen lists a child table, a
+  withheld doctype or a settings record
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-23. A list view takes at most `MAX_PAGE_LENGTH` kanban columns
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-40, 18 Nov 2026); built in `f743a80`
+- **Where:** `GET` and `POST /api/v1/<resource>/list-view/` with `kanban_columns`
+- **Old backend:** accepts any number of sent columns
+  (`backend/frappe_core/api/doc.py:484-526`)
+- **backend_v2:** a sent `kanban_columns` list longer than `MAX_PAGE_LENGTH` is 417 "At
+  most 500 kanban columns". A
+  column's `page_length` of 0 still means no limit, and `page_length=0` every row, as
+  before
+- **Why:** the same limit as a list page's length
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-12e. List-view crashes answer as errors
+
+- **Status:** approved — decided by the supervisor on the owner's behalf (`temp` A-40,
+  18 Nov 2026; narrowed and extended by A-44, 19 Nov 2026; it only replaces a crash);
+  built in `7daa881`, `f743a80`, `45a97a5`
+- **Where:** `GET` and `POST /api/v1/<resource>/list-view/` (old `crm.api.doc.get_data`)
+- **Old backend:** raises on: a `columns` entry that is not an object in a list or
+  group-by view (`backend/frappe_core/api/doc.py:296-303`); a `kanban_columns` entry
+  that is not an object in a kanban view (`:485-524`); a `rows` or `kanban_fields`
+  entry that is a list or an object (`:396`, `:460-462`); a column's `order` that is
+  neither a list nor a string (`:519-524`, `:540`); a `title_field` or `group_by_field` that is
+  not text; group-by values of mixed types (`:615-623`); a `custom_view_name` that is
+  not an integer (`filter(pk=…)`, `:176-186`)
+- **backend_v2:** each of these is 417 with a fixed sentence ("Columns must be objects",
+  "Kanban columns must be objects", "Rows must be fieldnames", "Kanban fields must be
+  fieldnames", "A column's order must be a list", "Title field must be a fieldname",
+  "Group by field must be a fieldname"), except that group-by values of mixed types are
+  sorted by their text and a `custom_view_name` that is not an integer counts as no
+  view. A null in a manual `order` names no card. Where the old code does not crash it
+  is kept: the kanban lists are read only in a kanban view and `columns` only in a list
+  or group-by view, a number or null in `rows` is "Unknown field 5 for X", and a string
+  `order` is read as its characters
 - **Why:** replaces a crash with an error
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 

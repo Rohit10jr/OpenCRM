@@ -601,14 +601,10 @@ Content-Type: application/json
 {"doctype": "CRM Organization", "filters": {}, "page_length": 1, "view": {"view_type": "list"}}
 
 ### 5.8 an unknown doctype -> 404 DoesNotExistError
-# @waiting CONFIGURATION
+# @negative
 # @expect $.exc_type == DoesNotExistError
-# @expect $.message == DocType No Such Doctype not found
-POST {{host}}/api/method/crm.api.doc.get_data
+POST {{host}}/api/v1/no-such-doctypes/list-view/
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{"doctype": "No Such Doctype", "view": {"view_type": "list"}}
 
 # ---- form layouts and the side panel ---------------------------------------------------------------
 
