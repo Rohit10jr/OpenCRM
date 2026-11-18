@@ -75,14 +75,66 @@ def test_quick_filters_skip_a_doctype_with_a_row(administrator):
 
 
 def test_form_scripts_are_written_once(administrator):
+    """Ported from `backend/tests/test_seed_defaults.py:138-147`, exact text."""
     assert dev_data.sync_standard_form_scripts(administrator) == 3
     assert dev_data.sync_standard_form_scripts(administrator) == 0
-    lead = CRMFormScript.objects.get(pk="Product Details Script for CRM Lead")
-    assert lead.script.startswith("class CRMLead {")
-    assert (lead.dt, lead.view, lead.enabled, lead.is_standard) == ("CRM Lead", "Form", True, True)
-    forecasting = CRMFormScript.objects.get(pk="Forecasting Script")
+    scripts = {s.pk: s for s in CRMFormScript.objects.all()}
+    assert sorted(scripts) == [
+        "Forecasting Script",
+        "Product Details Script for CRM Deal",
+        "Product Details Script for CRM Lead",
+    ]
+    assert all(s.enabled and s.is_standard and s.view == "Form" for s in scripts.values())
+    lead = scripts["Product Details Script for CRM Lead"]
+    assert lead.script.startswith("class CRMLead {\n  update_total()")
+    assert lead.script == dev_data.product_details_script("CRM Lead")
+    deal = scripts["Product Details Script for CRM Deal"]
+    assert deal.dt == "CRM Deal"
+    assert deal.script == dev_data.product_details_script("CRM Deal")
+    forecasting = scripts["Forecasting Script"]
     assert forecasting.dt == "CRM Deal"
-    assert forecasting.script.startswith("class CRMDeal {")
+    assert forecasting.script == dev_data.default_rows()["forecasting_script"]
+
+
+def test_quick_filter_rows_match_the_data_file(administrator):
+    """Ported from `backend/tests/test_seed_defaults.py:132-134`."""
+    dev_data.write_quick_filters(administrator)
+    rows = {row.dt: row for row in CRMGlobalSettings.objects.filter(type="Quick Filters")}
+    assert sorted(rows) == sorted(dev_data.default_rows()["quick_filters"])
+    assert rows["CRM Lead"].json == ["lead_name", "email", "organization", "status", "source"]
+
+
+@pytest.mark.parametrize(
+    "step,seed,model,count",
+    [
+        ("fields_layouts", dev_data.write_default_layouts, CRMFieldsLayout, 14),
+        ("quick_filters", dev_data.write_quick_filters, CRMGlobalSettings, 6),
+        ("form_scripts", dev_data.sync_standard_form_scripts, CRMFormScript, 3),
+    ],
+)
+def test_a_second_seed_keeps_one_record_per_row(administrator, step, seed, model, count):
+    seed(administrator)
+    seed(administrator)
+    records = DevDataRecord.objects.filter(step=step)
+    assert records.count() == count == model.objects.count()
+    assert {r.object_pk for r in records} == {str(pk) for pk in model.objects.values_list("pk", flat=True)}
+
+
+@pytest.mark.parametrize(
+    "seed,clear,model,pk",
+    [
+        (dev_data.write_default_layouts, dev_data.clear_default_layouts, CRMFieldsLayout, "CRM Task-Quick Entry"),
+        (dev_data.sync_standard_form_scripts, dev_data.clear_standard_form_scripts, CRMFormScript, "Forecasting Script"),
+    ],
+)
+def test_a_row_deleted_and_seeded_again_is_still_cleared(administrator, seed, clear, model, pk):
+    """A-38 fix 2: the second seed recreates the row; its record is refreshed."""
+    seed(administrator)
+    model.objects.filter(pk=pk).delete()
+    seed(administrator)
+    assert model.objects.filter(pk=pk).exists()
+    clear(administrator)
+    assert not model.objects.exists()
 
 
 def test_a_drifted_product_script_gets_its_text_back_and_nothing_else(administrator):

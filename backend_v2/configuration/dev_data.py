@@ -65,7 +65,7 @@ def write_default_layouts(user, force: bool = False) -> int:
             dev_records.record_created(LAYOUTS_STEP, row)
             created += 1
         elif name in recorded:
-            dev_records.refresh_record(LAYOUTS_STEP, row)
+            dev_records.record_created(LAYOUTS_STEP, row)
     return created
 
 
