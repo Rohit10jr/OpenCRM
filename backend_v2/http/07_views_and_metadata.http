@@ -453,18 +453,22 @@ Content-Type: application/json
 {"type": "list", "doctype": "CRM Lead"}
 
 ### 4.4 -> one standard CRM Lead list view for Administrator, default, with the controller's columns
-# @waiting SALES
 # @resource-envelope {"data"}/201 -> {"message"}/200
 # @name std_req
 # @expect $.message count 1
 # @expect $.message[0].is_default == true
 # @expect $.message[0].label == List
-# @expect $.message[0].columns contains lead_name
 GET {{host}}/api/v1/view-settings/?fields=["name","is_default","label","columns","rows"]&filters=[["dt","=","CRM Lead"],["is_standard","=",1],["user","=","Administrator"],["type","=","list"]]
 Authorization: Bearer {{token}}
 
 ###
 @std = {{std_req.response.body.$.message[0].name}}
+
+### 4.4a the standard view 4.3 made holds CRM Lead's default columns -> 200
+# @waiting SALES
+# @expect $.message.columns contains lead_name
+GET {{host}}/api/v1/view-settings/{{std}}/
+Authorization: Bearer {{token}}
 
 ### 4.5 only one default per user: view1 was public and never default, the new one is -> 200
 # @resource-envelope {"data"}/201 -> {"message"}/200
@@ -509,7 +513,6 @@ Content-Type: application/json
 {}
 
 ### 4.9 calling it on a list view returns nothing -> 200, null
-# @waiting SALES
 # @expect $.message == null
 POST {{host}}/api/v1/view-settings/{{std}}/kanban-columns/
 Authorization: Bearer {{token}}
@@ -910,7 +913,6 @@ Content-Type: application/json
 {}
 
 ### 8.3 delete Administrator's standard list and kanban views for CRM Lead -> 200
-# @waiting SALES
 # @resource-envelope {"data"}/201 -> {"message"}/200
 DELETE {{host}}/api/v1/view-settings/{{std_req.response.body.$.message[0].name}}/
 Authorization: Bearer {{token}}

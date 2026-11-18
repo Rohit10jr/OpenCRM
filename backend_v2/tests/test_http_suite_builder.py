@@ -688,11 +688,60 @@ def test_07s_saved_view_blocks_wait_as_the_spec_says():
     def waits(number):
         return any(line.startswith("# @waiting") for line in blocks[number])
 
-    for number in ("3.1a", "3.4", "4.4", "4.6", "4.7", "4.8", "4.9", "8.3", "8.4"):
+    for number in ("3.1a", "3.4", "4.4a", "4.6", "4.7", "4.8", "8.4"):
         assert waits(number), number
-    for number in ("3.1", "3.2", "3.3", "3.5", "3.8", "3.12", "3.18", "4.1", "4.3", "4.5", "8.1", "8.2"):
+    for number in (
+        "3.1", "3.2", "3.3", "3.5", "3.8", "3.12", "3.18",
+        "4.1", "4.3", "4.4", "4.5", "4.9", "8.1", "8.2", "8.3",
+    ):
         assert not waits(number), number
     assert "# @expect $.message.columns contains lead_name" not in blocks["3.1"]
+    assert "# @expect $.message[0].columns contains lead_name" not in blocks["4.4"]
+    assert "# @expect $.message.columns contains lead_name" in blocks["4.4a"]
+
+
+def test_two_splits_in_one_file_each_land_after_their_own_block(monkeypatch):
+    """A-43 fix 3: the split loop walks the live list, so the first insertion does not
+    shift the second."""
+    import scripts.build_http_suite as builder
+
+    monkeypatch.setattr(
+        builder,
+        "SPLIT_EXPECTS",
+        {
+            ("f.http", "1.1"): ("1.1a -> 200", "SALES", "one", "GET {{host}}/x/{{one}}/", ("$.a == 1",)),
+            ("f.http", "2.1"): (
+                "2.1a -> 200", "SALES", "two", "GET {{host}}/y/{{two}}/", (("$.b[0] == 2", "$.b == 2"),)
+            ),
+        },
+    )
+    source = """\
+@host = http://localhost:8000
+### 1.1 makes one -> 200
+# @name one_req
+# @expect $.a == 1
+GET {{host}}/api/method/crm.api.other.thing
+
+###
+@one = {{one_req.response.body.$.message}}
+
+### 2.1 makes two -> 200
+# @name two_req
+# @expect $.b[0] == 2
+GET {{host}}/api/method/crm.api.other.thing
+
+###
+@two = {{two_req.response.body.$.message}}
+
+### 2.2 next -> 200
+GET {{host}}/api/method/crm.api.other.thing
+"""
+    blocks = parse_http(source).blocks
+    builder._split_expects(blocks, "f.http")
+    titles = [block.title for block in blocks if block.title]
+    assert titles == ["1.1 makes one -> 200", "1.1a -> 200", "2.1 makes two -> 200", "2.1a -> 200", "2.2 next -> 200"]
+    added = next(block for block in blocks if block.title == "2.1a -> 200")
+    assert added.lines[1] == "# @expect $.b == 2"
 
 
 def test_a_layout_call_waits_for_an_unbuilt_doctype():

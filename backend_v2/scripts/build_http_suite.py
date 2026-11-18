@@ -594,10 +594,9 @@ def _number(block: HttpBlock) -> str:
 
 
 #: A block whose route is built but whose expectations need another unit waits for it
-#: (CONFIGURATION section 4.7): 07 4.4 and 4.7 check CRM Lead's default columns and its
-#: status board, which come with SALES' list definition and statuses.
+#: (CONFIGURATION section 4.7): 07 4.7 checks CRM Lead's status board, which comes with
+#: SALES' statuses.
 WAITS_FOR_UNIT = {
-    ("07_views_and_metadata.http", "4.4"): "SALES",
     ("07_views_and_metadata.http", "4.7"): "SALES",
 }
 
@@ -610,9 +609,10 @@ def _wait_for_unit(blocks: list[HttpBlock], filename: str) -> None:
 
 
 #: An added block that waits for another unit, holding expectations taken out of a block
-#: that runs (CONFIGURATION section 4.7): 07 3.1's checks of CRM Lead's default columns
-#: and rows wait for SALES, and 3.1 runs without them. (file, block) -> (title, unit,
-#: the variable it reads, the request, the expectations moved).
+#: that runs (CONFIGURATION section 4.7): 07 3.1's and 4.4's checks of CRM Lead's
+#: default columns and rows wait for SALES, and 3.1 and 4.4 run without them. (file,
+#: block) -> (title, unit, the variable it reads, the request, the expectations moved;
+#: a pair is the expectation as the rewritten block holds it and as the added one reads).
 SPLIT_EXPECTS = {
     ("07_views_and_metadata.http", "3.1"): (
         "3.1a the view 3.1 made holds CRM Lead's default columns and rows -> 200",
@@ -621,18 +621,30 @@ SPLIT_EXPECTS = {
         "GET {{host}}/api/v1/view-settings/{{view1}}/",
         ("$.message.columns contains lead_name", "$.message.rows contains lead_owner"),
     ),
+    ("07_views_and_metadata.http", "4.4"): (
+        "4.4a the standard view 4.3 made holds CRM Lead's default columns -> 200",
+        "SALES",
+        "std",
+        "GET {{host}}/api/v1/view-settings/{{std}}/",
+        (("$.message[0].columns contains lead_name", "$.message.columns contains lead_name"),),
+    ),
 }
 
 
 def _split_expects(blocks: list[HttpBlock], filename: str) -> None:
     """Each block in `SPLIT_EXPECTS` loses the named expectations; the added block holding
-    them goes after the block that defines the variable it reads."""
-    for index, block in enumerate(list(blocks)):
+    them goes after the block that defines the variable it reads. The loop walks the live
+    list, so an earlier insertion does not shift a later split."""
+    index = -1
+    while index + 1 < len(blocks):
+        index += 1
+        block = blocks[index]
         split = SPLIT_EXPECTS.get((filename, _number(block)))
         if split is None:
             continue
         title, unit, variable, request, expects = split
-        moved = {f"# @expect {expect}" for expect in expects}
+        pairs = [item if isinstance(item, tuple) else (item, item) for item in expects]
+        moved = {f"# @expect {old}" for old, _ in pairs}
         if not moved <= set(block.lines):
             raise SuiteBuildError(f"{filename}: block {_number(block)} lacks {sorted(moved)}")
         block.lines = [line for line in block.lines if line not in moved]
@@ -646,7 +658,7 @@ def _split_expects(blocks: list[HttpBlock], filename: str) -> None:
             separator="### " + title,
             lines=[
                 f"# @waiting {unit}",
-                *sorted(moved),
+                *sorted(f"# @expect {new}" for _, new in pairs),
                 request,
                 "Authorization: Bearer {{token}}",
                 "",
@@ -656,11 +668,13 @@ def _split_expects(blocks: list[HttpBlock], filename: str) -> None:
 
 
 #: A waiting block that only reads: blocks after it that share its variables do not wait
-#: with it (CONFIGURATION section 4.7). 07 3.4 and 4.6 read `get_data` (milestone 8) and
-#: 3.1a reads the view 3.1 made; the blocks after them write and read that view.
+#: with it (CONFIGURATION section 4.7). 07 3.4 and 4.6 read `get_data` (milestone 8),
+#: and 3.1a and 4.4a read the views 3.1 and 4.3 made; the blocks after them use those
+#: views.
 WAITS_ALONE = {
     ("07_views_and_metadata.http", "3.1a"),
     ("07_views_and_metadata.http", "3.4"),
+    ("07_views_and_metadata.http", "4.4a"),
     ("07_views_and_metadata.http", "4.6"),
 }
 
@@ -693,16 +707,14 @@ def _wait_after_waiting(blocks: list[HttpBlock], filename: str = "") -> None:
 #: A block that reads rows an earlier block writes, with no variable between them to
 #: show it, waits with that block: (file, block) -> the block it waits with
 #: (CONFIGURATION section 4.6). 8.5 and 8.6 delete the rows 2.5 reads and 6.5 writes, in
-#: another section (0.14 deletes 6.5's row at the start of every run). 4.8, 4.9, 8.3 and
-#: 8.4 use the views 4.4 and 4.7 name (section 4.7; 0.9-0.11 clear them each run).
+#: another section (0.14 deletes 6.5's row at the start of every run). 4.8 and 8.4 use
+#: the kanban view 4.7 makes (section 4.7; 0.9-0.11 clear it each run).
 WAITS_WITH = {
     ("07_views_and_metadata.http", "2.5"): "2.3",
     ("07_views_and_metadata.http", "6.7"): "6.5",
     ("07_views_and_metadata.http", "8.5"): "2.5",
     ("07_views_and_metadata.http", "8.6"): "6.5",
     ("07_views_and_metadata.http", "4.8"): "4.7",
-    ("07_views_and_metadata.http", "4.9"): "4.4",
-    ("07_views_and_metadata.http", "8.3"): "4.4",
     ("07_views_and_metadata.http", "8.4"): "4.7",
 }
 
