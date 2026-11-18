@@ -17,6 +17,7 @@ from accounts.roles import (
     ROLE_SALES_USER,
     ROLE_SYSTEM_MANAGER,
 )
+from configuration import exchange_rate
 from configuration.models import SystemSettings
 from configuration.serializers import (
     DOCUMENT_FIELDS,
@@ -295,3 +296,19 @@ class FCRMSettingsViewSet(SingletonViewSet):
         if user.name == ADMINISTRATOR or ptype == "read":
             return True
         return user.has_role(ROLE_SYSTEM_MANAGER) or user.has_role(ROLE_SALES_MANAGER)
+
+
+class ExchangeRateView(BaseAPIView):
+    """`crm.api.exchange_rate.get_exchange_rate`: signed-in callers; the rate between two
+    currencies (configuration/exchange_rate.py; spec section 4.3)."""
+
+    def get(self, request):
+        inputs = self.get_inputs(request)
+        return Response(
+            exchange_rate.get_exchange_rate(
+                inputs.get("from_currency"),
+                inputs.get("to_currency"),
+                inputs.get("date"),
+                user=request.user,
+            )
+        )

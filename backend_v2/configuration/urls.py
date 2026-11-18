@@ -6,6 +6,7 @@ from configuration.views import (
     ClearDemoDataView,
     CountryViewSet,
     CurrencyViewSet,
+    ExchangeRateView,
     FCRMSettingsViewSet,
     LanguageViewSet,
     OnboardingStatusView,
@@ -27,6 +28,7 @@ urlpatterns = [
     ),
     re_path(r"^demo/clear/?$", ClearDemoDataView.as_view(), name="demo-clear"),
     re_path(r"^translations/?$", TranslationsView.as_view(), name="translations"),
+    re_path(r"^exchange-rate/?$", ExchangeRateView.as_view(), name="exchange-rate"),
     re_path(
         r"^onboarding/status/?$",
         OnboardingStatusView.as_view(),

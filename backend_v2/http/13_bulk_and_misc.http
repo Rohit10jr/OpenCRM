@@ -559,23 +559,13 @@ Authorization: Bearer {{mtoken}}
 # @expect $.message count 0
 GET {{host}}/api/v1/auth/oauth-providers/
 ### 5.2 get_exchange_rate, same currency -> 1
-# @waiting CONFIGURATION
 # @expect $.message == 1
-POST {{host}}/api/method/crm.api.exchange_rate.get_exchange_rate
+GET {{host}}/api/v1/exchange-rate/?from_currency=USD&to_currency=USD
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{"from_currency": "USD", "to_currency": "USD"}
-
 ### 5.3 different currencies with no provider configured -> 1, never 0 (a missing rate must not zero a deal)
-# @waiting CONFIGURATION
 # @expect $.message == 1
-POST {{host}}/api/method/crm.api.exchange_rate.get_exchange_rate
+GET {{host}}/api/v1/exchange-rate/?from_currency=EUR&to_currency=USD&date=2026-09-01
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{"from_currency": "EUR", "to_currency": "USD", "date": "2026-09-01"}
-
 ### 5.4 get_first_lead -> the oldest unconverted lead's name
 # @waiting SALES
 # @expect $.message contains CRM-LEAD-

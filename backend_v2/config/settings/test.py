@@ -16,6 +16,8 @@ CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 EMAIL_HOST = ""
+# No test reaches an exchange-rate provider; the tests that need one turn it on and fake it.
+ENABLE_EXCHANGE_RATE_API = False
 
 CACHES = {
     "default": {
