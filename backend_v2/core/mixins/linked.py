@@ -10,6 +10,7 @@ from django.db.models import Q
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from core.children import child_table_specs, read_children
 from core.delete import (
     IGNORE_LINKS_ON_DELETE,
     _dynamic_link_declarations,
@@ -290,13 +291,32 @@ def _clear_link_fields(instance, target_model, target_name):
         type(instance)._default_manager.filter(pk=instance.pk).update(**updates)
 
 
-def _clear_contact(instance):
+def _clear_contact(instance, urlconf=None):
+    """'Remove contact': the document's own `contact` field and its own `contacts` table,
+    the one its resource's serializer declares (PE-25). A reverse relation that happens
+    to be called `contacts` is not the document's table and is left alone."""
     concrete = {field.name for field in type(instance)._meta.concrete_fields}
     if "contact" in concrete:
         type(instance)._default_manager.filter(pk=instance.pk).update(contact=None)
-    contacts = getattr(instance, "contacts", None)
-    if contacts is not None:
-        contacts.all().delete()
+    rules = rules_for(type(instance), urlconf)
+    declared = getattr(getattr(rules, "serializer_class", None), "CHILD_TABLES", None) or {}
+    spec = child_table_specs(type(instance), declared).get("contacts")
+    if spec is not None:
+        for row in read_children(instance, spec):
+            row.delete()
+
+
+def delete_if_permitted(rules, user, instance) -> None:
+    """Deleting a linked document needs its own delete rule (PE-26); one the caller may
+    not delete, or one still linked elsewhere, is skipped. Its links are cleared either
+    way."""
+    if rules.has_object_rule(user, instance, "delete") is False:
+        return
+    try:
+        check_dynamic_links(instance)
+    except LinkExistsError:
+        return
+    instance.delete()
 
 
 class LinkedDocumentsMixin:
@@ -344,15 +364,11 @@ class LinkedDocumentsMixin:
                 continue
 
             if remove_contact:
-                _clear_contact(instance)
+                _clear_contact(instance, urlconf)
             else:
                 _clear_reference(instance)
                 _clear_link_fields(instance, self.document_model, target_name)
             if delete:
-                try:
-                    check_dynamic_links(instance)
-                except LinkExistsError:
-                    continue
-                instance.delete()
+                delete_if_permitted(rules, request.user, instance)
 
         return Response(Envelope("success", "message"))

@@ -20,6 +20,8 @@ from tests_support.export import placeholder_export_field_info
 from tests_support.list_views import WidgetListView
 from tests_support.serializers import (
     AutoIncrementDocumentSerializer,
+    ContactHolderSerializer,
+    StrayContactSerializer,
     DynamicReferenceSerializer,
     FieldDocumentSerializer,
     PointingDocumentSerializer,
@@ -101,6 +103,34 @@ class PointingDocumentViewSet(DocumentViewSet):
     @staticmethod
     def has_object_rule(user, document, ptype):
         return document.owner_id == user.pk
+
+
+class ContactHolderViewSet(DocumentViewSet):
+    """Everyone reads and writes a holder; a locked one may not be deleted (PE-26)."""
+
+    access = Access.ruled()
+    serializer_class = ContactHolderSerializer
+    readable_fields = ContactHolderSerializer.Meta.fields
+    filterable_fields = ("name", "widget", "contact", "locked")
+    sortable_fields = ("name", "modified")
+
+    @staticmethod
+    def list_rule(user):
+        return None
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        if ptype == "delete":
+            return not document.locked
+        return True
+
+
+class StrayContactViewSet(DocumentViewSet):
+    access = Access.open(reason="A fixture row with no confidential fields.")
+    serializer_class = StrayContactSerializer
+    readable_fields = StrayContactSerializer.Meta.fields
+    filterable_fields = ("name", "pointer")
+    sortable_fields = ("name", "modified")
 
 
 class DynamicReferenceViewSet(DocumentViewSet):

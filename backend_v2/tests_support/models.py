@@ -270,3 +270,54 @@ class DynamicReference(BaseDocument):
     DYNAMIC_LINK_FIELDS = (("reference_doctype", "reference_name"),)
     reference_doctype = models.CharField(max_length=140)
     reference_name = models.CharField(max_length=140)
+
+
+class ContactHolder(BaseDocument):
+    """A document linking a Widget, with a `contact` field and its own `contacts` table,
+    as a deal has (CONTACTS milestone 0, PE-25); `locked` refuses its delete (PE-26)."""
+
+    DOCTYPE = "Foundation Contact Holder"
+    NAME_STRATEGY = Hash()
+    widget = models.ForeignKey(
+        Widget, on_delete=models.PROTECT, related_name="+", null=True, blank=True
+    )
+    contact = models.CharField(max_length=140, null=True, blank=True)
+    locked = models.BooleanField(default=False)
+
+
+class ContactHolderRow(BaseDocument):
+    DOCTYPE = "Foundation Contact Holder Row"
+    NAME_STRATEGY = Hash()
+    IS_CHILD_TABLE = True
+    CHILD_FIELDS = (
+        "name",
+        "owner",
+        "modified_by",
+        "creation",
+        "modified",
+        "idx",
+        "docstatus",
+        "_assign",
+        "_liked_by",
+        "_comments",
+        "_user_tags",
+        "holder",
+        "parentfield",
+        "parenttype",
+        "value",
+    )
+    holder = models.ForeignKey(ContactHolder, on_delete=models.CASCADE, related_name="contacts")
+    parentfield = models.CharField(max_length=140, default="contacts")
+    parenttype = models.CharField(max_length=140, default="Foundation Contact Holder")
+    value = models.CharField(max_length=140, blank=True, default="")
+
+
+class StrayContact(BaseDocument):
+    """Reaches a PointingDocument under the reverse name `contacts`, which is not that
+    document's table (CONTACTS milestone 0, PE-25)."""
+
+    DOCTYPE = "Foundation Stray Contact"
+    NAME_STRATEGY = Hash()
+    pointer = models.ForeignKey(
+        PointingDocument, on_delete=models.CASCADE, related_name="contacts"
+    )
