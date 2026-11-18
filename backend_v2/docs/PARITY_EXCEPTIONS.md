@@ -288,23 +288,26 @@ comparison skips that block.
   outside the resource's readable list keeps the answer within the fields it lists
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
-### PE-12b. Two `user_settings` crashes answer as errors
+### PE-12b. Three `user_settings` crashes answer as errors
 
-- **Status:** approved — decided by the supervisor on the owner's behalf (`temp` A-35, 18
-  Nov 2026; it only replaces a crash); to be built in CONFIGURATION milestone 5
-- **Where:** `POST /api/v1/user-settings/` (old `frappe.model.utils.user_settings.save`)
+- **Status:** approved — decided by the supervisor on the owner's behalf (`temp` A-35,
+  A-36, 18 Nov 2026; it only replaces a crash); built in `d46ab53`, `d8a85a7`
+- **Where:** `GET` and `POST /api/v1/user-settings/` (old
+  `frappe.model.utils.user_settings.get` and `.save`)
 - **Old backend:** a `user_settings` string that is not JSON, and a `doctype` longer than
-  140 characters, probably raise unhandled (`backend/crm_app/api/user_settings.py:37-56`,
-  the 140-character key column); not run
-- **backend_v2:** each answers 417 with a fixed sentence
+  140 characters on a save, probably raise unhandled
+  (`backend/crm_app/api/user_settings.py:37-56`, the 140-character key column; not run);
+  a missing `doctype` raises on the missing argument (`whitelist.py:75-92`)
+- **backend_v2:** each answers 417 with a fixed sentence: "User settings must be valid
+  JSON", "DocType name is too long" (on a save only; a read of a longer name answers
+  `"{}"`, as `backend/`), "DocType is required"
 - **Why:** replaces a crash with an error
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
 ### PE-14. A withheld doctype is not found by the metadata calls
 
 - **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-35, DECISIONS 42, 18 Nov 2026); to be built in CONFIGURATION
-  milestone 5
+  the owner (`temp` A-35, DECISIONS 42, 18 Nov 2026); built in `f6e6822`, `94d5c15`
 - **Where:** `GET /api/v1/meta/doctype/`, `meta/fields/`, `meta/sort-options/`,
   `meta/filterable-fields/`, `meta/group-by-fields/` (old `getdoctype`, `get_fields`,
   `sort_options`, `get_filterable_fields`, `get_group_by_fields`), for a withheld doctype
@@ -319,13 +322,14 @@ comparison skips that block.
 ### PE-15. A child table answers `getdoctype` and the layout calls only
 
 - **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-35, DECISIONS 42, 18 Nov 2026); to be built in CONFIGURATION
-  milestones 5 and 6
+  the owner (`temp` A-35, DECISIONS 42, 18 Nov 2026); `getdoctype`'s half built in
+  `f6e6822`, `94d5c15`; the layout calls come with CONFIGURATION milestone 6
 - **Where:** the metadata calls above, for a child table (CRM Dropdown Item, User Email,
   and later units' rows). Seen in `docs/http/07` 9.2, 9.3
 - **Old backend:** answers every metadata call for a child table
 - **backend_v2:** `getdoctype` answers a child table (`Grid.vue:545`,
-  `stores/meta.js:9-17`), and so will milestone 6's layout calls; `get_fields`,
+  `stores/meta.js:9-17`), and so will milestone 6's layout calls when they are built;
+  `get_fields`,
   `sort_options`, `get_filterable_fields` and `get_group_by_fields` answer 404.
   `API_CONTRACT.md:209` says 404 for every child table; the contract is the owner's to
   change and is not edited here
@@ -336,12 +340,13 @@ comparison skips that block.
 ### PE-16. Metadata answers list only the fields the caller may read
 
 - **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-35, DECISIONS 43, 18 Nov 2026); to be built in CONFIGURATION
-  milestone 5
+  the owner (`temp` A-35, DECISIONS 43, 18 Nov 2026); built in `f6e6822`, `94d5c15`
 - **Where:** `getdoctype`'s fields, `meta/fields/`, `meta/filterable-fields/`,
   `meta/group-by-fields/`, `meta/sort-options/`, and later `get_data`'s `fields` block
 - **Old backend:** lists every field name
-- **backend_v2:** metadata answers list only the fields the caller may read
+- **backend_v2:** metadata answers list only the fields the caller may read. The fields
+  that remain keep their original `idx`; gaps are allowed
+- **Why:** the answer describes what the caller's own documents contain
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
 ---
