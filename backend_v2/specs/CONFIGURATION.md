@@ -1,6 +1,6 @@
 # CONFIGURATION — CRM settings, email accounts, saved views, layouts and the list engine
 
-**Status: Ready for milestones 1-3 (milestone 3: addendum A-30) — rewritten 18 Nov 2026** from the spec check
+**Status: Ready for milestones 1-4 (addenda: milestone 3 A-30, milestone 4 A-33) — rewritten 18 Nov 2026** from the spec check
 (`tasks\CONFIGURATION_00_spec_check_verdict.md`, `temp` A-27); spec review A-28. **Approval is staged** (A-27, DECISIONS 30, flagged for the owner): the facts and
 the route map below cover the whole unit, but the spec review approves **milestones 1
 and 2 only**; each later milestone needs the decisions marked "open" in §6 settled and a
@@ -71,7 +71,7 @@ unit's own doctypes, and their real gate is SALES and ACTIVITIES (§9).
 - **Settings:** `crm_app/api/settings.py:70-156`, `api/exchange_rate.py`,
   `crm_app/integrations/http.py`, `management/commands/refresh_exchange_rates.py`,
   `crm_app/models/metadata.py:360-491` (FCRM Settings, dropdown items),
-  `frappe_platform/models.py:1440-1554` (Email Account, User Email),
+  `frappe_platform/models.py:1390-1557` (Email Account, User Email),
   `frappe_core/mail.py`, `frappe_core/field_security.py`
 - **Field metadata, layouts, views, the engine:** `frappe_core/api/doc.py`,
   `crm_app/api/doc.py`, `api/views.py`, `api/view_settings.py`, `api/fields_layout.py`,
@@ -269,36 +269,121 @@ Spec-review addendum: `temp` A-30 (DECISIONS 31-35).
 
 ### 4.4 Email Account and User Email (milestone 4)
 
-- Everyone reads an Email Account (the Profile picker lists them; upstream bug #17); the
-  manager pair creates, writes and deletes (`platform_docs.py:158-186`). `password` and
-  `api_secret` are sensitive and encrypted — in `backend_v2` with
-  `core.fields.EncryptedCharField`/`EncryptedTextField` and `SENSITIVE_FIELDS`
-  (AS_BUILT §2), so the model cannot be `Access.open`. The eleven restricted fields:
-  `smtp_server`, `smtp_port`, `email_server`, `incoming_port`, `login_id`, `domain`,
-  `api_key`, `frappe_mail_site`, `signature`, `no_smtp_authentication`,
-  `awaiting_password` (`frappe_platform/models.py:1465-1477`). `api_key` gets the same
-  reviewed guard exception as `access_key`.
-- **`create_email_account`** (`settings.py:70-156`): one `data` object (anything else
-  refuses "Invalid data"); "Email account name is required"; an unknown `service`
-  **answers the string** "Service not supported" (200); Frappe Mail takes `api_key`,
-  `api_secret`, `frappe_mail_site`, the others `password`; `append_to` is always CRM Lead;
-  the account is validated before it is saved (`validate_email_account`, the only caller,
-  `:149`), a rejected one leaves no row, any non-API exception from the mail library is a
-  417 with its text; answers the account's name.
-- **Validation** (`frappe_core/mail.py`): "Password is required or select Awaiting
-  Password", "SMTP Server is required", "Email Server is required", "Failed to create
-  email account: invalid credentials", "Could not connect to the mail server: <exc>";
-  the three escape hatches at `:179-226`; a 10-second timeout (`MAIL_CONNECT_TIMEOUT`,
-  upstream bug #15).
-- **Through the resource** (`EmailEdit.vue:200-207` uses `set_value`): a manager's create
-  or write is saved **without** that validation, service defaults or the name check, as
-  in `backend/`; and a `password` sent on update is **ignored** (200), because the field
-  is excluded from the serializer (`frappe_core/serializers.py:254`). Decision 4 settles
-  whether `POST /api/v1/email-accounts/` is served at all.
-- The frontend reads the list with `fields=["*"]` filtered `email_id not like %example%`
-  (`EmailAccountList.vue:66-72`), and the Profile picker `name`, `email_id` filtered on
+Spec-review addendum: `temp` A-33 (DECISIONS 36-39). Old model and link:
+`backend/frappe_platform/models.py:1390-1557`.
+
+- **Rules:** everyone reads an Email Account (the Profile picker lists them; upstream bug
+  #17); the manager pair or Administrator creates, writes and deletes
+  (`platform_docs.py:158-186`). Route `email-accounts/` (list, POST, `<name>/` GET, PATCH,
+  DELETE, rename) and `email-accounts/setup/` (`create_email_account`, an
+  `@action(detail=False)`; GET is 405 under PE-1). Naming
+  `FieldValue("email_account_name")`; default sort `-modified` (the account lookup and
+  the signature take `.first()`).
+- **Fields** (types, lengths and defaults as the old model): `password` and `api_secret`
+  are `EncryptedCharField(max_length=280)` (parity; an encrypted secret longer than about
+  143 bytes does not fit) and `SENSITIVE_FIELDS`: absent for everyone, Administrator
+  included, in the document and in `fields=["*"]`; 417 when named in `fields`, 400 when
+  filtered on, 403 from `value/`. The eleven restricted fields (`smtp_server`,
+  `smtp_port`, `email_server`, `incoming_port`, `login_id`, `domain`, `api_key`,
+  `frappe_mail_site`, `signature`, `no_smtp_authentication`, `awaiting_password`) are
+  present for Administrator and the manager pair and, for anyone else, absent (417 / 400
+  / 403 the same way). Nothing is masked or `null`. `email_id` is in `EMAIL_FIELDS`.
+  `api_key` gets its reviewed guard entry (decision 15). The model cannot be
+  `Access.open`.
+- **Through the resource** (decision 4, parity): `POST email-accounts/` is served for the
+  manager pair; a create or PATCH is saved **without** validation, service defaults or
+  the name check, as in `backend/`; a `password` or `api_secret` sent on update is
+  ignored with 200 (`frappe_core/serializers.py:253-257`). **Known difference from
+  upstream, parked for the owner (DECISIONS 37):** `EmailEdit.vue:104-118` sends
+  `password` with every save and upstream stores it; here, as in `backend/`, it is
+  discarded.
+- **Rename** keeps `email_account_name` at the old value, as `backend/`
+  (`frappe_core/rename.py:41-45`; `backend_v2/core/rename.py:14-20`). Upstream updates
+  the naming field (`frappe/model/rename_doc.py:319,323-328`). Parked for the owner
+  (DECISIONS 38); a test pins today's behaviour.
+- **`create_email_account`** (`backend/crm_app/api/settings.py`), checks in this order:
+  1. the role check: manager pair or Administrator, else 403 "Not permitted" (`:96`;
+     `crm_app/api/user.py:28-34`);
+  2. `data` must be an object, else 417 "Invalid data" (`:98-100`);
+  3. an unknown `service` answers the **string** "Service not supported", 200
+     (`:102-106`);
+  4. "Email account name is required" (`:133-134`);
+  5. the encryption key (`core/secrets.py`'s `ensure_key()` when `password` or
+     `api_secret` is non-empty): 417, no row, no connection (`:140-141`,
+     `test_email_account_setup.py:36-43`);
+  6. mail validation (`:148-153`);
+  7. the insert (`:155`); a duplicate name fails here, after validation, as 409
+     `DuplicateEntryError`.
+  Frappe Mail takes `api_key`, `api_secret`, `frappe_mail_site`, the others `password`;
+  `append_to` is always CRM Lead; every service fixes the hosts and the payload cannot
+  set the escape hatches. Booleans are `bool(value)`, so `"0"` is true (parity). Answers
+  the account's name.
+- **Validation** (`backend/frappe_core/mail.py:179-226`), in `core/mail.py` with
+  `smtp_settings`, `check_smtp`, `check_imap` (decision 7): `awaiting_password` returns
+  without checking; with no password and a server other than `127.0.0.1`/`localhost` it
+  refuses "Password is required or select Awaiting Password" when incoming is on, or
+  outgoing is on without `no_smtp_authentication`, and otherwise returns **without
+  connecting**; then SMTP when outgoing, IMAP when incoming and `use_imap` (always
+  `IMAP4_SSL` on 993, login `email_id`, host `email_server` else `smtp_server`).
+  `SMTPAuthenticationError` and any `imaplib.IMAP4.error`: "Failed to create email
+  account: invalid credentials"; `SMTPException`, `socket.timeout`, `gaierror`,
+  `OSError`: "Could not connect to the mail server: {0}"; anything else: its text; all
+  417. "SMTP Server is required", "Email Server is required". Ten seconds per
+  connection (`MAIL_CONNECT_TIMEOUT`, upstream bug #15). A Frappe Mail account with
+  either direction on is always refused (its service config has no password and no
+  server; the UI hides it); this is intended, not a bug to fix.
+- **How `core` reaches a saved account** (decision 7): `configuration/mail.py` exposes
+  `saved_outgoing_account(sender=None, reference_doctype=None)` (steps 1-3 of
+  `backend/crm_app/communication.py:400-440`, newest by `-modified`) and
+  `default_signature()`. `core.mail` reaches them through the setting
+  `MAIL_ACCOUNT_PROVIDER = "configuration.mail"` (a module path resolved with
+  `import_module`), with a system check that fails when the path does not resolve, so a
+  typo never falls back quietly to the config account. `core.mail` wraps both as
+  `find_outgoing_account(sender=None, reference_doctype=None)` (saved account, else the
+  config account) and `default_signature()`. An empty setting means the config account
+  only and no signature fallback.
+- **`open_backend`** gets its saved-account branch (old `communication.py:617-631`): a
+  saved account sends through `EmailBackend(**smtp_settings(account, <its password>),
+  timeout=MAIL_CONNECT_TIMEOUT)`, "what was checked is what sends"; the config account
+  keeps Django's own connection. `ConfigAccount` stays (section 8's replacement is
+  withdrawn).
+- **The signature fallback** (`backend/crm_app/api/misc.py:62-67`): the Email Account
+  with `default_outgoing=True, add_signature=True`, newest by `-modified`; it does not
+  require `enable_outgoing`; an empty signature on that row answers `None`.
+  `accounts.services.user_signature` calls `core.mail.default_signature()`.
+- **Several default accounts can coexist** (upstream un-defaults the others; `backend/`
+  does not): parity; the newest wins.
+- **User Email** (old `models.py:1495-1557`): a child table of User (`user_emails`),
+  `IS_CHILD_TABLE`, `CHILD_FIELDS` the standard stamps, `parent_user`, `parentfield`,
+  `parenttype`, `email_account`, `email_id`, `awaiting_password`, `enable_outgoing`,
+  `used_oauth`; FK to `accounts.User` with `related_name="user_emails"`; `email_account`
+  CASCADE; `FETCH_FROM` as old `:1505-1509`. `EmailAccount.save()` calls
+  `link_to_user()` after `super().save()`, a direct call, not a signal: `email_id`
+  trimmed, matched against `User.email` or `User.pk` case-insensitively; it updates the
+  user's existing row or appends one with `idx = count + 1`; an empty `email_id` does
+  nothing; a changed `email_id` leaves the previous user's row; a rename keeps the rows;
+  a delete removes them; a queryset `.update()` does not link.
+- **What `accounts` changes** (decision 8, one commit per file's concern):
+  `accounts/models.py` gains `PRIVILEGED_WRITE_FIELDS = ("user_emails",)` and
+  `PRIVILEGED_WRITE_ROLES = ("System Manager",)`; `accounts/serializers.py:73-86` drops
+  `user_emails` from `EMPTY_CHILD_KEYS`, declares the child table and adds it to
+  `Meta.fields`; `accounts/services.py:157-164` takes the signature fallback through
+  `core.mail.default_signature()`; `tests/test_user_access.py:166`
+  (`test_user_emails_is_an_empty_list_until_configuration`) is rewritten.
+- **Closed to a non-manager, each tested:** create, PATCH, DELETE: 403
+  (`platform_docs.py:174-186`); rename: 417 "You need write permission on Email Account
+  X to rename" (`client.py:490-491`); `setup/`: 403; `user_emails` on their own User:
+  dropped with 200 while the rest of the save applies (`test_user_emails.py:57-63`).
+- **The list the frontend reads:** `fields=["*"]` filtered `email_id not like %example%`
+  (`EmailAccountList.vue:66-72`), and the Profile picker's `name`, `email_id` filtered on
   `enable_outgoing` (`UserEmailSettings.vue:138-143`).
-- §8: User Email, the signature fallback, the carrier's saved-account steps.
+- **Tests:** `test_email_account_access.py` whole except `:206` (the legacy-rows
+  migration; `:183` is kept); `test_mail_validation.py` (its two endpoint cases moved to
+  the new validation path); `test_email_account_setup.py`; `test_user_emails.py`;
+  `test_phase5_async.py:377`. New: the signature fallback, `open_backend`'s branch (a
+  saved account does not use the settings connection), the 409, the role 403, rename
+  refused, rename keeping the naming field, the provider system check. No seeded Email
+  Account in dev data.
 
 ### 4.5 Field metadata (milestone 5)
 
@@ -410,8 +495,8 @@ what `backend/` tracks, decided at milestone 7 (decision 14).
 | 8 | Who edits `accounts` for §8 | decided: this unit, in milestone 4, one commit per file's concern |
 | 15 | Guard exceptions for `access_key`, `api_key` | decided: written, reviewed entries at the milestone that builds each (3, 4) |
 | 5 | The outbound HTTP helper before INTEGRATIONS | decided (A-30, DECISIONS 31): `backend/crm_app/integrations/http.py` ported whole as `core/http.py` (§4.3) |
-| 4 | `POST /api/v1/email-accounts/` served? A PATCH re-validates? | **open — before milestone 4** [default: parity — served, no re-validation, a new password ignored; ask first] |
-| 7 | Where mail validation lives; how `core/mail.py` reaches an Email Account | **open — before milestone 4** [default: a provider hook in `core`, as export's] |
+| 4 | `POST /api/v1/email-accounts/` served? A PATCH re-validates? | decided (A-33, DECISIONS 36): parity, served for the manager pair, no re-validation, a sent password ignored (section 4.4); the discarded password and the stale naming field after a rename are parked for the owner (DECISIONS 37, 38) |
+| 7 | Where mail validation lives; how `core/mail.py` reaches an Email Account | decided (A-33, DECISIONS 39): the validators in `core/mail.py`; saved accounts through `MAIL_ACCOUNT_PROVIDER = "configuration.mail"`, with a system check (section 4.4) |
 | 2, 9 | What "doctype exists" means; what a child table and a withheld doctype answer, per call; copying or regenerating `doctype_meta.json` and where its generator lives | **open — before milestone 5** [default: 404 for a withheld doctype (`API_CONTRACT.md:209`); child tables only where a screen needs them — `getdoctype`, the layout calls, `get_fields`, `user_settings`] |
 | 10 | Sensitive column names in field metadata | **open — before milestone 5** [default: left out] |
 | 3 | The saved-view rules (§4.7) | **open — before milestone 7** [default: the resource applies the same role rule as the dedicated call; the unchecked calls get the object rule; proposed parity exceptions] |
@@ -452,10 +537,11 @@ Moved here by ACCOUNTS' spec rewrite (`temp` A-21 D-D; flagged for the owner).
 - **`get_user_signature`'s fallback**: with no `email_signature`, the default outgoing
   Email Account's signature when `add_signature` is set (`backend/crm_app/api/misc.py:62-67`;
   `backend_v2/accounts/services.py`).
-- **The outgoing-account lookup**: add the Email Account steps of
-  `find_outgoing_account` (`backend/crm_app/communication.py:400-440`) to `core/mail.py`,
-  tried **before** the settings-configured account, and replace its `ConfigAccount` with
-  the unsaved `EmailAccount` the old backend builds (`:372-398`). Steps 1 and 2 are
+- **The outgoing-account lookup**: the saved Email Account steps of
+  `find_outgoing_account` (`backend/crm_app/communication.py:400-440`) are tried **before**
+  the settings-configured account, through `MAIL_ACCOUNT_PROVIDER` (section 4.4).
+  `ConfigAccount` stays: the earlier plan to replace it with an unsaved `EmailAccount` is
+  withdrawn (A-33), since `core` cannot build a `configuration` model. Steps 1 and 2 are
   reachable only from `email.make` (ACTIVITIES). Port `test_phase5_async.py:377` here;
   `test_mail_config_account.py:262` is ACTIVITIES'.
 - **`User.default_list_data`** (the User list view, old `:309-318`) — milestone 8.
@@ -471,7 +557,7 @@ Moved here by ACCOUNTS' spec rewrite (`temp` A-21 D-D; flagged for the owner).
 | **1. Desk plumbing** | `get_apps`, `current_site_info`, `boot_config`, `clear_demo_data`, `get_translations`; no model; the two `POSTHOG_*` settings | yes |
 | **2. Reference data and boot** | Country, Currency, Language, System Settings and their data migration; `FRAPPE_SYSDEFAULTS`; `get_context_for_dev` (re-creating a missing System Settings row); both onboarding calls; link search on Language, Currency and Country | yes |
 | **3. FCRM Settings** | FCRM Settings (16 fields), CRM Dropdown Item and its standard rows, `core/http.py`, `get_exchange_rate`, `ENABLE_EXCHANGE_RATE_API`; PE-10 to PE-12 | yes (A-30) |
-| 4. Email Account | Email Account, User Email, `create_email_account`, validation, rename, §8 | once decisions 4, 7 are taken; pytest only |
+| **4. Email Account** | Email Account, User Email, `create_email_account` (`setup/`), validation in `core/mail.py`, `MAIL_ACCOUNT_PROVIDER`, `open_backend`'s saved-account branch, the signature fallback, rename, section 8 | yes (A-33); pytest only |
 | 5. Field metadata | the metadata file and generator, the four field helpers, `getdoctype`, `user_settings`, export's provider | on this unit's own doctypes and `tests_support` |
 | 6. Layouts, scripts, quick filters | CRM Fields Layout and its three calls, CRM Form Script, CRM Global Settings, the quick-filter calls, default seeds, and the operator command that restores standard rows (`seed_defaults --force`, which calls `add_standard_dropdown_items(force=True)`) | partly; content cases name Lead or Task |
 | 7. Saved views | CRM View Settings, the eight calls, `get_views` | rules yes; default columns need a list definition |
