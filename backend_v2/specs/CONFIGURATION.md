@@ -656,23 +656,32 @@ this section "the read rule" and "the write rule" are the resource's.
   doctype, nothing. At milestone 7 no ViewSet names a class, so every served doctype
   answers the fallback. The saved-view calls' kanban column lookup reads the metadata
   file (`view_settings.py:87-103`): a Link column's values through the target's list
-  rule (`core.resources.rules_for(target)`), ordered by `modified`, nothing when the
-  target has no rules; a Select's options; twinned on a `tests_support` model with a
-  Select field.
+  rule, ordered by `modified`, and nothing when no resource serves the target (the
+  routed rule map, not `rules_for`'s `ROW_RULES` fallback); a Select's options. A
+  `column_field` the caller may not read gives no columns (PE-16). The tests use CRM
+  Fields Layout's `type` (a Select), a Link to User, and Version (withheld).
+- **Crashes become errors (PE-12d):** besides the cases above, a view that is not an
+  object, `rows` or `columns` that is not a list, a row that is not a fieldname, a
+  `doctype` or `type` that is not text, and `create` with no `label` are 417 with a fixed
+  sentence; in the kanban refresh a stored `kanban_columns` that is not a list counts as
+  none and an entry that is not an object is skipped. A value longer than its column
+  stays as `backend/` (not in the PE).
 - **Version history:** no `TRACKED_FIELDS` on CRM View Settings, as `backend/` pins on
   purpose (`backend/tests/test_version_retention.py:97-107`, `crm_app/tasks.py:75-85`);
   that test is ported as a guard (decision 14). `clear_old_versions` already prunes its
   versions (`backend_v2/core/tasks.py`).
-- **Gating.** Now: `test_phase4_metadata.py:213`, `:236`, `:551`, `:573`, `:584`, `:599`,
-  `:616`, `:626`, `:640`, `:681`, `:689`, `:699`, `:778`, `:792`, `:804`, `:817`;
-  `test_version_retention.py:97`; `test_permissions.py:777`; new tests for PE-19, PE-20,
-  PE-21 and PE-12d, the resource create's `user`, the integer `name`, and the two parity
-  facts above. An old case that asserts what PE-19 to PE-21 change is rewritten, and the
-  brief names each. `.http` `07`: 0.4-0.11, 3.13-3.17, 3.19, 3.20, 4.1-4.3, 4.5, 8.2,
-  8.8; 3.1's two default-column checks split into a block waiting for SALES, and then
-  3.1-3.3, 3.5-3.12, 3.18 and 8.1 run too. Waiting for SALES or milestone 8:
-  `test_phase4_metadata.py:562`, `:654`, `:223`, `:900-940`; `.http` 3.4, 4.4, 4.6-4.9,
-  8.3, 8.4; `test_kanban_defaults.py`, `test_kanban_counts.py`.
+- **Gating.** Now: `test_phase4_metadata.py:213`, `:236`, `:573`, `:584`, `:599`
+  (rewritten for PE-20), `:616`, `:626`, `:640`, `:654` (twinned on a Link to User),
+  `:681`, `:689`, `:699`, `:778`, `:792`, `:804`, `:817`; `test_version_retention.py:97`
+  (a guard); `:551` (the calls are registered) is covered by
+  `tests/guards/test_route_map.py`, and `test_permissions.py:777` (the doctype has a row
+  rule) by `tests/guards/test_resource_access.py`; new tests for PE-19, PE-20, PE-21 and
+  PE-12d, the resource create's `user`, the integer `name`, and the two parity facts
+  above. `.http` `07`: 0.4-0.11, 3.1-3.3, 3.5-3.20, 4.1-4.5, 4.9, 8.1-8.3, 8.8 run;
+  3.1's and 4.4's checks of CRM Lead's default columns move to 3.1a and 4.4a, which wait
+  for SALES. Waiting for SALES or milestone 8: `test_phase4_metadata.py:562`, `:223`,
+  `:900-940`; `.http` 3.1a, 3.4, 4.4a, 4.6-4.8, 8.4; `test_kanban_defaults.py`,
+  `test_kanban_counts.py`.
 
 ### 4.8 The list engine (milestone 8)
 

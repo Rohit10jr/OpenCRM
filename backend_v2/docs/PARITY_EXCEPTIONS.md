@@ -350,8 +350,9 @@ comparison skips that block.
   the owner (`temp` A-35, DECISIONS 43, 18 Nov 2026); built in `f6e6822`, `94d5c15`
 - **Where:** `getdoctype`'s fields, `meta/fields/`, `meta/filterable-fields/`,
   `meta/group-by-fields/`, `meta/sort-options/`; with milestone 6, the layout and
-  quick-filter calls (the Required Fields section and the default layout included); and
-  later `get_data`'s `fields` block
+  quick-filter calls (the Required Fields section and the default layout included); with
+  milestone 7, a saved kanban's default columns (a `column_field` the caller may not
+  read gives none); and later `get_data`'s `fields` block
 - **Old backend:** lists every field name
 - **backend_v2:** metadata answers list only the fields the caller may read. The fields
   that remain keep their original `idx`; gaps are allowed
@@ -454,20 +455,31 @@ comparison skips that block.
 ### PE-12d. Saved-view crashes answer as errors
 
 - **Status:** approved — decided by the supervisor on the owner's behalf (`temp` A-39,
-  18 Nov 2026; it only replaces a crash); built in `c590ac3`, `b744875`, `f7c4ea5`, `8f5c569`
-- **Where:** `create-view/`, `standard-view/`, `update-view/` and `set-as-default/` under
-  `/api/v1/view-settings/`, the resource's create and PATCH, and `GET /api/v1/views/`
+  18 Nov 2026; extended by A-43, 19 Nov 2026; it only replaces a crash); built in
+  `c590ac3`, `b744875`, `f7c4ea5`, `8f5c569`, `85374af`
+- **Where:** `create-view/`, `standard-view/`, `update-view/`, `set-as-default/` and
+  `<name>/kanban-columns/` under `/api/v1/view-settings/`, the resource's create and
+  PATCH, and `GET /api/v1/views/`
 - **Old backend:** `create` or `create_or_update_standard_view` without a `doctype`
   raises building the route name (`backend/crm_app/api/view_settings.py:56-62`);
   `get_views` without a `doctype` raises on the missing argument
   (`backend/crm_app/api/views.py:13`, `frappe_core/whitelist.py:75-92`); `update`
   and `set_as_default` with a name that is not an integer raise in `filter(pk=…)`
-  (`:176`, `:261`); a JSON column written through the resource that is not valid JSON is
-  stored as written
-- **backend_v2:** no `doctype` is 417 "DocType is required"; a name that is not an
-  integer is 404 "CRM View Settings X not found"; a resource write of `filters`,
-  `columns`, `rows`, `kanban_columns` or `kanban_fields` that is not valid JSON is 417
-  "<Label> must be valid JSON" (for example "Kanban Columns must be valid JSON")
+  (`:176`, `:261`); a view that is not an object, `rows` or `columns` that is not a
+  list, a row that is not a fieldname, a `doctype` or `type` that is not text, and
+  `create` with no `label` raise (`:109-135`, `:150-167`); the kanban refresh raises on a
+  stored `kanban_columns` that is not a list of objects (`:339-343`); a JSON column
+  written through the resource that is not valid JSON is stored as written
+- **backend_v2:** no `doctype`, or one that is not text, is 417 "DocType is required";
+  a name that is not an integer is 404 "CRM View Settings X not found"; a view that is
+  not an object is 417 "View must be an object"; `rows` or `columns` that is not a list
+  is 417 "Rows must be a list" or "Columns must be a list"; a row that is not a
+  fieldname is 417 "Rows must be fieldnames"; a `type` that is not text is 417 "Type
+  must be text"; `create` with no `label` is 417 "Label is required"; in the kanban
+  refresh, a stored `kanban_columns` that is not a list counts as none and an entry that
+  is not an object is skipped; a resource write of `filters`, `columns`, `rows`,
+  `kanban_columns` or `kanban_fields` that is not valid JSON is 417 "<Label> must be
+  valid JSON" (for example "Kanban Columns must be valid JSON")
 - **Why:** replaces a crash with an error
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
