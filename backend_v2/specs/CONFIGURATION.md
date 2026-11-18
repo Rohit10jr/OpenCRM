@@ -551,7 +551,8 @@ Spec-review addendum: `temp` A-37 (DECISIONS 44-47).
   the table covers ten doctypes of six units. Entries are built from the model's
   concrete fields and `verbose_name`, not from the metadata file: `{label, fieldname,
   fieldtype, options}`; `converted` dropped for CRM Lead; a blank first option only when a
-  Select has none (`:190-192`); `cached` ignored. A `json` entry that is not a string is
+  Select has none (`:190-192`); `cached` ignored. A `json` stored as a string is parsed
+  (`:171-172`), and one that does not parse to a list counts as no entries. A `json` entry that is not a string is
   skipped on read (PE-12c; in `backend/` it fails the call for every later caller,
   `:173-177`). Stored names are matched against model fields, never used in a query as
   they are. `update_quick_filters` answers `None`; `old_filters` is ignored (Property
