@@ -773,6 +773,19 @@ class CRMViewSettings(AutoIncrementDocument):
         ).first()
 
     @classmethod
+    def listed_for(cls, user, rule, doctype) -> list[dict]:
+        """`get_views`' rows: under the read rule `rule`, the ownerless views and the
+        caller's own (Administrator and System Manager too), of `doctype` when it is
+        truthy; newest first; as `.values()` gives them, as `backend/` answers."""
+        queryset = cls._default_manager.all()
+        if rule is not None:
+            queryset = queryset.filter(rule)
+        queryset = queryset.filter(models.Q(user__isnull=True) | models.Q(user=user))
+        if doctype:
+            queryset = queryset.filter(dt=doctype)
+        return list(queryset.values())
+
+    @classmethod
     def mark_default(cls, pk) -> None:
         """A plain update, as the old `filter(pk=name).update(is_default=True)`."""
         cls._default_manager.filter(pk=pk).update(is_default=True)

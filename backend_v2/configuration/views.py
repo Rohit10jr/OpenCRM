@@ -637,6 +637,15 @@ class CRMViewSettingsViewSet(DocumentViewSet):
         return Response(Envelope(answer, "message"))
 
 
+class SavedViewsView(BaseAPIView):
+    """`crm.api.views.get_views`, for any signed-in caller (configuration/view_settings.py).
+    GET, as the route map says; the `.http` generator rewrites the old POST."""
+
+    def get(self, request):
+        inputs = self.get_inputs(request)
+        return Response(view_settings.get_views(inputs.get("doctype"), user=request.user))
+
+
 class QuickFiltersView(BaseAPIView):
     """`crm.api.doc.get_quick_filters`, for any signed-in caller
     (configuration/quick_filters.py)."""

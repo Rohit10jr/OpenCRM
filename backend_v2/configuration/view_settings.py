@@ -24,6 +24,7 @@ from configuration.serializers import CRMViewSettingsSerializer
 from core.doctypes import declared_doctypes
 from core.exceptions import DoesNotExistError, PermissionError, ValidationError
 from core.inputs import parse_json_param
+from core.query import wire_json_text
 from core.resources import rules_for
 
 VIEW_SETTINGS = "CRM View Settings"
@@ -238,6 +239,16 @@ def create_or_update_standard_view(view, *, user) -> dict:
     doc.is_default = bool(parsed.get("is_default") or False)
     doc.save(user=user)
     return serialised(doc, user)
+
+
+def get_views(doctype, *, user) -> list[dict]:
+    """`crm.api.views.get_views` (old `crm_app/api/views.py:12-36`): the read rule, then
+    ownerless views and the caller's own, of `doctype` when it is truthy (the store sends
+    `""` for every doctype). No `doctype` at all is 417 (PE-12d)."""
+    if doctype is None:
+        raise ValidationError("DocType is required")
+    rows = CRMViewSettings.listed_for(user, read_rule(user), doctype)
+    return [wire_json_text(row) for row in rows]
 
 
 def _named_or_404(name):

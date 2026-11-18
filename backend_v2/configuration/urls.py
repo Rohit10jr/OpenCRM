@@ -20,6 +20,7 @@ from configuration.views import (
     LanguageViewSet,
     OnboardingStatusView,
     QuickFiltersView,
+    SavedViewsView,
     SiteInfoView,
     SortOptionsView,
     SystemSettingsViewSet,
@@ -62,6 +63,7 @@ urlpatterns = [
         UpdateQuickFiltersView.as_view(),
         name="meta-quick-filters-update",
     ),
+    re_path(r"^views/?$", SavedViewsView.as_view(), name="views"),
     re_path(
         r"^onboarding/status/?$",
         OnboardingStatusView.as_view(),

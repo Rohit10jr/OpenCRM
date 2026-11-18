@@ -198,7 +198,7 @@ per-view calls that require it.
 | `crm.api.exchange_rate.get_exchange_rate` | GET/POST | auth | `crm_app/api/exchange_rate.py:get_exchange_rate` | `GET /api/v1/exchange-rate/` | configuration | built |
 | `crm.api.get_translations` | GET/POST | guest | `crm_app/api/misc.py:get_translations` | `GET /api/v1/translations/` | configuration | built |
 | `crm.api.settings.create_email_account` | GET/POST | auth | `crm_app/api/settings.py:create_email_account` | `POST /api/v1/email-accounts/setup/` | configuration | built |
-| `crm.api.views.get_views` | GET/POST | auth | `crm_app/api/views.py:get_views` | `GET /api/v1/views/` (`doctype` kept as input) | configuration | — |
+| `crm.api.views.get_views` | GET/POST | auth | `crm_app/api/views.py:get_views` | `GET /api/v1/views/` (`doctype` kept as input) | configuration | built |
 | `crm.demo.api.clear_demo_data` | POST | auth | `crm_app/api/demo.py:clear_demo_data` | `POST /api/v1/demo/clear/` | configuration | built |
 | `crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout` | GET/POST | auth | `crm_app/api/fields_layout.py:get_fields_layout` | `GET /api/v1/fields-layouts/layout/` (`doctype` kept as input) | configuration | built |
 | `crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections` | GET/POST | auth | `crm_app/api/fields_layout.py:get_sidepanel_sections` | `GET /api/v1/fields-layouts/sidepanel-sections/` (`doctype` kept as input) | configuration | built |
