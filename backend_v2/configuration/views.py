@@ -30,6 +30,9 @@ from configuration.serializers import (
     DOCUMENT_FIELDS,
     FCRM_SETTINGS_FIELDS,
     CountrySerializer,
+    CRMFieldsLayoutSerializer,
+    CRMFormScriptSerializer,
+    CRMGlobalSettingsSerializer,
     CurrencySerializer,
     EmailAccountSerializer,
     FCRMSettingsSerializer,
@@ -445,3 +448,71 @@ class GroupByFieldsView(_FieldHelperView):
     """`crm.api.doc.get_group_by_fields`."""
 
     helper = staticmethod(field_helpers.get_group_by_fields)
+
+
+def _is_admin_or_manager(user) -> bool:
+    return (
+        user.name == ADMINISTRATOR
+        or user.has_role(ROLE_SYSTEM_MANAGER)
+        or user.has_role(ROLE_SALES_MANAGER)
+    )
+
+
+class CRMFieldsLayoutViewSet(DocumentViewSet):
+    """Everyone reads a layout; Administrator or the manager pair creates, writes and
+    deletes one (old `metadata_docs.py:126-132`). A layout's field lists hold fieldnames
+    (PE-18). Every column readable, filterable and sortable."""
+
+    access = Access.ruled()
+    serializer_class = CRMFieldsLayoutSerializer
+    readable_fields = CRMFieldsLayoutSerializer.Meta.fields
+    filterable_fields = CRMFieldsLayoutSerializer.Meta.fields
+    sortable_fields = CRMFieldsLayoutSerializer.Meta.fields
+    searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        return None
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        if ptype in ("read", "select"):
+            return True
+        return _is_admin_or_manager(user)
+
+
+class CRMFormScriptViewSet(DocumentViewSet):
+    """Everyone lists and reads a form script; System Manager or Administrator creates,
+    changes and deletes one (PE-17). Every column readable, filterable and sortable."""
+
+    access = Access.ruled()
+    serializer_class = CRMFormScriptSerializer
+    readable_fields = CRMFormScriptSerializer.Meta.fields
+    filterable_fields = CRMFormScriptSerializer.Meta.fields
+    sortable_fields = CRMFormScriptSerializer.Meta.fields
+    searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        return None
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        if ptype in ("read", "select"):
+            return True
+        return _is_system_admin(user)
+
+
+class CRMGlobalSettingsViewSet(DocumentViewSet):
+    """Open to every role, as upstream's role table (`crm_global_settings.json`). Every
+    column readable, filterable and sortable."""
+
+    access = Access.open(
+        reason="Holds only a doctype, a type and a JSON list of fieldnames; upstream "
+        "grants all three roles full access, deliberately (test_route_surface.py:77-80)."
+    )
+    serializer_class = CRMGlobalSettingsSerializer
+    readable_fields = CRMGlobalSettingsSerializer.Meta.fields
+    filterable_fields = CRMGlobalSettingsSerializer.Meta.fields
+    sortable_fields = CRMGlobalSettingsSerializer.Meta.fields
+    searchable_fields = ()

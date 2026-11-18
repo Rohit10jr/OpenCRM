@@ -5,6 +5,9 @@ from configuration.views import (
     BootView,
     ClearDemoDataView,
     CountryViewSet,
+    CRMFieldsLayoutViewSet,
+    CRMFormScriptViewSet,
+    CRMGlobalSettingsViewSet,
     CurrencyViewSet,
     DocTypeMetaView,
     EmailAccountViewSet,
@@ -69,4 +72,7 @@ router.register("countries", CountryViewSet, basename="country")
 router.register("currencies", CurrencyViewSet, basename="currency")
 router.register("email-accounts", EmailAccountViewSet, basename="email-account")
 router.register("languages", LanguageViewSet, basename="language")
+router.register("fields-layouts", CRMFieldsLayoutViewSet, basename="fields-layout")
+router.register("form-scripts", CRMFormScriptViewSet, basename="form-script")
+router.register("global-settings", CRMGlobalSettingsViewSet, basename="global-setting")
 urlpatterns += router.urls
