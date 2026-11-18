@@ -282,12 +282,13 @@ Spec-review addendum: `temp` A-33 (DECISIONS 36-39). Old model and link:
 - **Fields** (types, lengths and defaults as the old model): `password` and `api_secret`
   are `EncryptedCharField(max_length=280)` (parity; an encrypted secret longer than about
   143 bytes does not fit) and `SENSITIVE_FIELDS`: absent for everyone, Administrator
-  included, in the document and in `fields=["*"]`; 417 when named in `fields`, 400 when
-  filtered on, 403 from `value/`. The eleven restricted fields (`smtp_server`,
+  included, in the document and in `fields=["*"]`; 417 when named in `fields` or in
+  `value/`'s `fieldname` (`value/` goes through the list query, as the old
+  `get_value`, `crm_app/api/client.py:243`), 400 when filtered on. The eleven restricted fields (`smtp_server`,
   `smtp_port`, `email_server`, `incoming_port`, `login_id`, `domain`, `api_key`,
   `frappe_mail_site`, `signature`, `no_smtp_authentication`, `awaiting_password`) are
   present for Administrator and the manager pair and, for anyone else, absent (417 / 400
-  / 403 the same way). Nothing is masked or `null`. `email_id` is in `EMAIL_FIELDS`.
+  the same way). Nothing is masked or `null`. `email_id` is in `EMAIL_FIELDS`.
   `api_key` gets its reviewed guard entry (decision 15). The model cannot be
   `Access.open`.
 - **Through the resource** (decision 4, parity): `POST email-accounts/` is served for the

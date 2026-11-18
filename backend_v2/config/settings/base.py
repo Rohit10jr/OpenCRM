@@ -236,5 +236,5 @@ CHANNEL_LAYERS = {
 }
 
 # The module that finds saved Email Accounts for core.mail (spec CONFIGURATION 4.4); empty
-# means the settings-configured account only. Set once configuration's Email Account exists.
-MAIL_ACCOUNT_PROVIDER = ""
+# means the settings-configured account only.
+MAIL_ACCOUNT_PROVIDER = "configuration.mail"
