@@ -65,6 +65,18 @@ def test_a_sales_users_pick_is_dropped_as_upstream_resets_it(auth_api, alice, gm
     assert alice.first_name == "Alicia"
 
 
+def test_a_sales_managers_pick_is_dropped_too(api_as, make_user, gmail):
+    """New (A-34 finding 2): System Manager only, not the manager pair, writes
+    `user_emails` (`User.PRIVILEGED_WRITE_ROLES`); the rest of the save applies."""
+    manager = make_user("mgr@example.com", roles=["Sales Manager", "Sales User"])
+    client = api_as(manager)
+    response = set_rows(client, manager.name, [{"email_account": gmail.pk}], first_name="Mgr")
+    assert response.status_code == 200, response.content[:300]
+    assert rows_of(client, manager.name) == []
+    manager.refresh_from_db()
+    assert manager.first_name == "Mgr"
+
+
 def test_an_account_with_a_users_address_links_itself_to_that_user(administrator, alice):
     account = make_account(
         administrator, email_account_name="ZZ Alice", email_id=alice.name, enable_outgoing=True

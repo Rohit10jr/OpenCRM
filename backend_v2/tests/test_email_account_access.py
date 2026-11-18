@@ -160,3 +160,40 @@ def test_the_mail_layer_gets_the_real_password(account, monkeypatch):
     mail.validate_email_account(account)
 
     assert seen["password"] == SECRET
+
+
+# --- new: every restricted field through every door (A-34 finding 3) ---------------------
+
+RESTRICTED = (
+    "smtp_server",
+    "smtp_port",
+    "email_server",
+    "incoming_port",
+    "login_id",
+    "domain",
+    "api_key",
+    "frappe_mail_site",
+    "signature",
+    "no_smtp_authentication",
+    "awaiting_password",
+)
+
+
+@pytest.mark.parametrize("field", RESTRICTED)
+def test_a_non_manager_cannot_reach_a_restricted_field_by_any_door(alice, account, api_as, field):
+    client = api_as(alice)
+    assert field not in client.get(f"{ACCOUNTS}{account.name}/").json()["message"]
+    rows = client.get(ACCOUNTS, {"fields": '["*"]'}).json()["message"]
+    assert field not in rows[0]
+    assert client.get(ACCOUNTS, {"fields": f'["{field}"]'}).status_code == 417
+    assert client.get(ACCOUNTS, {"filters": f'[["{field}","is","set"]]'}).status_code == 400
+    assert client.get(ACCOUNTS, {"order_by": f"{field} asc"}).status_code in (400, 417)
+    value = client.get(f"{ACCOUNTS}value/", {"fieldname": field, "filters": '{"name": "Support"}'})
+    assert value.status_code == 417
+
+
+@pytest.mark.parametrize("field", RESTRICTED)
+def test_a_manager_reaches_every_restricted_field(manager, account, api_as, field):
+    client = api_as(manager)
+    assert field in client.get(f"{ACCOUNTS}{account.name}/").json()["message"]
+    assert client.get(ACCOUNTS, {"fields": f'["{field}"]'}).status_code == 200
