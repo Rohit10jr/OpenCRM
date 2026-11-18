@@ -260,6 +260,19 @@ comparison skips that block.
 - **Why:** each replaces a 500 with the answer the old code gives the neighbouring case
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
+### PE-12a. A saved account without authentication sends without reading its password
+
+- **Status:** approved — decided by the supervisor on the owner's behalf (`temp` A-34, 18
+  Nov 2026; it only replaces an error); built in `8a2cbf1`
+- **Where:** system and outgoing mail through a saved Email Account (`core.mail.open_backend`)
+- **Old backend:** reads and decrypts the stored password for every saved account before
+  sending (`backend/crm_app/communication.py:624`), so an account with
+  `no_smtp_authentication` and a stored password could not send without an encryption key
+- **backend_v2:** the password is decrypted only when the account authenticates
+  (`smtp_settings`); an account with `no_smtp_authentication` sends without reading it
+- **Why:** an account that sends no credentials has no use for them; this replaces an error
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
 ### PE-13. A settings record's `value/` refuses a field it does not list
 
 - **Status:** approved — decided by the supervisor on the owner's behalf (`temp` A-31, 18
