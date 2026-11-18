@@ -219,40 +219,44 @@ comparison skips that block.
 ### PE-10. `get_exchange_rate` accepts only a known date and currency shape
 
 - **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-30, DECISIONS 33, 18 Nov 2026); to be built in CONFIGURATION
-  milestone 3
+  the owner (`temp` A-30, DECISIONS 33, 18 Nov 2026); built in `c072147`, `9aa9a82`
 - **Where:** `GET /api/v1/exchange-rate/` (old `crm.api.exchange_rate.get_exchange_rate`)
-- `get_exchange_rate` accepts `date` only as `latest` or an ISO date and currencies only
-  as three-letter codes; the old backend passes them through.
+- `get_exchange_rate` accepts `date` only as `latest` or an ISO date (ASCII digits, a real
+  calendar date) and currencies only as three-letter codes (ASCII letters, either case);
+  the old backend passes them through. A lowercase code is used as given, as the old
+  backend uses it, and cached under its own key.
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
 ### PE-11. A settings record has no list route
 
 - **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-30, DECISIONS 35, 18 Nov 2026); to be built in CONFIGURATION
-  milestone 3
+  the owner (`temp` A-30, DECISIONS 35, 18 Nov 2026); built in `ff874c1`, with the
+  `.http` generator's handling in `e0656cd`
 - **Where:** `GET /api/v1/crm-settings/` (old `GET /api/resource/FCRM Settings` with
   `fields` or `filters`). Seen in `docs/http/12_settings_singletons.http` 1.3-1.5 and
   `backend/tests/test_settings_access.py` `test_the_key_cannot_be_probed_by_filtering`
 - **Old backend:** answers list-shaped reads of a settings record
-- **backend_v2:** a settings record has no list route; list-shaped reads of it are not
-  served. `12` 1.3 maps to 1.2's check on `GET crm-settings/`, 1.4 to 1.11
-  (`value/?field=access_key`); 1.5 and the filter test retire
+- **backend_v2:** a settings record has no list route. `GET crm-settings/` answers the
+  record itself, ignoring `fields` and `filters`. In the `.http` copy, `12` 1.3-1.5 are
+  marked `# @retired PE-11`: 1.3 is covered by 1.2, 1.4 by 1.11
+  (`value/?field=access_key`), 1.5 by no other block; the filter test is not ported
 - **Why:** the settled singleton routes (S25 (3)) serve one record at the resource root,
   with GET, PATCH and `value/`
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
-### PE-12. Two exchange-rate crashes answer as ordinary results
+### PE-12. Exchange-rate crashes and malformed answers answer as failed fetches
 
 - **Status:** proposed — decided by the supervisor on the owner's behalf (`temp` A-30,
-  DECISIONS 34, 18 Nov 2026; it only replaces a 500); to be built in CONFIGURATION
-  milestone 3
+  DECISIONS 34, 18 Nov 2026; it only replaces a 500); built in `c072147`, `9aa9a82`
 - **Where:** `GET /api/v1/exchange-rate/` (old `crm.api.exchange_rate.get_exchange_rate`)
 - **Old backend:** a missing `from_currency` or `to_currency` raises TypeError in the
   dispatch (500); a transport error or malformed JSON from a paid provider is not caught
-  (`backend/crm_app/api/exchange_rate.py:168-186`, 500)
+  (`backend/crm_app/api/exchange_rate.py:168-186`, 500); any JSON value a provider
+  answers is cached and returned as the rate
 - **backend_v2:** a missing currency answers `1`, as an empty one does (`:56`); the paid
-  providers' failure falls through to the generic 417 sentence
+  providers' failure falls through to the generic 417 sentence; a provider's answer
+  counts only as a positive number, and anything else is a failed fetch (not cached, and
+  a free provider falls back to the other)
 - **Why:** each replaces a 500 with the answer the old code gives the neighbouring case
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 

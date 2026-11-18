@@ -248,10 +248,11 @@ Spec-review addendum: `temp` A-30 (DECISIONS 31-35).
   `frontend/src` file calls it; its callers are the deal and organization saves and
   `refresh_exchange_rates` (SALES).
   - PE-10 (proposed): `get_exchange_rate` accepts `date` only as `latest` or an ISO date
-    and currencies only as three-letter codes; the old backend passes them through.
-  - Two 500s become errors (`PARITY_EXCEPTIONS.md`): a missing `from_currency` or
-    `to_currency` answers `1`, as an empty one does (`:56`); a transport error or
-    malformed JSON from a paid provider falls through to the generic 417 (`:168-186`).
+    (ASCII digits, a real date) and currencies only as three-letter codes (ASCII
+    letters, either case, used as given); the old backend passes them through.
+  - PE-12: a missing `from_currency` or `to_currency` answers `1`, as an empty one does
+    (`:56`); a transport error or malformed JSON from a paid provider falls through to
+    the generic 417 (`:168-186`); a provider's answer counts only as a positive number.
 - **Tests:** `test_settings_access.py:126-175` (`:177-190` is INTEGRATIONS'); fixtures
   that create the row (`test_settings_access.py:60-65`, `test_dropdown_items.py:71,81`,
   `test_singleton_names.py:29,37,56`) update the migrated row instead;
