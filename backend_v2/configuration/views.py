@@ -8,6 +8,7 @@ import json
 
 from django.conf import settings
 from django.db.models import Q
+from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
@@ -17,7 +18,7 @@ from accounts.roles import (
     ROLE_SALES_USER,
     ROLE_SYSTEM_MANAGER,
 )
-from configuration import exchange_rate
+from configuration import email_accounts, exchange_rate
 from configuration.models import SystemSettings
 from configuration.serializers import (
     DOCUMENT_FIELDS,
@@ -31,9 +32,11 @@ from configuration.serializers import (
 )
 from core.access import Access
 from core.exceptions import PermissionError, ValidationError
+from core.inputs import build_payload
 from core.mixins import LinkSearchMixin
 from core.mixins.rename import RenameMixin
 from core.query import parse_json_param
+from core.renderers import Envelope
 from core.views import BaseAPIView, DocumentViewSet, SingletonViewSet
 
 #: The CRM's `add_to_apps_screen` entry (`crm/hooks.py:15-23`), verbatim.
@@ -340,3 +343,16 @@ class EmailAccountViewSet(RenameMixin, DocumentViewSet):
         if user.name == ADMINISTRATOR or ptype == "read":
             return True
         return user.has_role(ROLE_SYSTEM_MANAGER) or user.has_role(ROLE_SALES_MANAGER)
+
+    @action(detail=False, methods=("post",), url_path="setup")
+    def setup(self, request):
+        """`crm.api.settings.create_email_account`: the service's settings, the
+        credentials checked before the row exists (configuration/email_accounts.py)."""
+        inputs = build_payload(request)
+        return Response(
+            Envelope(
+                email_accounts.create_email_account(inputs.get("data"), user=request.user),
+                "message",
+            )
+        )
+
