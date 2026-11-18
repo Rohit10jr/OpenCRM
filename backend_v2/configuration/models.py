@@ -771,3 +771,15 @@ class CRMViewSettings(AutoIncrementDocument):
         return cls._default_manager.filter(
             dt=dt, type=type, is_standard=True, user=user
         ).first()
+
+    @classmethod
+    def mark_default(cls, pk) -> None:
+        """A plain update, as the old `filter(pk=name).update(is_default=True)`."""
+        cls._default_manager.filter(pk=pk).update(is_default=True)
+
+    @classmethod
+    def clear_other_defaults(cls, user, keep) -> None:
+        """One default per user: the caller's other defaults are cleared, nobody else's."""
+        cls._default_manager.filter(user=user, is_default=True).exclude(pk=keep).update(
+            is_default=False
+        )

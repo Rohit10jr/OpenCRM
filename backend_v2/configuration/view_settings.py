@@ -238,3 +238,80 @@ def create_or_update_standard_view(view, *, user) -> dict:
     doc.is_default = bool(parsed.get("is_default") or False)
     doc.save(user=user)
     return serialised(doc, user)
+
+
+def _named_or_404(name):
+    doc = CRMViewSettings.named(name)
+    if doc is None:
+        raise not_found(name)
+    return doc
+
+
+def set_public(name, value, *, user) -> None:
+    """`public` (old `:204-229`): Administrator or Sales Manager (System Manager is not
+    enough, as `backend/`), then 404, then the read rule (PE-20). Publishing clears the
+    owner and unpins; unpublishing gives the view to the caller."""
+    if user.name != ADMINISTRATOR and not user.has_role(ROLE_SALES_MANAGER):
+        raise PermissionError(NOT_PERMITTED)
+    doc = _named_or_404(name)
+    if not can_read(user, doc):
+        raise PermissionError(NOT_PERMITTED)
+    wants_public = bool(value)
+    if doc.pinned:
+        doc.pinned = False
+    doc.public = wants_public
+    doc.user = None if wants_public else user
+    doc.save(user=user)
+
+
+def pin(name, value, *, user) -> None:
+    """`pin` (old `:232-243`): 404, then the write rule. A Sales Manager pinning a public
+    view pins it for everyone, as `backend/`."""
+    doc = _named_or_404(name)
+    require_write(user, doc)
+    doc.pinned = bool(value)
+    doc.save(user=user)
+
+
+def set_as_default(name=None, type=None, doctype=None, *, user) -> None:
+    """`set_as_default` (old `:246-270`). With a name, the caller's own view (PE-21);
+    without one, the caller's standard view. Then the caller's other defaults clear."""
+    if name:
+        doc = _named_or_404(name)
+        if doc.user_id != user.name:
+            raise PermissionError(NOT_PERMITTED)
+        CRMViewSettings.mark_default(doc.pk)
+        keep = doc.pk
+    else:
+        standard = create_or_update_standard_view(
+            {"type": type, "doctype": doctype, "is_default": 1}, user=user
+        )
+        keep = standard["name"]
+    CRMViewSettings.clear_other_defaults(user, keep)
+
+
+def fetch_and_update_kanban_columns(name, *, user):
+    """`fetch_and_update_kanban_columns` (old `:318-347`): the kanban's columns as a JSON
+    string, a column that has appeared since flagged `delete: True`; `None` for a missing
+    view or one that is not a kanban. The read rule applies, and the columns are saved
+    only where the caller may write the view (PE-21)."""
+    doc = CRMViewSettings.named(name)
+    if doc is None:
+        return None
+    if not can_read(user, doc):
+        raise PermissionError(NOT_PERMITTED)
+    if doc.type != "kanban":
+        return None
+    current = default_columns(
+        {"dt": doc.dt, "type": doc.type, "column_field": doc.column_field}, user
+    )
+    existing = parse_json_param(doc.kanban_columns, []) or []
+    existing_names = [column.get("name") for column in existing]
+    for column in current:
+        if column.get("name") not in existing_names:
+            existing.append({"name": column.get("name"), "delete": True})
+    text = json.dumps(existing)
+    if can_write(user, doc):
+        doc.kanban_columns = text
+        doc.save(user=user)
+    return text

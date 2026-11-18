@@ -607,6 +607,35 @@ class CRMViewSettingsViewSet(DocumentViewSet):
         view_settings.delete_view(self._named(), user=request.user)
         return Response(Envelope(None, "message"))
 
+    @action(detail=True, methods=("post",), url_path="pin")
+    def pin(self, request, *args, **kwargs):
+        """`crm_view_settings.pin`: `value` read as `bool(value)`, as `backend/`."""
+        value = build_payload(request).get("value")
+        view_settings.pin(self._named(), value, user=request.user)
+        return Response(Envelope(None, "message"))
+
+    @action(detail=True, methods=("post",), url_path="public")
+    def public(self, request, *args, **kwargs):
+        """`crm_view_settings.public`: Administrator or Sales Manager (PE-20)."""
+        value = build_payload(request).get("value")
+        view_settings.set_public(self._named(), value, user=request.user)
+        return Response(Envelope(None, "message"))
+
+    @action(detail=False, methods=("post",), url_path="set-as-default")
+    def set_as_default(self, request):
+        """`crm_view_settings.set_as_default`: `name` optional, in the body (PE-21)."""
+        inputs = build_payload(request)
+        view_settings.set_as_default(
+            inputs.get("name"), inputs.get("type"), inputs.get("doctype"), user=request.user
+        )
+        return Response(Envelope(None, "message"))
+
+    @action(detail=True, methods=("post",), url_path="kanban-columns")
+    def kanban_columns(self, request, *args, **kwargs):
+        """`crm_view_settings.fetch_and_update_kanban_columns`: a JSON string or `null`."""
+        answer = view_settings.fetch_and_update_kanban_columns(self._named(), user=request.user)
+        return Response(Envelope(answer, "message"))
+
 
 class QuickFiltersView(BaseAPIView):
     """`crm.api.doc.get_quick_filters`, for any signed-in caller
