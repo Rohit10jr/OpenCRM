@@ -577,6 +577,36 @@ class CRMViewSettingsViewSet(DocumentViewSet):
             return True
         return view_settings.can_write(user, document)
 
+    # The calls look the view up themselves: each answers a missing view its own way.
+
+    def _named(self):
+        return self.kwargs[self.lookup_url_kwarg or self.lookup_field]
+
+    @action(detail=False, methods=("post",), url_path="create-view")
+    def create_view(self, request):
+        """`crm_view_settings.create`: the new view, the caller's."""
+        view = build_payload(request).get("view")
+        return Response(Envelope(view_settings.create_view(view, user=request.user), "message"))
+
+    @action(detail=False, methods=("post",), url_path="update-view")
+    def update_view(self, request):
+        """`crm_view_settings.update`: the view with its `name` in the body."""
+        view = build_payload(request).get("view")
+        return Response(Envelope(view_settings.update_view(view, user=request.user), "message"))
+
+    @action(detail=False, methods=("post",), url_path="standard-view")
+    def standard_view(self, request):
+        """`crm_view_settings.create_or_update_standard_view`."""
+        view = build_payload(request).get("view")
+        answer = view_settings.create_or_update_standard_view(view, user=request.user)
+        return Response(Envelope(answer, "message"))
+
+    @action(detail=True, methods=("post",), url_path="delete-view")
+    def delete_view(self, request, *args, **kwargs):
+        """`crm_view_settings.delete`: `null`, also for a missing view."""
+        view_settings.delete_view(self._named(), user=request.user)
+        return Response(Envelope(None, "message"))
+
 
 class QuickFiltersView(BaseAPIView):
     """`crm.api.doc.get_quick_filters`, for any signed-in caller

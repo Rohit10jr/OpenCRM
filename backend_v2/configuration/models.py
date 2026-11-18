@@ -9,6 +9,7 @@ from django.db import IntegrityError, models, transaction
 from core.fields import EncryptedCharField
 from core.models import AutoIncrementDocument, BaseDocument, SingletonDocument
 from core.naming import FieldValue, Format, Hash, Prompt
+from core.query import by_name
 
 SYSTEM_DATE_FORMATS = (
     "yyyy-mm-dd",
@@ -756,3 +757,17 @@ class CRMViewSettings(AutoIncrementDocument):
                 fields=["dt", "type", "is_standard", "user"], name="view_settings_lookup_idx"
             ),
         ]
+
+    @classmethod
+    def named(cls, name):
+        """The view called `name`, or `None`; a name that is not an integer names none
+        (`by_name`). The calls apply the read and write rules themselves."""
+        return by_name(cls, name).first()
+
+    @classmethod
+    def own_standard_view(cls, dt, type: str, user):
+        """The caller's standard view for a doctype and view type, newest first (the old
+        `.first()` under `-modified`), or `None`."""
+        return cls._default_manager.filter(
+            dt=dt, type=type, is_standard=True, user=user
+        ).first()
