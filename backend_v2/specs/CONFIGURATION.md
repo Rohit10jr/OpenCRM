@@ -519,6 +519,8 @@ Spec-review addendum: `temp` A-37 (DECISIONS 44-47).
   found" (in `backend/` the three layout calls validate nothing; an unknown doctype gets
   an empty first tab, `fields_layout.py:120-135`). Fields the caller may not read are
   left out of every answer, the Required Fields section and the default layout included.
+  The saved-view calls of milestone 7 check no doctype, as `backend/` (§4.7); the
+  difference is on purpose.
 - **Field lists hold fieldnames (PE-18):** `save_fields_layout` and the resource's create
   and PATCH refuse a layout whose `fields` lists hold anything but strings (417);
   `get_fields_layout` and `get_sidepanel_sections` leave such an entry out on read. A
@@ -585,23 +587,92 @@ Spec-review addendum: `temp` A-37 (DECISIONS 44-47).
 
 ### 4.7 Saved views (milestone 7)
 
-Who may do what (spec check findings 2, 3; detail for the owner in `temp\`):
+Spec-review addendum: `temp` A-39 (DECISIONS 49-52). CRM View Settings, its eight calls
+(`backend/crm_app/api/view_settings.py`) and `get_views` (`crm_app/api/views.py`). In
+this section "the read rule" and "the write rule" are the resource's.
 
-| Call or route | `backend/` |
-|---|---|
-| Resource read | own, ownerless or public views |
-| Resource create | everyone (`metadata_docs.py:84-85`) |
-| Resource write / delete | own; a public view: Sales Manager; System Manager or Administrator (`metadata_docs.py:86-91`) |
-| `public` | Administrator or Sales Manager only, System Manager excluded, on any user's view, without the object rule; clears `user` (`view_settings.py:205-229`) |
-| `delete` | as the resource rule for a public view (`view_settings.py:37-48`) |
-| `create`, `update`, `pin` | as `backend/`'s `view_settings.py` decides each, read at milestone 7 |
-| `set_as_default` | no permission check, as upstream; `name` is optional (`view_settings.py:249-270`), so the route is a collection action with `name` in the body |
-| `fetch_and_update_kanban_columns` | no permission check, as upstream; a missing name answers `None` (`view_settings.py:322`) |
+- **The resource's rules** (`backend/crm_app/permissions/metadata_docs.py:61-91`):
+  - **Read rule:** the caller's own views, ownerless views and public views;
+    Administrator and System Manager read every view (`:64-65`, `:76-77`).
+  - **Write rule** (write and delete): the owner; Sales Manager on a public view;
+    Administrator and System Manager. The same rule as `check_permission`
+    (`view_settings.py:37-48`, message "Not permitted").
+  - **Create:** everyone (`:84-85`); the created view belongs to the caller: the create
+    stamps `user` = caller explicitly, since `DocumentSerializer.save`'s `user` keyword is
+    the actor (`core/serializers.py:137-143`), not the field (PE-19).
+  - **Read-only on the resource, for everyone (PE-19):** `user`, `public`, `is_standard`,
+    `is_default`. Only the `public` call keeps "a public view has no owner and is not
+    pinned", and only the default calls keep one default per user. `pinned` stays
+    writable under the write rule (the rule `pin` uses). The frontend never writes this
+    doctype through the resource (`ViewControls.vue:984-1290`, `ViewModal.vue:121-130`);
+    create, PATCH and DELETE stay, for the `.http` cleanup.
+  - **Allowlists:** every column readable, filterable and sortable, listed explicitly, as
+    `backend/`. No bulk delete. `backend/`'s migration `0011_kanban_fields_reset` is not
+    ported.
+  - **A JSON column written through the resource** (`filters`, `columns`, `rows`,
+    `kanban_columns`, `kanban_fields`) that is not valid JSON is 417 (PE-12d).
+    `route_name` and `type` are not checked (parity).
+- **The calls:**
 
-A public view has no owner. Whether `backend_v2` matches every row or narrows the
-resource side is decision 3. `clear_old_versions` already prunes CRM View Settings
-versions (`backend_v2/core/tasks.py`); whether the model declares `TRACKED_FIELDS` follows
-what `backend/` tracks, decided at milestone 7 (decision 14).
+  | Call | Rule | What it does |
+  |---|---|---|
+  | `create` (`:150-167`) | none, as `backend/` | `user` = caller; never sets `public`, `pinned`, `is_standard`, `is_default`. Merges the doctype's default rows; fills `columns` (or, for a kanban, `kanban_columns`) from the default columns when empty. Answers the document. No `doctype` is 417 (PE-12d) |
+  | `update` (`:170-187`) | 404 "CRM View Settings X not found", then the write rule | changes `label` (an empty label keeps the old one), `type`, `icon`, `route_name`, `load_default_columns` and the eight query and JSON fields (`_apply`, `:120-135`: a field left out is reset to its blank, as `backend/`); never `dt`, `user`, `public`, `pinned`, `is_standard`, `is_default`. Answers the document |
+  | `delete` (`:193-201`) | the write rule | a missing view answers 200, `null`, and does nothing |
+  | `public` (`:204-229`) | Administrator or Sales Manager, else 403 "Not permitted" (System Manager excluded, parity); then 404 for a missing view; then the read rule, 403 "Not permitted" (PE-20) | publishing clears `user` and unpins; unpublishing gives the view to the caller. Answers `null` |
+  | `pin` (`:232-243`) | 404, then the write rule | sets `pinned`; a Sales Manager pinning a public view pins it for everyone (parity, pinned by a test). Answers `null` |
+  | `set_as_default` (`:246-270`) | with a `name`: 404 for a missing view, then 403 "Not permitted" unless the view's `user` is the caller (PE-21); without one: as the standard-view call | marks the view default, then clears `is_default` on the caller's other views. Answers `null` |
+  | `create_or_update_standard_view` (`:273-315`) | none: it acts on the caller's own row | the caller's own newest `{dt, type, is_standard, user}` row, created when missing with the label "List", "Group By" or "Kanban"; defaults `column_field` "status", `order_by` "modified desc", `group_by_field` "owner"; sets `is_default` from the payload **without** clearing the caller's other defaults (parity, pinned by a test). Answers the document. No `doctype` is 417 (PE-12d) |
+  | `fetch_and_update_kanban_columns` (`:318-347`) | the read rule on the named view; it **saves** only when the caller also passes the write rule, and otherwise computes and answers without saving (PE-21) | answers the `kanban_columns` JSON **string**; `null` for a missing view or one that is not a kanban. A column that has appeared since the view was saved is appended with `delete: True` |
+  | `get_views` (`crm_app/api/views.py:12-36`) | the read rule, then `user IS NULL OR user = caller` (Administrator and System Manager too) | then `dt = doctype` when `doctype` is truthy (the store sends `''`, `stores/views.js:5-8,19`, which answers every doctype's views); no `doctype` at all is 417 "DocType is required" (PE-12d); ordered `-modified`, which decides which default the store picks. Keys as `backend/`'s `.values()` gives them (`user_id`, `owner_id`, `modified_by_id`; no frontend code reads them); the JSON columns as strings (`wire_json_text`) |
+
+  A `name` that is not an integer is a missing view on every call that takes one, as
+  `backend/`'s `by_name` makes it (`frappe_core/query.py:32-44`): `delete` and
+  `fetch_and_update_kanban_columns` answer `null`, the others 404. `update` and
+  `set_as_default` look the name up with `filter(pk=…)` and raise in `backend/`; in
+  `backend_v2` they use `by_name` too and answer 404 (PE-12d). `name` stays an
+  **integer** in `get_views` and in every answer: PE-21 rests on the screen never
+  sending a saved view's integer name to `set_as_default` (`ViewControls.vue:1112-1116`,
+  `:1141-1146`, `:1225-1233`), and a test pins it.
+- **`value` on `pin` and `public`** is `bool(value)` on the raw payload
+  (`view_settings.py:223,242`; `frappe_core/whitelist.py` coerces nothing): a JSON body's
+  `true`/`false`/`1`/`0` give what they say; a body string, `"0"` and `"false"`
+  included, is true; a query-string value is parsed as JSON first
+  (`frappe_core/method_views.py:77-91`), so `?value=0` and `?value=false` are false.
+  `backend_v2` matches this.
+- **`get_views`' HTTP method:** `GET /api/v1/views/` as `PORT_MAP.md:201`. The frontend
+  sends it as POST (frappe-ui `frappeRequest.ts:141` defaults to POST and
+  `stores/views.js:17-22` names no method); as for the `meta/` calls, the `.http`
+  generator rewrites the method and the frontend changes at S22.
+- **No doctype check** on any view call or on `get_views`, as `backend/`: `dt` is stored
+  text, and an unknown doctype gets no default rows or columns (`view_settings.py:67,84`).
+  This differs from milestone 6's calls on purpose (§4.6).
+- **The seam to milestone 8:** `create`, `update` and the standard-view call merge the
+  doctype's default rows and columns (`view_settings.py:65-106,138-143`). Milestone 7
+  builds `list_definition_for(dt)` as FOUNDATION Q6 decided (`specs/FOUNDATION.md:349`):
+  for a served doctype that is not a child, the ViewSet's `list_view_class`
+  found through `routed_rule_map()`, else the fallback (the Name and Last Modified
+  columns, rows `["name"]`, `registry.py:94-114`); for an unknown, child or withheld
+  doctype, nothing. At milestone 7 no ViewSet names a class, so every served doctype
+  answers the fallback. The saved-view calls' kanban column lookup reads the metadata
+  file (`view_settings.py:87-103`): a Link column's values through the target's list
+  rule (`core.resources.rules_for(target)`), ordered by `modified`, nothing when the
+  target has no rules; a Select's options; twinned on a `tests_support` model with a
+  Select field.
+- **Version history:** no `TRACKED_FIELDS` on CRM View Settings, as `backend/` pins on
+  purpose (`backend/tests/test_version_retention.py:97-107`, `crm_app/tasks.py:75-85`);
+  that test is ported as a guard (decision 14). `clear_old_versions` already prunes its
+  versions (`backend_v2/core/tasks.py`).
+- **Gating.** Now: `test_phase4_metadata.py:213`, `:236`, `:551`, `:573`, `:584`, `:599`,
+  `:616`, `:626`, `:640`, `:681`, `:689`, `:699`, `:778`, `:792`, `:804`, `:817`;
+  `test_version_retention.py:97`; `test_permissions.py:777`; new tests for PE-19, PE-20,
+  PE-21 and PE-12d, the resource create's `user`, the integer `name`, and the two parity
+  facts above. An old case that asserts what PE-19 to PE-21 change is rewritten, and the
+  brief names each. `.http` `07`: 0.4-0.11, 3.13-3.17, 3.19, 3.20, 4.1-4.3, 4.5, 8.2,
+  8.8; 3.1's two default-column checks split into a block waiting for SALES, and then
+  3.1-3.3, 3.5-3.12, 3.18 and 8.1 run too. Waiting for SALES or milestone 8:
+  `test_phase4_metadata.py:562`, `:654`, `:223`, `:900-940`; `.http` 3.4, 4.4, 4.6-4.9,
+  8.3, 8.4; `test_kanban_defaults.py`, `test_kanban_counts.py`.
 
 ### 4.8 The list engine (milestone 8)
 
@@ -633,7 +704,7 @@ what `backend/` tracks, decided at milestone 7 (decision 14).
   | `13_bulk_and_misc` | 9.9-9.11 | 2 | — |
   | `12_settings_singletons` | 0.10, 1.1-1.12, 1.14-1.16 | 3 | 1.13 (CRM Lead: SALES); sections 2-4 INTEGRATIONS |
   | `13_bulk_and_misc` | 5.2, 5.3 (exchange rate) | 3 | — |
-  | `07_views_and_metadata` | the resource-only blocks 0.12-0.15, 2.5, 6.7, 7.1-7.3, 7.5, 8.5-8.8, 9.12-9.14 | 5-8 | every other block: SALES, ACTIVITIES, CONTACTS |
+  | `07_views_and_metadata` | the resource-only blocks 0.12-0.15, 2.5, 6.7, 7.1-7.3, 7.5, 8.5-8.8, 9.12-9.14; the view blocks §4.7 names (7) | 5-8 | every other block: SALES, ACTIVITIES, CONTACTS |
 
   `12` 1.14 and 1.15 (a second POST, a DELETE on the singleton, 403 in `backend/`) answer
   405 under the singleton route (PE-1); so does `test_system_settings.py`
@@ -666,8 +737,8 @@ what `backend/` tracks, decided at milestone 7 (decision 14).
 | 7 | Where mail validation lives; how `core/mail.py` reaches an Email Account | decided (A-33, DECISIONS 39): the validators in `core/mail.py`; saved accounts through `MAIL_ACCOUNT_PROVIDER = "configuration.mail"`, with a system check (section 4.4) |
 | 2, 9 | What "doctype exists" means; what a child table and a withheld doctype answer, per call; copying or regenerating `doctype_meta.json` and where its generator lives | decided (A-35, DECISIONS 41, 42): the file copied and its generator and staleness test ported, wired into CI; a doctype exists when declared and served or a served child; withheld 404 everywhere (PE-14); a child answers `getdoctype` and the layout calls only (PE-15) (section 4.5) |
 | 10 | Sensitive column names in field metadata | decided (A-35, DECISIONS 43): every metadata answer leaves out the fields the caller may not read, sensitive and restricted (PE-16) |
-| 3 | The saved-view rules (§4.7) | **open — before milestone 7** [default: the resource applies the same role rule as the dedicated call; the unchecked calls get the object rule; proposed parity exceptions] |
-| 14 | `TRACKED_FIELDS` on CRM View Settings | **open — at milestone 7**, following what `backend/` tracks |
+| 3 | The saved-view rules (§4.7) | decided (A-39, DECISIONS 49-52): `user`, `public`, `is_standard`, `is_default` read-only on the resource (PE-19); `public` also applies the read rule (PE-20); `set_as_default` with a name on the caller's own view, `fetch_and_update_kanban_columns` under the read rule, saving under the write rule (PE-21); crashes become errors (PE-12d); the rest parity |
+| 14 | `TRACKED_FIELDS` on CRM View Settings | decided (A-39): none, as `backend/`; its test ported as a guard |
 | 6 | Kanban badge counts before ACTIVITIES | **open — before milestone 8** |
 | — | `get_data` on a withheld or child doctype | **open — before milestone 8** [default: refused, as the contract says] |
 | — | The standard filter, group-by and sort entries a model lacks (on User: `owner`, `modified_by`, the `_`-prefixed fields; `tests/guards/test_field_helper_names.py`) | **open — before milestone 8**, where the User list view is built [today: offered, as `backend/`; the alternative is a parity exception dropping them] |
