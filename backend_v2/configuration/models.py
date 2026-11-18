@@ -7,7 +7,7 @@ from django.conf import settings
 from django.db import IntegrityError, models, transaction
 
 from core.fields import EncryptedCharField
-from core.models import BaseDocument, SingletonDocument
+from core.models import AutoIncrementDocument, BaseDocument, SingletonDocument
 from core.naming import FieldValue, Format, Hash, Prompt
 
 SYSTEM_DATE_FORMATS = (
@@ -695,3 +695,64 @@ class CRMGlobalSettings(BaseDocument):
         """The first row by name for a doctype and type, or `None`: several can exist
         (hash names, no unique constraint). Every row is open to everyone."""
         return cls._default_manager.filter(dt=dt, type=type).order_by("name").first()
+
+
+VIEW_TYPES = ("list", "group_by", "kanban")
+#: The columns that hold JSON text (old `crm_app/models/metadata.py:83-90`), with the
+#: label a write that is not valid JSON names (PE-12d).
+VIEW_JSON_FIELDS = {
+    "filters": "Filters",
+    "columns": "Columns",
+    "rows": "Rows",
+    "kanban_columns": "Kanban Columns",
+    "kanban_fields": "Kanban Fields",
+}
+
+
+class CRMViewSettings(AutoIncrementDocument):
+    """A saved view of a list: its columns, filters and kanban settings, per user or
+    public (old `crm_app/models/metadata.py:61-106`; spec section 4.7). Integer names.
+
+    No `TRACKED_FIELDS`, as `backend/` pins on purpose (decision 14;
+    `backend/tests/test_version_retention.py:97-107`).
+    """
+
+    DOCTYPE = "CRM View Settings"
+    #: Set by the dedicated calls only; on the resource a created view belongs to the
+    #: caller (PE-19).
+    READONLY_FIELDS = ("user", "public", "is_standard", "is_default")
+
+    dt = models.CharField(max_length=140, db_index=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    label = models.CharField(max_length=140, blank=True, default="")
+    type = models.CharField(max_length=20, choices=_choices(VIEW_TYPES), default="list")
+    columns = models.TextField(blank=True, default="")
+    rows = models.TextField(blank=True, default="")
+    filters = models.TextField(blank=True, default="")
+    order_by = models.TextField(blank=True, default="")
+    group_by_field = models.CharField(max_length=140, blank=True, default="")
+    column_field = models.CharField(max_length=140, blank=True, default="")
+    kanban_columns = models.TextField(blank=True, default="")
+    kanban_fields = models.TextField(blank=True, default="")
+    title_field = models.CharField(max_length=140, blank=True, default="")
+    route_name = models.CharField(max_length=140, blank=True, default="")
+    icon = models.CharField(max_length=140, blank=True, default="")
+    pinned = models.BooleanField(default=False)
+    public = models.BooleanField(default=False)
+    load_default_columns = models.BooleanField(default=False)
+    is_standard = models.BooleanField(default=False)
+    is_default = models.BooleanField(default=False)
+
+    class Meta(BaseDocument.Meta):
+        ordering = ["-modified"]
+        indexes = [
+            models.Index(
+                fields=["dt", "type", "is_standard", "user"], name="view_settings_lookup_idx"
+            ),
+        ]

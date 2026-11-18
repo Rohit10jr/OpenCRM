@@ -26,6 +26,7 @@ from configuration import (
     metadata,
     quick_filters,
     user_settings,
+    view_settings,
 )
 from configuration.models import SystemSettings
 from configuration.serializers import (
@@ -35,6 +36,7 @@ from configuration.serializers import (
     CRMFieldsLayoutSerializer,
     CRMFormScriptSerializer,
     CRMGlobalSettingsSerializer,
+    CRMViewSettingsSerializer,
     CurrencySerializer,
     EmailAccountSerializer,
     FCRMSettingsSerializer,
@@ -546,6 +548,34 @@ class CRMGlobalSettingsViewSet(DocumentViewSet):
     filterable_fields = CRMGlobalSettingsSerializer.Meta.fields
     sortable_fields = CRMGlobalSettingsSerializer.Meta.fields
     searchable_fields = ()
+
+
+class CRMViewSettingsViewSet(DocumentViewSet):
+    """Saved views (spec section 4.7). Read: own, ownerless and public views, every view
+    for Administrator and System Manager; create: everyone, the view belonging to the
+    caller; write and delete: the owner, Sales Manager on a public view, Administrator
+    and System Manager (configuration/view_settings.py). `user`, `public`, `is_standard`
+    and `is_default` are read-only here (PE-19). Every column readable, filterable and
+    sortable; no bulk delete."""
+
+    access = Access.ruled()
+    serializer_class = CRMViewSettingsSerializer
+    readable_fields = CRMViewSettingsSerializer.Meta.fields
+    filterable_fields = CRMViewSettingsSerializer.Meta.fields
+    sortable_fields = CRMViewSettingsSerializer.Meta.fields
+    searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        return view_settings.read_rule(user)
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        if ptype in ("read", "select"):
+            return view_settings.can_read(user, document)
+        if ptype == "create":
+            return True
+        return view_settings.can_write(user, document)
 
 
 class QuickFiltersView(BaseAPIView):
