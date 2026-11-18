@@ -12,6 +12,7 @@ from django.db.models import ForeignKey, OneToOneField
 
 from configuration import view_settings
 from configuration.form_scripts import get_form_script
+from configuration.kanban_counts import add_counts
 from configuration.list_views import ListView
 from core.doctypes import doctype_of
 from core.exceptions import ValidationError
@@ -301,6 +302,7 @@ def kanban(viewset, model, definition, queryset, *, filters, order_by, rows, col
                 queryset, user=user, filters=column_filters, filterable=viewset.filterable_fields
             )
             column["count"] = len(cards)
+            add_counts(doctype_of(model), cards)
         data.append({"column": column, "fields": kanban_fields, "data": cards})
     return data, kanban_columns, kanban_fields, rows, title_field
 
