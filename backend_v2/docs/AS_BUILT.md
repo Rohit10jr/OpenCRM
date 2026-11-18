@@ -142,6 +142,17 @@ CRM and accounting roles. Data migrations write the System Settings row (`0002`)
 `configuration/data/`, copies of `backend/crm_app/data/`; they are not dev data. Onboarding
 status lives at `onboarding/status/` (GET reads, POST updates the caller's own column).
 
+Its third milestone (§4.3) adds FCRM Settings at `crm-settings/` (everyone reads; the
+manager pair or Administrator writes; `access_key` restricted; no list route, PE-11) with
+its inline CRM Dropdown Item rows; data migration `0006` writes the row and the six
+standard items, and `FCRMSettings.load_or_create(user=...)` adds them only when it
+creates the row. `core/http.py` is the one outbound HTTP helper (timeout and retry
+policy), ported whole for every later caller. `configuration/exchange_rate.py` serves
+`GET exchange-rate/` (PE-10, PE-12); `ENABLE_EXCHANGE_RATE_API` is off in the test
+settings. A settings record's `value/` refuses a field it does not list (PE-13). The
+`.http` generator serves a singleton's document URLs at its root and marks a list-shaped
+read of one `# @retired PE-11`.
+
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
 disabled, and there are no bulk actions.
