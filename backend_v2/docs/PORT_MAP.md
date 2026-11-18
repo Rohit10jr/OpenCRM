@@ -217,8 +217,8 @@ per-view calls that require it.
 | `frappe.integrations.frappe_providers.frappecloud_billing.current_site_info` | GET/POST | auth | `crm_app/api/desk.py:current_site_info` | `GET /api/v1/desk/site-info/` | configuration | built |
 | `frappe.model.utils.user_settings.get` | GET/POST | auth | `crm_app/api/user_settings.py:get` | `GET /api/v1/user-settings/` (`doctype` kept as input) | configuration | — |
 | `frappe.model.utils.user_settings.save` | GET/POST | auth | `crm_app/api/user_settings.py:save` | `POST /api/v1/user-settings/` (`doctype` kept as input) | configuration | — |
-| `frappe.onboarding.get_onboarding_status` | GET/POST | auth | `crm_app/api/onboarding.py:get_onboarding_status` | `GET /api/v1/onboarding/status/` | configuration | — |
-| `frappe.onboarding.update_user_onboarding_status` | GET/POST | auth | `crm_app/api/onboarding.py:update_user_onboarding_status` | `POST /api/v1/onboarding/status/` | configuration | — |
+| `frappe.onboarding.get_onboarding_status` | GET/POST | auth | `crm_app/api/onboarding.py:get_onboarding_status` | `GET /api/v1/onboarding/status/` | configuration | built |
+| `frappe.onboarding.update_user_onboarding_status` | GET/POST | auth | `crm_app/api/onboarding.py:update_user_onboarding_status` | `POST /api/v1/onboarding/status/` | configuration | built |
 | `frappe.utils.telemetry.pulse.client.boot_config` | GET/POST | auth | `crm_app/api/desk.py:boot_config` | `GET /api/v1/desk/telemetry-config/` | configuration | built |
 
 ## SHARED_ACTIONS
