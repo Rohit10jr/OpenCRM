@@ -16,6 +16,7 @@ from core.mixins import (
 from core.renderers import Envelope
 from core.views import DocumentViewSet, SingletonViewSet
 from tests_support.export import placeholder_export_field_info
+from tests_support.list_views import WidgetListView
 from tests_support.serializers import (
     AutoIncrementDocumentSerializer,
     DynamicReferenceSerializer,
@@ -39,6 +40,7 @@ class WidgetViewSet(
     DocumentViewSet,
 ):
     export_field_info = staticmethod(placeholder_export_field_info)
+    list_view_class = WidgetListView
     access = Access.ruled()
     serializer_class = WidgetSerializer
     readable_fields = WidgetSerializer.Meta.fields
