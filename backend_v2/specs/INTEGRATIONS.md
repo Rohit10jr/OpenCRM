@@ -63,6 +63,10 @@ request that failed to *connect* never reached the provider, and one that return
 whose response was lost, is covered by the call-log dedupe, keyed on the provider's own
 call id. A caller without that property passes `attempts=1`.
 
+**Field metadata leaves out what a caller may not read** (CONFIGURATION PE-16): check the
+Twilio settings save in a browser, since `auth_token` is `mandatory_depends_on` and its
+value is never on the wire.
+
 **Telephony providers**
 
 - **Twilio webhooks verify the signature from the real request** — the absolute URL and

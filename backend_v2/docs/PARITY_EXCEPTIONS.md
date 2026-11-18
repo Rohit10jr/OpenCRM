@@ -288,6 +288,62 @@ comparison skips that block.
   outside the resource's readable list keeps the answer within the fields it lists
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
+### PE-12b. Two `user_settings` crashes answer as errors
+
+- **Status:** approved — decided by the supervisor on the owner's behalf (`temp` A-35, 18
+  Nov 2026; it only replaces a crash); to be built in CONFIGURATION milestone 5
+- **Where:** `POST /api/v1/user-settings/` (old `frappe.model.utils.user_settings.save`)
+- **Old backend:** a `user_settings` string that is not JSON, and a `doctype` longer than
+  140 characters, probably raise unhandled (`backend/crm_app/api/user_settings.py:37-56`,
+  the 140-character key column); not run
+- **backend_v2:** each answers 417 with a fixed sentence
+- **Why:** replaces a crash with an error
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-14. A withheld doctype is not found by the metadata calls
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-35, DECISIONS 42, 18 Nov 2026); to be built in CONFIGURATION
+  milestone 5
+- **Where:** `GET /api/v1/meta/doctype/`, `meta/fields/`, `meta/sort-options/`,
+  `meta/filterable-fields/`, `meta/group-by-fields/` (old `getdoctype`, `get_fields`,
+  `sort_options`, `get_filterable_fields`, `get_group_by_fields`), for a withheld doctype
+  (Version now; ToDo and Data Import Log when built)
+- **Old backend:** answers any registered doctype (`crm_app/api/form_load.py:177`,
+  `crm_app/api/doc.py:90,346`, `frappe_core/metadata.py:117,154`)
+- **backend_v2:** a withheld doctype answers 404 "DocType X not found" on every call that
+  validates a doctype, as `API_CONTRACT.md:209` says
+- **Why:** a doctype that is not served has no screen to describe
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-15. A child table answers `getdoctype` and the layout calls only
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-35, DECISIONS 42, 18 Nov 2026); to be built in CONFIGURATION
+  milestones 5 and 6
+- **Where:** the metadata calls above, for a child table (CRM Dropdown Item, User Email,
+  and later units' rows). Seen in `docs/http/07` 9.2, 9.3
+- **Old backend:** answers every metadata call for a child table
+- **backend_v2:** `getdoctype` answers a child table (`Grid.vue:545`,
+  `stores/meta.js:9-17`), and so will milestone 6's layout calls; `get_fields`,
+  `sort_options`, `get_filterable_fields` and `get_group_by_fields` answer 404.
+  `API_CONTRACT.md:209` says 404 for every child table; the contract is the owner's to
+  change and is not edited here
+- **Why:** the grids call `getdoctype` for their rows; no screen calls the other four for a
+  child
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-16. Metadata answers list only the fields the caller may read
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-35, DECISIONS 43, 18 Nov 2026); to be built in CONFIGURATION
+  milestone 5
+- **Where:** `getdoctype`'s fields, `meta/fields/`, `meta/filterable-fields/`,
+  `meta/group-by-fields/`, `meta/sort-options/`, and later `get_data`'s `fields` block
+- **Old backend:** lists every field name
+- **backend_v2:** metadata answers list only the fields the caller may read
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
 ---
 
 ## Candidates — not exceptions yet
