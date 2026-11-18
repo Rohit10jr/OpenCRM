@@ -1,16 +1,21 @@
 """Ported from ``backend/tests/test_boot.py`` (REBUILD_PLAN S14).
 
 `crm.www.crm.get_context_for_dev` is `POST /api/v1/boot/` (specs/CONFIGURATION.md 4.2).
-Expected answers are unchanged, except a wrong method, which answers 405 (PE-1). Not
-ported: `test_the_guard_sees_the_prefixed_call`, which checks the old backend's frontend
-path guard; here the route map guard covers the route.
+Expected answers are unchanged, except a wrong method, which answers 405 (PE-1).
+`test_the_guard_sees_the_prefixed_call` checked the old backend's frontend-path guard;
+its intent is ported as `test_the_frontends_boot_call_is_mapped_and_built`.
 """
+
+from pathlib import Path
 
 import pytest
 
 pytestmark = pytest.mark.django_db
 
 BOOT = "/api/v1/boot/"
+OLD_PATH = "crm.www.crm.get_context_for_dev"
+ROOT = Path(__file__).resolve().parents[2]
+PORT_MAP = ROOT / "backend_v2" / "docs" / "PORT_MAP.md"
 
 EXPECTED_KEYS = {
     "sysdefaults",
@@ -84,3 +89,23 @@ def test_a_user_without_a_time_zone_gets_the_system_zone(auth_api, settings):
 def test_the_boot_call_is_post_only(api):
     """405 under PE-1 (403 "Method ... does not accept GET" in backend/)."""
     assert api.get(BOOT).status_code == 405
+
+
+def test_the_frontends_boot_call_is_mapped_and_built():
+    """The intent of `test_the_guard_sees_the_prefixed_call` (A-31 finding 7):
+    `main.js` makes this call before the app mounts, so an unserved path is a blank
+    page. Until the frontend moves to `/api/v1/` (S22) it calls the old path, so the
+    check is that the path it calls has a built route-map row for this route."""
+    main_js = ROOT / "frontend" / "src" / "main.js"
+    if not main_js.exists():
+        pytest.skip("frontend source not available")
+    assert f"/api/method/{OLD_PATH}" in main_js.read_text(encoding="utf-8")
+    rows = [
+        line
+        for line in PORT_MAP.read_text(encoding="utf-8").splitlines()
+        if line.startswith(f"| `{OLD_PATH}` |")
+    ]
+    assert len(rows) == 1, rows
+    cells = [cell.strip() for cell in rows[0].strip("|").split("|")]
+    assert "`POST /api/v1/boot/`" in cells
+    assert cells[-1] == "built"

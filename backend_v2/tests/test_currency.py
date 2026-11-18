@@ -6,7 +6,8 @@ are unchanged. The rows come from `configuration`'s data migration, whose
 `add_currencies` stands in for `frappe_platform.reference_data.add_currencies`.
 
 Waiting for later work: `test_a_currency_that_names_nothing_is_refused` (an organization,
-SALES; its System Settings half is in test_system_settings.py),
+SALES; its System Settings half, with the "eur" -> "EUR" spelling, is in
+test_system_settings.py),
 `test_the_dashboard_currency_can_be_chosen` (FCRM Settings, milestone 3),
 `test_the_dashboard_shows_the_currencys_symbol` (DASHBOARD).
 """
@@ -85,9 +86,18 @@ def test_the_rows_are_version_15s():
 
 
 def test_a_user_with_no_crm_role_cannot_read_it(api_as, make_user):
+    """Changed expectation (A-31 finding 6): exactly 403, where the old test accepted
+    403 or 404; the search and value routes answer nothing for the same caller."""
     outsider = make_user("outsider@example.com", first_name="Out")
-    response = api_as(outsider).get(f"{CURRENCIES}USD/")
-    assert response.status_code in (403, 404), response.content[:300]
+    client = api_as(outsider)
+    response = client.get(f"{CURRENCIES}USD/")
+    assert response.status_code == 403, response.content[:300]
+    assert search(client, txt="USD") == []
+    value = client.get(
+        f"{CURRENCIES}value/", {"fieldname": "symbol", "filters": json.dumps({"name": "USD"})}
+    )
+    assert value.status_code == 200, value.content[:300]
+    assert value.json()["message"] == {}
 
 
 # --- new: no old test covers these (specs/CONFIGURATION.md section 4.2) -------------------
@@ -103,6 +113,19 @@ def test_a_user_with_no_crm_role_lists_nothing(api_as, make_user):
 def test_an_accounting_role_reads_it(api_as, make_user):
     clerk = make_user("clerk@example.com", roles=["Accounts User"])
     assert api_as(clerk).get(f"{CURRENCIES}USD/").status_code == 200
+
+
+def test_a_sales_manager_alone_reads_it(api_as, make_user):
+    manager = make_user("onlymanager@example.com", roles=["Sales Manager"])
+    assert api_as(manager).get(f"{CURRENCIES}USD/").status_code == 200
+
+
+def test_a_system_manager_who_is_not_administrator_changes_it(api_as, make_user):
+    """A-31 finding 4."""
+    manager = make_user("sysman@example.com", roles=["System Manager"])
+    response = api_as(manager).patch(f"{CURRENCIES}NZD/", {"enabled": 1}, format="json")
+    assert response.status_code == 200, response.content[:300]
+    assert Currency.objects.get(pk="NZD").enabled is True
 
 
 def test_a_disabled_currency_shows_only_when_asked_for(auth_api):

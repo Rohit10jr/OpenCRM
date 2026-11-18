@@ -117,6 +117,33 @@ def test_an_unknown_choice_is_refused(api_as, administrator):
     assert set_values(api_as(administrator), time_format="hh").status_code == 417
 
 
+def test_a_system_manager_who_is_not_administrator_reads_and_writes_it(api_as, make_user):
+    """A-31 finding 4: the System Manager branch, apart from Administrator's name."""
+    manager = make_user("sysman@example.com", roles=["System Manager"])
+    client = api_as(manager)
+    assert client.get(SETTINGS).status_code == 200
+    response = set_values(client, date_format="dd/mm/yyyy")
+    assert response.status_code == 200, response.content[:300]
+    assert SystemSettings.load_or_create().date_format == "dd/mm/yyyy"
+
+
+def test_a_currency_is_stored_in_its_own_spelling(api_as, administrator):
+    """A-31 finding 5, from `backend/tests/test_currency.py:77-79` (there on an
+    organization): "eur" is saved as "EUR"."""
+    response = set_values(api_as(administrator), currency="eur")
+    assert response.status_code == 200, response.content[:300]
+    assert SystemSettings.load_or_create().currency == "EUR"
+
+
+def test_the_value_route_refuses_a_missing_or_unlisted_field(api_as, administrator):
+    """A-31 finding 8: 417, not a 500."""
+    client = api_as(administrator)
+    assert client.get(f"{SETTINGS}value/").status_code == 417
+    assert client.get(f"{SETTINGS}value/", {"field": "nope"}).status_code == 417
+    owner = client.get(f"{SETTINGS}value/", {"field": "owner"})
+    assert owner.json() == {"message": "Administrator"}
+
+
 def test_the_administrator_passes_without_its_groups(api_as, administrator):
     administrator.groups.clear()
     administrator.clear_roles_cache()
