@@ -57,6 +57,7 @@ class UserSerializer(DocumentSerializer):
             "email_signature",
             "creation",
             "modified",
+            "user_emails",
         )
 
     def get_fields(self):
@@ -66,11 +67,16 @@ class UserSerializer(DocumentSerializer):
             fields["name"].read_only = True
         return fields
 
+    #: The send-from accounts, CONFIGURATION's User Email rows (named by label, so this
+    #: app does not import configuration). Written by System Manager only
+    #: (`User.PRIVILEGED_WRITE_FIELDS`).
+    CHILD_TABLES = {"user_emails": ("configuration.UserEmail", "parent_user")}
+
     #: Child-table keys the old User document always carries (its serializer emits every
     #: reverse FK it discovers, backend/frappe_core/children.py:38-51), empty here until
-    #: their units build them: User Email (CONFIGURATION) and Assignment Rule User
-    #: (ASSIGNMENTS). Never written through User.
-    EMPTY_CHILD_KEYS = ("user_emails", "assignmentruleuser_set")
+    #: their unit builds them: Assignment Rule User (ASSIGNMENTS, PE-9). Never written
+    #: through User.
+    EMPTY_CHILD_KEYS = ("assignmentruleuser_set",)
 
     def to_internal_value(self, data):
         if isinstance(data, dict):

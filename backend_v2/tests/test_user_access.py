@@ -163,7 +163,8 @@ def test_a_name_sent_on_update_is_ignored(alice, api_as):
     assert alice.first_name == "Al"
 
 
-def test_user_emails_is_an_empty_list_until_configuration(auth_api, alice):
+def test_user_emails_is_an_empty_list_for_a_user_with_no_account(auth_api, alice):
+    """CONFIGURATION built User Email; a user no Email Account names has no rows."""
     body = auth_api.get(f"{USERS}{alice.name}/").json()["message"]
     assert body["user_emails"] == []
     assert body["doctype"] == "User"
