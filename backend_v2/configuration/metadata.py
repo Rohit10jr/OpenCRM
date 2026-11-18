@@ -10,9 +10,8 @@ fields the caller may read (PE-16).
 
 from __future__ import annotations
 
-from django.apps import apps
-
 from configuration import field_meta
+from core.children import child_table_specs
 from core.doctypes import declared_doctypes, is_child_table, is_single
 from core.exceptions import DoesNotExistError
 from core.field_access import hidden_from
@@ -40,10 +39,12 @@ def _served_children() -> frozenset:
     each call from `routed_rule_map()`, which `core.resources.clear_rules_cache()` already
     clears, so no second process-wide cache can go stale."""
     children = set()
-    for viewset in set(routed_rule_map().values()):
+    for model, viewset in routed_rule_map().items():
         serializer = getattr(viewset, "serializer_class", None)
-        for model_label, _fk in (getattr(serializer, "CHILD_TABLES", {}) or {}).values():
-            children.add(apps.get_model(model_label))
+        # core.children resolves every declaration form the serializers use: a tuple, a
+        # bare label, and the model's POLYMORPHIC_CHILD_TABLES (A-36 finding 1).
+        specs = child_table_specs(model, getattr(serializer, "CHILD_TABLES", {}) or {})
+        children.update(spec["model"] for spec in specs.values())
     return frozenset(children)
 
 
@@ -128,6 +129,10 @@ def getdoctype(doctype, *, with_parent=False, user):
         parent_dt = get_parent_dt(doctype, model)
         if parent_dt:
             docs = get_meta_bundle(parent_dt, served_model(parent_dt), user)
+            # The parent's bundle leaves the child out when its Table field is hidden from
+            # the caller (PE-16); then the child answers for itself (A-36 finding 6).
+            if not any(doc["name"] == doctype for doc in docs):
+                docs, parent_dt = [], None
     if not docs:
         docs = get_meta_bundle(doctype, model, user)
     return docs, get_user_settings(parent_dt or doctype, user=user), parent_dt
