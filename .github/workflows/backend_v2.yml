@@ -108,6 +108,7 @@ jobs:
           repository: frappe/crm
           ref: 48cb3cccec12ef798f8faacc165fff3dc008a8fa
           path: upstream-crm
+          persist-credentials: false
 
       - uses: actions/setup-python@v7
         with:

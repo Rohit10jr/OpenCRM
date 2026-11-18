@@ -9,6 +9,7 @@ the platform fallback on User (`:82`). The allowlist and non-filterable cases (`
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import sys
 
@@ -24,6 +25,11 @@ def test_generated_field_meta_is_current():
     """Regenerate from the DocType JSON and compare with the committed file. CI checks
     frappe/crm out at the port's commit and sets CRM_UPSTREAM_DIR, so this runs there."""
     if not CRM_DOCTYPE_DIR.exists():
+        # CI sets CRM_UPSTREAM_DIR; a wrong one must fail, since -rfE does not list skips
+        # and the check would vanish silently (A-36 finding 8). Unset, it is a local run
+        # without the owner's checkout.
+        if os.environ.get("CRM_UPSTREAM_DIR"):
+            pytest.fail(f"CRM_UPSTREAM_DIR is set but {CRM_DOCTYPE_DIR} does not exist")
         pytest.skip("CRM source not available")
 
     sys.path.insert(0, str(SCRIPTS))
