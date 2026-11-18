@@ -35,10 +35,18 @@ def _coerce(user_settings) -> dict:
     return parsed
 
 
-def _check_doctype(doctype) -> str:
-    """PE-12b: a doctype longer than the key column is refused rather than a database
-    error."""
-    doctype = "" if doctype is None else str(doctype)
+def _required(doctype) -> str:
+    """PE-12b: a missing doctype is refused (the old call raised on the missing
+    argument); otherwise it is used as given, never validated."""
+    if doctype is None:
+        raise ValidationError("DocType is required")
+    return str(doctype)
+
+
+def _storable(doctype) -> str:
+    """PE-12b, on the write only: a doctype longer than the key column is refused rather
+    than a database error. A read of one finds nothing and answers `"{}"`, as backend/."""
+    doctype = _required(doctype)
     if len(doctype) > DOCTYPE_MAX_LENGTH:
         raise ValidationError("DocType name is too long")
     return doctype
@@ -46,14 +54,14 @@ def _check_doctype(doctype) -> str:
 
 def get_user_settings(doctype, *, user) -> str:
     """The stored JSON string for (user, doctype), `"{}"` when there is none."""
-    return UserSettings.load(user, _check_doctype(doctype))
+    return UserSettings.load(user, _required(doctype))
 
 
 def update_user_settings(doctype, user_settings: dict, *, user) -> dict:
     """Merge `user_settings` into the stored dict at the top level and store it, as
     upstream's `current.update(...)`: saving `{"List": ...}` leaves `{"GridView": ...}`
     alone but replaces an existing `"List"` wholesale. Returns the merged dict."""
-    doctype = _check_doctype(doctype)
+    doctype = _storable(doctype)
     current = _coerce(get_user_settings(doctype, user=user))
     current.update(user_settings)
     UserSettings.store(user, doctype, json.dumps(current))

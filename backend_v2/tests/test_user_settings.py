@@ -121,6 +121,23 @@ def test_pe12b_an_over_long_doctype_is_refused(auth_api):
     assert response.json()["message"] == "DocType name is too long"
 
 
+def test_an_over_long_doctype_is_read_as_nothing_saved(auth_api):
+    """A-36 finding 3: the length check is on the write only; a read answers "{}"."""
+    assert auth_api.get(SETTINGS, {"doctype": "X" * 141}).json() == {"message": "{}"}
+
+
+@pytest.mark.parametrize("method", ["get", "post"])
+def test_pe12b_a_missing_doctype_is_refused(auth_api, method):
+    """A-36 finding 5: no row is stored under an empty key."""
+    if method == "get":
+        response = auth_api.get(SETTINGS)
+    else:
+        response = auth_api.post(SETTINGS, {"user_settings": "{}"}, format="json")
+    assert response.status_code == 417
+    assert response.json()["message"] == "DocType is required"
+    assert not UserSettings.objects.exists()
+
+
 def test_the_rows_go_with_their_user(make_user, api_as):
     gone = make_user("gone@example.com", roles=["Sales User"])
     save_settings(api_as(gone), "CRM Deal", {"x": 1})
