@@ -807,19 +807,41 @@ on port 8000, keep the new server on 8001, and then run from `backend_v2/`:
   --old http://localhost:8000 --new http://localhost:8001
 ```
 
-The comparison reports `same`, `differs` with the first short JSON path difference, or
-`skipped` for waiting, negative, and PE-3 blocks. Each server has its own response-label
-and variable state, so one server's login token is never sent to the other. Rules in
-`scripts/parity_ignore.json` ignore only values: the path must exist on both sides and
-its type must match. Today's runnable FOUNDATION blocks need exactly two rules,
-`$.message.access` and `$.message.refresh`; timestamps and generated record names are
-not yet returned by a runnable block, so their paths must be added with comments only
-when the owning units make those blocks runnable. Error `exception` and
-`_server_messages` values are never ignored.
+The comparison reports `same`, `differs` with **every** differing path, or `skipped` for
+waiting, negative, and PE-3 blocks. Each server has its own response-label and variable
+state, so one server's login token is never sent to the other. How it compares (ACCOUNTS,
+A-25 and A-26):
 
-`99_lockout.http` locks this machine out for 60 seconds. Run it by itself and last. The
-diff refuses to combine it with other files unless `--include-lockout` is explicit; with
-that flag it reorders the lockout file to the end. Neither script starts or stops a
+- **Status**, then the headers, then the body; a header difference never hides the body.
+  `WWW-Authenticate` and `Retry-After` are compared exactly. `Allow` is compared only on a
+  405, and only for presence: the method sets differ by design (S7, PE-1).
+- **Resource envelope:** a block marked `# @resource-envelope` compares the old
+  `{"data": ...}` (201 on create) with the REST `{"message": ...}` (200).
+- **Rows by name:** a list whose rows all carry `name` is compared row by row, matched by
+  name, with names only one side holds and a change of order reported separately.
+- **Timestamps:** only under `creation`, `modified` and keys ending `_at` or `_on`, and
+  there only the digits are blanked, so the format (separator, precision, zone) still
+  counts. A timestamp anywhere else is compared exactly.
+- **Generated names:** a ten-character lowercase hex token with at least one letter a-f is
+  normalised, and old and new tokens must pair one-to-one across the response. A wrong
+  link to another generated record is therefore still seen when the pairing breaks, but
+  not when it is consistent — the limit of the rule.
+- Rules in `scripts/parity_ignore.json` ignore only values: the path must exist on both
+  sides and its type must match. Two rules today, `$.message.access` and
+  `$.message.refresh`. Error `exception` and `_server_messages` values are never ignored.
+
+`99_lockout.http` locks this machine out for 60 seconds. Run it by itself and last; it
+runs against each backend in turn, not interleaved, so the failed logins land inside one
+server's window. The diff refuses to combine it with other files unless
+`--include-lockout` is explicit; with that flag it reorders the lockout file to the end.
+
+`scripts/walk_auth_flow.py` walks onboarding end to end (invite-by-email, the emailed
+accept link, set password, log in, forgot password) on its own test database;
+`tests/test_walk_auth_flow.py` runs it under pytest. `kombu` is pinned to 5.6.2, the old
+backend's version, because 5.7 refuses the pinned redis-py 5.3.1 on a real broker. The
+Celery settings (queue `default`, late acknowledgement, prefetch one, JSON, results kept a
+day) are the old backend's. The one-off script that reset the old `opencrm` database's
+suite roles (A-25) ran once from the main checkout and is not in the tree. Neither script starts or stops a
 server, and both report an unreachable configured server without a traceback.
 
 ### Traps — read before starting a server or running tests
