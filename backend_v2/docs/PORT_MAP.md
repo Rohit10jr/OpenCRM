@@ -164,57 +164,57 @@ alone, an old `POST` body moves into the query string: a reshaped input
 
 ### Doctypes (12)
 
-| DocType | Kind | Naming | Old protection | Declared fields | Old model | New app | Status |
-|---|---|---|---|---|---|---|---|
-| CRM Fields Layout | main | `Format('{dt}-{type}')` | ruled: list rule, object rule |  | `crm_app.CRMFieldsLayout` | configuration | — |
-| CRM Form Script | main | `Prompt()` | ruled: list rule, object rule |  | `crm_app.CRMFormScript` | configuration | — |
-| CRM Global Settings | main | `Hash(10)` | reviewed-open — no secrets: holds only `dt`, `type` and a JSON blob. Upstream grants all three roles full CRUD (`crm_global_settings.json`), deliberately. Reproduced. |  | `crm_app.CRMGlobalSettings` | configuration | — |
-| CRM View Settings | main | `AutoIncrement()` | ruled: list rule, object rule |  | `crm_app.CRMViewSettings` | configuration | — |
-| Country | main | `FieldValue('country_name')` | ruled: list rule, object rule |  | `frappe_platform.Country` | configuration | — |
-| Currency | main | `FieldValue('currency_name')` | ruled: list rule, object rule |  | `frappe_platform.Currency` | configuration | — |
-| Email Account | main | `FieldValue('email_account_name')` | ruled: list rule, object rule | S: `password`, `api_secret`; E: `password`, `api_secret`; R: `smtp_server`, `smtp_port`, `email_server`, `incoming_port`, `login_id`, `domain`, `api_key`, `frappe_mail_site`, `signature`, `no_smtp_authentication`, `awaiting_password` | `frappe_platform.EmailAccount` | configuration | — |
-| FCRM Settings | single | default | ruled: list rule, object rule | R: `access_key` | `crm_app.FCRMSettings` | configuration | — |
-| Language | main | `FieldValue('language_code')` | ruled: list rule, object rule |  | `frappe_platform.Language` | configuration | — |
-| System Settings | single | default | ruled: list rule, object rule |  | `frappe_platform.SystemSettings` | configuration | — |
-| CRM Dropdown Item | child | `Hash(10)` | n/a |  | `crm_app.CRMDropdownItem` | configuration | — |
-| User Email | child | `Hash(10)` | n/a; `user_emails` on `User` is System Manager only (`PRIVILEGED_WRITE_FIELDS`) |  | `frappe_platform.UserEmail` | configuration (moved from ACCOUNTS, `temp` A-21 D-D) | — |
+| DocType | Kind | Naming | Old protection | Declared fields | Old model | New route | New app | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CRM Fields Layout | main | `Format('{dt}-{type}')` | ruled: list rule, object rule |  | `crm_app.CRMFieldsLayout` | `GET /api/v1/fields-layouts/`, `POST /api/v1/fields-layouts/`, `GET /api/v1/fields-layouts/value/`, `GET /api/v1/fields-layouts/<name>/`, `PATCH /api/v1/fields-layouts/<name>/`, `DELETE /api/v1/fields-layouts/<name>/`, `GET /api/v1/fields-layouts/<name>/permissions/` | configuration | — |
+| CRM Form Script | main | `Prompt()` | ruled: list rule, object rule |  | `crm_app.CRMFormScript` | `GET /api/v1/form-scripts/`, `POST /api/v1/form-scripts/`, `GET /api/v1/form-scripts/value/`, `GET /api/v1/form-scripts/<name>/`, `PATCH /api/v1/form-scripts/<name>/`, `DELETE /api/v1/form-scripts/<name>/`, `GET /api/v1/form-scripts/<name>/permissions/` | configuration | — |
+| CRM Global Settings | main | `Hash(10)` | reviewed-open — no secrets: holds only `dt`, `type` and a JSON blob. Upstream grants all three roles full CRUD (`crm_global_settings.json`), deliberately. Reproduced. |  | `crm_app.CRMGlobalSettings` | `GET /api/v1/global-settings/`, `POST /api/v1/global-settings/`, `GET /api/v1/global-settings/value/`, `GET /api/v1/global-settings/<name>/`, `PATCH /api/v1/global-settings/<name>/`, `DELETE /api/v1/global-settings/<name>/`, `GET /api/v1/global-settings/<name>/permissions/` | configuration | — |
+| CRM View Settings | main | `AutoIncrement()` | ruled: list rule, object rule |  | `crm_app.CRMViewSettings` | `GET /api/v1/view-settings/`, `POST /api/v1/view-settings/`, `GET /api/v1/view-settings/value/`, `GET /api/v1/view-settings/<name>/`, `PATCH /api/v1/view-settings/<name>/`, `DELETE /api/v1/view-settings/<name>/`, `GET /api/v1/view-settings/<name>/permissions/` | configuration | — |
+| Country | main | `FieldValue('country_name')` | ruled: list rule, object rule |  | `frappe_platform.Country` | `GET /api/v1/countries/`, `POST /api/v1/countries/`, `GET /api/v1/countries/value/`, `GET /api/v1/countries/<name>/`, `PATCH /api/v1/countries/<name>/`, `DELETE /api/v1/countries/<name>/`, `GET /api/v1/countries/<name>/permissions/` | configuration | — |
+| Currency | main | `FieldValue('currency_name')` | ruled: list rule, object rule |  | `frappe_platform.Currency` | `GET /api/v1/currencies/`, `POST /api/v1/currencies/`, `GET /api/v1/currencies/value/`, `GET /api/v1/currencies/<name>/`, `PATCH /api/v1/currencies/<name>/`, `DELETE /api/v1/currencies/<name>/`, `GET /api/v1/currencies/<name>/permissions/` | configuration | — |
+| Email Account | main | `FieldValue('email_account_name')` | ruled: list rule, object rule | S: `password`, `api_secret`; E: `password`, `api_secret`; R: `smtp_server`, `smtp_port`, `email_server`, `incoming_port`, `login_id`, `domain`, `api_key`, `frappe_mail_site`, `signature`, `no_smtp_authentication`, `awaiting_password` | `frappe_platform.EmailAccount` | `GET /api/v1/email-accounts/`, `POST /api/v1/email-accounts/`, `GET /api/v1/email-accounts/value/`, `GET /api/v1/email-accounts/<name>/`, `PATCH /api/v1/email-accounts/<name>/`, `DELETE /api/v1/email-accounts/<name>/`, `GET /api/v1/email-accounts/<name>/permissions/`; `POST /api/v1/email-accounts/<name>/rename/` (decision 4: whether `POST` on the collection is served) | configuration | — |
+| FCRM Settings | single | default | ruled: list rule, object rule | R: `access_key` | `crm_app.FCRMSettings` | `GET /api/v1/crm-settings/`, `PATCH /api/v1/crm-settings/`, `GET /api/v1/crm-settings/value/` (singleton, S25 (3)) | configuration | — |
+| Language | main | `FieldValue('language_code')` | ruled: list rule, object rule |  | `frappe_platform.Language` | `GET /api/v1/languages/`, `POST /api/v1/languages/`, `GET /api/v1/languages/value/`, `GET /api/v1/languages/search/`, `POST /api/v1/languages/search/`, `GET /api/v1/languages/<name>/`, `PATCH /api/v1/languages/<name>/`, `DELETE /api/v1/languages/<name>/`, `GET /api/v1/languages/<name>/permissions/` | configuration | — |
+| System Settings | single | default | ruled: list rule, object rule |  | `frappe_platform.SystemSettings` | `GET /api/v1/system-settings/`, `PATCH /api/v1/system-settings/`, `GET /api/v1/system-settings/value/` (singleton, S25 (3)) | configuration | — |
+| CRM Dropdown Item | child | `Hash(10)` | n/a |  | `crm_app.CRMDropdownItem` | not served: rows of FCRM Settings (`dropdown_items`) | configuration | — |
+| User Email | child | `Hash(10)` | n/a; `user_emails` on `User` is System Manager only (`PRIVILEGED_WRITE_FIELDS`) |  | `frappe_platform.UserEmail` | not served: rows of User (`user_emails`) | configuration (moved from ACCOUNTS, `temp` A-21 D-D) | — |
 
 ### Method paths (32)
 
-| Dotted path | Verbs | Access | Old source | New app | Status |
-|---|---|---|---|---|---|
-| `crm.api.doc.get_data` | GET/POST | auth | `frappe_core/api/doc.py:get_data` | configuration | — |
-| `crm.api.doc.get_fields` | GET/POST | auth | `crm_app/api/doc.py:get_fields` | configuration | — |
-| `crm.api.doc.get_filterable_fields` | GET/POST | auth | `crm_app/api/doc.py:get_filterable_fields` | configuration | — |
-| `crm.api.doc.get_group_by_fields` | GET/POST | auth | `crm_app/api/doc.py:get_group_by_fields` | configuration | — |
-| `crm.api.doc.get_quick_filters` | GET/POST | auth | `crm_app/api/doc.py:get_quick_filters` | configuration | — |
-| `crm.api.doc.sort_options` | GET/POST | auth | `crm_app/api/doc.py:sort_options` | configuration | — |
-| `crm.api.doc.update_quick_filters` | GET/POST | auth | `crm_app/api/doc.py:update_quick_filters` | configuration | — |
-| `crm.api.exchange_rate.get_exchange_rate` | GET/POST | auth | `crm_app/api/exchange_rate.py:get_exchange_rate` | configuration | — |
-| `crm.api.get_translations` | GET/POST | guest | `crm_app/api/misc.py:get_translations` | configuration | — |
-| `crm.api.settings.create_email_account` | GET/POST | auth | `crm_app/api/settings.py:create_email_account` | configuration | — |
-| `crm.api.views.get_views` | GET/POST | auth | `crm_app/api/views.py:get_views` | configuration | — |
-| `crm.demo.api.clear_demo_data` | POST | auth | `crm_app/api/demo.py:clear_demo_data` | configuration | — |
-| `crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout` | GET/POST | auth | `crm_app/api/fields_layout.py:get_fields_layout` | configuration | — |
-| `crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections` | GET/POST | auth | `crm_app/api/fields_layout.py:get_sidepanel_sections` | configuration | — |
-| `crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.save_fields_layout` | POST | auth | `crm_app/api/fields_layout.py:save_fields_layout` | configuration | — |
-| `crm.fcrm.doctype.crm_view_settings.crm_view_settings.create_or_update_standard_view` | POST | auth | `crm_app/api/view_settings.py:create_or_update_standard_view` | configuration | — |
-| `crm.fcrm.doctype.crm_view_settings.crm_view_settings.create` | POST | auth | `crm_app/api/view_settings.py:create` | configuration | — |
-| `crm.fcrm.doctype.crm_view_settings.crm_view_settings.delete` | POST/DELETE | auth | `crm_app/api/view_settings.py:delete` | configuration | — |
-| `crm.fcrm.doctype.crm_view_settings.crm_view_settings.fetch_and_update_kanban_columns` | POST | auth | `crm_app/api/view_settings.py:fetch_and_update_kanban_columns` | configuration | — |
-| `crm.fcrm.doctype.crm_view_settings.crm_view_settings.pin` | POST | auth | `crm_app/api/view_settings.py:pin` | configuration | — |
-| `crm.fcrm.doctype.crm_view_settings.crm_view_settings.public` | POST | auth | `crm_app/api/view_settings.py:public` | configuration | — |
-| `crm.fcrm.doctype.crm_view_settings.crm_view_settings.set_as_default` | POST | auth | `crm_app/api/view_settings.py:set_as_default` | configuration | — |
-| `crm.fcrm.doctype.crm_view_settings.crm_view_settings.update` | POST/PUT | auth | `crm_app/api/view_settings.py:update` | configuration | — |
-| `crm.www.crm.get_context_for_dev` | POST | guest | `crm_app/api/boot.py:get_context_for_dev` | configuration | — |
-| `frappe.apps.get_apps` | GET/POST | auth | `crm_app/api/desk.py:get_apps` | configuration | — |
-| `frappe.desk.form.load.getdoctype` | GET/POST | auth | `crm_app/api/form_load.py:getdoctype` | configuration | — |
-| `frappe.integrations.frappe_providers.frappecloud_billing.current_site_info` | GET/POST | auth | `crm_app/api/desk.py:current_site_info` | configuration | — |
-| `frappe.model.utils.user_settings.get` | GET/POST | auth | `crm_app/api/user_settings.py:get` | configuration | — |
-| `frappe.model.utils.user_settings.save` | GET/POST | auth | `crm_app/api/user_settings.py:save` | configuration | — |
-| `frappe.onboarding.get_onboarding_status` | GET/POST | auth | `crm_app/api/onboarding.py:get_onboarding_status` | configuration | — |
-| `frappe.onboarding.update_user_onboarding_status` | GET/POST | auth | `crm_app/api/onboarding.py:update_user_onboarding_status` | configuration | — |
-| `frappe.utils.telemetry.pulse.client.boot_config` | GET/POST | auth | `crm_app/api/desk.py:boot_config` | configuration | — |
+| Dotted path | Verbs | Access | Old source | New route | New app | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| `crm.api.doc.get_data` | GET/POST | auth | `frappe_core/api/doc.py:get_data` | `GET /api/v1/<resource>/list-view/`, `POST /api/v1/<resource>/list-view/` (a mixin each resource opts in to, S24; `doctype` leaves the input) | configuration | — |
+| `crm.api.doc.get_fields` | GET/POST | auth | `crm_app/api/doc.py:get_fields` | `GET /api/v1/meta/fields/` (`doctype` kept as input) | configuration | — |
+| `crm.api.doc.get_filterable_fields` | GET/POST | auth | `crm_app/api/doc.py:get_filterable_fields` | `GET /api/v1/meta/filterable-fields/` (`doctype` kept as input) | configuration | — |
+| `crm.api.doc.get_group_by_fields` | GET/POST | auth | `crm_app/api/doc.py:get_group_by_fields` | `GET /api/v1/meta/group-by-fields/` (`doctype` kept as input) | configuration | — |
+| `crm.api.doc.get_quick_filters` | GET/POST | auth | `crm_app/api/doc.py:get_quick_filters` | `GET /api/v1/meta/quick-filters/` (`doctype` kept as input) | configuration | — |
+| `crm.api.doc.sort_options` | GET/POST | auth | `crm_app/api/doc.py:sort_options` | `GET /api/v1/meta/sort-options/` (`doctype` kept as input) | configuration | — |
+| `crm.api.doc.update_quick_filters` | GET/POST | auth | `crm_app/api/doc.py:update_quick_filters` | `POST /api/v1/meta/quick-filters/update/` (`doctype` kept as input) | configuration | — |
+| `crm.api.exchange_rate.get_exchange_rate` | GET/POST | auth | `crm_app/api/exchange_rate.py:get_exchange_rate` | `GET /api/v1/exchange-rate/` | configuration | — |
+| `crm.api.get_translations` | GET/POST | guest | `crm_app/api/misc.py:get_translations` | `GET /api/v1/translations/` | configuration | — |
+| `crm.api.settings.create_email_account` | GET/POST | auth | `crm_app/api/settings.py:create_email_account` | `POST /api/v1/email-accounts/setup/` | configuration | — |
+| `crm.api.views.get_views` | GET/POST | auth | `crm_app/api/views.py:get_views` | `GET /api/v1/views/` (`doctype` kept as input) | configuration | — |
+| `crm.demo.api.clear_demo_data` | POST | auth | `crm_app/api/demo.py:clear_demo_data` | `POST /api/v1/demo/clear/` | configuration | — |
+| `crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout` | GET/POST | auth | `crm_app/api/fields_layout.py:get_fields_layout` | `GET /api/v1/fields-layouts/layout/` (`doctype` kept as input) | configuration | — |
+| `crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections` | GET/POST | auth | `crm_app/api/fields_layout.py:get_sidepanel_sections` | `GET /api/v1/fields-layouts/sidepanel-sections/` (`doctype` kept as input) | configuration | — |
+| `crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.save_fields_layout` | POST | auth | `crm_app/api/fields_layout.py:save_fields_layout` | `POST /api/v1/fields-layouts/save/` (`doctype` kept as input) | configuration | — |
+| `crm.fcrm.doctype.crm_view_settings.crm_view_settings.create_or_update_standard_view` | POST | auth | `crm_app/api/view_settings.py:create_or_update_standard_view` | `POST /api/v1/view-settings/standard-view/` | configuration | — |
+| `crm.fcrm.doctype.crm_view_settings.crm_view_settings.create` | POST | auth | `crm_app/api/view_settings.py:create` | `POST /api/v1/view-settings/create-view/` | configuration | — |
+| `crm.fcrm.doctype.crm_view_settings.crm_view_settings.delete` | POST/DELETE | auth | `crm_app/api/view_settings.py:delete` | `POST /api/v1/view-settings/<name>/delete-view/` (`name` in the URL) | configuration | — |
+| `crm.fcrm.doctype.crm_view_settings.crm_view_settings.fetch_and_update_kanban_columns` | POST | auth | `crm_app/api/view_settings.py:fetch_and_update_kanban_columns` | `POST /api/v1/view-settings/<name>/kanban-columns/` (`name` in the URL) | configuration | — |
+| `crm.fcrm.doctype.crm_view_settings.crm_view_settings.pin` | POST | auth | `crm_app/api/view_settings.py:pin` | `POST /api/v1/view-settings/<name>/pin/` (`name` in the URL) | configuration | — |
+| `crm.fcrm.doctype.crm_view_settings.crm_view_settings.public` | POST | auth | `crm_app/api/view_settings.py:public` | `POST /api/v1/view-settings/<name>/public/` (`name` in the URL) | configuration | — |
+| `crm.fcrm.doctype.crm_view_settings.crm_view_settings.set_as_default` | POST | auth | `crm_app/api/view_settings.py:set_as_default` | `POST /api/v1/view-settings/<name>/set-as-default/` (`name` in the URL) | configuration | — |
+| `crm.fcrm.doctype.crm_view_settings.crm_view_settings.update` | POST/PUT | auth | `crm_app/api/view_settings.py:update` | `POST /api/v1/view-settings/update-view/` (the view, with its `name`, in the body) | configuration | — |
+| `crm.www.crm.get_context_for_dev` | POST | guest | `crm_app/api/boot.py:get_context_for_dev` | `POST /api/v1/boot/` | configuration | — |
+| `frappe.apps.get_apps` | GET/POST | auth | `crm_app/api/desk.py:get_apps` | `GET /api/v1/desk/apps/` | configuration | — |
+| `frappe.desk.form.load.getdoctype` | GET/POST | auth | `crm_app/api/form_load.py:getdoctype` | `GET /api/v1/meta/doctype/` (`doctype` kept as input) | configuration | — |
+| `frappe.integrations.frappe_providers.frappecloud_billing.current_site_info` | GET/POST | auth | `crm_app/api/desk.py:current_site_info` | `GET /api/v1/desk/site-info/` | configuration | — |
+| `frappe.model.utils.user_settings.get` | GET/POST | auth | `crm_app/api/user_settings.py:get` | `GET /api/v1/user-settings/` (`doctype` kept as input) | configuration | — |
+| `frappe.model.utils.user_settings.save` | GET/POST | auth | `crm_app/api/user_settings.py:save` | `POST /api/v1/user-settings/` (`doctype` kept as input) | configuration | — |
+| `frappe.onboarding.get_onboarding_status` | GET/POST | auth | `crm_app/api/onboarding.py:get_onboarding_status` | `GET /api/v1/onboarding/status/` | configuration | — |
+| `frappe.onboarding.update_user_onboarding_status` | GET/POST | auth | `crm_app/api/onboarding.py:update_user_onboarding_status` | `POST /api/v1/onboarding/status/` | configuration | — |
+| `frappe.utils.telemetry.pulse.client.boot_config` | GET/POST | auth | `crm_app/api/desk.py:boot_config` | `GET /api/v1/desk/telemetry-config/` | configuration | — |
 
 ## SHARED_ACTIONS
 
