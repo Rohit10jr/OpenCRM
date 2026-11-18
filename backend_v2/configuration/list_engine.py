@@ -120,6 +120,46 @@ def doctype_fields(model) -> list[dict]:
     ]
 
 
+def check_shapes(columns, rows, kanban_columns=(), kanban_fields=()) -> None:
+    """PE-12e: what the old code would crash on is 417."""
+    if any(not isinstance(column, dict) for column in columns):
+        raise ValidationError("Columns must be objects")
+    if any(not isinstance(row, str) for row in rows):
+        raise ValidationError("Rows must be fieldnames")
+    if any(not isinstance(column, dict) for column in kanban_columns):
+        raise ValidationError("Kanban columns must be objects")
+    if any(not isinstance(field, str) for field in kanban_fields):
+        raise ValidationError("Kanban fields must be fieldnames")
+
+
+def group_by_options(fields: list, group_by_field: str, data: list, order_by):
+    """Old `:601-630`: the group-by field as `{label, fieldname, fieldtype, options}`,
+    the options a Select's or else the page's own distinct values."""
+    descriptor = next((f for f in fields if f.get("fieldname") == group_by_field), None)
+    if descriptor is None:
+        return group_by_field
+    if descriptor.get("fieldtype") == "Select" and descriptor.get("options"):
+        options = list(str(descriptor["options"]).split("\n"))
+    else:
+        has_empty = any(not row.get(group_by_field) for row in data)
+        options = [value for value in {row.get(group_by_field) for row in data} if value]
+        if has_empty:
+            options.append("")
+        order_by_text = str(order_by or "")
+        if group_by_field in order_by_text:
+            clauses = [clause.strip().split(" ") for clause in order_by_text.split(",")]
+            pairs = {(clause[0], clause[1]) for clause in clauses if len(clause) > 1}
+            options.sort(reverse=(group_by_field, "desc") in pairs)
+        else:
+            options.sort()
+    return {
+        "label": descriptor.get("label"),
+        "fieldname": descriptor.get("fieldname"),
+        "fieldtype": descriptor.get("fieldtype"),
+        "options": options,
+    }
+
+
 def selectable(model, rows: list) -> list:
     """The row keys to query: every unknown key named in one refusal, as the old
     `_selectable`; a known key the caller may not read is refused by the query."""
@@ -154,6 +194,8 @@ def get_data(viewset, inputs: dict, *, user) -> dict:
     page_length = inputs.get("page_length", 20)
     view_type = view.get("view_type")
     group_by_field = view.get("group_by_field")
+    custom_view_name = view.get("custom_view_name")
+    check_shapes(columns, rows, kanban_columns, kanban_fields)
 
     # 1-2. @me, then default_filters over filters.
     filters = resolve_me_tokens(filters, user)
@@ -173,7 +215,16 @@ def get_data(viewset, inputs: dict, *, user) -> dict:
             columns = ListView.default_columns()
         if not rows:
             rows = list(FALLBACK_ROWS)
-        if not custom_view or (is_default and has_list_data):
+        saved = None
+        if not custom_view:
+            saved = view_settings.saved_standard_view(doctype, view_type, user=user)
+        if saved is not None:
+            # The caller's own standard view (old `:267-274`).
+            columns = as_list(saved["columns"]) or ListView.default_columns()
+            rows = as_list(saved["rows"]) or list(FALLBACK_ROWS)
+            check_shapes(columns, rows)
+            is_default = False
+        elif not custom_view or (is_default and has_list_data):
             # The old clause, dead as written (`:275`), ported as it is.
             rows = list(default_rows) or list(FALLBACK_ROWS)
             columns = definition.default_columns() or ListView.default_columns()
@@ -216,6 +267,14 @@ def get_data(viewset, inputs: dict, *, user) -> dict:
             known.add(descriptor["fieldname"])
     hidden_fields = hidden_from(model, user)
     fields = [field for field in fields if field["fieldname"] not in hidden_fields]
+
+    # 7. A named view that loads the default columns reports itself as default.
+    if not is_default and custom_view_name:
+        is_default = view_settings.loads_default_columns(custom_view_name, user=user)
+
+    # 8. Group-by options: the page's own values.
+    if group_by_field and view_type == "group_by":
+        group_by_field = group_by_options(fields, group_by_field, data, order_by)
 
     return {
         "data": data,

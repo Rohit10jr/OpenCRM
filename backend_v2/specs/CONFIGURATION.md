@@ -765,8 +765,9 @@ Settings. Paths in this section are `backend/frappe_core/api/doc.py` unless name
      (PE-21's "Where", PE-12e).
   7. **Group-by options** (`:350-351`, `:601-630`): for `view_type` `group_by`,
      `group_by_field` becomes `{label, fieldname, fieldtype, options}`: a Select's
-     options, or else the page's own distinct non-empty values, with `""` last when a
-     row is empty, sorted descending only when `order_by` sorts that field `desc`. A
+     options, or else the page's own distinct non-empty values, plus `""` when a row is
+     empty, all sorted together (so `""` first), descending only when `order_by` sorts
+     that field `desc`. A
      field not in `fields` is answered as the plain name.
   8. **The answer** (`:353-372`): `data`, `columns`, `rows`, `fields`, `column_field`,
      `title_field`, `kanban_columns`, `kanban_fields`, `group_by_field`, `page_length`
