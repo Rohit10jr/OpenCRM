@@ -22,6 +22,7 @@ from configuration import (
     email_accounts,
     exchange_rate,
     field_helpers,
+    fields_layout,
     metadata,
     user_settings,
 )
@@ -479,6 +480,34 @@ class CRMFieldsLayoutViewSet(DocumentViewSet):
         if ptype in ("read", "select"):
             return True
         return _is_admin_or_manager(user)
+
+    @action(detail=False, methods=("get",), url_path="layout")
+    def layout(self, request):
+        """`get_fields_layout`, for any signed-in caller (configuration/fields_layout.py)."""
+        inputs = build_payload(request)
+        tabs = fields_layout.get_fields_layout(
+            inputs.get("doctype"),
+            inputs.get("type"),
+            user=request.user,
+            parent_doctype=inputs.get("parent_doctype"),
+        )
+        return Response(Envelope(tabs, "message"))
+
+    @action(detail=False, methods=("get",), url_path="sidepanel-sections")
+    def sidepanel_sections(self, request):
+        """`get_sidepanel_sections`, for any signed-in caller."""
+        inputs = build_payload(request)
+        sections = fields_layout.get_sidepanel_sections(inputs.get("doctype"), user=request.user)
+        return Response(Envelope(sections, "message"))
+
+    @action(detail=False, methods=("post",), url_path="save")
+    def save_layout(self, request):
+        """`save_fields_layout`: System Manager or Sales Manager."""
+        inputs = build_payload(request)
+        stored = fields_layout.save_fields_layout(
+            inputs.get("doctype"), inputs.get("type"), inputs.get("layout"), user=request.user
+        )
+        return Response(Envelope(stored, "message"))
 
 
 class CRMFormScriptViewSet(DocumentViewSet):

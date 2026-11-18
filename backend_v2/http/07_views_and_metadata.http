@@ -623,7 +623,7 @@ Content-Type: application/json
 # ---- form layouts and the side panel ---------------------------------------------------------------
 
 ### 6.1 get_fields_layout with nothing saved -> the default layout from the JSON's breaks, fields expanded
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 # @expect $.message[0].sections exists
 # @expect $.message[0].sections[0].columns[0].fields[0].fieldname exists
 # @expect $.message[0].sections[0].columns[0].fields[0].fieldtype exists
@@ -634,7 +634,7 @@ Content-Type: application/json
 {"doctype": "CRM Task", "type": "Quick Entry"}
 
 ### 6.2 the side panel for a lead (a saved row exists) -> sections with expanded fields
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message[0].name exists
 # @expect $.message[0].columns[0].fields[0].fieldname exists
 POST {{host}}/api/method/{{fl}}.get_sidepanel_sections
@@ -644,7 +644,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead"}
 
 ### 6.3 no side panel configured for a task -> empty list
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 # @expect $.message count 0
 POST {{host}}/api/method/{{fl}}.get_sidepanel_sections
 Authorization: Bearer {{token}}
@@ -653,7 +653,7 @@ Content-Type: application/json
 {"doctype": "CRM Task"}
 
 ### 6.4 a Sales User may not save a layout -> 403, crm_fields_layout.py:197 verbatim
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 # @expect $.exc_type == PermissionError
 # @expect $.message == Not permitted to modify fields layout
 POST {{host}}/api/method/{{fl}}.save_fields_layout
@@ -663,7 +663,7 @@ Content-Type: application/json
 {"doctype": "CRM Task", "type": "Quick Entry", "layout": "[{\"name\": \"tab_1\", \"sections\": [{\"name\": \"s1\", \"columns\": [{\"name\": \"c1\", \"fields\": [\"title\", \"priority\"]}]}]}]"}
 
 ### 6.5 a Sales Manager may -> 200, the layout string is echoed
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 # @expect $.message contains title
 POST {{host}}/api/method/{{fl}}.save_fields_layout
 Authorization: Bearer {{mtoken}}
@@ -672,7 +672,7 @@ Content-Type: application/json
 {"doctype": "CRM Task", "type": "Quick Entry", "layout": "[{\"name\": \"tab_1\", \"sections\": [{\"name\": \"s1\", \"columns\": [{\"name\": \"c1\", \"fields\": [\"title\", \"priority\", \"no_such_field\"]}]}]}]"}
 
 ### 6.6 -> the saved layout is served, fields expanded, unknown fieldnames dropped
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 # @expect $.message count 1
 # @expect $.message[0].sections[0].columns[0].fields count 2
 # @expect $.message[0].sections[0].columns[0].fields[0].fieldname == title

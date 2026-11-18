@@ -639,6 +639,12 @@ class CRMFieldsLayout(BaseDocument):
     class Meta(BaseDocument.Meta):
         ordering = ["name"]
 
+    @classmethod
+    def row_for(cls, dt: str, type: str):
+        """The stored layout for a doctype and type, or `None`. Every layout is readable
+        by everyone, so there is no row rule to apply."""
+        return cls._default_manager.filter(dt=dt, type=type).first()
+
 
 class CRMFormScript(BaseDocument):
     """A client-side script the browser runs on a form or list (old
