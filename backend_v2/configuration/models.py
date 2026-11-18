@@ -271,6 +271,13 @@ class FCRMSettings(SingletonDocument):
         verbose_name = "FCRM Settings"
 
     @classmethod
+    def load(cls, *, user):
+        """The old loader's name (`backend/crm_app/models/metadata.py:369-376`): the same as
+        `load_or_create`, so a later port that calls `load` still gets the standard items
+        on a row it creates."""
+        return cls.load_or_create(user=user)
+
+    @classmethod
     def load_or_create(cls, *, user):
         """The row; if it is missing, written with `user` as actor and given the standard
         items. A row that exists is never refilled (old `metadata.py:369-376`)."""

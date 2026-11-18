@@ -138,9 +138,20 @@ def test_force_restores_a_standard_row_and_keeps_a_custom_one(administrator):
     assert settings.dropdown_items.filter(name1="docs").exists()
 
 
-def test_a_manager_empties_the_menu_and_it_stays_empty(api_as, make_user):
+def test_a_manager_empties_the_menu_and_it_stays_empty(api_as, make_user, administrator):
+    """No save hook refills it (spec section 4.3): neither the read nor either loader
+    puts the standard items back on a row that exists."""
     manager = make_user("mgr@example.com", roles=["Sales Manager"])
     client = api_as(manager)
     response = client.patch("/api/v1/crm-settings/", {"dropdown_items": []}, format="json")
     assert response.status_code == 200, response.content[:300]
     assert client.get("/api/v1/crm-settings/").json()["message"]["dropdown_items"] == []
+    assert FCRMSettings.load(user=administrator).dropdown_items.count() == 0
+    assert FCRMSettings.load_or_create(user=administrator).dropdown_items.count() == 0
+
+
+def test_load_on_a_missing_row_writes_the_standard_items(administrator):
+    """A-32 finding 4: `load`, the old loader's name, behaves as `load_or_create`."""
+    FCRMSettings.objects.all().delete()
+    settings = FCRMSettings.load(user=administrator)
+    assert _names(settings) == STANDARD_NAMES
