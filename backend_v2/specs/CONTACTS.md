@@ -13,7 +13,7 @@ App `contacts`. The `PORT_MAP.md` rows under **CONTACTS**:
   Salutation and Gender; child tables Contact Email, Contact Phone, Dynamic Link
 - **Method paths (4):** `crm.api.contact.create_new`, `search_emails`, `set_as_primary`;
   `crm.api.session.get_organizations`. **`crm.api.contact.get_linked_deals` moves to
-  SALES** (DECISIONS 56, flagged): it reads only the deal-contacts table and CRM Deal
+  SALES** (DECISIONS 57, flagged): it reads only the deal-contacts table and CRM Deal
   (`crm_app/api/contact.py:44-72`), and `contacts` cannot import `sales`. §9 says what
   SALES keeps.
 
@@ -273,7 +273,7 @@ dropping the row signal breaks one of them.
   ordered by `name`, no limit, in the list-projection shape (decimals as numbers, the
   caches as JSON strings).
 
-### The child-row routes (DECISIONS 57; `client.py:393-459`)
+### The child-row routes (DECISIONS 60; `client.py:393-459`)
 
 - `PATCH` answers the **contact's** serialized document; `DELETE` answers `null`.
 - The row is looked up first, as the old route does (`client.py:409-411,424`): a row
@@ -307,7 +307,7 @@ dropping the row signal breaks one of them.
   with SALES; `test_envelope.py:165-185`).
 - **Address:** a System Manager may delete an address an organization's text `address`
   still names; that organization's next save is then 417 "Could not find Address:
-  <name>" until the field is cleared. Reproduced, as `backend/` (DECISIONS 57, flagged;
+  <name>" until the field is cleared. Reproduced, as `backend/` (DECISIONS 58, flagged;
   `delete_doc.py:164-180` checks dynamic links only). Upstream refuses the delete.
 
 ### CRM Organization (milestone 5, §6 A)
@@ -329,7 +329,7 @@ set here is cleared on every other enabled address linked to the same document. 
 hides disabled addresses (FINDINGS 45); list-shaped search filters follow ACCOUNTS'
 User precedent (`AS_BUILT.md:503-504`).
 
-### What `backend/` does not do (DECISIONS 57, flagged; followed here)
+### What `backend/` does not do (DECISIONS 58, flagged; followed here)
 
 Upstream does each of these; `backend/` does not, and neither does `backend_v2`:
 

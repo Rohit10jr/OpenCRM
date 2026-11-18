@@ -267,7 +267,7 @@ today. CONFIGURATION still owns the field labels and fieldtypes used by export h
 
 ### Method paths (4)
 
-`crm.api.contact.get_linked_deals` moved to SALES (`temp` A-41, DECISIONS 56; flagged for
+`crm.api.contact.get_linked_deals` moved to SALES (`temp` A-41, DECISIONS 57; flagged for
 the owner).
 
 | Dotted path | Verbs | Access | Old source | New route | New app | Status |

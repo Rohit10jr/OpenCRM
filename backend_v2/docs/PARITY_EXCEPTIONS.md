@@ -545,7 +545,8 @@ comparison skips that block.
 ### PE-24. Rename is served for the resources that opt in
 
 - **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-41, A-42, DECISIONS 57, 19 Nov 2026); to be built in CONTACTS
+  the owner (`temp` A-41, A-42, DECISIONS 58 and, for the child-row caches, 60; 19 Nov
+  2026); to be built in CONTACTS
 - **Where:** `POST /api/v1/<resource>/<name>/rename/` (old `frappe.client.rename_doc`),
   for Address, CRM Industry, Salutation and Gender; and the Contact Email and Contact
   Phone row routes, `PATCH /api/v1/contacts/<name>/email-ids/<row>/` and
@@ -558,6 +559,33 @@ comparison skips that block.
   write never writes the underscore caches
 - **Why:** each resource serves the actions its screens use (S24), and the caches are
   written by their own calls (`API_CONTRACT.md:239`)
+- **Recorded by:** CONTACTS, 19 Nov 2026
+
+### PE-25. "Remove contact" clears the document's own contact field and table
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-42, DECISIONS 59, 19 Nov 2026); built in `c1490cd`
+- **Where:** `POST /api/v1/<resource>/<name>/linked-documents/` with `remove_contact`,
+  and `POST /api/v1/<resource>/bulk-delete/` on a resource that removes contacts (old
+  `remove_linked_doc_reference` and `delete_bulk_docs`)
+- **Old backend:** clears whatever the document exposes under that name
+  (`backend/crm_app/api/doc.py:579-586`)
+- **backend_v2:** "remove contact" clears the document's own `contact` field and its
+  `contacts` table, the one its resource declares
+- **Why:** the screen removes a contact from the deal it is unlinked from
+- **Recorded by:** CONTACTS, 19 Nov 2026
+
+### PE-26. Deleting a linked document needs its delete rule
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-42, DECISIONS 59, 19 Nov 2026); built in `c1490cd`
+- **Where:** `POST /api/v1/<resource>/<name>/linked-documents/` with `delete`, and
+  `POST /api/v1/<resource>/bulk-delete/` with `delete_linked`
+- **Old backend:** checks the write rule
+- **backend_v2:** the unlink action's delete and bulk delete's `delete_linked` delete
+  only the linked documents the caller may delete; one the caller may not delete is
+  skipped, like every other refusal in those loops, and its link is still cleared
+- **Why:** deleting a document is the delete rule's decision on every door
 - **Recorded by:** CONTACTS, 19 Nov 2026
 
 ---

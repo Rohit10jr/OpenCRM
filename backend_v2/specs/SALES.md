@@ -119,7 +119,7 @@ mechanism is tested on `tests_support`; the cases below prove it on real records
 
 ## 9. Carried from CONTACTS
 
-Moved here by CONTACTS' spec rewrite (`temp` A-41, A-42; DECISIONS 56, flagged for the
+Moved here by CONTACTS' spec rewrite (`temp` A-41, A-42; DECISIONS 57, flagged for the
 owner). `CONTACTS.md` §9 has the detail.
 
 - **`crm.api.contact.get_linked_deals`** (`backend/crm_app/api/contact.py:44-72`;

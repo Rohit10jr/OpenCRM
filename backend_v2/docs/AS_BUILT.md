@@ -643,11 +643,15 @@ value selects production, and any other value is refused before authorization.
 
 The perform half is one transaction. It reuses the linked-document batched scan and
 clear helpers, skips links whose resource or actual child-row parent denies object
-write, optionally deletes a cleared link only when its own dynamic-link check permits,
-then checks every target for remaining dynamic links. It batch-removes reference rows,
-stands down per-row reference cleanup, and deletes all targets with one queryset.
-`bulk_delete_remove_contact = True` selects the old Contact-specific clearing hook;
-it defaults off. No production resource opts in yet; the test Widget resource does.
+write, optionally deletes a cleared link only when the caller may delete it (its own
+delete rule, PE-26) and its own dynamic-link check permits, then checks every target
+for remaining dynamic links. It batch-removes reference rows, stands down per-row
+reference cleanup, and deletes all targets with one queryset.
+`bulk_delete_remove_contact = True` selects the Contact-specific clearing hook, which
+clears a linked document's own `contact` field and the `contacts` table its resource's
+serializer declares, never a reverse relation of that name (PE-25); it defaults off. The
+unlink action's `remove_contact` and `delete` use the same two helpers. No production
+resource opts in yet; the test Widget resource does.
 
 `ListExportMixin` writes `GET` and `POST <resource>/export/`, merges query and body
 inputs, reads through the resource queryset and field allowlists, and returns the raw
