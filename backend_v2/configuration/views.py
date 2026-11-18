@@ -18,7 +18,7 @@ from accounts.roles import (
     ROLE_SALES_USER,
     ROLE_SYSTEM_MANAGER,
 )
-from configuration import email_accounts, exchange_rate
+from configuration import email_accounts, exchange_rate, user_settings
 from configuration.models import SystemSettings
 from configuration.serializers import (
     DOCUMENT_FIELDS,
@@ -356,3 +356,21 @@ class EmailAccountViewSet(RenameMixin, DocumentViewSet):
             )
         )
 
+
+
+class UserSettingsView(BaseAPIView):
+    """`frappe.model.utils.user_settings.get` (GET) and `save` (POST): the caller's own
+    UI state for a doctype (configuration/user_settings.py). Any signed-in caller; the
+    doctype is not validated, as `backend/`."""
+
+    def get(self, request):
+        inputs = self.get_inputs(request)
+        return Response(user_settings.get(inputs.get("doctype"), user=request.user))
+
+    def post(self, request):
+        inputs = self.get_inputs(request)
+        return Response(
+            user_settings.save(
+                inputs.get("doctype"), inputs.get("user_settings"), user=request.user
+            )
+        )

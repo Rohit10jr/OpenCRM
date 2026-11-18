@@ -53,7 +53,7 @@ commit its reference was read at.
 | Old model | What it is | New app | Unit | Status |
 |---|---|---|---|---|
 | `frappe_core.NamingSeriesCounter` | One counter row per resolved naming-series prefix | core | FOUNDATION | built |
-| `frappe_platform.UserSettings` | Per-user list-view state behind `frappe.model.utils.user_settings.*` | configuration | CONFIGURATION | — |
+| `frappe_platform.UserSettings` | Per-user list-view state behind `frappe.model.utils.user_settings.*` | configuration | CONFIGURATION | built |
 | SimpleJWT `token_blacklist` tables | Rotated and logged-out refresh tokens | accounts | FOUNDATION | built |
 
 ---
@@ -215,8 +215,8 @@ per-view calls that require it.
 | `frappe.apps.get_apps` | GET/POST | auth | `crm_app/api/desk.py:get_apps` | `GET /api/v1/desk/apps/` | configuration | built |
 | `frappe.desk.form.load.getdoctype` | GET/POST | auth | `crm_app/api/form_load.py:getdoctype` | `GET /api/v1/meta/doctype/` (`doctype` kept as input) | configuration | — |
 | `frappe.integrations.frappe_providers.frappecloud_billing.current_site_info` | GET/POST | auth | `crm_app/api/desk.py:current_site_info` | `GET /api/v1/desk/site-info/` | configuration | built |
-| `frappe.model.utils.user_settings.get` | GET/POST | auth | `crm_app/api/user_settings.py:get` | `GET /api/v1/user-settings/` (`doctype` kept as input) | configuration | — |
-| `frappe.model.utils.user_settings.save` | GET/POST | auth | `crm_app/api/user_settings.py:save` | `POST /api/v1/user-settings/` (`doctype` kept as input) | configuration | — |
+| `frappe.model.utils.user_settings.get` | GET/POST | auth | `crm_app/api/user_settings.py:get` | `GET /api/v1/user-settings/` (`doctype` kept as input) | configuration | built |
+| `frappe.model.utils.user_settings.save` | GET/POST | auth | `crm_app/api/user_settings.py:save` | `POST /api/v1/user-settings/` (`doctype` kept as input) | configuration | built |
 | `frappe.onboarding.get_onboarding_status` | GET/POST | auth | `crm_app/api/onboarding.py:get_onboarding_status` | `GET /api/v1/onboarding/status/` | configuration | built |
 | `frappe.onboarding.update_user_onboarding_status` | GET/POST | auth | `crm_app/api/onboarding.py:update_user_onboarding_status` | `POST /api/v1/onboarding/status/` | configuration | built |
 | `frappe.utils.telemetry.pulse.client.boot_config` | GET/POST | auth | `crm_app/api/desk.py:boot_config` | `GET /api/v1/desk/telemetry-config/` | configuration | built |
