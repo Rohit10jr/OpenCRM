@@ -456,11 +456,13 @@ Caching: the process-lifetime memo of the metadata file only.
     list route.
   - `get_non_filterable_fields` is a model staticmethod, adopted unchanged by milestone 8.
 - **The model fallback** (old `field_meta.py:124-180`) reads v2's declarations:
-  `TEXT_LINK_FIELDS` (tuple values), `DYNAMIC_LINK_FIELDS` (pairs), `ATTACH_FIELDS`, and
-  child tables from the serializer's `CHILD_TABLES`. System Settings' `currency` answers
-  `Link` / `Currency` (`test_system_settings.py:70`). The old User has no
-  `TABLE_FIELD_LABELS`, so `getdoctype` on User has no Table row for `user_emails`: none
-  is synthesised from `CHILD_TABLES`.
+  `TEXT_LINK_FIELDS` (tuple values), `DYNAMIC_LINK_FIELDS` (pairs) and `ATTACH_FIELDS`.
+  System Settings' `currency` answers `Link` / `Currency` (`test_system_settings.py:70`).
+  Table rows for a model's child tables come only from `TABLE_FIELD_LABELS`, as the old
+  fallback (`field_meta.py:181-195`): never synthesised from `CHILD_TABLES`. The old User
+  has none, so `getdoctype` on User has no Table row for `user_emails`. The old Contact
+  has one (`email_ids`, `phone_nos`); its reading is not built here and is carried to
+  CONTACTS' spec, since no backend_v2 model declares it yet.
 - **`user_settings`** (`backend/crm_app/api/user_settings.py`): keyed on (user, doctype),
   unique, cascading with the User; no `user` input, so nobody reads or writes another's.
   A dict or a JSON string; `""` and None mean `{}`; valid JSON that is not an object

@@ -158,9 +158,15 @@ def _dynamic_link_targets(model) -> dict[str, str]:
 
 
 def _derive_from_model(doctype: str) -> list[dict]:
-    """Best effort for a doctype with no file entry (old `field_meta.py:124-196`). No
-    Table rows are made up from child tables: the old fallback added them only where a
-    model declared `TABLE_FIELD_LABELS`, which none of this backend's models does."""
+    """Best effort for a doctype with no file entry (old `field_meta.py:124-196`).
+
+    Not yet ported: the old fallback also added Table rows for the child tables a model
+    names in `TABLE_FIELD_LABELS` (old `field_meta.py:181-195`). The old Contact declares
+    it for `email_ids` and `phone_nos`, so its bundle is Contact, Contact Email, Contact
+    Phone (old `tests/test_form_load.py:300-306`). No backend_v2 model declares it yet;
+    CONTACTS adds the attribute, under the old name, and its reading here (CONTACTS' spec,
+    "Carried from CONFIGURATION"). User has no such declaration, so no Table row for
+    `user_emails`."""
     model = model_for_doctype(doctype)
     if model is None:
         return []

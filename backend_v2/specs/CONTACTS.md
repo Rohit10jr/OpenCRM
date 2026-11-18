@@ -64,6 +64,18 @@ None yet.
 - Update `API_CONTRACT.md`'s "a child row is never reachable on its own" rule with the
   approved exception for those two nested routes when they are built.
 
+## 7a. Carried from CONFIGURATION
+
+- **Contact's field metadata needs Table rows for `email_ids` and `phone_nos`.** The old
+  Contact declares `TABLE_FIELD_LABELS = {"email_ids": "Email IDs", "phone_nos": "Contact
+  Numbers"}` (`backend/frappe_platform/models.py:362-368`), and the old model fallback
+  turns each into a `Table` row naming the child doctype
+  (`backend/frappe_core/field_meta.py:181-195`), so Contact's `getdoctype` bundle is
+  Contact, Contact Email, Contact Phone (`backend/tests/test_form_load.py:300-306`).
+  Declare the attribute under the old name on Contact, and teach
+  `configuration/field_meta.py`'s `_derive_from_model` to read it, resolving each child
+  through `core.children.child_table_specs` (CONFIGURATION spec section 4.5; temp A-36).
+
 ## 8. Carried from SHARED_ACTIONS
 
 Opt the resources below in to the `core/mixins/` actions (AS_BUILT §2, "Opting a
