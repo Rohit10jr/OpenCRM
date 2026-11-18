@@ -15,6 +15,7 @@ transport or JSON failure answers the generic sentence).
 
 from __future__ import annotations
 
+import datetime
 import logging
 import re
 
@@ -30,8 +31,8 @@ logger = logging.getLogger(__name__)
 #: `exchange_rate.py` passes `timeout=5` to every request.
 TIMEOUT = 5
 
-_CURRENCY_RE = re.compile(r"[A-Za-z]{3}")
-_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+_CURRENCY_RE = re.compile(r"[A-Za-z]{3}", re.ASCII)
+_DATE_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", re.ASCII)
 
 
 def fx_enabled() -> bool:
@@ -77,8 +78,26 @@ def _accepted(from_currency, to_currency, date) -> bool:
         and isinstance(date, str)
         and bool(_CURRENCY_RE.fullmatch(from_currency))
         and bool(_CURRENCY_RE.fullmatch(to_currency))
-        and (date == "latest" or bool(_DATE_RE.fullmatch(date)))
+        and (date == "latest" or _is_real_date(date))
     )
+
+
+def _is_real_date(value: str) -> bool:
+    if not _DATE_RE.fullmatch(value):
+        return False
+    try:
+        datetime.date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _rate(value):
+    """A provider's answer counts only as a positive number (PE-12); anything else is a
+    failed fetch, so it is neither cached nor answered."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return value if value > 0 else None
 
 
 def _today() -> str:
@@ -130,7 +149,7 @@ def _fetch_from_frankfurter(from_currency, to_currency, date):
     try:
         res = _get(f"https://api.frankfurter.app/{date}?from={from_currency}&to={to_currency}")
         if res.ok:
-            return res.json().get("rates", {}).get(to_currency)
+            return _rate(res.json().get("rates", {}).get(to_currency))
     except Exception:  # noqa: BLE001 - as upstream: every failure falls back
         pass
     return None
@@ -148,7 +167,9 @@ def _fetch_from_fawaz_api(from_currency, to_currency, date):
         try:
             res = _get(url)
             if res.ok:
-                return res.json()[from_lower][to_lower]
+                rate = _rate(res.json()[from_lower][to_lower])
+                if rate is not None:
+                    return rate
         except Exception:  # noqa: BLE001 - as upstream: try the next mirror
             continue
     return None
@@ -174,7 +195,7 @@ def _fetch_from_exchangerate_host(settings_doc, from_currency, to_currency, date
     try:
         res = _get("https://api.exchangerate.host/convert", params=params)
         if res.ok:
-            return res.json()["result"]
+            return _rate(res.json()["result"])
     except Exception:  # noqa: BLE001
         logger.warning("exchangerate.host request failed")
     return None
@@ -188,7 +209,7 @@ def _fetch_from_exchangerate_api(settings_doc, from_currency, to_currency):
         if res.ok:
             data = res.json()
             if data["result"] == "success":
-                return data["conversion_rate"]
+                return _rate(data["conversion_rate"])
     except Exception:  # noqa: BLE001
         logger.warning("exchangerate-api request failed")
     return None
