@@ -3,8 +3,8 @@
 The equivalent of `backend/scripts/walk_auth_flow.py` for backend_v2: invite an address,
 read the link out of the outbox, redeem it, set a password, log in with it, then forgot
 password. It does not import the endpoint functions: it drives real HTTP through Django's
-test client and never touches a key it did not receive by mail. The invitation is created
-through the model, so the model's own after-commit queueing sends the mail.
+test client and never touches a key it did not receive by mail. The invitation is made the
+only way one can be (PE-8): a System Manager's invite-by-email.
 
 Run:  backend_v2/.venv/Scripts/python.exe scripts/walk_auth_flow.py
 It builds and drops its own test database. `tests/test_walk_auth_flow.py` runs the same
@@ -19,6 +19,8 @@ import sys
 
 STEPS: list[tuple[str, bool, str]] = []
 INVITEE = "newstarter@example.com"
+MANAGER = "walk.manager@example.com"
+MANAGER_PASSWORD = "W4lk!Manager-pass"
 
 
 def step(label, ok, detail=""):
@@ -43,16 +45,22 @@ def walk() -> list[tuple[str, bool, str]]:
 
     # A carrier for the two emails: the config account, sending to the locmem outbox.
     with override_settings(EMAIL_HOST="smtp.walk.test"):
-        print("\n1. A manager invites an address")
+        print("\n1. A System Manager invites an address through invite-by-email")
+        from django.contrib.auth.models import Group
+
+        manager = User.objects.create_user(MANAGER, password=MANAGER_PASSWORD)
+        manager.groups.add(Group.objects.get_or_create(name="System Manager")[0])
+        login = post("/api/v1/auth/login/", {"usr": MANAGER, "pwd": MANAGER_PASSWORD})
+        manager_token = login.json()["message"]["access"] if login.status_code == 200 else ""
         mail.outbox.clear()
-        invitation = CRMInvitation.objects.create_for_user(
-            user="Administrator",
-            email=INVITEE,
-            role="Sales User",
-            status="Pending",
-            key="walk-key-001",
+        response = post(
+            "/api/v1/invitations/invite-by-email/",
+            {"emails": INVITEE, "role": "Sales User"},
+            HTTP_AUTHORIZATION=f"Bearer {manager_token}",
         )
-        step("invitation created", CRMInvitation.objects.filter(pk=invitation.pk).exists())
+        if not step("invite-by-email answers 200", response.status_code == 200, f"status {response.status_code}"):
+            return list(STEPS)
+        step("it invited the address", response.json()["message"]["to_invite"] == [INVITEE])
 
         print("\n2. The invitation email went out on create")
         if not step("one email sent", len(mail.outbox) == 1):
@@ -62,7 +70,8 @@ def walk() -> list[tuple[str, bool, str]]:
         if not step("email contains an accept link", bool(invite_match)):
             return list(STEPS)
         invite_key = invite_match.group(1)
-        step("the key came from the email, not the API", invite_key == "walk-key-001")
+        stored = CRMInvitation.objects.get(email=INVITEE)
+        step("the key came only from the email", invite_key == stored.key and invite_key not in response.content.decode())
         step("the link is a page, not the JSON API", "/api/" not in body)
         step("the link points at the SPA accept page", "/crm/accept-invitation?key=" in body)
 

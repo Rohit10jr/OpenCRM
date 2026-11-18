@@ -369,8 +369,10 @@ an empty schedule today.
 - `99_lockout.http` runs last, each backend in turn (§7).
 - The body diff over the same blocks, after the `opencrm` roles are reset (§7).
 - An equivalent of `walk_auth_flow.py` (invite → accept → set password → log in → reset),
-  run as the old one is: Django's test client and `mail.outbox` on a test database, the
-  invitation created through the model so the signal sends the mail (`:26-33,194-199`).
+  run as the old one is: Django's test client and `mail.outbox` on a test database
+  (`:26-33,194-199`). The invitation is made the only way one can be since PE-8, a System
+  Manager's `invitations/invite-by-email/`, and the key is read from the outbox
+  (`backend_v2/scripts/walk_auth_flow.py`, run by `tests/test_walk_auth_flow.py`).
 
 ## 6. Decided in the rewrite (checked at the spec review)
 
