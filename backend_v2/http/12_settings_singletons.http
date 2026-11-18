@@ -126,12 +126,15 @@ Authorization: Bearer {{stoken}}
 # @expect $.data[0].access_key absent
 # @expect $.data[0].brand_name exists
 # @retired PE-11: a settings record has no list route; covered by 1.2
+
 ### 1.4 naming it explicitly -> 417 "not readable"
 # @expect $.message contains not readable
 # @retired PE-11: a settings record has no list route; covered by 1.11
+
 ### 1.5 filtering on it -> 400 (a filter would turn the row count into an oracle)
 # @expect $.message contains Cannot filter
 # @retired PE-11: a settings record has no list route; no other block covers it
+
 ### 1.6 she may not write it -> 403
 # @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == PermissionError
@@ -140,6 +143,7 @@ Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"brand_name": "ZZ hijacked"}
+
 ### 1.7 a Sales Manager may -> 200
 # @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.message.brand_name == ZZ Brand
@@ -148,6 +152,7 @@ Authorization: Bearer {{mtoken}}
 Content-Type: application/json
 
 {"brand_name": "ZZ Brand"}
+
 ### 1.8 and sees access_key -> present
 # @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.message.access_key exists
@@ -162,28 +167,23 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"access_key": "ZZ-fx-key"}
+
 ### 1.10 get_single_value, the second door: a public field for a Sales User -> 200
 # @expect $.message == ZZ Brand
-GET {{host}}/api/v1/crm-settings/value/
+GET {{host}}/api/v1/crm-settings/value/?field=brand_name
 Authorization: Bearer {{stoken}}
-Content-Type: application/json
 
-{"field": "brand_name"}
 ### 1.11 the restricted field through the same door -> 403 (this was open before the phase-7 review)
 # @expect $.exc_type == PermissionError
 # @expect $.message contains not readable
-GET {{host}}/api/v1/crm-settings/value/
+GET {{host}}/api/v1/crm-settings/value/?field=access_key
 Authorization: Bearer {{stoken}}
-Content-Type: application/json
 
-{"field": "access_key"}
 ### 1.12 ...and for a manager -> the value
 # @expect $.message == ZZ-fx-key
-GET {{host}}/api/v1/crm-settings/value/
+GET {{host}}/api/v1/crm-settings/value/?field=access_key
 Authorization: Bearer {{mtoken}}
-Content-Type: application/json
 
-{"field": "access_key"}
 ### 1.13 get_single_value on a doctype that is not a singleton -> 417
 # @waiting SALES
 # @expect $.message contains not a single DocType
@@ -193,17 +193,18 @@ Content-Type: application/json
 
 {"doctype": "CRM Lead", "field": "status"}
 
-### 1.14 a Sales User may not create a second settings row -> 403
-# @resource-envelope {"data"}/201 -> {"message"}/200
-# @expect $.exc_type == PermissionError
+### 1.14 a Sales User may not create a second settings row -> 405
+# @negative
+# @expect $.exc_type == MethodNotAllowed
 POST {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"brand_name": "ZZ second"}
-### 1.15 nor delete the row -> 403
-# @resource-envelope {"data"}/201 -> {"message"}/200
-# @expect $.exc_type == PermissionError
+
+### 1.15 nor delete the row -> 405
+# @negative
+# @expect $.exc_type == MethodNotAllowed
 DELETE {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{stoken}}
 

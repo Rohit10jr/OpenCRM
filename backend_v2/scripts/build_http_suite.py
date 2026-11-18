@@ -175,17 +175,21 @@ def _replace_request(block: HttpBlock, method: str, url: str, body: dict | None 
         end += 1
     while end < len(block.lines) and not block.lines[end].strip():
         end += 1
-    # Comments after the body (often the next section's heading) stay where they were.
-    tail_start = len(block.lines)
-    while tail_start > index + 1 and (
-        not block.lines[tail_start - 1].strip()
-        or block.lines[tail_start - 1].startswith(("#", "//"))
+    block.lines = block.lines[: index + 1] + headers + ["", json.dumps(body)] + _tail(block)
+
+
+def _tail(block: HttpBlock) -> list[str]:
+    """The block's trailing blank and comment lines: the blank line before the next `###`
+    and often the next section's heading. Every rewrite that cuts a block keeps them."""
+    index = block.request_index
+    assert index is not None
+    start = len(block.lines)
+    while start > index + 1 and (
+        not block.lines[start - 1].strip()
+        or block.lines[start - 1].startswith(("#", "//"))
     ):
-        tail_start -= 1
-    tail = block.lines[tail_start:]
-    if not any(line.strip() for line in tail):
-        tail = []
-    block.lines = block.lines[: index + 1] + headers + ["", json.dumps(body)] + tail
+        start -= 1
+    return block.lines[start:]
 
 
 def _payload(block: HttpBlock, url: str) -> dict:
@@ -240,9 +244,11 @@ def _retire_list_read(block: HttpBlock, filename: str) -> None:
     cover = f"covered by {covered}" if covered else "no other block covers it"
     index = block.request_index
     assert index is not None
-    block.lines = block.lines[:index] + [
-        f"# @retired PE-11: a settings record has no list route; {cover}"
-    ]
+    block.lines = (
+        block.lines[:index]
+        + [f"# @retired PE-11: a settings record has no list route; {cover}"]
+        + _tail(block)
+    )
 
 
 def _resource_path(entry: RouteEntry, method: str, has_name: bool) -> str | None:
@@ -359,6 +365,12 @@ def _rewrite_generic(
         body = {key: value for key, value in doc.items() if key != "doctype"}
     elif path == "frappe.client.set_value":
         body = {str(body.pop("fieldname")): body.pop("value")}
+    if method == "GET":
+        # A GET route reads its query, not a body (A-32 finding 1).
+        query = _query_string(body)
+        _replace_request(block, "GET", "{{host}}" + target + (f"?{query}" if query else ""))
+        _drop_body(block)
+        return True
     _replace_request(block, method, "{{host}}" + target, body)
     return True
 
@@ -366,9 +378,11 @@ def _rewrite_generic(
 def _comment_not_served(block: HttpBlock) -> None:
     index = block.request_index
     assert index is not None
-    block.lines = block.lines[:index] + [
-        "# @not-served PE-3: frappe.client.get by filters has no REST route"
-    ]
+    block.lines = (
+        block.lines[:index]
+        + ["# @not-served PE-3: frappe.client.get by filters has no REST route"]
+        + _tail(block)
+    )
 
 
 def _rewrite_resource(
@@ -393,9 +407,16 @@ def _rewrite_resource(
         _annotate(block, f"# @waiting {entry.unit}")
         return None
     new_method = "PATCH" if method == "PUT" else method
-    if _is_singleton(entry) and name is None and new_method == "GET":
-        _retire_list_read(block, filename)
-        return None
+    if _is_singleton(entry):
+        if name is None and new_method == "GET":
+            _retire_list_read(block, filename)
+            return None
+        root = min((path for _, path in entry.routes), key=len)
+        served = {verb for verb, path in entry.routes if path == root}
+        if new_method not in served:
+            # A verb the settings record does not serve is a wrong-verb 405 (PE-1).
+            _negative(block, new_method, root)
+            return None
     target = _resource_path(entry, new_method, name is not None)
     if target is None:
         raise SuiteBuildError(f"line {block.start_line}: no {new_method} route for {doctype}")
@@ -467,9 +488,11 @@ def _drop_body(block: HttpBlock) -> None:
     index = block.request_index
     assert index is not None
     headers, _ = block.headers_and_body()
-    block.lines = block.lines[: index + 1] + [
-        line for line in headers if not line.lower().startswith("content-type")
-    ]
+    block.lines = (
+        block.lines[: index + 1]
+        + [line for line in headers if not line.lower().startswith("content-type")]
+        + _tail(block)
+    )
 
 
 def _negative(block: HttpBlock, method: str, route: str) -> None:

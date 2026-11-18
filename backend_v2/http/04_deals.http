@@ -37,6 +37,7 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"enable_forecasting": 0}
+
 ### 0.3 find deals left by an earlier run -> 200
 # @waiting SALES
 # @cleanup
@@ -347,6 +348,7 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"enable_forecasting": 1}
+
 ### 4.3 now a deal without an expected value -> 417 MandatoryError, crm_deal.py:257 verbatim
 # @waiting SALES
 # @expect $.exc_type == MandatoryError
@@ -398,6 +400,7 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"enable_forecasting": 0}
+
 ### 4.8 auto_update_expected_deal_value: products total overwrites a SET expected value -> 200
 # @waiting SALES
 # Upstream computes totals client-side and validate() sees them in the same save, so the

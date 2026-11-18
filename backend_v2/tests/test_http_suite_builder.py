@@ -474,3 +474,71 @@ GET {{host}}/api/resource/CRM%20Widget/W1
 """
     result = rewrite_http(source, parse_route_map(ROUTE_MAP_TEXT))
     assert "# ---- the next section ----" in result
+
+
+def test_a_verb_a_singleton_does_not_serve_is_a_negative_405():
+    source = """\
+@host = http://localhost:8000
+### 1.14 a second row -> 403
+# @expect $.exc_type == PermissionError
+POST {{host}}/api/resource/FCRM%20Settings
+Content-Type: application/json
+
+{"brand_name": "Again"}
+
+### 1.15 delete it -> 403
+DELETE {{host}}/api/resource/FCRM%20Settings/FCRM%20Settings
+"""
+    result = rewrite_http(source, parse_route_map(SINGLETON_ROUTE_MAP))
+    blocks = [block for block in parse_http(result).blocks if block.title]
+    assert [block.title for block in blocks] == ["1.14 a second row -> 405", "1.15 delete it -> 405"]
+    assert "POST {{host}}/api/v1/crm-settings/" in result
+    assert "DELETE {{host}}/api/v1/crm-settings/" in result
+    assert result.count("# @negative") == 2
+    assert "PermissionError" not in result
+
+
+def test_a_get_rewrite_moves_its_payload_into_the_query():
+    route_map = parse_route_map(
+        SINGLETON_ROUTE_MAP.replace(
+            "| `frappe.client.get` | GET/POST |",
+            "| `frappe.client.get_single_value` | GET/POST | auth | `client.py:x` | each resource's | core | built |\n| `frappe.client.get` | GET/POST |",
+        )
+    )
+    source = """\
+@host = http://localhost:8000
+### 1.11 the key by value -> 403
+POST {{host}}/api/method/frappe.client.get_single_value
+Content-Type: application/json
+
+{"doctype": "FCRM Settings", "field": "access_key"}
+
+### next -> 200
+GET {{host}}/api/resource/FCRM%20Settings/FCRM%20Settings
+"""
+    result = rewrite_http(source, route_map)
+    assert "GET {{host}}/api/v1/crm-settings/value/?field=access_key" in result
+    assert '{"field"' not in result
+    assert "Content-Type" not in result.split("### next")[0]
+
+
+def test_every_rewrite_keeps_the_blank_line_before_the_next_block():
+    source = """\
+@host = http://localhost:8000
+### write -> 200
+PUT {{host}}/api/resource/FCRM%20Settings/FCRM%20Settings
+Content-Type: application/json
+
+{"brand_name": "Acme"}
+
+### 1.3 a list -> 200
+GET {{host}}/api/resource/FCRM%20Settings?fields=["*"]
+
+# ---- the next section ----
+
+### read -> 200
+GET {{host}}/api/resource/FCRM%20Settings/FCRM%20Settings
+"""
+    result = rewrite_http(source, parse_route_map(SINGLETON_ROUTE_MAP), "12_settings_singletons.http")
+    assert '{"brand_name": "Acme"}\n\n### ' in result
+    assert "covered by 1.2\n\n# ---- the next section ----" in result

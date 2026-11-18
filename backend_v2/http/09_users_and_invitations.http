@@ -103,20 +103,24 @@ Authorization: Bearer {{token}}
 # @expect $.message[0] excludes "name": "Guest"
 GET {{host}}/api/v1/users/directory/?include_all=false
 Authorization: Bearer {{stoken}}
+
 ### 1.2 include_all is ignored for a Sales User -> still only CRM users, no Guest
 # @expect $.message[0] excludes "name": "Guest"
 GET {{host}}/api/v1/users/directory/?include_all=true
 Authorization: Bearer {{stoken}}
+
 ### 1.3 a System Manager with include_all -> every enabled account in the first list, CRM users in the second
 # @expect $.message[0] contains "name": "Guest"
 # @expect $.message[1] excludes "name": "Guest"
 # @expect $.message[1] contains "role": "Sales Manager"
 GET {{host}}/api/v1/users/directory/?include_all=true
 Authorization: Bearer {{token}}
+
 ### 1.4 the roles list mirrors frappe.get_roles: the implicit All and Guest are appended
 # @expect $.message[0] contains "All"
 GET {{host}}/api/v1/users/directory/
 Authorization: Bearer {{stoken}}
+
 ### 1.5 get_user_info -> the five display fields per name
 # @expect $.message count 2
 # @expect $.message[0].full_name exists
@@ -172,6 +176,7 @@ Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"first_name": "Ada", "mobile_no": "+1 555 0100"}
+
 ### 2.5 ...but cannot disable herself: enabled is read-only -> 200, unchanged
 # @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.message.enabled == true
@@ -180,6 +185,7 @@ Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"enabled": 0}
+
 ### 2.6 nor grant herself roles: the field is not writable, the request is a no-op -> 200
 # @resource-envelope {"data"}/201 -> {"message"}/200
 PATCH {{host}}/api/v1/users/ada@example.com/
@@ -187,10 +193,12 @@ Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"groups": ["System Manager"], "is_superuser": true}
+
 ### 2.7 -> she is still a plain Sales User (3.1 below proves it: only_for refuses her)
 # @expect $.message[0] contains "role": "Sales User"
 GET {{host}}/api/v1/users/directory/
 Authorization: Bearer {{stoken}}
+
 ### 2.8 she may not edit a colleague -> 403
 # @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == PermissionError
@@ -199,6 +207,7 @@ Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"first_name": "Hacked"}
+
 ### 2.9 nor create an account -> 403
 # @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == PermissionError
@@ -207,6 +216,7 @@ Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"name": "{{temp}}", "email": "{{temp}}", "first_name": "ZZ Temp"}
+
 ### 2.10 nor delete one, even her own -> 403
 # @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == PermissionError
@@ -222,6 +232,7 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"name": "ZZ.Temp@Example.com", "email": "ZZ.Temp@Example.com", "first_name": "ZZ Temp", "enabled": 1}
+
 ### 2.12 a Sales Manager may NOT edit other rows either: User writes are System Manager only upstream -> 403
 # @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == PermissionError
@@ -230,6 +241,7 @@ Authorization: Bearer {{mtoken}}
 Content-Type: application/json
 
 {"last_name": "Account"}
+
 ### 2.13 a System Manager may -> 200
 # @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.message.last_name == Account
@@ -248,6 +260,7 @@ Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"new_role": "Sales User"}
+
 ### 3.2 a Sales Manager may grant Sales User -> 200
 POST {{host}}/api/v1/users/add-existing/
 Authorization: Bearer {{mtoken}}
@@ -259,6 +272,7 @@ Content-Type: application/json
 # @expect $.message[1] contains "name": "zz.temp@example.com"
 GET {{host}}/api/v1/users/directory/
 Authorization: Bearer {{token}}
+
 ### 3.4 a Sales Manager may not grant Sales Manager -> 403, crm/api/user.py:157 verbatim
 # @expect $.exc_type == PermissionError
 # @expect $.message == Only System Managers can assign the Sales Manager role
@@ -267,6 +281,7 @@ Authorization: Bearer {{mtoken}}
 Content-Type: application/json
 
 {"new_role": "Sales Manager"}
+
 ### 3.5 nor System Manager -> 403, :151 verbatim
 # @expect $.message == Only System Managers can assign the System Manager role
 POST {{host}}/api/v1/users/{{temp}}/update-role/
@@ -274,6 +289,7 @@ Authorization: Bearer {{mtoken}}
 Content-Type: application/json
 
 {"new_role": "System Manager"}
+
 ### 3.6 a role outside the three -> 417 "Cannot assign this role"
 # @expect $.message == Cannot assign this role
 POST {{host}}/api/v1/users/{{temp}}/update-role/
@@ -281,23 +297,27 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"new_role": "Accounts Manager"}
+
 ### 3.7 a System Manager grants Sales Manager -> 200
 POST {{host}}/api/v1/users/{{temp}}/update-role/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"new_role": "Sales Manager"}
+
 ### 3.8 -> Sales Manager (which implies Sales User too)
 # @expect $.message[1] contains "name": "zz.temp@example.com"
 # @expect $.message[1] contains "role": "Sales Manager"
 GET {{host}}/api/v1/users/directory/
 Authorization: Bearer {{token}}
+
 ### 3.9 promote to System Manager -> 200
 POST {{host}}/api/v1/users/{{temp}}/update-role/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"new_role": "System Manager"}
+
 ### 3.10 a Sales Manager may not touch a System Manager -> 403, :154 verbatim
 # @expect $.message == Only System Managers can modify other System Managers
 POST {{host}}/api/v1/users/{{temp}}/update-role/
@@ -305,6 +325,7 @@ Authorization: Bearer {{mtoken}}
 Content-Type: application/json
 
 {"new_role": "Sales User"}
+
 ### 3.11 ...nor remove their roles -> 403, same message
 # @expect $.message == Only System Managers can modify other System Managers
 POST {{host}}/api/v1/users/{{temp}}/remove-crm-roles/
@@ -312,12 +333,14 @@ Authorization: Bearer {{mtoken}}
 Content-Type: application/json
 
 {}
+
 ### 3.12 demote back to Sales User -> 200
 POST {{host}}/api/v1/users/{{temp}}/update-role/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"new_role": "Sales User"}
+
 ### 3.13 you cannot remove yourself -> 403, :191 verbatim
 # @expect $.message == You cannot remove yourself.
 POST {{host}}/api/v1/users/{{manager}}/remove-crm-roles/
@@ -325,6 +348,7 @@ Authorization: Bearer {{mtoken}}
 Content-Type: application/json
 
 {}
+
 ### 3.14 remove the throwaway account's CRM roles -> 200 with the sentence
 # @expect $.message == User zz.temp@example.com has been removed from CRM roles.
 POST {{host}}/api/v1/users/{{temp}}/remove-crm-roles/
@@ -332,10 +356,12 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {}
+
 ### 3.15 -> gone from the CRM users list
 # @expect $.message[1] excludes "name": "zz.temp@example.com"
 GET {{host}}/api/v1/users/directory/
 Authorization: Bearer {{token}}
+
 ### 3.16 a user that does not exist -> 417
 # @expect $.message contains not found
 POST {{host}}/api/v1/users/nobody@example.com/update-role/
@@ -421,6 +447,7 @@ Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"email": "zz.evil@example.test", "role": "System Manager", "status": "Pending", "key": "chosen-by-me"}
+
 ### 4.10 filtering on the key is refused rather than answered -> 400
 # @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.message contains Cannot filter
@@ -481,6 +508,7 @@ Content-Type: application/json
 # @expect $.message == null
 GET {{host}}/api/v1/users/signature/
 Authorization: Bearer {{stoken}}
+
 ### 6.2 set one on her own row -> 200
 # @resource-envelope {"data"}/201 -> {"message"}/200
 PATCH {{host}}/api/v1/users/ada@example.com/
@@ -488,10 +516,12 @@ Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"email_signature": "Ada, Sales"}
+
 ### 6.3 -> wrapped the way the composer inserts it (crm/api/__init__.py:22-50)
 # @expect $.message == <br><p class="signature">Ada, Sales</p>
 GET {{host}}/api/v1/users/signature/
 Authorization: Bearer {{stoken}}
+
 ### 6.4 clear it again -> 200
 # @resource-envelope {"data"}/201 -> {"message"}/200
 PATCH {{host}}/api/v1/users/ada@example.com/
@@ -499,9 +529,11 @@ Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"email_signature": "", "mobile_no": ""}
+
 ### 6.5 get_translations is guest-callable and returns the (empty) catalogue -> 200, {}
 # @expect $.message count 0
 GET {{host}}/api/v1/translations/
+
 ### 6.6 get_file_uploader_defaults -> the upload limits the file picker reads
 # @waiting ACTIVITIES
 # @expect $.message.allowed_file_types contains PDF
