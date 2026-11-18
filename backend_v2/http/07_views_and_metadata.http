@@ -134,7 +134,7 @@ Authorization: Bearer {{token}}
 # ---- the field lists behind the list screen's menus -----------------------------------------
 
 ### 1.1 sort_options -> every column, with label / value / fieldname, plus the standard fields
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message contains "fieldname": "lead_name"
 # @expect $.message contains "fieldname": "modified"
 # @expect $.message[0].label exists
@@ -146,7 +146,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead"}
 
 ### 1.2 get_filterable_fields -> Links, Selects, Data, dates ... and the standard nine
-# @waiting CONFIGURATION
+# @waiting SALES
 # `converted` is excluded by CRMLead.get_non_filterable_fields (crm_lead.py:409)
 # @expect $.message contains "fieldname": "status"
 # @expect $.message contains "fieldname": "_assign"
@@ -159,7 +159,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead"}
 
 ### 1.3 a Link field carries its target doctype as options
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message contains "options": "CRM Lead Status"
 POST {{host}}/api/method/crm.api.doc.get_filterable_fields
 Authorization: Bearer {{token}}
@@ -168,7 +168,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead"}
 
 ### 1.4 get_group_by_fields -> no free text (lost_notes is Text), standard fields appended
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message contains "fieldname": "status"
 # @expect $.message contains "fieldname": "_assign"
 # @expect $.message excludes "fieldname": "lost_notes"
@@ -180,7 +180,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead"}
 
 ### 1.5 get_fields -> a descriptor per column with fieldname, fieldtype, label
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message[0].fieldname exists
 # @expect $.message[0].fieldtype exists
 # @expect $.message[0].label exists
@@ -191,14 +191,10 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "allow_all_fieldtypes": true}
 
 ### 1.6 an unknown doctype -> 404 DoesNotExistError, as frappe.get_meta raises it
-# @waiting CONFIGURATION
 # @expect $.exc_type == DoesNotExistError
 # @expect $.message == DocType No Such Doctype not found
-POST {{host}}/api/method/crm.api.doc.get_fields
+GET {{host}}/api/v1/meta/fields/?doctype=No%20Such%20Doctype
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{"doctype": "No Such Doctype"}
 
 # ---- quick filters ------------------------------------------------------------------------------
 

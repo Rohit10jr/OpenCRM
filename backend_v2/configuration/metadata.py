@@ -10,15 +10,13 @@ fields the caller may read (PE-16).
 
 from __future__ import annotations
 
-import functools
-
 from django.apps import apps
 
 from configuration import field_meta
 from core.doctypes import declared_doctypes, is_child_table, is_single
 from core.exceptions import DoesNotExistError
 from core.field_access import hidden_from
-from core.resources import PRODUCTION_URLCONF, routed_rule_map, routed_viewsets
+from core.resources import routed_rule_map
 
 TABLE_FIELDTYPES = ("Table", "Table MultiSelect")
 
@@ -37,11 +35,12 @@ DOCTYPE_PROPERTY_DEFAULTS = {
 }
 
 
-@functools.lru_cache(maxsize=1)
 def _served_children() -> frozenset:
-    """The child models of every served resource's serializer `CHILD_TABLES`."""
+    """The child models of every served resource's serializer `CHILD_TABLES`. Derived on
+    each call from `routed_rule_map()`, which `core.resources.clear_rules_cache()` already
+    clears, so no second process-wide cache can go stale."""
     children = set()
-    for viewset in routed_viewsets(PRODUCTION_URLCONF):
+    for viewset in set(routed_rule_map().values()):
         serializer = getattr(viewset, "serializer_class", None)
         for model_label, _fk in (getattr(serializer, "CHILD_TABLES", {}) or {}).values():
             children.add(apps.get_model(model_label))

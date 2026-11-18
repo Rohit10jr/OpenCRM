@@ -189,11 +189,11 @@ per-view calls that require it.
 | Dotted path | Verbs | Access | Old source | New route | New app | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | `crm.api.doc.get_data` | GET/POST | auth | `frappe_core/api/doc.py:get_data` | `GET /api/v1/<resource>/list-view/`, `POST /api/v1/<resource>/list-view/` (a mixin each resource opts in to, S24; `doctype` leaves the input) | configuration | — |
-| `crm.api.doc.get_fields` | GET/POST | auth | `crm_app/api/doc.py:get_fields` | `GET /api/v1/meta/fields/` (`doctype` kept as input) | configuration | — |
-| `crm.api.doc.get_filterable_fields` | GET/POST | auth | `crm_app/api/doc.py:get_filterable_fields` | `GET /api/v1/meta/filterable-fields/` (`doctype` kept as input) | configuration | — |
-| `crm.api.doc.get_group_by_fields` | GET/POST | auth | `crm_app/api/doc.py:get_group_by_fields` | `GET /api/v1/meta/group-by-fields/` (`doctype` kept as input) | configuration | — |
+| `crm.api.doc.get_fields` | GET/POST | auth | `crm_app/api/doc.py:get_fields` | `GET /api/v1/meta/fields/` (`doctype` kept as input) | configuration | built |
+| `crm.api.doc.get_filterable_fields` | GET/POST | auth | `crm_app/api/doc.py:get_filterable_fields` | `GET /api/v1/meta/filterable-fields/` (`doctype` kept as input) | configuration | built |
+| `crm.api.doc.get_group_by_fields` | GET/POST | auth | `crm_app/api/doc.py:get_group_by_fields` | `GET /api/v1/meta/group-by-fields/` (`doctype` kept as input) | configuration | built |
 | `crm.api.doc.get_quick_filters` | GET/POST | auth | `crm_app/api/doc.py:get_quick_filters` | `GET /api/v1/meta/quick-filters/` (`doctype` kept as input) | configuration | — |
-| `crm.api.doc.sort_options` | GET/POST | auth | `crm_app/api/doc.py:sort_options` | `GET /api/v1/meta/sort-options/` (`doctype` kept as input) | configuration | — |
+| `crm.api.doc.sort_options` | GET/POST | auth | `crm_app/api/doc.py:sort_options` | `GET /api/v1/meta/sort-options/` (`doctype` kept as input) | configuration | built |
 | `crm.api.doc.update_quick_filters` | GET/POST | auth | `crm_app/api/doc.py:update_quick_filters` | `POST /api/v1/meta/quick-filters/update/` (`doctype` kept as input) | configuration | — |
 | `crm.api.exchange_rate.get_exchange_rate` | GET/POST | auth | `crm_app/api/exchange_rate.py:get_exchange_rate` | `GET /api/v1/exchange-rate/` | configuration | built |
 | `crm.api.get_translations` | GET/POST | guest | `crm_app/api/misc.py:get_translations` | `GET /api/v1/translations/` | configuration | built |

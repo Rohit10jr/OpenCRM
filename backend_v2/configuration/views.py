@@ -18,7 +18,13 @@ from accounts.roles import (
     ROLE_SALES_USER,
     ROLE_SYSTEM_MANAGER,
 )
-from configuration import email_accounts, exchange_rate, metadata, user_settings
+from configuration import (
+    email_accounts,
+    exchange_rate,
+    field_helpers,
+    metadata,
+    user_settings,
+)
 from configuration.models import SystemSettings
 from configuration.serializers import (
     DOCUMENT_FIELDS,
@@ -396,3 +402,46 @@ class DocTypeMetaView(BaseAPIView):
         if parent_dt:
             keys["parent_dt"] = parent_dt
         return self.envelope(WithResponseKeys(None, **keys))
+
+
+class _FieldHelperView(BaseAPIView):
+    """A field helper for a served, non-child doctype (PE-14, PE-15), for any signed-in
+    caller (configuration/field_helpers.py)."""
+
+    helper = None
+
+    def get(self, request):
+        inputs = self.get_inputs(request)
+        doctype = inputs.get("doctype")
+        model = metadata.model_or_404(doctype, child_allowed=False)
+        return Response(self.answer(doctype, model, request.user, inputs))
+
+    def answer(self, doctype, model, user, inputs):
+        return type(self).helper(doctype, model, user)
+
+
+class FieldsView(_FieldHelperView):
+    """`crm.api.doc.get_fields`."""
+
+    def answer(self, doctype, model, user, inputs):
+        return field_helpers.get_fields(
+            doctype, model, user, inputs.get("allow_all_fieldtypes", False)
+        )
+
+
+class SortOptionsView(_FieldHelperView):
+    """`crm.api.doc.sort_options`."""
+
+    helper = staticmethod(field_helpers.sort_options)
+
+
+class FilterableFieldsView(_FieldHelperView):
+    """`crm.api.doc.get_filterable_fields`."""
+
+    helper = staticmethod(field_helpers.get_filterable_fields)
+
+
+class GroupByFieldsView(_FieldHelperView):
+    """`crm.api.doc.get_group_by_fields`."""
+
+    helper = staticmethod(field_helpers.get_group_by_fields)
