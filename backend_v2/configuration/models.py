@@ -6,7 +6,8 @@ Ported from `backend/frappe_platform/models.py:1616-1839`.
 from django.conf import settings
 from django.db import IntegrityError, models, transaction
 
-from core.models import SingletonDocument
+from core.models import BaseDocument, SingletonDocument
+from core.naming import FieldValue
 
 SYSTEM_DATE_FORMATS = (
     "yyyy-mm-dd",
@@ -59,6 +60,83 @@ def sysdefaults_from_environment() -> dict[str, str]:
     return {field: configured[field] for field in SYSDEFAULT_FIELDS if field in configured}
 
 
+#: `frappe/geo/doctype/currency/currency.py:9`: the currencies a new site has enabled.
+DEFAULT_ENABLED_CURRENCIES = ("INR", "USD", "GBP", "EUR", "AED", "AUD", "JPY", "CNY", "CHF")
+
+
+class Country(BaseDocument):
+    """Frappe's `Country`, the Link target of an address's country. Everyone reads it;
+    System Manager or Administrator writes it (old `platform_docs.py:458-466`)."""
+
+    DOCTYPE = "Country"
+    NAME_STRATEGY = FieldValue("country_name", label="Country Name")
+
+    country_name = models.CharField("Country Name", max_length=140, unique=True)
+    date_format = models.CharField("Date Format", max_length=140, blank=True, default="")
+    time_format = models.CharField("Time format", max_length=140, blank=True, default="")
+    time_zones = models.TextField("Time Zones", blank=True, default="")
+    code = models.CharField("Code", max_length=140, blank=True, default="")
+
+    class Meta(BaseDocument.Meta):
+        ordering = ["name"]
+
+
+class Language(BaseDocument):
+    """Frappe's `Language`, the Link target of `User.language`, named after its code. The
+    picker shows and searches the name and offers enabled rows only. Everyone reads it;
+    System Manager or Administrator writes it (old `platform_docs.py:484-496`)."""
+
+    DOCTYPE = "Language"
+    NAME_STRATEGY = FieldValue("language_code", label="Language Code")
+    SEARCH_FIELD = "language_name"
+    SHOW_TITLE_FIELD_IN_LINK = True
+
+    language_code = models.CharField("Language Code", max_length=140, unique=True)
+    language_name = models.CharField("Language Name", max_length=140)
+    flag = models.CharField("Flag", max_length=140, blank=True, default="")
+    based_on = models.CharField("Based On", max_length=140, blank=True, default="")
+    enabled = models.BooleanField("Enabled", default=False)
+
+    class Meta(BaseDocument.Meta):
+        ordering = ["name"]
+
+
+class Currency(BaseDocument):
+    """Frappe's `Currency`, named after its code; the Link target of System Settings'
+    `currency` and, later, of a deal's, an organization's and FCRM Settings'. Nine are
+    enabled on a new site; the picker offers enabled rows only (old
+    `frappe_platform/models.py:1691-1726`)."""
+
+    DOCTYPE = "Currency"
+    NAME_STRATEGY = FieldValue("currency_name", label="Currency Name")
+
+    currency_name = models.CharField("Currency Name", max_length=140, unique=True)
+    enabled = models.BooleanField("Enabled", default=False)
+    fraction = models.CharField("Fraction", max_length=140, blank=True, default="")
+    fraction_units = models.IntegerField("Fraction Units", default=0)
+    smallest_currency_fraction_value = models.DecimalField(
+        "Smallest Currency Fraction Value",
+        max_digits=18,
+        decimal_places=6,
+        null=True,
+        blank=True,
+    )
+    symbol = models.CharField("Symbol", max_length=140, blank=True, default="")
+    number_format = models.CharField(
+        "Number Format",
+        max_length=140,
+        blank=True,
+        default="",
+        choices=_choices(CURRENCY_NUMBER_FORMATS),
+    )
+    symbol_on_right = models.BooleanField(
+        "Show Currency Symbol on Right Side", default=False
+    )
+
+    class Meta(BaseDocument.Meta):
+        ordering = ["name"]
+
+
 class SystemSettings(SingletonDocument):
     """Frappe's `System Settings` single, the seven fields the CRM reads.
 
@@ -68,6 +146,8 @@ class SystemSettings(SingletonDocument):
     """
 
     DOCTYPE = "System Settings"
+    #: A text column upstream declares as a Link: an unknown currency is refused (417).
+    TEXT_LINK_FIELDS = {"currency": ("configuration.Currency", "Currency")}
 
     date_format = models.CharField(
         "Date Format", max_length=140, choices=_choices(SYSTEM_DATE_FORMATS)

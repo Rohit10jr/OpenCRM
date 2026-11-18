@@ -4,13 +4,16 @@ from configuration.views import (
     AppsView,
     BootView,
     ClearDemoDataView,
+    CountryViewSet,
+    CurrencyViewSet,
+    LanguageViewSet,
     OnboardingStatusView,
     SiteInfoView,
     SystemSettingsViewSet,
     TelemetryConfigView,
     TranslationsView,
 )
-from core.routers import SingletonRouter
+from core.routers import DocumentRouter, SingletonRouter
 
 urlpatterns = [
     re_path(r"^boot/?$", BootView.as_view(), name="boot"),
@@ -35,3 +38,9 @@ singleton_router.register(
     "system-settings", SystemSettingsViewSet, basename="system-settings"
 )
 urlpatterns += singleton_router.urls
+
+router = DocumentRouter()
+router.register("countries", CountryViewSet, basename="country")
+router.register("currencies", CurrencyViewSet, basename="currency")
+router.register("languages", LanguageViewSet, basename="language")
+urlpatterns += router.urls

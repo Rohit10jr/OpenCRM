@@ -18,11 +18,17 @@ from accounts.roles import (
     ROLE_SYSTEM_MANAGER,
 )
 from configuration.models import SystemSettings
-from configuration.serializers import SystemSettingsSerializer
+from configuration.serializers import (
+    CountrySerializer,
+    CurrencySerializer,
+    LanguageSerializer,
+    SystemSettingsSerializer,
+)
 from core.access import Access
 from core.exceptions import PermissionError, ValidationError
+from core.mixins import LinkSearchMixin
 from core.query import parse_json_param
-from core.views import BaseAPIView, SingletonViewSet
+from core.views import BaseAPIView, DocumentViewSet, SingletonViewSet
 
 #: The CRM's `add_to_apps_screen` entry (`crm/hooks.py:15-23`), verbatim.
 CRM_APP = {
@@ -183,3 +189,83 @@ class BootView(BaseAPIView):
                 "is_fc_site": False,
             }
         )
+
+
+#: Version-15 `currency.json`'s readers besides System Manager (old
+#: `platform_docs.py:504-510`); Sales Manager is listed rather than looked up through
+#: Sales User.
+CURRENCY_READERS = frozenset(
+    {"Sales User", "Sales Manager", "Accounts Manager", "Accounts User", "Purchase User"}
+)
+
+
+def _read_all_write_admin(user, ptype) -> bool:
+    """Everyone reads; System Manager or Administrator writes, creates and deletes."""
+    if ptype == "read":
+        return True
+    return _is_system_admin(user)
+
+
+class CountryViewSet(LinkSearchMixin, DocumentViewSet):
+    """Old `platform_docs.py:458-466`. Every column readable, filterable and sortable."""
+
+    access = Access.ruled()
+    serializer_class = CountrySerializer
+    readable_fields = CountrySerializer.Meta.fields
+    filterable_fields = CountrySerializer.Meta.fields
+    sortable_fields = CountrySerializer.Meta.fields
+    searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        return None
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        return _read_all_write_admin(user, ptype)
+
+
+class LanguageViewSet(LinkSearchMixin, DocumentViewSet):
+    """Old `platform_docs.py:484-496`. Every column readable, filterable and sortable."""
+
+    access = Access.ruled()
+    serializer_class = LanguageSerializer
+    readable_fields = LanguageSerializer.Meta.fields
+    filterable_fields = LanguageSerializer.Meta.fields
+    sortable_fields = LanguageSerializer.Meta.fields
+    searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        return None
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        return _read_all_write_admin(user, ptype)
+
+
+def _reads_currency(user) -> bool:
+    return _is_system_admin(user) or bool(user.get_roles() & CURRENCY_READERS)
+
+
+class CurrencyViewSet(LinkSearchMixin, DocumentViewSet):
+    """Read by System Manager, Administrator and the CRM and accounting roles above; a
+    caller with none gets an empty list and 403 by name (old `platform_docs.py:504-529`).
+    Every column readable, filterable and sortable."""
+
+    access = Access.ruled()
+    serializer_class = CurrencySerializer
+    readable_fields = CurrencySerializer.Meta.fields
+    filterable_fields = CurrencySerializer.Meta.fields
+    sortable_fields = CurrencySerializer.Meta.fields
+    searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        return None if _reads_currency(user) else Q(pk__in=[])
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        if ptype == "read":
+            return _reads_currency(user)
+        return _is_system_admin(user)

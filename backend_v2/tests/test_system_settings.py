@@ -7,8 +7,7 @@ Expected answers are unchanged, except:
 - `test_nobody_deletes_it`: the singleton route has no DELETE, so it answers 405 (PE-1;
   403 from `frappe.client.delete` in backend/).
 - Waiting for later work: `test_the_defaults_page_loads_the_row_and_its_options`
-  (`getdoctype`, milestone 5); the currency half of
-  `test_a_required_format_cannot_be_blanked_and_a_currency_must_exist` (Currency, CF2c).
+  (`getdoctype`, milestone 5).
 """
 
 import pytest
@@ -60,11 +59,20 @@ def test_a_saved_format_reaches_every_users_boot(api_as, administrator, auth_api
     assert sysdefaults(auth_api)["date_format"] == "dd.mm.yyyy"
 
 
-def test_a_required_format_cannot_be_blanked(api_as, administrator):
+def test_a_required_format_cannot_be_blanked_and_a_currency_must_exist(api_as, administrator):
     client = api_as(administrator)
     before = SystemSettings.load_or_create().date_format
     assert set_values(client, date_format="").status_code == 417
-    assert SystemSettings.load_or_create().date_format == before
+    assert set_values(client, currency="XYZ").status_code == 417
+    row = SystemSettings.load_or_create()
+    assert (row.date_format, row.currency) == (before, "")
+
+
+def test_a_saved_currency_reaches_every_users_boot(api_as, administrator, auth_api):
+    """The currency half of `test_a_saved_format_reaches_every_users_boot`."""
+    response = set_values(api_as(administrator), currency="EUR")
+    assert response.status_code == 200, response.content[:300]
+    assert sysdefaults(auth_api)["currency"] == "EUR"
 
 
 @pytest.mark.parametrize("who", ["alice", "grace"])
