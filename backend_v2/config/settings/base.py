@@ -140,6 +140,19 @@ CORS_ALLOW_CREDENTIALS = True
 POSTHOG_PROJECT_ID = env("POSTHOG_PROJECT_ID", default="")
 POSTHOG_HOST = env("POSTHOG_HOST", default="")
 
+# The formats System Settings starts from (old backend/config/settings/base.py:305-313):
+# Frappe's own fallbacks. `currency` empty is a fresh site before its setup wizard picked
+# one; the frontend shows USD for it.
+FRAPPE_SYSDEFAULTS = {
+    "date_format": env("FRAPPE_DATE_FORMAT", default="yyyy-mm-dd"),
+    "time_format": env("FRAPPE_TIME_FORMAT", default="HH:mm:ss"),
+    "number_format": env("FRAPPE_NUMBER_FORMAT", default="#,###.##"),
+    "float_precision": env("FRAPPE_FLOAT_PRECISION", default="3"),
+    "currency_precision": env("FRAPPE_CURRENCY_PRECISION", default=""),
+    "currency": env("FRAPPE_CURRENCY", default=""),
+    "rounding_method": env("FRAPPE_ROUNDING_METHOD", default="Banker's Rounding (legacy)"),
+}
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},

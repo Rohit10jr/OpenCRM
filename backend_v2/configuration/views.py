@@ -7,6 +7,7 @@ reads a row-restricted model; what they read is the caller's roles.
 import json
 
 from django.conf import settings
+from django.db.models import Q
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
@@ -16,9 +17,12 @@ from accounts.roles import (
     ROLE_SALES_USER,
     ROLE_SYSTEM_MANAGER,
 )
+from configuration.models import SystemSettings
+from configuration.serializers import SystemSettingsSerializer
+from core.access import Access
 from core.exceptions import PermissionError, ValidationError
 from core.query import parse_json_param
-from core.views import BaseAPIView
+from core.views import BaseAPIView, SingletonViewSet
 
 #: The CRM's `add_to_apps_screen` entry (`crm/hooks.py:15-23`), verbatim.
 CRM_APP = {
@@ -126,3 +130,56 @@ class OnboardingStatusView(BaseAPIView):
             onboarding_status=json.dumps(status)
         )
         return Response(None)
+
+
+class SystemSettingsViewSet(SingletonViewSet):
+    """System Manager or Administrator for everything, reading included; nobody deletes
+    it, and the singleton route has no delete (old `platform_docs.py:532-551`). The boot
+    call reads the row server-side for every caller."""
+
+    access = Access.ruled()
+    serializer_class = SystemSettingsSerializer
+    readable_fields = SystemSettingsSerializer.Meta.fields
+    filterable_fields = SystemSettingsSerializer.Meta.fields
+    sortable_fields = SystemSettingsSerializer.Meta.fields
+    searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        return None if _is_system_admin(user) else Q(pk__in=[])
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        if ptype == "delete":
+            return False
+        return _is_system_admin(user)
+
+
+def _is_system_admin(user) -> bool:
+    return user.name == ADMINISTRATOR or user.has_role(ROLE_SYSTEM_MANAGER)
+
+
+class BootView(BaseAPIView):
+    """`crm.www.crm.get_context_for_dev`: the values the page needs before it draws
+    (old `crm_app/api/boot.py:41-73`). Guest, POST only, exactly eight keys. System
+    Settings is read server-side, so no permission on it is needed; a missing row is
+    written again (spec section 4.2)."""
+
+    permission_classes = (AllowAny,)
+
+    def post(self, request):
+        system_zone = settings.TIME_ZONE
+        # A guest's request.user is None here (UNAUTHENTICATED_USER).
+        own_zone = getattr(request.user, "time_zone", "") or ""
+        return Response(
+            {
+                "sysdefaults": SystemSettings.load_or_create().sysdefaults(),
+                "timezone": {"system": system_zone, "user": own_zone or system_zone},
+                "translated_messages": {},
+                "translated_doctypes": [],
+                "state_options": {},
+                "is_demo_site": False,
+                "demo_data_created": False,
+                "is_fc_site": False,
+            }
+        )
