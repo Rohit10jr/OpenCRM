@@ -589,12 +589,103 @@ def _story_variables(block: HttpBlock) -> set[str]:
     return {name for name in names if name != "host" and not name.endswith("token")}
 
 
-def _wait_after_waiting(blocks: list[HttpBlock]) -> None:
+def _number(block: HttpBlock) -> str:
+    return (block.title or "").split(" ", 1)[0]
+
+
+#: A block whose route is built but whose expectations need another unit waits for it
+#: (CONFIGURATION section 4.7): 07 4.7 checks CRM Lead's status board, which comes with
+#: SALES' statuses.
+WAITS_FOR_UNIT = {
+    ("07_views_and_metadata.http", "4.7"): "SALES",
+}
+
+
+def _wait_for_unit(blocks: list[HttpBlock], filename: str) -> None:
+    for block in blocks:
+        unit = WAITS_FOR_UNIT.get((filename, _number(block)))
+        if unit and not any(line.startswith("# @waiting ") for line in block.lines):
+            _annotate(block, f"# @waiting {unit}")
+
+
+#: An added block that waits for another unit, holding expectations taken out of a block
+#: that runs (CONFIGURATION section 4.7): 07 3.1's and 4.4's checks of CRM Lead's
+#: default columns and rows wait for SALES, and 3.1 and 4.4 run without them. (file,
+#: block) -> (title, unit, the variable it reads, the request, the expectations moved;
+#: a pair is the expectation as the rewritten block holds it and as the added one reads).
+SPLIT_EXPECTS = {
+    ("07_views_and_metadata.http", "3.1"): (
+        "3.1a the view 3.1 made holds CRM Lead's default columns and rows -> 200",
+        "SALES",
+        "view1",
+        "GET {{host}}/api/v1/view-settings/{{view1}}/",
+        ("$.message.columns contains lead_name", "$.message.rows contains lead_owner"),
+    ),
+    ("07_views_and_metadata.http", "4.4"): (
+        "4.4a the standard view 4.3 made holds CRM Lead's default columns -> 200",
+        "SALES",
+        "std",
+        "GET {{host}}/api/v1/view-settings/{{std}}/",
+        (("$.message[0].columns contains lead_name", "$.message.columns contains lead_name"),),
+    ),
+}
+
+
+def _split_expects(blocks: list[HttpBlock], filename: str) -> None:
+    """Each block in `SPLIT_EXPECTS` loses the named expectations; the added block holding
+    them goes after the block that defines the variable it reads. The loop walks the live
+    list, so an earlier insertion does not shift a later split."""
+    index = -1
+    while index + 1 < len(blocks):
+        index += 1
+        block = blocks[index]
+        split = SPLIT_EXPECTS.get((filename, _number(block)))
+        if split is None:
+            continue
+        title, unit, variable, request, expects = split
+        pairs = [item if isinstance(item, tuple) else (item, item) for item in expects]
+        moved = {f"# @expect {old}" for old, _ in pairs}
+        if not moved <= set(block.lines):
+            raise SuiteBuildError(f"{filename}: block {_number(block)} lacks {sorted(moved)}")
+        block.lines = [line for line in block.lines if line not in moved]
+        position = next(
+            later
+            for later in range(index, len(blocks))
+            if variable in dict(blocks[later].variables())
+        )
+        added = HttpBlock(
+            title=title,
+            separator="### " + title,
+            lines=[
+                f"# @waiting {unit}",
+                *sorted(f"# @expect {new}" for _, new in pairs),
+                request,
+                "Authorization: Bearer {{token}}",
+                "",
+            ],
+        )
+        blocks.insert(position + 1, added)
+
+
+#: A waiting block that only reads: blocks after it that share its variables do not wait
+#: with it (CONFIGURATION section 4.7). 07 3.4 and 4.6 read `get_data` (milestone 8),
+#: and 3.1a and 4.4a read the views 3.1 and 4.3 made; the blocks after them use those
+#: views.
+WAITS_ALONE = {
+    ("07_views_and_metadata.http", "3.1a"),
+    ("07_views_and_metadata.http", "3.4"),
+    ("07_views_and_metadata.http", "4.4a"),
+    ("07_views_and_metadata.http", "4.6"),
+}
+
+
+def _wait_after_waiting(blocks: list[HttpBlock], filename: str = "") -> None:
     """A block that reads the state an earlier waiting block of its numbered section was
     to set up waits too, on the same unit: 01_auth 4.8 logs in with the password 4.7 was
     to change (A-23). "Reads the same state" is approximated by sharing a variable other
     than the host or a token, so an unrelated check in the same section (13 5.8) still
-    runs. Negative and cleanup blocks always run."""
+    runs. Negative and cleanup blocks always run, and a block in `WAITS_ALONE` passes its
+    wait on to nobody."""
     waiting: dict[str, list[tuple[str, set[str]]]] = {}
     for block in blocks:
         section = _section(block)
@@ -609,19 +700,22 @@ def _wait_after_waiting(blocks: list[HttpBlock]) -> None:
             )
             if marker:
                 _annotate(block, marker)
-        if marker:
+        if marker and (filename, _number(block)) not in WAITS_ALONE:
             waiting.setdefault(section, []).append((marker, variables))
 
 
 #: A block that reads rows an earlier block writes, with no variable between them to
 #: show it, waits with that block: (file, block) -> the block it waits with
 #: (CONFIGURATION section 4.6). 8.5 and 8.6 delete the rows 2.5 reads and 6.5 writes, in
-#: another section (0.14 deletes 6.5's row at the start of every run).
+#: another section (0.14 deletes 6.5's row at the start of every run). 4.8 and 8.4 use
+#: the kanban view 4.7 makes (section 4.7; 0.9-0.11 clear it each run).
 WAITS_WITH = {
     ("07_views_and_metadata.http", "2.5"): "2.3",
     ("07_views_and_metadata.http", "6.7"): "6.5",
     ("07_views_and_metadata.http", "8.5"): "2.5",
     ("07_views_and_metadata.http", "8.6"): "6.5",
+    ("07_views_and_metadata.http", "4.8"): "4.7",
+    ("07_views_and_metadata.http", "8.4"): "4.7",
 }
 
 
@@ -681,7 +775,9 @@ def rewrite_http(text: str, route_map: RouteMap, filename: str = "fixture.http")
             if name := _rewrite_resource(block, method, resolved_url, route_map, filename):
                 resource_names.add(name)
 
-    _wait_after_waiting(document.blocks)
+    _split_expects(document.blocks, filename)
+    _wait_for_unit(document.blocks, filename)
+    _wait_after_waiting(document.blocks, filename)
     _wait_with_named(document.blocks, filename)
 
     for block in document.blocks:

@@ -314,7 +314,8 @@ comparison skips that block.
   (Version now; ToDo and Data Import Log when built); and, with CONFIGURATION milestone 6,
   the layout calls (`get_fields_layout`, `get_sidepanel_sections`,
   `save_fields_layout`) and the quick-filter calls (`get_quick_filters`,
-  `update_quick_filters`)
+  `update_quick_filters`); with milestone 7, the default rows and columns the saved-view
+  calls merge (`list_definition_for`), which are empty for such a doctype
 - **Old backend:** answers any registered doctype (`crm_app/api/form_load.py:177`,
   `crm_app/api/doc.py:90,346`, `frappe_core/metadata.py:117,154`)
 - **backend_v2:** a withheld doctype answers 404 "DocType X not found" on every call that
@@ -334,7 +335,9 @@ comparison skips that block.
   `stores/meta.js:9-17`), and so will milestone 6's `get_fields_layout` and
   `save_fields_layout` (the grid row editor); `get_sidepanel_sections`, the quick-filter
   calls, `get_fields`,
-  `sort_options`, `get_filterable_fields` and `get_group_by_fields` answer 404.
+  `sort_options`, `get_filterable_fields` and `get_group_by_fields` answer 404. With
+  milestone 7, the saved-view calls merge no default rows or columns for a child table
+  (`list_definition_for`).
   `API_CONTRACT.md:209` says 404 for every child table; the contract is the owner's to
   change and is not edited here
 - **Why:** the grids call `getdoctype` for their rows; no screen calls the other four for a
@@ -347,8 +350,9 @@ comparison skips that block.
   the owner (`temp` A-35, DECISIONS 43, 18 Nov 2026); built in `f6e6822`, `94d5c15`
 - **Where:** `getdoctype`'s fields, `meta/fields/`, `meta/filterable-fields/`,
   `meta/group-by-fields/`, `meta/sort-options/`; with milestone 6, the layout and
-  quick-filter calls (the Required Fields section and the default layout included); and
-  later `get_data`'s `fields` block
+  quick-filter calls (the Required Fields section and the default layout included); with
+  milestone 7, a saved kanban's default columns (a `column_field` the caller may not
+  read gives none); and later `get_data`'s `fields` block
 - **Old backend:** lists every field name
 - **backend_v2:** metadata answers list only the fields the caller may read. The fields
   that remain keep their original `idx`; gaps are allowed
@@ -402,6 +406,81 @@ comparison skips that block.
   save (417 "A layout's field lists hold fieldnames only") and left out on read
 - **Why:** every editor saves fieldnames, and the field's properties come from the
   doctype's own metadata
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-19. A saved view's owner and flags are set by the dedicated calls
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-39, DECISIONS 49, 18 Nov 2026); built in `c590ac3`
+- **Where:** `POST` and `PATCH /api/v1/view-settings/...` (old
+  `/api/resource/CRM View Settings`)
+- **Old backend:** accepts `user`, `public`, `is_standard` and `is_default` as written
+  (`backend/crm_app/permissions/metadata_docs.py:84-91`)
+- **backend_v2:** on the resource, a saved view's `user`, `public`, `is_standard` and
+  `is_default` are set by the dedicated calls only, and a created view belongs to the
+  caller
+- **Why:** the screen sets these through the dedicated calls alone
+  (`ViewControls.vue:984-1290`, `ViewModal.vue:121-130`)
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-20. `public` acts on a view the caller may read
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-39, DECISIONS 50, 18 Nov 2026); built in `f7c4ea5`
+- **Where:** `POST /api/v1/view-settings/<name>/public/` (old
+  `crm.fcrm.doctype.crm_view_settings.crm_view_settings.public`)
+- **Old backend:** checks the caller's role only
+  (`backend/crm_app/api/view_settings.py:204-229`)
+- **backend_v2:** `public` acts on a view the caller may read: the role check (403 "Not
+  permitted"), then 404 for a missing view, then the read rule (403 "Not permitted")
+- **Why:** the screen offers it on the views the caller sees
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-21. `set_as_default` and the kanban column refresh act on views the caller may use
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-39, DECISIONS 51, 18 Nov 2026); built in `f7c4ea5`
+- **Where:** `POST /api/v1/view-settings/set-as-default/` and
+  `POST /api/v1/view-settings/<name>/kanban-columns/` (old `set_as_default` and
+  `fetch_and_update_kanban_columns`)
+- **Old backend:** checks neither (`backend/crm_app/api/view_settings.py:246-270,318-347`)
+- **backend_v2:** `set_as_default` with a name acts on the caller's own view (403 "Not
+  permitted" otherwise, 404 for a missing one), and `fetch_and_update_kanban_columns` on
+  a view the caller may read, saving only where the caller may write it
+- **Why:** the screen offers "Set As Default" on the caller's own standard views only
+  (`ViewControls.vue:1112-1116`, `:1141-1146`, `:1225-1233`), and "Reload Columns" on
+  every board the caller sees (`KanbanView.vue:166-171`)
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-12d. Saved-view crashes answer as errors
+
+- **Status:** approved — decided by the supervisor on the owner's behalf (`temp` A-39,
+  18 Nov 2026; extended by A-43, 19 Nov 2026; it only replaces a crash); built in
+  `c590ac3`, `b744875`, `f7c4ea5`, `8f5c569`, `85374af`
+- **Where:** `create-view/`, `standard-view/`, `update-view/`, `set-as-default/` and
+  `<name>/kanban-columns/` under `/api/v1/view-settings/`, the resource's create and
+  PATCH, and `GET /api/v1/views/`
+- **Old backend:** `create` or `create_or_update_standard_view` without a `doctype`
+  raises building the route name (`backend/crm_app/api/view_settings.py:56-62`);
+  `get_views` without a `doctype` raises on the missing argument
+  (`backend/crm_app/api/views.py:13`, `frappe_core/whitelist.py:75-92`); `update`
+  and `set_as_default` with a name that is not an integer raise in `filter(pk=…)`
+  (`:176`, `:261`); a view that is not an object, `rows` or `columns` that is not a
+  list, a row that is not a fieldname, a `doctype` or `type` that is not text, and
+  `create` with no `label` raise (`:109-135`, `:150-167`); the kanban refresh raises on a
+  stored `kanban_columns` that is not a list of objects (`:339-343`); a JSON column
+  written through the resource that is not valid JSON is stored as written
+- **backend_v2:** no `doctype`, or one that is not text, is 417 "DocType is required";
+  a name that is not an integer is 404 "CRM View Settings X not found"; a view that is
+  not an object is 417 "View must be an object"; `rows` or `columns` that is not a list
+  is 417 "Rows must be a list" or "Columns must be a list"; a row that is not a
+  fieldname is 417 "Rows must be fieldnames"; a `type` that is not text is 417 "Type
+  must be text"; `create` with no `label` is 417 "Label is required"; in the kanban
+  refresh, a stored `kanban_columns` that is not a list counts as none and an entry that
+  is not an object is skipped; a resource write of `filters`, `columns`, `rows`,
+  `kanban_columns` or `kanban_fields` that is not valid JSON is 417 "<Label> must be
+  valid JSON" (for example "Kanban Columns must be valid JSON")
+- **Why:** replaces a crash with an error
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
 ---

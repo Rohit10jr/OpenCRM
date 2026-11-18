@@ -1,14 +1,19 @@
 """Serializers for the configuration resources."""
 
+import json
+
+from core.exceptions import ValidationError
 from core.serializers import DocumentSerializer
 
 from .layouts import validated_layout_text
 from .models import (
     SYSDEFAULT_FIELDS,
+    VIEW_JSON_FIELDS,
     Country,
     CRMFieldsLayout,
     CRMFormScript,
     CRMGlobalSettings,
+    CRMViewSettings,
     Currency,
     EmailAccount,
     FCRMSettings,
@@ -169,3 +174,57 @@ class CRMGlobalSettingsSerializer(DocumentSerializer):
     class Meta:
         model = CRMGlobalSettings
         fields = (*DOCUMENT_FIELDS, "dt", "type", "json")
+
+
+VIEW_SETTINGS_FIELDS = (
+    "dt",
+    "user",
+    "label",
+    "type",
+    "columns",
+    "rows",
+    "filters",
+    "order_by",
+    "group_by_field",
+    "column_field",
+    "kanban_columns",
+    "kanban_fields",
+    "title_field",
+    "route_name",
+    "icon",
+    "pinned",
+    "public",
+    "load_default_columns",
+    "is_standard",
+    "is_default",
+)
+
+
+def json_text(value, label: str) -> str:
+    """A JSON column's text as written; 417 "<Label> must be valid JSON" when it does
+    not parse (PE-12d). Blank stays blank."""
+    if value in (None, ""):
+        return ""
+    try:
+        json.loads(value)
+    except (TypeError, ValueError, RecursionError):
+        raise ValidationError(f"{label} must be valid JSON") from None
+    return value
+
+
+class CRMViewSettingsSerializer(DocumentSerializer):
+    class Meta:
+        model = CRMViewSettings
+        fields = (*DOCUMENT_FIELDS, *VIEW_SETTINGS_FIELDS)
+
+    def validate(self, attrs):
+        for fieldname, label in VIEW_JSON_FIELDS.items():
+            if fieldname in attrs:
+                attrs[fieldname] = json_text(attrs[fieldname], label)
+        return super().validate(attrs)
+
+    def create(self, validated_data):
+        """A view created on the resource belongs to the caller (PE-19); `user` is
+        read-only, and `save(user=...)` names the actor, not this field."""
+        validated_data["user"] = self.user
+        return super().create(validated_data)

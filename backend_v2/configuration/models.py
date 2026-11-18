@@ -7,8 +7,9 @@ from django.conf import settings
 from django.db import IntegrityError, models, transaction
 
 from core.fields import EncryptedCharField
-from core.models import BaseDocument, SingletonDocument
+from core.models import AutoIncrementDocument, BaseDocument, SingletonDocument
 from core.naming import FieldValue, Format, Hash, Prompt
+from core.query import by_name
 
 SYSTEM_DATE_FORMATS = (
     "yyyy-mm-dd",
@@ -695,3 +696,103 @@ class CRMGlobalSettings(BaseDocument):
         """The first row by name for a doctype and type, or `None`: several can exist
         (hash names, no unique constraint). Every row is open to everyone."""
         return cls._default_manager.filter(dt=dt, type=type).order_by("name").first()
+
+
+VIEW_TYPES = ("list", "group_by", "kanban")
+#: The columns that hold JSON text (old `crm_app/models/metadata.py:83-90`), with the
+#: label a write that is not valid JSON names (PE-12d).
+VIEW_JSON_FIELDS = {
+    "filters": "Filters",
+    "columns": "Columns",
+    "rows": "Rows",
+    "kanban_columns": "Kanban Columns",
+    "kanban_fields": "Kanban Fields",
+}
+
+
+class CRMViewSettings(AutoIncrementDocument):
+    """A saved view of a list: its columns, filters and kanban settings, per user or
+    public (old `crm_app/models/metadata.py:61-106`; spec section 4.7). Integer names.
+
+    No `TRACKED_FIELDS`, as `backend/` pins on purpose (decision 14;
+    `backend/tests/test_version_retention.py:97-107`).
+    """
+
+    DOCTYPE = "CRM View Settings"
+    #: Set by the dedicated calls only; on the resource a created view belongs to the
+    #: caller (PE-19).
+    READONLY_FIELDS = ("user", "public", "is_standard", "is_default")
+
+    dt = models.CharField(max_length=140, db_index=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    label = models.CharField(max_length=140, blank=True, default="")
+    type = models.CharField(max_length=20, choices=_choices(VIEW_TYPES), default="list")
+    columns = models.TextField(blank=True, default="")
+    rows = models.TextField(blank=True, default="")
+    filters = models.TextField(blank=True, default="")
+    order_by = models.TextField(blank=True, default="")
+    group_by_field = models.CharField(max_length=140, blank=True, default="")
+    column_field = models.CharField(max_length=140, blank=True, default="")
+    kanban_columns = models.TextField(blank=True, default="")
+    kanban_fields = models.TextField(blank=True, default="")
+    title_field = models.CharField(max_length=140, blank=True, default="")
+    route_name = models.CharField(max_length=140, blank=True, default="")
+    icon = models.CharField(max_length=140, blank=True, default="")
+    pinned = models.BooleanField(default=False)
+    public = models.BooleanField(default=False)
+    load_default_columns = models.BooleanField(default=False)
+    is_standard = models.BooleanField(default=False)
+    is_default = models.BooleanField(default=False)
+
+    class Meta(BaseDocument.Meta):
+        ordering = ["-modified"]
+        indexes = [
+            models.Index(
+                fields=["dt", "type", "is_standard", "user"], name="view_settings_lookup_idx"
+            ),
+        ]
+
+    @classmethod
+    def named(cls, name):
+        """The view called `name`, or `None`; a name that is not an integer names none
+        (`by_name`). The calls apply the read and write rules themselves."""
+        return by_name(cls, name).first()
+
+    @classmethod
+    def own_standard_view(cls, dt, type: str, user):
+        """The caller's standard view for a doctype and view type, newest first (the old
+        `.first()` under `-modified`), or `None`."""
+        return cls._default_manager.filter(
+            dt=dt, type=type, is_standard=True, user=user
+        ).first()
+
+    @classmethod
+    def listed_for(cls, user, rule, doctype) -> list[dict]:
+        """`get_views`' rows: under the read rule `rule`, the ownerless views and the
+        caller's own (Administrator and System Manager too), of `doctype` when it is
+        truthy; newest first; as `.values()` gives them, as `backend/` answers."""
+        queryset = cls._default_manager.all()
+        if rule is not None:
+            queryset = queryset.filter(rule)
+        queryset = queryset.filter(models.Q(user__isnull=True) | models.Q(user=user))
+        if doctype:
+            queryset = queryset.filter(dt=doctype)
+        return list(queryset.values())
+
+    @classmethod
+    def mark_default(cls, pk) -> None:
+        """A plain update, as the old `filter(pk=name).update(is_default=True)`."""
+        cls._default_manager.filter(pk=pk).update(is_default=True)
+
+    @classmethod
+    def clear_other_defaults(cls, user, keep) -> None:
+        """One default per user: the caller's other defaults are cleared, nobody else's."""
+        cls._default_manager.filter(user=user, is_default=True).exclude(pk=keep).update(
+            is_default=False
+        )
