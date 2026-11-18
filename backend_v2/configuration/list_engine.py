@@ -18,7 +18,15 @@ from core.exceptions import ValidationError
 from core.field_access import hidden_from
 from core.filters import normalize_filters, resolve_me_tokens
 from core.inputs import parse_json_param
-from core.query import concrete_field_names, count_rows, fetch_rows
+from core.exceptions import FilterError
+from core.query import (
+    MAX_PAGE_LENGTH,
+    coerce_page_length,
+    concrete_field_names,
+    count_rows,
+    fetch_rows,
+)
+from core.resources import routed_rule_map
 
 #: Appended to every answer's `rows` and, when missing, `fields` (old `:47-55`).
 STANDARD_FIELDS = (
@@ -160,6 +168,31 @@ def group_by_options(fields: list, group_by_field: str, data: list, order_by):
     }
 
 
+def kanban_link_columns(model, column_field, user) -> list[dict] | None:
+    """A kanban's columns from the model (old `:426-450`): a forward foreign key gives the
+    target's rows the caller may list, oldest modified first, and none when no resource
+    serves the target (PE-22); a field with choices gives its choices. `None` when the
+    field is neither."""
+    try:
+        field = model._meta.get_field(column_field)
+    except Exception:
+        return None
+    if field.is_relation and field.related_model is not None and not field.auto_created:
+        target = field.related_model
+        rules = routed_rule_map().get(target)
+        if rules is None:
+            return []
+        queryset = target._default_manager.all()
+        rule = rules.list_rule(user)
+        if rule is not None:
+            queryset = queryset.filter(rule)
+        order = "modified" if any(f.name == "modified" for f in target._meta.get_fields()) else "pk"
+        return [{"name": pk} for pk in queryset.order_by(order).values_list("pk", flat=True)]
+    if getattr(field, "choices", None):
+        return [{"name": choice[0]} for choice in field.choices]
+    return None
+
+
 def selectable(model, rows: list) -> list:
     """The row keys to query: every unknown key named in one refusal, as the old
     `_selectable`; a known key the caller may not read is refused by the query."""
@@ -173,6 +206,103 @@ def selectable(model, rows: list) -> list:
             f"{', '.join(repr(name) for name in unknown)} for {doctype_of(model)}"
         )
     return list(rows)
+
+
+# --- kanban (old `:405-561`) -------------------------------------------------------------
+
+
+def _records_in_order(viewset, queryset, fields, filters, page_length, order, user):
+    """Old `:531-561`: the cards named in `order` first, newest created first, then the
+    rest to fill the page; both through the caller's rules. The engine's own clauses
+    (`name in` / `not in`, `creation desc`) are not checked against the caller's lists."""
+    common = {
+        "user": user,
+        "fields": fields,
+        "filters": filters,
+        "order_by": "creation desc",
+        "selectable": viewset.readable_fields,
+        "filterable": viewset.filterable_fields,
+        "sortable": None,
+    }
+    # As the old code: a page length of 0 takes no named card and stops (`:540-550`).
+    records = fetch_rows(
+        queryset.filter(pk__in=list(order)[:page_length]), limit_page_length=page_length, **common
+    )
+    if len(records) < page_length:
+        records += fetch_rows(
+            queryset.exclude(pk__in=list(order)),
+            limit_page_length=page_length - len(records),
+            **common,
+        )
+    return records
+
+
+def kanban(viewset, model, definition, queryset, *, filters, order_by, rows, column_field,
+           title_field, kanban_columns, kanban_fields, user):
+    """The kanban branch: one entry per column, each with its cards and counts."""
+    if len(kanban_columns) > MAX_PAGE_LENGTH:
+        raise ValidationError(f"At most {MAX_PAGE_LENGTH} kanban columns")  # PE-23
+    if column_field and column_field not in viewset.filterable_fields:
+        raise FilterError(f"Cannot filter on {column_field!r}")
+    settings = definition.default_kanban_settings()
+
+    if not kanban_columns and column_field:
+        kanban_columns = kanban_link_columns(model, column_field, user) or []
+
+    if not title_field:
+        title_field = settings.get("title_field", "name")
+    if title_field not in rows:
+        rows.append(title_field)
+    if not kanban_fields:
+        raw = settings.get("kanban_fields")
+        kanban_fields = parse_json_param(raw, None) if isinstance(raw, str) else (raw or ["name"])
+    for fieldname in kanban_fields:
+        if fieldname not in rows:
+            rows.append(fieldname)
+    fields = selectable(model, rows)
+
+    # Only an equality filter on the column field pre-selects a column; any other
+    # operator on it stays and is AND-ed (old `:464-482`).
+    base = [list(condition) for condition in normalize_filters(filters)]
+    equality = next(
+        (value for fieldname, operator, value in base if column_field and fieldname == column_field and operator == "="),
+        None,
+    )
+
+    data = []
+    for column in kanban_columns:
+        if (equality is not None and equality != column.get("name")) or column.get("delete"):
+            cards = []
+        else:
+            column_filters = list(base)
+            if column_field:
+                column_filters = [c for c in column_filters if not (c[0] == column_field and c[1] == "=")]
+                column_filters.append([column_field, "=", column.get("name")])
+            page_length = coerce_page_length(column.get("page_length"), 20)
+            order = column.get("order")
+            if order is not None and not isinstance(order, list):
+                raise ValidationError("A column's order must be a list")  # PE-12e
+            if order:
+                cards = _records_in_order(viewset, queryset, fields, column_filters, page_length, order, user)
+                cards.sort(key=lambda row: order.index(row["name"]) if row.get("name") in order else len(order))
+            else:
+                cards = fetch_rows(
+                    queryset,
+                    user=user,
+                    fields=fields,
+                    filters=column_filters,
+                    order_by=order_by,
+                    limit_page_length=page_length,
+                    selectable=viewset.readable_fields,
+                    filterable=viewset.filterable_fields,
+                    sortable=viewset.sortable_fields,
+                )
+            column["all_count"] = count_rows(
+                queryset, user=user, filters=column_filters, filterable=viewset.filterable_fields
+            )
+            column["count"] = len(cards)
+        data.append({"column": column, "fields": kanban_fields, "data": cards})
+    return data, kanban_columns, kanban_fields, rows, title_field
 
 
 # --- the call (old `:211-372`) -----------------------------------------------------------
@@ -256,6 +386,23 @@ def get_data(viewset, inputs: dict, *, user) -> dict:
         )
         data = definition.parse(data)
 
+    title_field = inputs.get("title_field")
+    if view_type == "kanban":
+        data, kanban_columns, kanban_fields, rows, title_field = kanban(
+            viewset,
+            model,
+            definition,
+            queryset,
+            filters=filters,
+            order_by=order_by,
+            rows=rows or list(default_rows),
+            column_field=inputs.get("column_field"),
+            title_field=title_field,
+            kanban_columns=kanban_columns,
+            kanban_fields=kanban_fields,
+            user=user,
+        )
+
     # 6. The fields block, the standard fields added, then PE-16.
     fields = doctype_fields(model)
     known = {field["fieldname"] for field in fields}
@@ -282,7 +429,7 @@ def get_data(viewset, inputs: dict, *, user) -> dict:
         "rows": rows,
         "fields": fields,
         "column_field": inputs.get("column_field"),
-        "title_field": inputs.get("title_field"),
+        "title_field": title_field,
         "kanban_columns": kanban_columns,
         "kanban_fields": kanban_fields,
         "group_by_field": group_by_field,

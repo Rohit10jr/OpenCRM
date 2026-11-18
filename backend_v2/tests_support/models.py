@@ -95,6 +95,13 @@ class Widget(BaseDocument):
     due_date = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True, default="")
     external_id = models.CharField(max_length=140, null=True, blank=True, unique=True)
+    #: A field with choices: a kanban on it takes its columns from them (CONFIGURATION 4.8).
+    priority = models.CharField(
+        max_length=20,
+        choices=[("Low", "Low"), ("Medium", "Medium"), ("High", "High")],
+        blank=True,
+        default="Medium",
+    )
     widget_owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,

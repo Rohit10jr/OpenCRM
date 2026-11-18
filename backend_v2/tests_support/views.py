@@ -53,6 +53,7 @@ class WidgetViewSet(
         "amount",
         "quantity",
         "notes",
+        "priority",
         "widget_owner",
         "_assign",
     )
