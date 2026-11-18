@@ -1,6 +1,6 @@
 # ACCOUNTS — users, roles, password reset, invitations, the sales hierarchy
 
-**Status: Ready — rewritten 18 Nov 2026** against `backend_v2/docs/AS_BUILT.md` and
+**Status: gate passed 18 Nov 2026** (milestones 1-3, PRs #74, #75, #76); **rewritten 18 Nov 2026** against `backend_v2/docs/AS_BUILT.md` and
 the spec check (`tasks\ACCOUNTS_00_spec_check_verdict.md`, `temp` A-21); spec review
 approved with fixes (A-22), made here. Paths are from the repository root; `backend/` is read at `main` `8f5ff1b`.
 
