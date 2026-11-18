@@ -187,7 +187,10 @@ def test_a_non_manager_cannot_reach_a_restricted_field_by_any_door(alice, accoun
     assert field not in rows[0]
     assert client.get(ACCOUNTS, {"fields": f'["{field}"]'}).status_code == 417
     assert client.get(ACCOUNTS, {"filters": f'[["{field}","is","set"]]'}).status_code == 400
-    assert client.get(ACCOUNTS, {"order_by": f"{field} asc"}).status_code in (400, 417)
+    # backend/frappe_core/query.py:157-158: a ValidationError naming the field.
+    ordered = client.get(ACCOUNTS, {"order_by": f"{field} asc"})
+    assert ordered.status_code == 417
+    assert ordered.json()["message"].startswith(f"Cannot order by '{field}'")
     value = client.get(f"{ACCOUNTS}value/", {"fieldname": field, "filters": '{"name": "Support"}'})
     assert value.status_code == 417
 
