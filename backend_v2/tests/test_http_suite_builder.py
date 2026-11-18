@@ -574,3 +574,36 @@ Content-Type: application/json
     future, unknown = result.split("### unknown")
     assert "# @waiting SALES" in future
     assert "GET {{host}}/api/v1/meta/doctype/?doctype=No%20Such%20Doctype" in unknown
+
+
+def test_a_layout_call_waits_for_an_unbuilt_doctype():
+    """CONFIGURATION milestone 6: any route whose row keeps `doctype` as input waits the
+    same way, outside meta/ too (the layout save stays a POST)."""
+    route_map = parse_route_map(
+        ROUTE_MAP_TEXT
+        + """
+## CONFIGURATION
+| Dotted path | Verbs | Access | Old source | New route | New app | Status |
+|---|---|---|---|---|---|---|
+| `crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.save_fields_layout` | POST | auth | `fields_layout.py:save_fields_layout` | `POST /api/v1/fields-layouts/save/` (`doctype` kept as input) | configuration | built |
+"""
+    )
+    source = """\
+@host = http://localhost:8000
+### future -> 200
+POST {{host}}/api/method/crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.save_fields_layout
+Content-Type: application/json
+
+{"doctype": "CRM Future", "type": "Quick Entry", "layout": "[]"}
+
+### served -> 200
+POST {{host}}/api/method/crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.save_fields_layout
+Content-Type: application/json
+
+{"doctype": "No Such Doctype", "type": "Quick Entry", "layout": "[]"}
+"""
+    result = rewrite_http(source, route_map)
+    future, unknown = result.split("### served")
+    assert "# @waiting SALES" in future
+    assert "POST {{host}}/api/v1/fields-layouts/save/" in unknown
+    assert "@waiting" not in unknown

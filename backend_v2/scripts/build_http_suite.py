@@ -453,13 +453,26 @@ def _url_key(entry: RouteEntry) -> str | None:
     return match.group(1) if match else None
 
 
+#: Routes answering 404 for a doctype that is not served (configuration/metadata.py).
+DOCTYPE_CHECKING_PREFIXES = (
+    "/api/v1/meta/",
+    "/api/v1/fields-layouts/layout/",
+    "/api/v1/fields-layouts/sidepanel-sections/",
+    "/api/v1/fields-layouts/save/",
+)
+
+
 def _waits_for_its_doctype(
     block: HttpBlock, url: str, entry: RouteEntry, routes: RouteMap | None
 ) -> bool:
-    """A field-metadata route (`meta/...`) asked about a doctype whose resource is not
-    built yet waits for that unit: it would answer 404 until then. An unknown doctype is
-    left alone, since its 404 is what the block expects (CONFIGURATION milestone 5)."""
-    if routes is None or not any("/api/v1/meta/" in path for _, path in entry.routes):
+    """A route that checks the doctype it is asked about (the meta/ and layout calls)
+    asked about a doctype whose resource is not built yet waits for that unit: it would
+    answer 404 until then. An unknown doctype is left alone, since its 404 is what the
+    block expects (CONFIGURATION milestones 5 and 6). user-settings/ takes a doctype too
+    but does not check it, so it runs."""
+    if routes is None or not any(
+        path.startswith(DOCTYPE_CHECKING_PREFIXES) for _, path in entry.routes
+    ):
         return False
     doctype = _payload(block, url).get("doctype")
     resource = routes.doctypes.get(unquote(doctype)) if isinstance(doctype, str) else None
