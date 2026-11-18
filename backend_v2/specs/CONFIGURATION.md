@@ -35,7 +35,10 @@ layouts and quick filters (the three `crm_fields_layout.*` calls, `get_quick_fil
 **Routes** (`PORT_MAP.md`, REBUILD_PLAN S25 and `REBUILD_PLAN.md:174-176`): field
 metadata, saved views and `getdoctype` keep `doctype` as an input; everything else has a
 per-resource or per-purpose route. The list engine is a mixin each resource opts in to
-(`<resource>/list-view/`, S24).
+(`<resource>/list-view/`, S24). As S25 (8) says, a record named exactly like an action
+cannot be reached by its document route: an Email Account named `setup`, a Form Script
+or Fields Layout named `layout`, `save` or `sidepanel-sections`, any record named `value`
+or `search`.
 
 ## 2. Depends on
 
@@ -63,7 +66,9 @@ unit's own doctypes, and their real gate is SALES and ACTIVITIES (§9).
   `frappe_platform/reference_data.py`, `crm_app/data/country_info.json` (the version-15
   copy), `crm_app/data/languages.csv`, `crm_app/setup.py` (`:374`, `:397`), migrations
   `frappe_platform` 0017 (currencies) and 0019 (System Settings),
-  `frappe_platform/models.py:1667` (Language), `:1806-1839` (System Settings)
+  `frappe_platform/models.py:1616-1839` (Country, Currency, Language, System Settings:
+  their choices, the three `FieldValue` naming rules, `SystemSettings.LINK_FIELDS`),
+  `config/settings/base.py:305-313` (`FRAPPE_SYSDEFAULTS`)
 - **Settings:** `crm_app/api/settings.py:70-156`, `api/exchange_rate.py`,
   `crm_app/integrations/http.py`, `management/commands/refresh_exchange_rates.py`,
   `crm_app/models/metadata.py:360-491` (FCRM Settings, dropdown items),
@@ -116,33 +121,63 @@ unit's own doctypes, and their real gate is SALES and ACTIVITIES (§9).
   <strong>System Manager</strong>", title "Not Permitted"; then returns early with nothing
   cleared (`demo.py:55-63`).
 - **`get_translations`**: guest; answers `{}` (`misc.py:31-39`).
+- Both refusals are `PermissionError`, 403; `current_site_info`'s carries the default
+  title "Not Permitted" (`backend/frappe_core/exceptions.py:68-70`). A wrong method is
+  **405** under PE-1 (the old dispatch answered 403 "Method … does not accept GET");
+  `13` 9.11 is a negative block.
 
 ### 4.2 Reference data, boot and onboarding (milestone 2)
 
 - **Rules** (`platform_docs.py`): Country and Language are read by everyone and written
-  by System Manager (`:458-498`); Currency is read only by the five listed roles, so a
-  caller with none gets an empty list (`:504-529`); System Settings is System Manager
-  only, **reads included**, and nobody deletes it (`:532-551`).
-- **Language** keeps `language_name`, its `SEARCH_FIELD`, readable and filterable (link
-  search, §7).
-- **`get_context_for_dev`**: guest, POST only, exactly eight keys — `sysdefaults` (always
-  a dict with `date_format`), `timezone` `{"system", "user"}` (the caller's `time_zone`,
-  else the system zone; a guest gets the system zone twice), `translated_messages` `{}`,
-  `translated_doctypes` `[]`, `state_options` `{}`, and `is_demo_site`,
-  `demo_data_created`, `is_fc_site` all false (`boot.py:41-73`). It reads System
-  Settings server-side, so no permission on that doctype is needed.
-- **Onboarding** (`onboarding.py:43-85`): `get_onboarding_status` answers the caller's
-  `User.onboarding_status` as a dict, `{}` when unset or unreadable;
-  `update_user_onboarding_status` refuses "appName is required" and "steps must be JSON",
-  stores `steps` under `<appName>_onboarding_status`, keeps other apps' keys, treats an
-  unset status as `{}` (upstream bug 40 not reproduced, as in `backend/`) and leaves the
-  row's timestamps untouched.
+  by System Manager (`:458-498`). **Currency** is read by Administrator, System Manager,
+  or any of Sales User, Sales Manager, Accounts Manager, Accounts User, Purchase User; a
+  caller with none gets an empty list, and a refused read by name is 403; writes are
+  System Manager or Administrator (`:504-529`). System Settings is System Manager only,
+  **reads included**, and nobody deletes it (`:532-551`).
+- **Field lists:** in `backend/` every column of Country, Currency, Language and System
+  Settings is readable, filterable and sortable, none sensitive
+  (`frappe_platform/models.py:1616-1839`); `backend_v2`'s allowlists default to empty, so
+  each resource lists them all. `SystemSettings.LINK_FIELDS` maps `currency` to Currency
+  (417 for an unknown one).
+- **Link search** (SHARED_ACTIONS' mixin, §7): Language, Currency and Country opt in —
+  `languages/search/`, `currencies/search/`, `countries/search/` — because the pickers
+  search them (`DashboardSettings.vue:88`, `DefaultsSettings.vue:44` for Currency; the
+  Address control for Country; `backend/tests/test_currency.py:27,36-39,60-63`,
+  `test_address.py:6`). Language keeps `language_name` (its `SEARCH_FIELD`) readable and
+  filterable; `enabled` is filterable on Currency and Language.
+- **`get_context_for_dev`**: guest, POST only, exactly eight keys — `sysdefaults` (exactly
+  seven keys, all strings, `test_boot.py`), `timezone` `{"system", "user"}` (the caller's
+  `time_zone`, else the system zone; a guest gets the system zone twice),
+  `translated_messages` `{}`, `translated_doctypes` `[]`, `state_options` `{}`, and
+  `is_demo_site`, `demo_data_created`, `is_fc_site` all false (`boot.py:41-73`). It reads
+  System Settings server-side, so no permission on that doctype is needed.
+- **A missing System Settings row is written again on the next boot** (required:
+  `test_system_settings.py` `test_a_missing_row_is_written_again_on_the_next_boot`;
+  `boot.py:61`, `frappe_platform/models.py:1806-1826`): from `FRAPPE_SYSDEFAULTS`, with
+  `Administrator` as the actor (decision 11); a lost insert race reads the winner's row.
+- **`FRAPPE_SYSDEFAULTS`** (`backend/config/settings/base.py:305-313`): seven keys from
+  seven `FRAPPE_*` environment names, with defaults. Added to `backend_v2`'s settings;
+  the data migration and the re-create both read it.
+- **Onboarding** (`onboarding.py:43-85`, `test_onboarding_status.py:64-72`):
+  `get_onboarding_status` answers the caller's `User.onboarding_status` as a dict, `{}`
+  when unset or unreadable; `update_user_onboarding_status` refuses "appName is required"
+  and "steps must be JSON", both 417; `steps` may be a JSON string or a list or dict;
+  extra inputs are ignored; it stores `steps` under `<appName>_onboarding_status`, keeps
+  other apps' keys, treats an unset status as `{}` (upstream bug 40 not reproduced, as in
+  `backend/`), leaves the row's timestamps untouched and answers `null`. A guest gets 401.
 - **Rows the application cannot run without** (decision 13): the countries, languages,
-  currencies (nine enabled) and the System Settings row are written by a data migration
-  in `configuration`, as FOUNDATION writes roles and built-in users and as `backend/`
-  does (`crm_app/setup.py:374`, `:397`; migrations 0017, 0019), **not** by a dev-data step:
-  `DEV_DATA_ALLOWED` does not gate them. The guest boot call therefore only reads the row;
-  if it ever must create it, the actor is `Administrator` (decision 11).
+  currencies (nine enabled) and the System Settings row are written by a **data migration**
+  in `configuration`, as FOUNDATION writes roles and built-in users; not a dev-data step,
+  so `DEV_DATA_ALLOWED` does not gate them. The mechanism differs from `backend/`, where
+  countries and languages come from the `seed_defaults` command (`setup.py:374-416`) and
+  currencies and System Settings from migrations 0017 and 0019. The two data files
+  (`country_info.json`, the version-15 copy, and `languages.csv`) are copied into
+  `backend_v2/configuration/`, since nothing imports from `backend/`. A Country without
+  formats falls back to `dd-mm-yyyy` and `HH:mm:ss`, and its time zones are joined with
+  newlines; a Language's `enabled` is the file's column; existing rows are left alone; the
+  owner is Administrator, so the migration depends on `accounts`' built-in users.
+  Whether the default layouts, quick filters, form scripts and dropdown rows are a
+  migration or a seed is **open — before milestones 3 and 6**.
 
 ### 4.3 FCRM Settings and exchange rate (milestone 3)
 
@@ -233,9 +268,10 @@ Who may do what (spec check findings 2, 3; detail for the owner in `temp\`):
 | Resource read | own, ownerless or public views |
 | Resource create | everyone (`metadata_docs.py:84-85`) |
 | Resource write / delete | own; a public view: Sales Manager; System Manager or Administrator (`metadata_docs.py:86-91`) |
-| `public` | Administrator or Sales Manager only, System Manager excluded; clears `user` (`view_settings.py:205-229`) |
+| `public` | Administrator or Sales Manager only, System Manager excluded, on any user's view, without the object rule; clears `user` (`view_settings.py:205-229`) |
 | `delete` | as the resource rule for a public view (`view_settings.py:37-48`) |
-| `set_as_default` | no permission check, as upstream (`view_settings.py:249-270`) |
+| `create`, `update`, `pin` | as `backend/`'s `view_settings.py` decides each, read at milestone 7 |
+| `set_as_default` | no permission check, as upstream; `name` is optional (`view_settings.py:249-270`), so the route is a collection action with `name` in the body |
 | `fetch_and_update_kanban_columns` | no permission check, as upstream; a missing name answers `None` (`view_settings.py:322`) |
 
 A public view has no owner. Whether `backend_v2` matches every row or narrows the
@@ -248,7 +284,7 @@ what `backend/` tracks, decided at milestone 7 (decision 14).
 - `get_data`'s response shape, every key present even when empty.
 - It reads through the resource's own queryset and field rules (root `CLAUDE.md` rule
   11). In `backend/` it resolves any registered doctype (`frappe_core/api/doc.py:229`);
-  `backend_v2` serves it per resource (decision 9 and §6).
+  `backend_v2` serves it per resource (§6, the last row).
 - `all_count` and `count` go through the caller's rules (`doc.py:506-515`); the four badge
   counts are deliberately **not** permission-filtered (`:564-598`) and are safe only
   because the rows they count for were filtered first.
@@ -276,7 +312,12 @@ what `backend/` tracks, decided at milestone 7 (decision 14).
   | `07_views_and_metadata` | the resource-only blocks 0.12-0.15, 2.5, 6.7, 7.1-7.3, 7.5, 8.5-8.8, 9.12-9.14 | 5-8 | every other block: SALES, ACTIVITIES, CONTACTS |
 
   `12` 1.14 and 1.15 (a second POST, a DELETE on the singleton, 403 in `backend/`) answer
-  405 under the singleton route (PE-1). `13` 5.3 expects `1` for EUR to USD, true only
+  405 under the singleton route (PE-1); so does `test_system_settings.py`
+  `test_nobody_deletes_it` (403 from `frappe.client.delete` in `backend/`). Two more cases
+  wait for later milestones: `test_system_settings.py`
+  `test_the_defaults_page_loads_the_row_and_its_options` (`getdoctype`, milestone 5) and
+  `test_currency.py` `test_the_dashboard_currency_can_be_chosen` (FCRM Settings,
+  milestone 3). `13` 5.3 expects `1` for EUR to USD, true only
   with `ENABLE_EXCHANGE_RATE_API` off. No `.http` block covers Email Account, System
   Settings, Country, Currency, Language or the onboarding status: pytest is their gate.
 - The body comparison over the same blocks.
@@ -341,8 +382,8 @@ Moved here by ACCOUNTS' spec rewrite (`temp` A-21 D-D; flagged for the owner).
   reachable only from `email.make` (ACTIVITIES). Port `test_phase5_async.py:377` here;
   `test_mail_config_account.py:262` is ACTIVITIES'.
 - **`User.default_list_data`** (the User list view, old `:309-318`) — milestone 8.
-- `test_language.py:65` and `test_onboarding_status.py` write `User` through ACCOUNTS'
-  `/api/v1/users/<name>/` route (milestone 2).
+- `test_language.py:65` writes `User` through ACCOUNTS' `/api/v1/users/<name>/` route;
+  `test_onboarding_status.py` calls the two onboarding paths (milestone 2).
 - `docs/http/09_users_and_invitations.http` 6.5 (`get_translations`) waits on this unit
   (milestone 1).
 
@@ -351,7 +392,7 @@ Moved here by ACCOUNTS' spec rewrite (`temp` A-21 D-D; flagged for the owner).
 | # | Holds | Gate alone today? |
 |---|---|---|
 | **1. Desk plumbing** | `get_apps`, `current_site_info`, `boot_config`, `clear_demo_data`, `get_translations`; no model; the two `POSTHOG_*` settings | yes |
-| **2. Reference data and boot** | Country, Currency, Language, System Settings and their data migration; `get_context_for_dev`; both onboarding calls; Language link search | yes |
+| **2. Reference data and boot** | Country, Currency, Language, System Settings and their data migration; `FRAPPE_SYSDEFAULTS`; `get_context_for_dev` (re-creating a missing System Settings row); both onboarding calls; link search on Language, Currency and Country | yes |
 | 3. FCRM Settings | FCRM Settings, CRM Dropdown Item, `get_exchange_rate`, `ENABLE_EXCHANGE_RATE_API` | once decision 5 is taken |
 | 4. Email Account | Email Account, User Email, `create_email_account`, validation, rename, §8 | once decisions 4, 7 are taken; pytest only |
 | 5. Field metadata | the metadata file and generator, the four field helpers, `getdoctype`, `user_settings`, export's provider | on this unit's own doctypes and `tests_support` |
