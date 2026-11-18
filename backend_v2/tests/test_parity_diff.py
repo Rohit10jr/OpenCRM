@@ -336,3 +336,11 @@ def test_a_reused_generated_name_must_be_reused_on_the_other_side():
         {"a": "abc123def0", "b": "111111111a"}, {"a": "fed321cba9", "b": "fed321cba9"}, []
     )
     assert shared
+
+
+def test_rows_named_by_generated_hashes_are_compared_by_position():
+    old = [{"name": "aa11bb22cc", "role": "Sales User"}]
+    new = [{"name": "dd33ee44ff", "role": "Sales Manager"}]
+    difference = body_difference(old, new, [])
+    assert difference == '$[0].role: "Sales User" != "Sales Manager"'
+    assert body_difference(old, [{"name": "dd33ee44ff", "role": "Sales User"}], []) is None

@@ -136,6 +136,15 @@ class _Comparison:
             return None
 
         old_names, new_names = names(left), names(right)
+        generated = (
+            old_names is not None
+            and new_names is not None
+            and all(GENERATED_NAME_RE.fullmatch(name) for name in old_names + new_names)
+        )
+        if generated:
+            # Rows named by generated hashes cannot match by name across two servers:
+            # pair them by position, and the one-to-one name pairing checks the names.
+            old_names = new_names = None
         if old_names is not None and new_names is not None and old_names != new_names:
             # Rows of documents: compare the rows both sides hold, matched by name, and
             # report the names only one side holds.
