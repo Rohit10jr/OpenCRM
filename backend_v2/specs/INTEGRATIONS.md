@@ -54,6 +54,15 @@ timeline).
 
 ## 4. Must not be lost
 
+**The outbound HTTP helper** is already in `backend_v2/core/http.py`, ported whole by
+CONFIGURATION (decision 5 there): import it, don't port `integrations/http.py` again. It
+retries POST, which `urllib3` does not by default. The old helper's reason, which applies
+to this unit's callers (`backend/crm_app/integrations/http.py:20-25`): an outbound call
+request that failed to *connect* never reached the provider, and one that returned
+502/503 was rejected before dialling; the dangerous case, a request that succeeded but
+whose response was lost, is covered by the call-log dedupe, keyed on the provider's own
+call id. A caller without that property passes `attempts=1`.
+
 **Telephony providers**
 
 - **Twilio webhooks verify the signature from the real request** — the absolute URL and
