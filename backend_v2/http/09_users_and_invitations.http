@@ -238,6 +238,9 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"last_name": "Account"}
+
+# ---- roles: crm.api.user.* ---------------------------------------------------------------------
+
 ### 3.1 a Sales User may not change roles -> 403 "Not permitted" (frappe.only_for)
 # @expect $.exc_type == PermissionError
 POST {{host}}/api/v1/users/{{temp}}/update-role/
@@ -340,6 +343,9 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"new_role": "Sales User"}
+
+# ---- invitations -----------------------------------------------------------------------------------
+
 ### 4.1 a Sales User may not invite -> 403 "Not permitted"
 # @expect $.exc_type == PermissionError
 POST {{host}}/api/v1/invitations/invite-by-email/
