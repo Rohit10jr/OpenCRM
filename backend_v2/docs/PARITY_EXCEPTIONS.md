@@ -489,7 +489,7 @@ comparison skips that block.
 ### PE-22. `get_data` is served for the resources that opt in to a list view
 
 - **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-40, 18 Nov 2026); to be built in CONFIGURATION milestone 8
+  the owner (`temp` A-40, 18 Nov 2026); built in `717fdd3`, `f743a80`
 - **Where:** `GET` and `POST /api/v1/<resource>/list-view/` (old `crm.api.doc.get_data`)
 - **Old backend:** answers it for any registered doctype
   (`backend/frappe_core/api/doc.py:229`), and builds a kanban column list from every row
@@ -505,11 +505,12 @@ comparison skips that block.
 ### PE-23. A list view takes at most `MAX_PAGE_LENGTH` kanban columns
 
 - **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-40, 18 Nov 2026); to be built in CONFIGURATION milestone 8
+  the owner (`temp` A-40, 18 Nov 2026); built in `f743a80`
 - **Where:** `GET` and `POST /api/v1/<resource>/list-view/` with `kanban_columns`
 - **Old backend:** accepts any number of sent columns
   (`backend/frappe_core/api/doc.py:484-526`)
-- **backend_v2:** a sent `kanban_columns` list longer than `MAX_PAGE_LENGTH` is 417. A
+- **backend_v2:** a sent `kanban_columns` list longer than `MAX_PAGE_LENGTH` is 417 "At
+  most 500 kanban columns". A
   column's `page_length` of 0 still means no limit, and `page_length=0` every row, as
   before
 - **Why:** the same limit as a list page's length
@@ -518,7 +519,7 @@ comparison skips that block.
 ### PE-12e. List-view crashes answer as errors
 
 - **Status:** approved — decided by the supervisor on the owner's behalf (`temp` A-40,
-  18 Nov 2026; it only replaces a crash); to be built in CONFIGURATION milestone 8
+  18 Nov 2026; it only replaces a crash); built in `7daa881`, `f743a80`
 - **Where:** `GET` and `POST /api/v1/<resource>/list-view/` (old `crm.api.doc.get_data`)
 - **Old backend:** a `columns` or `kanban_columns` entry that is not an object, a `rows`
   or `kanban_fields` entry that is not a string, or a column's `order` that is not a list
