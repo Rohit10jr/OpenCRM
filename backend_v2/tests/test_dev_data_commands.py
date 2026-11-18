@@ -240,3 +240,19 @@ def test_a_second_seed_keeps_the_first_seeds_record(passwords):
     assert not User.objects.filter(
         pk__in=["ada@example.com", "grace@example.com", "alan@example.com"]
     ).exists()
+
+
+def test_a_stale_record_never_deletes_a_hand_made_row(make_user, passwords):
+    """A-26: the seeded grace is deleted by hand and a new one made under the same name;
+    clear leaves the new one and forgets the record."""
+    from core.models import DevDataRecord
+
+    call_command("seed_dev_data", stdout=io.StringIO())
+    User.objects.filter(pk="grace@example.com").delete()
+    make_user("grace@example.com", first_name="Real Grace")
+
+    call_command("clear_dev_data", stdout=io.StringIO())
+
+    assert User.objects.filter(pk="grace@example.com", first_name="Real Grace").exists()
+    assert not User.objects.filter(pk__in=["ada@example.com", "alan@example.com"]).exists()
+    assert not DevDataRecord.objects.exists()

@@ -96,8 +96,10 @@ def clear_users(user: User, force: bool = False) -> int:
     del user, force
     names = [name for name, _first_name, _role, _variable in SEEDED_USERS]
     recorded = set(dev_records.recorded_pks(STEP, User)) & set(names)
-    existing = User.objects.filter(name__in=recorded)
-    removed = existing.count()
-    existing.delete()
+    seeded = dev_records.still_seeded(
+        STEP, User, User.objects.filter(name__in=recorded)
+    )
+    removed = len(seeded)
+    User.objects.filter(pk__in=[account.pk for account in seeded]).delete()
     dev_records.forget(STEP, User)
     return removed

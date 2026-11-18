@@ -26,5 +26,21 @@ def recorded_pks(step: str, model) -> list[str]:
     )
 
 
+def still_seeded(step: str, model, rows):
+    """The rows whose record still describes them. A row created after its record (the
+    seeded row was deleted by hand and a new one made under the same name) is not the
+    seed's any more and is never deleted (A-26)."""
+    recorded = dict(
+        DevDataRecord.objects.filter(step=step, model_label=model._meta.label).values_list(
+            "object_pk", "creation"
+        )
+    )
+    return [
+        row
+        for row in rows
+        if str(row.pk) in recorded and row.creation <= recorded[str(row.pk)]
+    ]
+
+
 def forget(step: str, model) -> None:
     DevDataRecord.objects.filter(step=step, model_label=model._meta.label).delete()
