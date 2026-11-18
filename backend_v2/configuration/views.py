@@ -24,6 +24,7 @@ from configuration import (
     field_helpers,
     fields_layout,
     metadata,
+    quick_filters,
     user_settings,
 )
 from configuration.models import SystemSettings
@@ -545,3 +546,31 @@ class CRMGlobalSettingsViewSet(DocumentViewSet):
     filterable_fields = CRMGlobalSettingsSerializer.Meta.fields
     sortable_fields = CRMGlobalSettingsSerializer.Meta.fields
     searchable_fields = ()
+
+
+class QuickFiltersView(BaseAPIView):
+    """`crm.api.doc.get_quick_filters`, for any signed-in caller
+    (configuration/quick_filters.py)."""
+
+    def get(self, request):
+        inputs = self.get_inputs(request)
+        return Response(
+            quick_filters.get_quick_filters(
+                inputs.get("doctype"), user=request.user, cached=inputs.get("cached", True)
+            )
+        )
+
+
+class UpdateQuickFiltersView(BaseAPIView):
+    """`crm.api.doc.update_quick_filters`, for any signed-in caller, as `backend/`;
+    answers `None`."""
+
+    def post(self, request):
+        inputs = self.get_inputs(request)
+        quick_filters.update_quick_filters(
+            parse_json_param(inputs.get("quick_filters"), []),
+            parse_json_param(inputs.get("old_filters"), []),
+            inputs.get("doctype"),
+            user=request.user,
+        )
+        return Response(None)

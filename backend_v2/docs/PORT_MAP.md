@@ -192,9 +192,9 @@ per-view calls that require it.
 | `crm.api.doc.get_fields` | GET/POST | auth | `crm_app/api/doc.py:get_fields` | `GET /api/v1/meta/fields/` (`doctype` kept as input) | configuration | built |
 | `crm.api.doc.get_filterable_fields` | GET/POST | auth | `crm_app/api/doc.py:get_filterable_fields` | `GET /api/v1/meta/filterable-fields/` (`doctype` kept as input) | configuration | built |
 | `crm.api.doc.get_group_by_fields` | GET/POST | auth | `crm_app/api/doc.py:get_group_by_fields` | `GET /api/v1/meta/group-by-fields/` (`doctype` kept as input) | configuration | built |
-| `crm.api.doc.get_quick_filters` | GET/POST | auth | `crm_app/api/doc.py:get_quick_filters` | `GET /api/v1/meta/quick-filters/` (`doctype` kept as input) | configuration | — |
+| `crm.api.doc.get_quick_filters` | GET/POST | auth | `crm_app/api/doc.py:get_quick_filters` | `GET /api/v1/meta/quick-filters/` (`doctype` kept as input) | configuration | built |
 | `crm.api.doc.sort_options` | GET/POST | auth | `crm_app/api/doc.py:sort_options` | `GET /api/v1/meta/sort-options/` (`doctype` kept as input) | configuration | built |
-| `crm.api.doc.update_quick_filters` | GET/POST | auth | `crm_app/api/doc.py:update_quick_filters` | `POST /api/v1/meta/quick-filters/update/` (`doctype` kept as input) | configuration | — |
+| `crm.api.doc.update_quick_filters` | GET/POST | auth | `crm_app/api/doc.py:update_quick_filters` | `POST /api/v1/meta/quick-filters/update/` (`doctype` kept as input) | configuration | built |
 | `crm.api.exchange_rate.get_exchange_rate` | GET/POST | auth | `crm_app/api/exchange_rate.py:get_exchange_rate` | `GET /api/v1/exchange-rate/` | configuration | built |
 | `crm.api.get_translations` | GET/POST | guest | `crm_app/api/misc.py:get_translations` | `GET /api/v1/translations/` | configuration | built |
 | `crm.api.settings.create_email_account` | GET/POST | auth | `crm_app/api/settings.py:create_email_account` | `POST /api/v1/email-accounts/setup/` | configuration | built |

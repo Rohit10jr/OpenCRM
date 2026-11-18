@@ -689,3 +689,9 @@ class CRMGlobalSettings(BaseDocument):
         indexes = [
             models.Index(fields=["dt", "type"], name="global_settings_lookup_idx"),
         ]
+
+    @classmethod
+    def first_row(cls, dt: str, type: str):
+        """The first row by name for a doctype and type, or `None`: several can exist
+        (hash names, no unique constraint). Every row is open to everyone."""
+        return cls._default_manager.filter(dt=dt, type=type).order_by("name").first()

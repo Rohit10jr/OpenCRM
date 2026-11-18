@@ -199,7 +199,7 @@ Authorization: Bearer {{token}}
 # ---- quick filters ------------------------------------------------------------------------------
 
 ### 2.1 get_quick_filters for a lead -> the in_standard_filter fields, minus `converted`
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message contains "fieldname": "status"
 # @expect $.message contains "fieldname": "email"
 # @expect $.message excludes "fieldname": "converted"
@@ -210,7 +210,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "cached": true}
 
 ### 2.2 for a task: title, priority, assigned_to, status, due_date; a Select gets a blank first option
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 # @expect $.message count 5
 # @expect $.message[0].fieldname == title
 # @expect $.message[1].fieldname == priority
@@ -224,7 +224,7 @@ Content-Type: application/json
 {"doctype": "CRM Task"}
 
 ### 2.3 update_quick_filters writes a CRM Global Settings row -> 200
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 POST {{host}}/api/method/crm.api.doc.update_quick_filters
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -232,7 +232,7 @@ Content-Type: application/json
 {"doctype": "CRM Task", "quick_filters": ["status", "title"], "old_filters": ["title", "priority", "assigned_to", "status", "due_date"]}
 
 ### 2.4 -> get_quick_filters now follows the row, in the order given
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 # @expect $.message count 2
 # @expect $.message[0].fieldname == status
 # @expect $.message[1].fieldname == title
@@ -243,6 +243,7 @@ Content-Type: application/json
 {"doctype": "CRM Task"}
 
 ### 2.5 the row it wrote, one per (dt, type) -> 200
+# @waiting ACTIVITIES
 # @resource-envelope {"data"}/201 -> {"message"}/200
 # @name qf
 # @expect $.message count 1
@@ -684,6 +685,7 @@ Content-Type: application/json
 {"doctype": "CRM Task", "type": "Quick Entry"}
 
 ### 6.7 the row it wrote is named by the format strategy: "{dt}-{type}"
+# @waiting ACTIVITIES
 # @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.message.name == CRM Task-Quick Entry
 # @expect $.message.dt == CRM Task
@@ -934,6 +936,7 @@ DELETE {{views}}/{{kstd}}
 Authorization: Bearer {{token}}
 
 ### 8.5 delete the quick-filter override -> 200
+# @waiting ACTIVITIES
 # @resource-envelope {"data"}/201 -> {"message"}/200
 DELETE {{host}}/api/v1/global-settings/{{qf.response.body.$.message[0].name}}/
 Authorization: Bearer {{token}}

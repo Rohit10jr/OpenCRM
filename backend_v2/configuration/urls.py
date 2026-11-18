@@ -18,11 +18,13 @@ from configuration.views import (
     FCRMSettingsViewSet,
     LanguageViewSet,
     OnboardingStatusView,
+    QuickFiltersView,
     SiteInfoView,
     SortOptionsView,
     SystemSettingsViewSet,
     TelemetryConfigView,
     TranslationsView,
+    UpdateQuickFiltersView,
     UserSettingsView,
 )
 from core.routers import DocumentRouter, SingletonRouter
@@ -52,6 +54,12 @@ urlpatterns = [
         r"^meta/group-by-fields/?$",
         GroupByFieldsView.as_view(),
         name="meta-group-by-fields",
+    ),
+    re_path(r"^meta/quick-filters/?$", QuickFiltersView.as_view(), name="meta-quick-filters"),
+    re_path(
+        r"^meta/quick-filters/update/?$",
+        UpdateQuickFiltersView.as_view(),
+        name="meta-quick-filters-update",
     ),
     re_path(
         r"^onboarding/status/?$",
