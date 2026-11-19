@@ -2,7 +2,7 @@
 
 from core.serializers import DocumentSerializer
 
-from .models import CRMIndustry, Gender, Salutation
+from .models import Address, CRMIndustry, Gender, Salutation
 
 DOCUMENT_FIELDS = (
     "name",
@@ -35,3 +35,30 @@ class CRMIndustrySerializer(DocumentSerializer):
     class Meta:
         model = CRMIndustry
         fields = (*DOCUMENT_FIELDS, "industry")
+
+
+ADDRESS_FIELDS = (
+    "address_title",
+    "address_type",
+    "address_line1",
+    "address_line2",
+    "city",
+    "county",
+    "state",
+    "country",
+    "pincode",
+    "email_id",
+    "phone",
+    "fax",
+    "is_primary_address",
+    "is_shipping_address",
+    "disabled",
+)
+
+
+class AddressSerializer(DocumentSerializer):
+    """The address and its Dynamic Link rows (`links`, the model's polymorphic table)."""
+
+    class Meta:
+        model = Address
+        fields = (*DOCUMENT_FIELDS, *ADDRESS_FIELDS, "links")
