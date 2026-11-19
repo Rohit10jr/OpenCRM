@@ -125,7 +125,17 @@ class AddressViewSet(LinkSearchMixin, DocumentViewSet):
         return True
 
     def search_filters(self, filters, flags, user):
-        return super().search_filters(address_query_filters(filters), flags, user)
+        filters = address_query_filters(filters)
+        if isinstance(filters, list) and not flags["include_disabled"]:
+            # The base hook hides disabled rows for dict filters only; list filters get
+            # the same condition, as ACCOUNTS' User search does.
+            if not any(
+                isinstance(condition, (list, tuple)) and len(condition) >= 3 and condition[-3] == "disabled"
+                for condition in filters
+            ):
+                filters = [*filters, ["disabled", "!=", 1]]
+            return filters
+        return super().search_filters(filters, flags, user)
 
 
 class CRMIndustryViewSet(LinkSearchMixin, DocumentViewSet):

@@ -123,17 +123,12 @@ class AddressName(NameStrategy):
 
 
 def document_title(doctype: str, name: str) -> str:
-    """`Document.get_title`: the doctype's title field's value, else the name (old
-    `_document_title`); what a Dynamic Link row's `link_title` shows (DECISIONS 60)."""
-    from configuration.field_meta import get_title_field
-    from core.doctypes import model_for_doctype
-
-    model = model_for_doctype(doctype)
-    title_field = get_title_field(doctype) if model is not None else None
-    if not title_field:
-        return name
-    value = model._default_manager.filter(pk=name).values_list(title_field, flat=True).first()
-    return value or name
+    """What a Dynamic Link row's `link_title` shows: the linked document's name, as
+    `backend/` stores it. The old `_document_title` reads a title field no model there
+    declares (`frappe_platform/models.py:1609`), so it always answers the name
+    (DECISIONS 65)."""
+    del doctype
+    return name
 
 
 class Address(BaseDocument):
@@ -210,7 +205,7 @@ class Address(BaseDocument):
                 seen.add(key)
 
     def set_link_title(self) -> None:
-        """Each row's `link_title` is the linked document's title, or its name."""
+        """Each row's `link_title` is the linked document's name, as `backend/`."""
         for row in self.link_rows():
             title = document_title(row.link_doctype, row.link_name)
             if row.link_title != title:

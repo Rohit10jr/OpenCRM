@@ -244,7 +244,8 @@ one putting back a deleted salutation or gender and one writing the 51 industrie
 Its second milestone adds `addresses/` (everyone reads, writes and creates; System
 Manager or Administrator deletes) with its Dynamic Link rows (`links`, a polymorphic
 child declared on the model). An address is named `<title>-<type>` plus the collision
-number, and its save deduplicates its links, sets their titles and clears a preferred
+number, and its save deduplicates its links, stores each linked document's name as its
+title (as `backend/`) and clears a preferred
 flag on the other addresses linked to the same document. Search reads the old
 `address_query` link filters and hides disabled addresses. A record a Dynamic Link row
 names cannot be deleted, and the refusal names the row's place ("at Row: <idx>"), as

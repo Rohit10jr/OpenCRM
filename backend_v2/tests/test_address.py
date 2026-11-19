@@ -80,6 +80,8 @@ def test_the_labels_and_link_targets_are_upstreams():
     assert fields["country"]["options"] == "Country"
     assert fields["address_type"]["fieldtype"] == "Select"
     assert "Billing" in fields["address_type"]["options"].split("\n")
+    countries = {f["fieldname"]: f for f in field_meta.get_fields("Country")}
+    assert countries["country_name"]["label"] == "Country Name"
 
 
 def test_everyone_writes_but_only_a_system_manager_deletes(api_as, alice, administrator, india):
@@ -139,6 +141,80 @@ def test_link_title_is_the_name_without_a_title_field(administrator, india):
     assert address.link_rows().get().link_title == "W-1"
 
 
+@pytest.mark.parametrize("name", ["5", "not-an-integer"])
+def test_link_title_is_the_name_even_where_the_metadata_names_a_title_field(administrator, india, name):
+    """A-47: `backend/` stores the name (its title-field lookup never finds one)."""
+    address = make_address(administrator, india)
+    link(administrator, address, "CRM View Settings", name)
+    address.save(user=administrator)
+    assert address.link_rows().get().link_title == name
+
+
+def test_a_system_manager_deletes_an_address(make_user, api_as, administrator, india):
+    manager = make_user("sysman@example.com", roles=["System Manager"])
+    address = make_address(administrator, india)
+    assert api_as(manager).delete(f"{ADDRESSES}{address.pk}/").status_code == 200
+    assert not Address.objects.filter(pk=address.pk).exists()
+
+
+def test_posted_rows_belong_to_this_address_whatever_they_carry(auth_api, administrator, india):
+    other = make_address(administrator, india, title="Other")
+    theirs = link(administrator, other, "Foundation Widget", "W-9")
+    response = auth_api.post(
+        ADDRESSES,
+        {
+            "address_title": "Mine",
+            "address_type": "Office",
+            "address_line1": "1",
+            "city": "Pune",
+            "country": "India",
+            "links": [
+                {
+                    "name": theirs.pk,
+                    "parent": other.pk,
+                    "parenttype": "Address",
+                    "link_doctype": "Foundation Widget",
+                    "link_name": "W-1",
+                }
+            ],
+        },
+        format="json",
+    )
+    assert response.status_code == 200, response.json()
+    mine = Address.objects.get(pk=response.json()["message"]["name"])
+    assert [(row.link_doctype, row.link_name) for row in mine.link_rows()] == [("Foundation Widget", "W-1")]
+    assert [(row.pk, row.link_name) for row in other.link_rows()] == [(theirs.pk, "W-9")]
+
+
+def test_a_patch_of_one_addresss_links_leaves_anothers_alone(auth_api, administrator, india):
+    first = make_address(administrator, india, title="First")
+    second = make_address(administrator, india, title="Second")
+    kept = link(administrator, second, "Foundation Widget", "W-2")
+    response = auth_api.patch(
+        f"{ADDRESSES}{first.pk}/", {"links": [{"link_doctype": "Foundation Widget", "link_name": "W-1"}]}, format="json"
+    )
+    assert response.status_code == 200, response.json()
+    assert [row.pk for row in second.link_rows()] == [kept.pk]
+
+
+def test_two_duplicate_rows_posted_together_collapse_to_one(auth_api, india):
+    row = {"link_doctype": "Foundation Widget", "link_name": "W-1"}
+    response = auth_api.post(
+        ADDRESSES,
+        {
+            "address_title": "Dup",
+            "address_type": "Office",
+            "address_line1": "1",
+            "city": "Pune",
+            "country": "India",
+            "links": [row, dict(row)],
+        },
+        format="json",
+    )
+    assert response.status_code == 200, response.json()
+    assert Address.objects.get(pk="Dup-Office").link_rows().count() == 1
+
+
 def test_a_preferred_flag_clears_it_on_the_other_enabled_addresses(administrator, india):
     first = make_address(administrator, india, title="One", is_primary_address=True)
     link(administrator, first, "Foundation Widget", "W-1")
@@ -185,5 +261,16 @@ def test_search_reads_the_link_filters(auth_api, administrator, india):
 
 def test_search_hides_disabled_addresses(auth_api, administrator, india):
     shown = make_address(administrator, india, title="Shown")
-    make_address(administrator, india, title="Hidden", disabled=True)
+    hidden = make_address(administrator, india, title="Hidden", disabled=True)
     assert search(auth_api) == [shown.pk]
+    assert search(auth_api, filters='{"include_disabled": 1}') == sorted([shown.pk, hidden.pk])
+
+
+def test_list_filters_also_hide_a_disabled_linked_address(auth_api, administrator, india):
+    shown = make_address(administrator, india, title="On")
+    link(administrator, shown, "Foundation Widget", "W-1")
+    hidden = make_address(administrator, india, title="Off", disabled=True)
+    link(administrator, hidden, "Foundation Widget", "W-1")
+    listed = '[["link_doctype", "=", "Foundation Widget"], ["link_name", "=", "W-1"]]'
+    assert search(auth_api, filters=listed) == [shown.pk]
+    assert search(auth_api, filters='{"link_doctype": "Foundation Widget", "link_name": "W-1"}') == [shown.pk]
