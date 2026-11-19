@@ -708,7 +708,8 @@ def _wait_after_waiting(blocks: list[HttpBlock], filename: str = "") -> None:
 #: show it, waits with that block: (file, block) -> the block it waits with
 #: (CONFIGURATION section 4.6). 8.5 and 8.6 delete the rows 2.5 reads and 6.5 writes, in
 #: another section (0.14 deletes 6.5's row at the start of every run). 4.8 and 8.4 use
-#: the kanban view 4.7 makes (section 4.7; 0.9-0.11 clear it each run).
+#: the kanban view 4.7 makes (section 4.7; 0.9-0.11 clear it each run). 02 10.11 deletes
+#: the industry expecting the organization 1.2 makes to protect it (CONTACTS).
 WAITS_WITH = {
     ("07_views_and_metadata.http", "2.5"): "2.3",
     ("07_views_and_metadata.http", "6.7"): "6.5",
@@ -716,6 +717,7 @@ WAITS_WITH = {
     ("07_views_and_metadata.http", "8.6"): "6.5",
     ("07_views_and_metadata.http", "4.8"): "4.7",
     ("07_views_and_metadata.http", "8.4"): "4.7",
+    ("02_resource_grammar.http", "10.11"): "1.2",
 }
 
 
