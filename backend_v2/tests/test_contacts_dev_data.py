@@ -32,14 +32,36 @@ def test_the_51_industries_are_written_once(administrator):
     assert dev_data.write_industries(administrator) == 0
 
 
-def test_clear_removes_only_what_the_seed_made(administrator):
+def test_clear_removes_the_seeded_industries_and_keeps_a_restored_reference_row(administrator):
+    """A restored salutation or gender is promised to every database: never cleared."""
     Gender.objects.filter(pk="Other").delete()
     CRMIndustry(industry="Handmade").save(user=administrator)
     dev_data.add_reference_rows(administrator)
     dev_data.write_industries(administrator)
 
-    assert dev_data.clear_reference_rows(administrator) == 1
+    assert dev_data.clear_reference_rows(administrator) == 0
     assert dev_data.clear_industries(administrator) == 51
-    assert not Gender.objects.filter(pk="Other").exists()
-    assert set(Gender.objects.values_list("pk", flat=True)) == set(reference_rows.GENDERS) - {"Other"}
+    assert set(Gender.objects.values_list("pk", flat=True)) == set(reference_rows.GENDERS)
     assert list(CRMIndustry.objects.values_list("pk", flat=True)) == ["Handmade"]
+
+
+def test_both_steps_are_registered_after_configurations():
+    from core.dev_data import STEPS
+
+    assert [step.key for step in STEPS][4:] == ["reference_rows", "industries"]
+
+
+def test_seed_dev_data_puts_a_deleted_salutation_back(monkeypatch):
+    import io
+
+    from django.core.management import call_command
+
+    from tests.test_dev_data_commands import PASSWORDS
+
+    for variable, value in PASSWORDS.items():
+        monkeypatch.setenv(variable, value)
+    Salutation.objects.filter(pk="Prof").delete()
+    call_command("seed_dev_data", stdout=io.StringIO())
+    assert Salutation.objects.filter(pk="Prof").exists()
+    call_command("clear_dev_data", stdout=io.StringIO())
+    assert Salutation.objects.filter(pk="Prof").exists()

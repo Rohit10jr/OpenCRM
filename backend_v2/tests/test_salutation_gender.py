@@ -70,7 +70,24 @@ def test_a_salutation_is_unique(api_as, administrator):
     would collide."""
     response = api_as(administrator).post("/api/v1/salutations/", {"salutation": "Mr"}, format="json")
     assert response.status_code == 417
+    assert response.json()["exc_type"] == "ValidationError"
+    assert response.json()["message"] == "salutation: salutation with this Salutation already exists."
     assert Salutation.objects.filter(salutation="Mr").count() == 1
+
+
+def test_a_duplicate_industry_is_409(auth_api):
+    """The name collides (the column is not unique), as `backend/` answers."""
+    assert auth_api.post("/api/v1/industries/", {"industry": "Twice"}, format="json").status_code == 200
+    response = auth_api.post("/api/v1/industries/", {"industry": "Twice"}, format="json")
+    assert response.status_code == 409
+    assert response.json()["exc_type"] == "DuplicateEntryError"
+    assert response.json()["message"] == "CRM Industry <strong>Twice</strong> already exists"
+
+
+def test_an_industry_with_no_name_is_417(auth_api):
+    response = auth_api.post("/api/v1/industries/", {"industry": ""}, format="json")
+    assert response.status_code == 417
+    assert response.json()["message"] == "Industry is required"
 
 
 def test_crm_industry_is_open_to_every_signed_in_user(auth_api, api):

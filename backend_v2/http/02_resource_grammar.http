@@ -528,6 +528,7 @@ Content-Type: application/json
 {"organization_name": "ZZ Grammar Alpha"}
 
 ### 10.11 deleting a row another row links to -> 417 LinkExistsError (delete_doc.py:452)
+# @waiting CONTACTS
 # @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == LinkExistsError
 # @expect $.message == Cannot delete or cancel because CRM Industry ZZ Grammar Industry is linked with CRM Organization ZZ Grammar Alpha

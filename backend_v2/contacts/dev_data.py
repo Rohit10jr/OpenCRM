@@ -5,7 +5,8 @@ what they made:
 
 - **reference rows**: the salutations and genders the data migration writes, put back
   when someone deleted one, as the old `seed_defaults` does
-  (`backend/crm_app/setup.py:563-564`);
+  (`backend/crm_app/setup.py:563-564`). A restored row is not recorded, so
+  `clear_dev_data` never removes it: every database is promised these rows;
 - **industries**: the 51 of `backend/crm_app/setup.py:159` (DECISIONS 44 stays parked,
   as for CONFIGURATION's default rows).
 """
@@ -20,7 +21,8 @@ REFERENCE_STEP = "reference_rows"
 INDUSTRIES_STEP = "industries"
 
 
-def _write_missing(step: str, model, fieldname: str, values, user) -> int:
+def _write_missing(step, model, fieldname: str, values, user) -> int:
+    """Writes the values the table lacks; records each in `step` unless `step` is None."""
     existing = set(model.objects.values_list("pk", flat=True))
     created = 0
     for value in values:
@@ -28,7 +30,8 @@ def _write_missing(step: str, model, fieldname: str, values, user) -> int:
             continue
         row = model(**{fieldname: value})
         row.save(user=user)
-        dev_records.record_created(step, row)
+        if step is not None:
+            dev_records.record_created(step, row)
         created += 1
     return created
 
@@ -43,16 +46,17 @@ def _clear(step: str, model) -> int:
 
 
 def add_reference_rows(user, force: bool = False) -> int:
-    """The salutations and genders the table lacks."""
+    """The salutations and genders the table lacks, not recorded."""
     del force
-    return _write_missing(REFERENCE_STEP, Salutation, "salutation", SALUTATIONS, user) + (
-        _write_missing(REFERENCE_STEP, Gender, "gender", GENDERS, user)
+    return _write_missing(None, Salutation, "salutation", SALUTATIONS, user) + (
+        _write_missing(None, Gender, "gender", GENDERS, user)
     )
 
 
 def clear_reference_rows(user, force: bool = False) -> int:
+    """Nothing: the restored rows stay (they are promised to every database)."""
     del user, force
-    return _clear(REFERENCE_STEP, Salutation) + _clear(REFERENCE_STEP, Gender)
+    return 0
 
 
 def write_industries(user, force: bool = False) -> int:

@@ -14,7 +14,7 @@ def _is_system_admin(user) -> bool:
 def _read_all_write_admin(user, ptype) -> bool:
     """Everyone reads; System Manager or Administrator writes, creates and deletes (old
     `crm_app/permissions/platform_docs.py:472-484`)."""
-    if ptype in ("read", "select"):
+    if ptype == "read":
         return True
     return _is_system_admin(user)
 
