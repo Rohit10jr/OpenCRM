@@ -1,7 +1,15 @@
 """The contacts resources (specs/CONTACTS.md)."""
 
 from accounts.roles import ADMINISTRATOR, ROLE_SYSTEM_MANAGER
-from contacts.serializers import CRMIndustrySerializer, GenderSerializer, SalutationSerializer
+from contacts.models import Address
+from contacts.serializers import (
+    ADDRESS_FIELDS,
+    DOCUMENT_FIELDS,
+    AddressSerializer,
+    CRMIndustrySerializer,
+    GenderSerializer,
+    SalutationSerializer,
+)
 from core.access import Access
 from core.mixins import LinkSearchMixin
 from core.views import DocumentViewSet
@@ -55,6 +63,69 @@ class GenderViewSet(LinkSearchMixin, DocumentViewSet):
     @staticmethod
     def has_object_rule(user, document, ptype):
         return _read_all_write_admin(user, ptype)
+
+
+LINK_KEYS = ("link_doctype", "link_name")
+
+
+def address_query_filters(filters):
+    """The old `address_query` (`crm_app/api/client.py:64-81`): `link_doctype` and
+    `link_name` select the addresses linked to that document through their Dynamic Link
+    rows; every other key filters as a field. List-shaped filters get the same rule, as
+    ACCOUNTS' User search does (the old code fails on them)."""
+    if isinstance(filters, dict):
+        result = dict(filters)
+        wanted = {key: result.pop(key, None) for key in LINK_KEYS}
+    elif isinstance(filters, list):
+        wanted = {}
+        result = []
+        for condition in filters:
+            if (
+                isinstance(condition, (list, tuple))
+                and len(condition) >= 3
+                and condition[-3] in LINK_KEYS
+                and condition[-2] == "="
+            ):
+                wanted[condition[-3]] = condition[-1]
+            else:
+                result.append(condition)
+    else:
+        return filters
+    if not any(wanted.values()):
+        return result
+    names = Address.linked_to(wanted.get("link_doctype"), wanted.get("link_name"))
+    if isinstance(result, dict):
+        result["name"] = ["in", names]
+    else:
+        result.append(["name", "in", names])
+    return result
+
+
+class AddressViewSet(LinkSearchMixin, DocumentViewSet):
+    """Everyone reads, writes and creates an address; System Manager or Administrator
+    deletes one (old `platform_docs.py:424-434`). Every column readable, filterable and
+    sortable; search matches the name, hides disabled addresses and reads the link
+    filters."""
+
+    access = Access.ruled()
+    serializer_class = AddressSerializer
+    readable_fields = AddressSerializer.Meta.fields
+    filterable_fields = (*DOCUMENT_FIELDS, *ADDRESS_FIELDS)
+    sortable_fields = (*DOCUMENT_FIELDS, *ADDRESS_FIELDS)
+    searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        return None
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        if ptype == "delete":
+            return _is_system_admin(user)
+        return True
+
+    def search_filters(self, filters, flags, user):
+        return super().search_filters(address_query_filters(filters), flags, user)
 
 
 class CRMIndustryViewSet(LinkSearchMixin, DocumentViewSet):

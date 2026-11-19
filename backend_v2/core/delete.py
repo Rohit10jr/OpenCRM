@@ -83,8 +83,15 @@ def check_dynamic_links(instance) -> None:
                     str(instance.pk),
                     reference_doctype,
                     reference_name,
+                    _row_position(model, row),
                 )
             )
+
+
+def _row_position(model, row) -> str:
+    """The old `at_position` (`backend/frappe_core/delete_doc.py:137`): a child-table
+    row names its place in its parent's table."""
+    return f"at Row: {row.idx}" if is_child_table(model) else ""
 
 
 def check_dynamic_links_batch(instances) -> None:
@@ -138,6 +145,7 @@ def check_dynamic_links_batch(instances) -> None:
                     target_name,
                     reference_doctype,
                     reference_name,
+                    _row_position(model, row),
                 )
             )
 
