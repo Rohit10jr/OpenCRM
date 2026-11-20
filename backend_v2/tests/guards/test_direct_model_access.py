@@ -107,6 +107,14 @@ DIRECT_MANAGER_READS = {
     ("accounts/tasks.py", "flush_expired_tokens", "OutstandingToken.objects"): (
         "The scheduled count of already-expired tokens before SimpleJWT flushes them."
     ),
+    (
+        "configuration/views.py",
+        "OnboardingStatusView.post",
+        "type(request.user)._default_manager",
+    ): (
+        "A write-only update of the authenticated caller's own onboarding column, as "
+        "the old update does (crm_app/api/onboarding.py:84), timestamps untouched."
+    ),
     ("accounts/services.py", "login", "get_user_model()._default_manager"): (
         "Authentication must locate the account before a request user exists; lockout "
         "and password verification protect this lookup."

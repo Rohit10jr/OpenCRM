@@ -703,25 +703,23 @@ POST {{host}}/api/v1/demo/clear/
 Authorization: Bearer {{stoken}}
 
 ### 9.9 get_context_for_dev with no token -> 200: the boot values, guest-allowed because the first visit has none yet
-# @waiting CONFIGURATION
 # @expect $.message.sysdefaults.date_format == yyyy-mm-dd
 # @expect $.message.sysdefaults.number_format == #,###.##
 # @expect $.message.sysdefaults.currency exists
 # @expect $.message.timezone.system == UTC
 # @expect $.message.is_fc_site == false
 # @expect $.message.demo_data_created == false
-POST {{host}}/api/method/crm.www.crm.get_context_for_dev
+POST {{host}}/api/v1/boot/
 
 ### 9.10 ...and with a token, the caller's own time_zone when set, else the system zone -> 200
-# @waiting CONFIGURATION
 # @expect $.message.timezone.user exists
-POST {{host}}/api/method/crm.www.crm.get_context_for_dev
+POST {{host}}/api/v1/boot/
 Authorization: Bearer {{stoken}}
 
-### 9.11 ...POST only, as upstream declares it -> 403
-# @waiting CONFIGURATION
-# @expect $.message == Method crm.www.crm.get_context_for_dev does not accept GET
-GET {{host}}/api/method/crm.www.crm.get_context_for_dev
+### 9.11 ...POST only, as upstream declares it -> 405
+# @negative
+# @expect $.exc_type == MethodNotAllowed
+GET {{host}}/api/v1/boot/
 
 # ---- the list view's bulk actions, and the composer's template renderer --------------------------
 #

@@ -80,3 +80,27 @@ def test_get_doc_permissions_returns_an_empty_map_for_a_missing_row(auth_api):
     response = auth_api.get(f"{WIDGETS}missing/permissions/")
     assert response.status_code == 200
     assert response.json() == {"message": {"permissions": {}}}
+
+
+# --- A-31 finding 8: a missing or unlisted field is a 417, never a 500 ------------------
+
+
+def test_get_single_value_without_a_field_is_refused(auth_api, administrator):
+    SingletonDocument.load(user=administrator)
+    response = auth_api.get(SINGLETON_VALUE)
+    assert response.status_code == 417
+    assert response.json()["exc_type"] == "ValidationError"
+
+
+def test_get_single_value_refuses_a_field_outside_the_list(auth_api, administrator):
+    SingletonDocument.load(user=administrator)
+    response = auth_api.get(SINGLETON_VALUE, {"field": "no_such_field"})
+    assert response.status_code == 417
+    assert response.json()["message"] == "Field 'no_such_field' is not readable"
+
+
+def test_get_single_value_answers_a_link_by_its_stored_name(auth_api, administrator):
+    SingletonDocument.load(user=administrator)
+    response = auth_api.get(SINGLETON_VALUE, {"field": "owner"})
+    assert response.status_code == 200, response.content[:300]
+    assert response.json() == {"message": "Administrator"}

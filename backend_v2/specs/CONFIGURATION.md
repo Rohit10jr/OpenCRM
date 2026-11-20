@@ -316,7 +316,12 @@ what `backend/` tracks, decided at milestone 7 (decision 14).
   wait for later milestones: `test_system_settings.py`
   `test_the_defaults_page_loads_the_row_and_its_options` (`getdoctype`, milestone 5) and
   `test_currency.py` `test_the_dashboard_currency_can_be_chosen` (FCRM Settings,
-  milestone 3). `13` 5.3 expects `1` for EUR to USD, true only
+  milestone 3). Two more `test_currency.py` cases wait for other units:
+  `test_a_currency_that_names_nothing_is_refused` (an organization, SALES; its System
+  Settings half is ported) and `test_the_dashboard_shows_the_currencys_symbol`
+  (DASHBOARD). `test_boot.py` `test_the_guard_sees_the_prefixed_call` checked the old
+  backend's frontend-path guard; its intent is ported as a check that the old path
+  `main.js` calls has a built route-map row for `POST /api/v1/boot/`. `13` 5.3 expects `1` for EUR to USD, true only
   with `ENABLE_EXCHANGE_RATE_API` off. No `.http` block covers Email Account, System
   Settings, Country, Currency, Language or the onboarding status: pytest is their gate.
 - The body comparison over the same blocks.

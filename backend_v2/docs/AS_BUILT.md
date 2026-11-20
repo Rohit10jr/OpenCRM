@@ -131,6 +131,17 @@ otherwise), `desk/site-info/` (`{}`, System Manager or Administrator), `desk/tel
 the manager pair or Administrator, answers `null`) and the guest `translations/` (`{}`).
 Administrator passes each gate by name, not by its groups.
 
+Its second milestone (`configuration/models.py`, §4.2) adds the reference data and the
+boot call. `SystemSettings` is the first production `SingletonDocument` (`system-settings/`,
+System Manager or Administrator only, reads included); `POST boot/` is the guest
+`get_context_for_dev` and writes a missing System Settings row again from
+`FRAPPE_SYSDEFAULTS` with Administrator as the actor. Country, Language and Currency are
+document resources with link search (`<resource>/search/`); Currency is read only by the
+CRM and accounting roles. Data migrations write the System Settings row (`0002`) and the
+250 countries, the currencies (nine enabled) and the languages (`0004`) from
+`configuration/data/`, copies of `backend/crm_app/data/`; they are not dev data. Onboarding
+status lives at `onboarding/status/` (GET reads, POST updates the caller's own column).
+
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
 disabled, and there are no bulk actions.
