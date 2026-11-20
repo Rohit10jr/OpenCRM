@@ -207,6 +207,9 @@ def test_unknown_method_path_names_the_file_and_line():
         rewrite_http(source, parse_route_map(ROUTE_MAP_TEXT), "fixture.http")
 
 
+UPDATE_PASSWORD = "frappe.core.doctype.user.user.update_password"
+
+
 def test_real_foundation_blocks_are_runnable_and_later_blocks_wait():
     root = Path(__file__).resolve().parents[2]
     routes = parse_route_map(
@@ -220,23 +223,29 @@ def test_real_foundation_blocks_are_runnable_and_later_blocks_wait():
     )
     # The route map alone decides (specs/ACCOUNTS.md section 7): a block whose method
     # path is built runs on its new route, and one whose path is not waits on its unit.
-    for block in parse_http(auth).blocks:
-        if not block.request:
-            continue
-        number = (block.title or "").split(" ", 1)[0]
+    blocks = {
+        (block.title or "").split(" ", 1)[0]: block
+        for block in parse_http(auth).blocks
+        if block.request
+    }
+    for number, block in blocks.items():
         if number in {f"1.{n}" for n in range(1, 12)} | {"1.13"}:
             assert "# @waiting" not in block.lines
         if not any(line.startswith("# @waiting") for line in block.lines):
             assert "/api/v1/" in block.request[1]
-        if number in {"4.8", "4.9", "4.11"}:
-            # They follow update_password's 4.7 and 4.10 in the same story (A-23).
-            assert "# @waiting ACCOUNTS" in block.lines
+    # 4.8, 4.9 and 4.11 follow update_password's 4.7 in the same story (A-23): they wait
+    # exactly while it waits.
+    story_waits = "# @waiting ACCOUNTS" in blocks["4.7"].lines
+    for number in ("4.8", "4.9", "4.11"):
+        assert ("# @waiting ACCOUNTS" in blocks[number].lines) == story_waits
     for block in parse_http(lockout).blocks:
         if block.request and (block.title or "").startswith(("1.", "2.")):
             assert "# @waiting" not in block.lines
             assert "/api/v1/auth/login/" in block.request[1]
         elif block.request:
-            assert "# @waiting ACCOUNTS" in block.lines
+            # 3.1 is update_password's old-password path: it runs once the route is built.
+            waiting = any(line.startswith("# @waiting") for line in block.lines)
+            assert waiting == (routes.methods[UPDATE_PASSWORD].status != "built")
 
 
 ACCOUNTS_ROUTE_MAP = ROUTE_MAP_TEXT + """

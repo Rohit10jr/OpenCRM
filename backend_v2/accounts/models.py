@@ -2,10 +2,10 @@
 
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import PermissionsMixin
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
-from core.models import TreeDocument
+from core.models import BaseDocument, TreeDocument
 from core.naming import Hash
 
 from .roles import ADMINISTRATOR, GUEST, ROLE_ADMINISTRATOR, ROLE_SYSTEM_MANAGER
@@ -145,6 +145,67 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def has_role(self, role: str) -> bool:
         return role in self.get_roles()
+
+
+INVITATION_ROLE_CHOICES = [
+    ("", ""),
+    ("Sales User", "Sales User"),
+    ("Sales Manager", "Sales Manager"),
+    ("System Manager", "System Manager"),
+]
+INVITATION_STATUS_CHOICES = [
+    ("", ""),
+    ("Pending", "Pending"),
+    ("Accepted", "Accepted"),
+    ("Expired", "Expired"),
+]
+
+
+class CRMInvitation(BaseDocument):
+    """An invitation to join with a role (old `crm_app/models/metadata.py`).
+
+    `key` is a bearer token: whoever holds it redeems the invitation and its role. It is
+    minted only by `invite_by_email`, never here — a row created through the resource has
+    none, and accepting refuses an empty key, which is what stops a Sales Manager posting
+    a System Manager invitation (specs/ACCOUNTS.md section 4.6).
+    """
+
+    DOCTYPE = "CRM Invitation"
+    NAME_STRATEGY = Hash()
+    SENSITIVE_FIELDS = ("key",)
+
+    email = models.CharField(max_length=140)
+    role = models.CharField(max_length=40, choices=INVITATION_ROLE_CHOICES)
+    key = models.CharField(max_length=140, blank=True, default="", db_index=True)
+    invited_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sent_invitations",
+    )
+    status = models.CharField(
+        max_length=20, choices=INVITATION_STATUS_CHOICES, blank=True, default=""
+    )
+    email_sent_at = models.DateTimeField(null=True, blank=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta(BaseDocument.Meta):
+        ordering = ["-creation"]
+
+    def save(self, *args, **kwargs):
+        creating = self._state.adding
+        result = super().save(*args, **kwargs)
+        if creating:
+            # Any creation sends, as the old post_save did (async_signals.py:208-218):
+            # invite_by_email and a manager's direct resource create alike. A direct call
+            # here, not a signal (REBUILD_PLAN §5); after commit, so the worker finds the
+            # row (A-22).
+            from accounts.tasks import send_invitation_email
+
+            name = str(self.pk)
+            transaction.on_commit(lambda: send_invitation_email.delay(name))
+        return result
 
 
 class CRMSalesHierarchy(TreeDocument):

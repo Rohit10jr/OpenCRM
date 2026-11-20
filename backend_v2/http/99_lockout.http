@@ -101,11 +101,10 @@ Content-Type: application/json
 {"usr": "{{sales}}", "pwd": "{{sales_pwd}}"}
 
 ### 3.1 the old-password path of update_password sits behind the same tracker (phase-8 review) -> 403 "locked", not 401 "Invalid password"
-# @waiting ACCOUNTS
 # A wrong old password on purpose: if the lock is not in force this answers 401 "Invalid
 # password" and changes nothing; if it is, the tracker refuses before the password is read.
 # @expect $.message contains locked
-POST {{host}}/api/method/frappe.core.doctype.user.user.update_password
+POST {{host}}/api/v1/auth/update-password/
 Content-Type: application/json
 
 {"usr": "{{sales}}", "old_password": "not-the-password", "new_password": "Whatever#Temp-2026"}

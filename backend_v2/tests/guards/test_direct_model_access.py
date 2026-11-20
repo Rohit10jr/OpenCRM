@@ -56,6 +56,57 @@ DIRECT_MANAGER_READS = {
         "Removing CRM roles deletes the user's chart node, as the old action does "
         "(user.py:215), after the manager-pair and System Manager checks."
     ),
+    ("accounts/front_door.py", "reset_password", "User._default_manager"): (
+        "Forgot password runs before any request user exists; it finds the account by "
+        "address and answers one sentence whatever it finds (old auth_pages.py:81)."
+    ),
+    ("accounts/front_door.py", "_blacklist_outstanding_tokens", "OutstandingToken.objects"): (
+        "logout_all_sessions blacklists the authenticated account's own refresh tokens, "
+        "after the reset key or old password proved who it is."
+    ),
+    ("accounts/password_reset.py", "issue_key", "User._default_manager"): (
+        "A write-only update of one account's reset-key columns from a guest endpoint."
+    ),
+    ("accounts/password_reset.py", "resolve_key", "User._default_manager"): (
+        "Finds the account a reset key belongs to: the key is the credential, not a row rule."
+    ),
+    ("accounts/password_reset.py", "consume_key", "User._default_manager"): (
+        "A conditional write-only update clearing one account's reset key."
+    ),
+    ("accounts/invitations.py", "invite_by_email", "User._default_manager"): (
+        "invite_by_email finds which addresses already belong to members, after the "
+        "manager-pair and role checks (old misc.py:103-105)."
+    ),
+    ("accounts/invitations.py", "invite_by_email", "CRMInvitation._default_manager"): (
+        "invite_by_email finds invitations of any status for the addresses, after the "
+        "manager-pair and role checks (old misc.py:106-110)."
+    ),
+    ("accounts/invitations.py", "accept_invitation", "CRMInvitation._default_manager"): (
+        "A guest redeems by key: the key is the credential, not a row rule "
+        "(old auth_pages.py:346)."
+    ),
+    ("accounts/invitations.py", "accept_invitation", "User._default_manager"): (
+        "Loads the account the redeemed invitation names, to mint its key or tokens."
+    ),
+    ("accounts/invitations.py", "_accept", "CRMInvitation._default_manager"): (
+        "The conditional claim: a write-only update of the one invitation being redeemed."
+    ),
+    ("accounts/invitations.py", "_accept", "Group.objects"): (
+        "Resolves the invitation's role and its implied roles to groups."
+    ),
+    ("accounts/invitations.py", "_create_user_if_not_exists", "User._default_manager"): (
+        "Accepting reuses an existing account by the invited address (auth_pages.py:419)."
+    ),
+    ("accounts/tasks.py", "send_invitation_email", "CRMInvitation._default_manager"): (
+        "A queued job without a request user: reads the one invitation it was given and "
+        "stamps its send time."
+    ),
+    ("accounts/tasks.py", "expire_invitations", "CRMInvitation._default_manager"): (
+        "The scheduled sweep: a write-only status update of stale pending invitations."
+    ),
+    ("accounts/tasks.py", "flush_expired_tokens", "OutstandingToken.objects"): (
+        "The scheduled count of already-expired tokens before SimpleJWT flushes them."
+    ),
     ("accounts/services.py", "login", "get_user_model()._default_manager"): (
         "Authentication must locate the account before a request user exists; lockout "
         "and password verification protect this lookup."

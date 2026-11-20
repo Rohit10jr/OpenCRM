@@ -2,7 +2,7 @@
 
 from core.serializers import DocumentSerializer
 
-from .models import CRMSalesHierarchy, User
+from .models import CRMInvitation, CRMSalesHierarchy, User
 
 DOCUMENT_FIELDS = (
     "name",
@@ -77,3 +77,19 @@ class UserSerializer(DocumentSerializer):
         # The old serializer always emits the child table, empty for a user with no rows.
         data["user_emails"] = []
         return data
+
+
+class CRMInvitationSerializer(DocumentSerializer):
+    """`key` is sensitive on the model and never on the wire, even for a manager."""
+
+    class Meta:
+        model = CRMInvitation
+        fields = (
+            *DOCUMENT_FIELDS,
+            "email",
+            "role",
+            "invited_by",
+            "status",
+            "email_sent_at",
+            "accepted_at",
+        )

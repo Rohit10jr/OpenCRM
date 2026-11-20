@@ -1,12 +1,16 @@
 from django.urls import re_path
 
 from accounts.views import (
+    AcceptInvitationView,
+    CRMInvitationViewSet,
     ChangePasswordView,
     LoggedUserView,
     LoginView,
     LogoutView,
     OAuthProvidersView,
     RefreshTokenView,
+    ResetPasswordView,
+    UpdatePasswordView,
     UserViewSet,
     CRMSalesHierarchyViewSet,
 )
@@ -15,6 +19,7 @@ from core.routers import DocumentRouter
 
 router = DocumentRouter()
 router.register("users", UserViewSet, basename="user")
+router.register("invitations", CRMInvitationViewSet, basename="invitation")
 router.register(
     "sales-hierarchies", CRMSalesHierarchyViewSet, basename="sales-hierarchy"
 )
@@ -37,6 +42,21 @@ urlpatterns = [
         r"^auth/oauth-providers/?$",
         OAuthProvidersView.as_view(),
         name="auth-oauth-providers",
+    ),
+    re_path(
+        r"^auth/reset-password/?$",
+        ResetPasswordView.as_view(),
+        name="auth-reset-password",
+    ),
+    re_path(
+        r"^auth/update-password/?$",
+        UpdatePasswordView.as_view(),
+        name="auth-update-password",
+    ),
+    re_path(
+        r"^auth/accept-invitation/?$",
+        AcceptInvitationView.as_view(),
+        name="auth-accept-invitation",
     ),
     *router.urls,
 ]

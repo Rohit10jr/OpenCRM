@@ -276,12 +276,13 @@ v2's `core.security.rate_limit` hands a callable key only the merged inputs
 
 ### 4.6 CRM Invitation
 
-- System Manager and Sales Manager for every operation; everyone else gets a deny-all
+- System Manager and Sales Manager list, read and delete; everyone else gets a deny-all
   list (`platform_docs.py:394-407`). `key` is never on the wire.
-- The key is minted **only** in `invite_by_email` (`misc.py:115-117`). A row created
-  through the resource has an empty key, which `accept_invitation` refuses
-  (`auth_pages.py:340-344`) — that is what stops a Sales Manager posting a System Manager
-  invitation. **The model must not generate a key.**
+- **PE-8 (proposed; A-24):** CRM Invitation cannot be created or changed through its
+  resource, for any caller; invitations are created by `invite_by_email` alone. The
+  routes stay served and always refuse (403).
+- The key is minted **only** in `invite_by_email` (`misc.py:115-117`); `accept_invitation`
+  refuses an empty key (`auth_pages.py:340-344`). **The model must not generate a key.**
 - `invite_by_email` (`misc.py:75-123`): the manager pair first, 403 "Not permitted"
   (`:86`, `09` 4.1); then the role checks — "You are not allowed to invite
   System Managers", "You are not allowed to invite Sales Managers", "Cannot invite for this
@@ -291,11 +292,10 @@ v2's `core.security.rate_limit` hands a callable key only the merged inputs
   `to_invite` comes from a set, so its order is not stable: the body diff compares it as
   a set.
 - **The invitation email is sent on any creation of an invitation row** (old: `post_save`
-  and a Celery task, `async_signals.py:208-218`, `tasks.py:219-284`): `invite_by_email`
-  and a manager's direct resource create both send. In v2 **the CRM Invitation model's
-  save, on insert, queues the email task after commit** (A-22; REBUILD_PLAN §5: no signal
-  where a direct call reaches) — covering `invite_by_email`, the resource create and the
-  walk script's model create. Subject "You have been invited to
+  and a Celery task, `async_signals.py:208-218`, `tasks.py:219-284`). In v2 **the CRM
+  Invitation model's save, on insert, queues the email task after commit** (A-22;
+  REBUILD_PLAN §5: no signal where a direct call reaches) — covering `invite_by_email` and
+  the walk script's model create; a rolled-back create sends nothing. Subject "You have been invited to
   join Open CRM"; link `{FRONTEND_ORIGIN}/crm/accept-invitation?key=<key>`.
 - `accept_invitation`: every refusal is 417 "Invalid or expired key"
   (`auth_pages.py:344,348,386,396`). It claims the row with one conditional update (`:392-396`),
@@ -386,8 +386,11 @@ an empty schedule today.
    admin's.
 7. **Milestones:** three (§9).
 
-Open for the owner: PE-7 (§4.1), recorded `proposed`; the parity version is not built,
-because D-B is a decision to build the read-only `name` and flag it.
+8. **CRM Invitation's shared actions:** none; and create and write are refused through
+   the resource for every caller (PE-8, A-24).
+
+Open for the owner: PE-7 (§4.1) and PE-8 (§4.6), recorded `proposed`. Neither parity
+version is built: D-B and A-24 are decisions to build the change and flag it.
 
 ## 7. Carried from FOUNDATION, and tooling
 
