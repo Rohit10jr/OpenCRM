@@ -7,6 +7,55 @@
     {
       "path": "$.message.refresh",
       "comment": "JWT refresh tokens are signed and issued independently by each server."
+    },
+    {
+      "path": "$.message.assignmentruleuser_set",
+      "comment": "PE-9: the User document's assignmentruleuser_set is always empty in backend_v2.",
+      "file": "09_users_and_invitations.http",
+      "block": "2.3",
+      "pe": "PE-9"
+    },
+    {
+      "path": "$.message.assignmentruleuser_set",
+      "comment": "PE-9: the User document's assignmentruleuser_set is always empty in backend_v2.",
+      "file": "09_users_and_invitations.http",
+      "block": "2.4",
+      "pe": "PE-9"
+    },
+    {
+      "path": "$.message.assignmentruleuser_set",
+      "comment": "PE-9: the User document's assignmentruleuser_set is always empty in backend_v2.",
+      "file": "09_users_and_invitations.http",
+      "block": "2.5",
+      "pe": "PE-9"
+    },
+    {
+      "path": "$.message.assignmentruleuser_set",
+      "comment": "PE-9: the User document's assignmentruleuser_set is always empty in backend_v2.",
+      "file": "09_users_and_invitations.http",
+      "block": "2.6",
+      "pe": "PE-9"
+    },
+    {
+      "path": "$.message.assignmentruleuser_set",
+      "comment": "PE-9: the User document's assignmentruleuser_set is always empty in backend_v2.",
+      "file": "09_users_and_invitations.http",
+      "block": "6.2",
+      "pe": "PE-9"
+    },
+    {
+      "path": "$.message.assignmentruleuser_set",
+      "comment": "PE-9: the User document's assignmentruleuser_set is always empty in backend_v2.",
+      "file": "09_users_and_invitations.http",
+      "block": "6.4",
+      "pe": "PE-9"
+    },
+    {
+      "path": "$.message.assignmentruleuser_set",
+      "comment": "PE-9: the User document's assignmentruleuser_set is always empty in backend_v2.",
+      "file": "00_walkthrough.http",
+      "block": "4.9",
+      "pe": "PE-9"
     }
   ]
 }
