@@ -239,11 +239,11 @@ CONTACTS (`specs/CONTACTS.md`) starts with two changes to the shared actions in 
 (milestone 0, PE-25, PE-26; §2's bulk delete paragraph). Its first milestone adds the
 reference data in the `contacts` app: `salutations/` and `genders/` (everyone reads,
 System Manager or Administrator writes; the rows written by a data migration) and
-`industries/` (open to every signed-in user), each with `search/`. The lists are in
+`industries/` (a CRM role, PE-29), each with `search/`. The lists are in
 `contacts/reference_rows.py`; `contacts/dev_data.py` adds two `seed_dev_data` steps,
 one putting back a deleted salutation or gender and one writing the 51 industries.
-Its second milestone adds `addresses/` (everyone reads, writes and creates; System
-Manager or Administrator deletes) with its Dynamic Link rows (`links`, a polymorphic
+Its second milestone adds `addresses/` (a CRM role reads, writes and creates, PE-29;
+System Manager or Administrator deletes) with its Dynamic Link rows (`links`, a polymorphic
 child declared on the model). An address is named `<title>-<type>` plus the collision
 number, and its save deduplicates its links, stores each linked document's name as its
 title (as `backend/`) and clears a preferred

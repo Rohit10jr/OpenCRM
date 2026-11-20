@@ -643,6 +643,25 @@ comparison skips that block.
   Guest's rows to Guest on save
 - **Recorded by:** A-48 group 2, 21 Nov 2026
 
+### PE-29. Contact, CRM Organization, CRM Industry and Address need a CRM role
+
+- **Status:** approved by the owner (20 Nov 2026; `temp` A-48 2d, A-61 item 4); built
+  with this entry for CRM Industry and Address; Contact and CRM Organization to be built
+  with their milestones, and until then they are not served
+- **Where:** `/api/v1/industries/...` and `/api/v1/addresses/...`: list, create, read,
+  PATCH, delete, `value/`, `search/` and every other route that reads the list or the
+  object rule (old `/api/resource/CRM Industry`, `/api/resource/Address`)
+- **Old backend:** every signed-in user lists, reads, creates and changes them; CRM
+  Industry registers no rule, Address deletes only for System Manager or Administrator
+  (`backend/crm_app/permissions/platform_docs.py:424-434`; DECISIONS 58)
+- **backend_v2:** Sales User, Sales Manager, System Manager or Administrator; a caller
+  with none of these gets an empty list, 403 "No permission for <doctype> <name>" on a
+  record, and 403 on create. Address delete stays System Manager's or Administrator's.
+  Salutation and Gender keep their rule (everyone reads, System Manager writes)
+- **Why:** upstream's role tables grant these doctypes to the CRM roles (a user with
+  none keeps only the contacts they created; `backend_v2` grants nothing)
+- **Recorded by:** A-48 group 2, 21 Nov 2026
+
 ---
 
 ## Candidates — not exceptions yet

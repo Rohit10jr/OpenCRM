@@ -1,6 +1,13 @@
 """The contacts resources (specs/CONTACTS.md)."""
 
-from accounts.roles import ADMINISTRATOR, ROLE_SYSTEM_MANAGER
+from django.db.models import Q
+
+from accounts.roles import (
+    ADMINISTRATOR,
+    ROLE_SALES_MANAGER,
+    ROLE_SALES_USER,
+    ROLE_SYSTEM_MANAGER,
+)
 from contacts.models import Address
 from contacts.serializers import (
     ADDRESS_FIELDS,
@@ -17,6 +24,19 @@ from core.views import DocumentViewSet
 
 def _is_system_admin(user) -> bool:
     return user.name == ADMINISTRATOR or user.has_role(ROLE_SYSTEM_MANAGER)
+
+
+CRM_ROLES = frozenset({ROLE_SALES_USER, ROLE_SALES_MANAGER, ROLE_SYSTEM_MANAGER})
+
+
+def _has_crm_role(user) -> bool:
+    """PE-29: Sales User, Sales Manager, System Manager or Administrator."""
+    return user.name == ADMINISTRATOR or bool(user.get_roles() & CRM_ROLES)
+
+
+def _crm_list_rule(user):
+    """PE-29: a caller with no CRM role lists nothing."""
+    return None if _has_crm_role(user) else Q(pk__in=[])
 
 
 def _read_all_write_admin(user, ptype) -> bool:
@@ -102,10 +122,10 @@ def address_query_filters(filters):
 
 
 class AddressViewSet(LinkSearchMixin, DocumentViewSet):
-    """Everyone reads, writes and creates an address; System Manager or Administrator
-    deletes one (old `platform_docs.py:424-434`). Every column readable, filterable and
-    sortable; search matches the name, hides disabled addresses and reads the link
-    filters."""
+    """A caller with a CRM role reads, writes and creates an address (PE-29); System
+    Manager or Administrator deletes one (old `platform_docs.py:424-434`). Every column
+    readable, filterable and sortable; search matches the name, hides disabled addresses
+    and reads the link filters."""
 
     access = Access.ruled()
     serializer_class = AddressSerializer
@@ -116,13 +136,13 @@ class AddressViewSet(LinkSearchMixin, DocumentViewSet):
 
     @staticmethod
     def list_rule(user):
-        return None
+        return _crm_list_rule(user)
 
     @staticmethod
     def has_object_rule(user, document, ptype):
         if ptype == "delete":
             return _is_system_admin(user)
-        return True
+        return _has_crm_role(user)
 
     def search_filters(self, filters, flags, user):
         filters = address_query_filters(filters)
@@ -139,15 +159,20 @@ class AddressViewSet(LinkSearchMixin, DocumentViewSet):
 
 
 class CRMIndustryViewSet(LinkSearchMixin, DocumentViewSet):
-    """Open to every signed-in user, as `backend/` (no rule registered; DECISIONS 58).
-    Every column readable, filterable and sortable."""
+    """Every caller with a CRM role reads, writes, creates and deletes (PE-29; `backend/`
+    registers no rule, DECISIONS 58). Every column readable, filterable and sortable."""
 
-    access = Access.open(
-        reason="Reference data: the industry vocabulary shown on organisation forms; "
-        "no confidential rows or fields (PORT_MAP's reviewed-open entry)."
-    )
+    access = Access.ruled()
     serializer_class = CRMIndustrySerializer
     readable_fields = CRMIndustrySerializer.Meta.fields
     filterable_fields = CRMIndustrySerializer.Meta.fields
     sortable_fields = CRMIndustrySerializer.Meta.fields
     searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        return _crm_list_rule(user)
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        return _has_crm_role(user)
