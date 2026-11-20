@@ -153,8 +153,9 @@ settings. A settings record's `value/` refuses a field it does not list (PE-13).
 `.http` generator serves a singleton's document URLs at its root and marks a list-shaped
 read of one `# @retired PE-11`.
 
-Its fourth milestone (§4.4) adds Email Account at `email-accounts/` (everyone reads; the
-manager pair or Administrator writes, renames and deletes; `password` and `api_secret`
+Its fourth milestone (§4.4) adds Email Account at `email-accounts/` (System Manager or
+Administrator lists, reads, writes, renames and deletes; anyone else gets an empty list
+and 403, PE-27; `password` and `api_secret`
 encrypted and never served; eleven mail-server fields restricted) and
 `email-accounts/setup/` (`create_email_account`, credentials checked before the row
 exists). `core/mail.py` holds the server checks (`smtp_settings`, `check_smtp`,
