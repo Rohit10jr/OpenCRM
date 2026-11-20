@@ -213,8 +213,8 @@ comparison skips that block.
 - **Old backend:** emits the rows and accepts them (`backend/frappe_core/children.py:38-51`,
   `backend/frappe_core/serializers.py:76-77,188-192`)
 - **backend_v2:** the User document's `assignmentruleuser_set` is always empty and is not
-  written through User; ASSIGNMENTS decides the read side. Whether the key leaves the
-  User document is decided in ASSIGNMENTS
+  written through User. ASSIGNMENTS decides the read side and whether the key leaves the
+  User document
 - **Why:** Assignment Rule is ASSIGNMENTS' model, not yet built; no `frontend/src` file
   reads the key
 - **Recorded by:** ACCOUNTS, 18 Nov 2026
@@ -342,9 +342,9 @@ comparison skips that block.
   `stores/meta.js:9-17`), and so will milestone 6's `get_fields_layout` and
   `save_fields_layout` (the grid row editor); `get_sidepanel_sections`, the quick-filter
   calls, `get_fields`,
-  `sort_options`, `get_filterable_fields` and `get_group_by_fields` answer 404. With
-  milestone 7, the saved-view calls merge no default rows or columns for a child table
-  (`list_definition_for`), as `API_CONTRACT.md:210` says
+  `sort_options`, `get_filterable_fields` and `get_group_by_fields` answer 404, as
+  `API_CONTRACT.md:210` says. With milestone 7, the saved-view calls merge no default
+  rows or columns for a child table (`list_definition_for`)
 - **Why:** the grids call `getdoctype` for their rows; no screen calls the other four for a
   child. Upstream answers these calls for any doctype and lists every field
   (`frappe/desk/form/load.py:65-86`, `crm/api/doc.py`); the old backend does the same
