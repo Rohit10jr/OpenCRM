@@ -90,6 +90,9 @@ jobs:
       CELERY_BROKER_URL: redis://localhost:6379/5
       CELERY_RESULT_BACKEND: redis://localhost:6379/6
       CHANNEL_LAYER_URL: redis://localhost:6379/7
+      # Upstream Frappe CRM, checked out below: tests/test_field_meta.py regenerates the
+      # field metadata from it and compares (specs/CONFIGURATION.md 4.5).
+      CRM_UPSTREAM_DIR: ${{ github.workspace }}/upstream-crm/crm
 
     defaults:
       run:
@@ -97,6 +100,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+
+      # Upstream Frappe CRM at the commit the port follows (v1.82.0), as backend.yml checks
+      # it out; without it the metadata staleness test skips.
+      - uses: actions/checkout@v7
+        with:
+          repository: frappe/crm
+          ref: 48cb3cccec12ef798f8faacc165fff3dc008a8fa
+          path: upstream-crm
+          persist-credentials: false
 
       - uses: actions/setup-python@v7
         with:

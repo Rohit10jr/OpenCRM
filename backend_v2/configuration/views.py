@@ -18,7 +18,13 @@ from accounts.roles import (
     ROLE_SALES_USER,
     ROLE_SYSTEM_MANAGER,
 )
-from configuration import email_accounts, exchange_rate
+from configuration import (
+    email_accounts,
+    exchange_rate,
+    field_helpers,
+    metadata,
+    user_settings,
+)
 from configuration.models import SystemSettings
 from configuration.serializers import (
     DOCUMENT_FIELDS,
@@ -36,7 +42,7 @@ from core.inputs import build_payload
 from core.mixins import LinkSearchMixin
 from core.mixins.rename import RenameMixin
 from core.query import parse_json_param
-from core.renderers import Envelope
+from core.renderers import Envelope, WithResponseKeys
 from core.views import BaseAPIView, DocumentViewSet, SingletonViewSet
 
 #: The CRM's `add_to_apps_screen` entry (`crm/hooks.py:15-23`), verbatim.
@@ -356,3 +362,86 @@ class EmailAccountViewSet(RenameMixin, DocumentViewSet):
             )
         )
 
+
+
+class UserSettingsView(BaseAPIView):
+    """`frappe.model.utils.user_settings.get` (GET) and `save` (POST): the caller's own
+    UI state for a doctype (configuration/user_settings.py). Any signed-in caller; the
+    doctype is not validated, as `backend/`."""
+
+    def get(self, request):
+        inputs = self.get_inputs(request)
+        return Response(user_settings.get(inputs.get("doctype"), user=request.user))
+
+    def post(self, request):
+        inputs = self.get_inputs(request)
+        return Response(
+            user_settings.save(
+                inputs.get("doctype"), inputs.get("user_settings"), user=request.user
+            )
+        )
+
+
+def _truthy(value) -> bool:
+    return str(value).strip().lower() not in ("", "0", "false", "none", "null")
+
+
+class DocTypeMetaView(BaseAPIView):
+    """`frappe.desk.form.load.getdoctype`: `message` null with `docs` and `user_settings`
+    beside it, and `parent_dt` when a parent was found (frappe-ui hands the caller the
+    whole body when `docs` is present). Any signed-in caller (configuration/metadata.py)."""
+
+    def get(self, request):
+        inputs = self.get_inputs(request)
+        docs, settings_json, parent_dt = metadata.getdoctype(
+            inputs.get("doctype"),
+            with_parent=_truthy(inputs.get("with_parent", False)),
+            user=request.user,
+        )
+        keys = {"docs": docs, "user_settings": settings_json}
+        if parent_dt:
+            keys["parent_dt"] = parent_dt
+        return self.envelope(WithResponseKeys(None, **keys))
+
+
+class _FieldHelperView(BaseAPIView):
+    """A field helper for a served, non-child doctype (PE-14, PE-15), for any signed-in
+    caller (configuration/field_helpers.py)."""
+
+    helper = None
+
+    def get(self, request):
+        inputs = self.get_inputs(request)
+        doctype = inputs.get("doctype")
+        model = metadata.model_or_404(doctype, child_allowed=False)
+        return Response(self.answer(doctype, model, request.user, inputs))
+
+    def answer(self, doctype, model, user, inputs):
+        return type(self).helper(doctype, model, user)
+
+
+class FieldsView(_FieldHelperView):
+    """`crm.api.doc.get_fields`."""
+
+    def answer(self, doctype, model, user, inputs):
+        return field_helpers.get_fields(
+            doctype, model, user, inputs.get("allow_all_fieldtypes", False)
+        )
+
+
+class SortOptionsView(_FieldHelperView):
+    """`crm.api.doc.sort_options`."""
+
+    helper = staticmethod(field_helpers.sort_options)
+
+
+class FilterableFieldsView(_FieldHelperView):
+    """`crm.api.doc.get_filterable_fields`."""
+
+    helper = staticmethod(field_helpers.get_filterable_fields)
+
+
+class GroupByFieldsView(_FieldHelperView):
+    """`crm.api.doc.get_group_by_fields`."""
+
+    helper = staticmethod(field_helpers.get_group_by_fields)

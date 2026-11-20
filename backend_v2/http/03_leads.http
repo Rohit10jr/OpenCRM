@@ -528,7 +528,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "filters": {"name": ["in", ["{{lead1}}", "{{lead2}}", "{{lead3}}", "{{lead4}}", "{{lead5}}", "{{lead6}}"]]}, "order_by": "modified desc", "page_length": 20, "view": {"view_type": "list"}}
 
 ### 6.2 `converted` is deliberately not filterable (crm_lead.py:409) -> absent from the list
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message exists
 POST {{host}}/api/method/crm.api.doc.get_filterable_fields
 Authorization: Bearer {{token}}

@@ -6,15 +6,21 @@ from configuration.views import (
     ClearDemoDataView,
     CountryViewSet,
     CurrencyViewSet,
+    DocTypeMetaView,
     EmailAccountViewSet,
+    FieldsView,
+    FilterableFieldsView,
+    GroupByFieldsView,
     ExchangeRateView,
     FCRMSettingsViewSet,
     LanguageViewSet,
     OnboardingStatusView,
     SiteInfoView,
+    SortOptionsView,
     SystemSettingsViewSet,
     TelemetryConfigView,
     TranslationsView,
+    UserSettingsView,
 )
 from core.routers import DocumentRouter, SingletonRouter
 
@@ -30,6 +36,20 @@ urlpatterns = [
     re_path(r"^demo/clear/?$", ClearDemoDataView.as_view(), name="demo-clear"),
     re_path(r"^translations/?$", TranslationsView.as_view(), name="translations"),
     re_path(r"^exchange-rate/?$", ExchangeRateView.as_view(), name="exchange-rate"),
+    re_path(r"^user-settings/?$", UserSettingsView.as_view(), name="user-settings"),
+    re_path(r"^meta/doctype/?$", DocTypeMetaView.as_view(), name="meta-doctype"),
+    re_path(r"^meta/fields/?$", FieldsView.as_view(), name="meta-fields"),
+    re_path(r"^meta/sort-options/?$", SortOptionsView.as_view(), name="meta-sort-options"),
+    re_path(
+        r"^meta/filterable-fields/?$",
+        FilterableFieldsView.as_view(),
+        name="meta-filterable-fields",
+    ),
+    re_path(
+        r"^meta/group-by-fields/?$",
+        GroupByFieldsView.as_view(),
+        name="meta-group-by-fields",
+    ),
     re_path(
         r"^onboarding/status/?$",
         OnboardingStatusView.as_view(),

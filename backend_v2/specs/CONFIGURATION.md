@@ -1,6 +1,6 @@
 # CONFIGURATION — CRM settings, email accounts, saved views, layouts and the list engine
 
-**Status: Ready for milestones 1-4 (addenda: milestone 3 A-30, milestone 4 A-33) — rewritten 18 Nov 2026** from the spec check
+**Status: Ready for milestones 1-5 (addenda: milestone 3 A-30, milestone 4 A-33, milestone 5 A-35) — rewritten 18 Nov 2026** from the spec check
 (`tasks\CONFIGURATION_00_spec_check_verdict.md`, `temp` A-27); spec review A-28. **Approval is staged** (A-27, DECISIONS 30, flagged for the owner): the facts and
 the route map below cover the whole unit, but the spec review approves **milestones 1
 and 2 only**; each later milestone needs the decisions marked "open" in §6 settled and a
@@ -388,21 +388,111 @@ Spec-review addendum: `temp` A-33 (DECISIONS 36-39). Old model and link:
 
 ### 4.5 Field metadata (milestone 5)
 
-- **`getdoctype`** (`form_load.py:151-196`): `message` is `null`, with `docs` and
-  `user_settings` beside it (frappe-ui returns the whole body when `docs` is present);
-  `parent_dt` only when a parent is found; `with_parent` on a child table answers the
-  parent's bundle; `cached_timestamp` accepted and ignored; each field gets `idx`; nine
-  DocType properties defaulted (`:55-65`); `user_settings` is the row of
-  `parent_dt or doctype`.
-- **`user_settings`** (`user_settings.py`): `save` answers the **incoming** dict, merges at
-  the top level only, does not validate the doctype; a non-JSON string raises. The model
-  stays unrouted (decision 12): a plain model, with a `core.withheld` entry only if the
-  served-or-withheld guard asks for one.
-- The field metadata file is generated, and a test fails if it goes stale (it skips when
-  the upstream checkout is absent, `test_phase4_metadata.py:37`).
-- **Export's field-info provider** (§7) is filled from this metadata.
-- `sort_options`, `get_data`'s `fields` block and the model fallback list every concrete
-  column name in `backend/`, sensitive ones included (decision 10).
+Spec-review addendum: `temp` A-35 (DECISIONS 41-43). These routes keep `doctype` as an
+input (`REBUILD_PLAN.md:173-176`), beside S24's "from mixins" wording; this is settled.
+Caching: the process-lifetime memo of the metadata file only.
+
+- **Who may call:** all seven calls (`getdoctype`, `user_settings` get and save,
+  `get_fields`, `sort_options`, `get_filterable_fields`, `get_group_by_fields`) are for
+  any signed-in caller, with no role or per-doctype check, as `backend/`
+  (`form_load.py:23-26`; `07` 9.15). The three narrowings below are the only ones.
+- **The metadata file** (decision 41): the whole 39-doctype `doctype_meta.json` is copied
+  to `backend_v2/configuration/data/`; entries for doctypes with no v2 model yet are
+  inert data. The generator is ported to `backend_v2/scripts/generate_field_meta.py`,
+  reading `CRM_UPSTREAM_DIR` (its hard-coded owner path is the fallback only). The
+  staleness test is ported and runs in CI: `.github/workflows/backend_v2.yml` gets the
+  same pinned `frappe/crm` checkout (`48cb3ccce…`) and `CRM_UPSTREAM_DIR` as
+  `backend.yml:80,93-97`, and a `backend_v2/tests` helper resolves the path as
+  `backend/tests/upstream_source.py:21-28`. A guard: every value field the file lists for
+  a served doctype is a model column or explicitly excused.
+- **What "doctype exists" means** (decision 42): a model declares `DOCTYPE`
+  (`core.doctypes.declared_doctypes`) and is served (`core.resources.routed_rule_map`; a
+  singleton counts) or is a child in a served serializer's `CHILD_TABLES`. No registry:
+  these are the existing derived lookups.
+  - **A withheld doctype** (Version now; ToDo and Data Import Log when built): 404
+    "DocType X not found" on every call that validates a doctype. **PE-14** (proposed,
+    flagged): `backend/` answers them, checking only that the doctype is registered
+    (`form_load.py:177`, `crm_app/api/doc.py:90,346`, `frappe_core/metadata.py:117,154`).
+  - **A child table:** `getdoctype` answers (`Grid.vue:545`, `stores/meta.js:9-17`, the
+    Home Actions grid; `docs/http/07` 9.2, 9.3), and so will milestone 6's layout calls;
+    `get_fields`, `sort_options`, `get_filterable_fields` and `get_group_by_fields` answer
+    404 (no screen calls them for a child). **PE-15** (proposed, flagged), against
+    `API_CONTRACT.md:209`, which says 404 for every child table; the contract is not
+    edited here, the line is flagged to the owner.
+  - **`user_settings` never validates the doctype**, as `backend/`: parity.
+  - **A doctype in the file with no model yet:** 404, as `backend/` answers an
+    unregistered doctype.
+  - `with_parent`: only a parent that exists, else the child's own bundle
+    (`form_load.py:189-190`); unbuilt children are left out of a bundle; the parent scan
+    covers existing doctypes only.
+- **Field names a caller may not read** (decision 43, **PE-16**, proposed, flagged):
+  metadata answers list only the fields the caller may read; the old backend lists every
+  field name. Every answer (`getdoctype`'s fields, `get_fields`,
+  `get_filterable_fields`, `get_group_by_fields`, `sort_options`, later `get_data`'s
+  `fields` block) leaves out `core.field_access.hidden_from(model, user)`. Each remaining
+  field keeps its original `idx` (gaps are fine); a copy is filtered, never the file memo.
+- **The four helpers, each ported verbatim:**
+  - `sort_options` (`backend/crm_app/api/doc.py:82-101`): the model's concrete fields,
+    labels from `verbose_name`, entries `label`, `value`, `fieldname`; the five standard
+    fields are appended (`:38-44`), so `name`, `creation`, `modified`, `modified_by`,
+    `owner` appear twice. The duplicates are reproduced.
+  - `get_filterable_fields` (`backend/frappe_core/metadata.py:111-144`): the nine
+    standard fields first (`:60-75`), then the metadata value fields of the 16 allowed
+    types; drops `name`, duplicates and `get_non_filterable_fields()`; the label falls
+    back to the fieldname; `options` always present.
+  - `get_group_by_fields` (`:147-172`): the doctype's fields first, then the eight
+    standard fields without duplicates (`:77-89`); entries `{fieldname, label}`.
+  - `get_fields` (`crm_app/api/doc.py:329-355`): rows through `docfield()` (adds
+    `options`, `description`, `default` as None and six flags as 0, `:309-326`); drops
+    fieldless rows, and the no-value types and `Read Only` unless `allow_all_fieldtypes`
+    is `1` or `true`.
+  - `getdoctype` (`form_load.py`): the raw rows plus `idx`, **without** `docfield()`'s
+    defaults; `istable`/`issingle` from the model when there is no file entry (`:79-84`);
+    `message` null with `docs`, `user_settings` and the conditional `parent_dt`
+    (`:192-196`); `cached_timestamp` ignored; the parent lookup is deterministic over
+    sorted doctypes (`:109-141`); nine DocType properties defaulted (`:55-65`).
+  - No intersection with the resource's `filterable_fields` / `sortable_fields` beyond
+    PE-16; a guard test checks that every name a helper offers is accepted by the served
+    list route.
+  - `get_non_filterable_fields` is a model staticmethod, adopted unchanged by milestone 8.
+- **The model fallback** (old `field_meta.py:124-180`) reads v2's declarations:
+  `TEXT_LINK_FIELDS` (tuple values), `DYNAMIC_LINK_FIELDS` (pairs) and `ATTACH_FIELDS`.
+  System Settings' `currency` answers `Link` / `Currency` (`test_system_settings.py:70`).
+  Table rows for a model's child tables come only from `TABLE_FIELD_LABELS`, as the old
+  fallback (`field_meta.py:181-195`): never synthesised from `CHILD_TABLES`. The old User
+  has none, so `getdoctype` on User has no Table row for `user_emails`. The old Contact
+  has one (`email_ids`, `phone_nos`); its reading is not built here and is carried to
+  CONTACTS' spec, since no backend_v2 model declares it yet.
+- **`user_settings`** (`backend/crm_app/api/user_settings.py`): keyed on (user, doctype),
+  unique, cascading with the User; no `user` input, so nobody reads or writes another's.
+  A dict or a JSON string; `""` and None mean `{}`; valid JSON that is not an object
+  becomes `{}`; a top-level merge; `save` answers the incoming value; `get` answers the
+  stored **string**, `"{}"` when none (`:113-121`). Two probable 500s in `backend/`
+  become 417 with a fixed sentence, recorded with PE-12's kind (replacing a crash): a
+  string that is not JSON, and a `doctype` longer than 140 characters. The model is a
+  plain `models.Model` with no `DOCTYPE`, so it needs no withheld entry (decision 12).
+- **The export provider** (old `backend/crm_app/api/reportview.py:39-47,59-84`): `name`
+  is labelled `ID`, type `Data`; a metadata field gives its label (or the fieldname) and
+  fieldtype (or `Data`); anything else uses the standard labels and types.
+  `core/mixins/export.py:96-102` calls `provider(fields)` with no doctype, so
+  `configuration` exposes a factory, `export_field_info_for(model)`, that a resource's
+  ViewSet assigns; `core` never imports `configuration`. No CONFIGURATION resource opts
+  in; the waiting resources are SALES', CONTACTS' and ACTIVITIES'. None of this unit's
+  doctypes has a Duration, Text Editor, Long Text or Rating field, so the reader accepts
+  a `tests_support` metadata overlay and those types are tested through it.
+- **What can be gated now:**
+  - `.http`: `07` 1.6 and 9.6 (unknown doctype, 404), 9.7, 9.9, 9.11, 9.13
+    (`user_settings`); not 9.12 and 9.14 (CRM Holiday List, a later unit), nor 1.1-1.5,
+    9.1-9.5, 9.8, 9.10, 9.15 (SALES, CONTACTS). The REST rows of `07` for the `meta/` and
+    `user-settings/` routes are written in PORT_MAP.
+  - pytest: `test_form_load.py:292`, `:316`, `:431`, `:333`, `:341`, `:354`, `:409`;
+    `test_bulk_edit_fields.py:61`; from `test_phase4_metadata.py:37-186` (internal,
+    rewritten) the platform-fallback case on User (`:82`), the allowlist constants
+    (`:94`, `:103`), the non-filterable case on a test model (`:152`);
+    `test_system_settings.py:51`. In-unit twins of the Deal and Contacts `getdoctype`
+    cases on FCRM Settings and CRM Dropdown Item (the Home Actions grid:
+    `HomeActions.vue:26-31`, `Grid.vue:545-546`, `GridFieldsEditorModal.vue:193`); the
+    Deal versions are SALES'.
 
 ### 4.6 Layouts, form scripts, quick filters (milestone 6)
 
@@ -498,17 +588,18 @@ what `backend/` tracks, decided at milestone 7 (decision 14).
 | 5 | The outbound HTTP helper before INTEGRATIONS | decided (A-30, DECISIONS 31): `backend/crm_app/integrations/http.py` ported whole as `core/http.py` (§4.3) |
 | 4 | `POST /api/v1/email-accounts/` served? A PATCH re-validates? | decided (A-33, DECISIONS 36): parity, served for the manager pair, no re-validation, a sent password ignored (section 4.4); the discarded password and the stale naming field after a rename are parked for the owner (DECISIONS 37, 38) |
 | 7 | Where mail validation lives; how `core/mail.py` reaches an Email Account | decided (A-33, DECISIONS 39): the validators in `core/mail.py`; saved accounts through `MAIL_ACCOUNT_PROVIDER = "configuration.mail"`, with a system check (section 4.4) |
-| 2, 9 | What "doctype exists" means; what a child table and a withheld doctype answer, per call; copying or regenerating `doctype_meta.json` and where its generator lives | **open — before milestone 5** [default: 404 for a withheld doctype (`API_CONTRACT.md:209`); child tables only where a screen needs them — `getdoctype`, the layout calls, `get_fields`, `user_settings`] |
-| 10 | Sensitive column names in field metadata | **open — before milestone 5** [default: left out] |
+| 2, 9 | What "doctype exists" means; what a child table and a withheld doctype answer, per call; copying or regenerating `doctype_meta.json` and where its generator lives | decided (A-35, DECISIONS 41, 42): the file copied and its generator and staleness test ported, wired into CI; a doctype exists when declared and served or a served child; withheld 404 everywhere (PE-14); a child answers `getdoctype` and the layout calls only (PE-15) (section 4.5) |
+| 10 | Sensitive column names in field metadata | decided (A-35, DECISIONS 43): every metadata answer leaves out the fields the caller may not read, sensitive and restricted (PE-16) |
 | 3 | The saved-view rules (§4.7) | **open — before milestone 7** [default: the resource applies the same role rule as the dedicated call; the unchecked calls get the object rule; proposed parity exceptions] |
 | 14 | `TRACKED_FIELDS` on CRM View Settings | **open — at milestone 7**, following what `backend/` tracks |
 | 6 | Kanban badge counts before ACTIVITIES | **open — before milestone 8** |
 | — | `get_data` on a withheld or child doctype | **open — before milestone 8** [default: refused, as the contract says] |
+| — | The standard filter, group-by and sort entries a model lacks (on User: `owner`, `modified_by`, the `_`-prefixed fields; `tests/guards/test_field_helper_names.py`) | **open — before milestone 8**, where the User list view is built [today: offered, as `backend/`; the alternative is a parity exception dropping them] |
 
 Departures from `backend/` in any of these are flagged for the owner and recorded in
 `PARITY_EXCEPTIONS.md` before they are built. `API_CONTRACT.md:209` (404 for a child table)
 conflicts with `docs/http/07` 9.2, 9.3 (200 for `getdoctype` on `CRM Contacts`) and
-`GridRowFieldsModal.vue:77`: reported to the owner, not edited here.
+`Grid.vue:545` and `stores/meta.js:9-17`: reported to the owner, not edited here (PE-15).
 
 ## 7. Carried from SHARED_ACTIONS
 
@@ -559,7 +650,7 @@ Moved here by ACCOUNTS' spec rewrite (`temp` A-21 D-D; flagged for the owner).
 | **2. Reference data and boot** | Country, Currency, Language, System Settings and their data migration; `FRAPPE_SYSDEFAULTS`; `get_context_for_dev` (re-creating a missing System Settings row); both onboarding calls; link search on Language, Currency and Country | yes |
 | **3. FCRM Settings** | FCRM Settings (16 fields), CRM Dropdown Item and its standard rows, `core/http.py`, `get_exchange_rate`, `ENABLE_EXCHANGE_RATE_API`; PE-10 to PE-12 | yes (A-30) |
 | **4. Email Account** | Email Account, User Email, `create_email_account` (`setup/`), validation in `core/mail.py`, `MAIL_ACCOUNT_PROVIDER`, `open_backend`'s saved-account branch, the signature fallback, rename, section 8 | yes (A-33); pytest only |
-| 5. Field metadata | the metadata file and generator, the four field helpers, `getdoctype`, `user_settings`, export's provider | on this unit's own doctypes and `tests_support` |
+| **5. Field metadata** | the metadata file, its generator and CI check; "doctype exists"; `getdoctype`; `user_settings`; the four field helpers; export's provider factory; PE-14 to PE-16 | yes (A-35), on this unit's own doctypes and `tests_support` |
 | 6. Layouts, scripts, quick filters | CRM Fields Layout and its three calls, CRM Form Script, CRM Global Settings, the quick-filter calls, default seeds, and the operator command that restores standard rows (`seed_defaults --force`, which calls `add_standard_dropdown_items(force=True)`) | partly; content cases name Lead or Task |
 | 7. Saved views | CRM View Settings, the eight calls, `get_views` | rules yes; default columns need a list definition |
 | 8. List engine | `get_data` as the list-view mixin, the list-definition convention, `User.default_list_data` | on `tests_support` and `User` only; the real gate is SALES and ACTIVITIES |

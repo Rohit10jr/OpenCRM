@@ -542,3 +542,35 @@ GET {{host}}/api/resource/FCRM%20Settings/FCRM%20Settings
     result = rewrite_http(source, parse_route_map(SINGLETON_ROUTE_MAP), "12_settings_singletons.http")
     assert '{"brand_name": "Acme"}\n\n### ' in result
     assert "covered by 1.2\n\n# ---- the next section ----" in result
+
+
+def test_a_metadata_call_waits_for_an_unbuilt_doctype():
+    """CONFIGURATION milestone 5: `meta/...` asked about a doctype whose resource is not
+    built waits for its unit; an unknown doctype runs (its 404 is expected)."""
+    route_map = parse_route_map(
+        ROUTE_MAP_TEXT
+        + """
+## CONFIGURATION
+| Dotted path | Verbs | Access | Old source | New route | New app | Status |
+|---|---|---|---|---|---|---|
+| `frappe.desk.form.load.getdoctype` | GET/POST | auth | `form_load.py:getdoctype` | `GET /api/v1/meta/doctype/` (`doctype` kept as input) | configuration | built |
+"""
+    )
+    source = """\
+@host = http://localhost:8000
+### future -> 200
+POST {{host}}/api/method/frappe.desk.form.load.getdoctype
+Content-Type: application/json
+
+{"doctype": "CRM Future"}
+
+### unknown -> 404
+POST {{host}}/api/method/frappe.desk.form.load.getdoctype
+Content-Type: application/json
+
+{"doctype": "No Such Doctype"}
+"""
+    result = rewrite_http(source, route_map)
+    future, unknown = result.split("### unknown")
+    assert "# @waiting SALES" in future
+    assert "GET {{host}}/api/v1/meta/doctype/?doctype=No%20Such%20Doctype" in unknown

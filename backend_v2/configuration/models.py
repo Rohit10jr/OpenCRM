@@ -583,3 +583,36 @@ class UserEmail(BaseDocument):
 
     class Meta(BaseDocument.Meta):
         ordering = ["idx"]
+
+
+class UserSettings(models.Model):
+    """Per-user, per-doctype UI state (grid columns, list settings): Frappe's
+    `__UserSettings` table (old `frappe_platform/models.py:2039-2099`).
+
+    A plain model, not a document (spec decision 12): upstream's table is no DocType, has
+    no route of its own, and its only way in is `user-settings/`, always keyed on the
+    caller, so nobody reads or writes another's. `data` is the JSON string as stored.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        db_column="user",
+        related_name="+",
+    )
+    doctype = models.CharField(max_length=140)
+    data = models.TextField(default="{}")
+
+    class Meta:
+        unique_together = [("user", "doctype")]
+
+    @classmethod
+    def load(cls, user, doctype: str) -> str:
+        """The stored JSON string for one user and doctype, `"{}"` when there is none."""
+        row = cls._default_manager.filter(user=user, doctype=doctype).only("data").first()
+        return (row.data if row is not None else None) or "{}"
+
+    @classmethod
+    def store(cls, user, doctype: str, data: str) -> None:
+        """Upsert on (user, doctype), as `sync_user_settings`' ON CONFLICT clause."""
+        cls._default_manager.update_or_create(user=user, doctype=doctype, defaults={"data": data})

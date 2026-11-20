@@ -53,7 +53,7 @@ commit its reference was read at.
 | Old model | What it is | New app | Unit | Status |
 |---|---|---|---|---|
 | `frappe_core.NamingSeriesCounter` | One counter row per resolved naming-series prefix | core | FOUNDATION | built |
-| `frappe_platform.UserSettings` | Per-user list-view state behind `frappe.model.utils.user_settings.*` | configuration | CONFIGURATION | — |
+| `frappe_platform.UserSettings` | Per-user list-view state behind `frappe.model.utils.user_settings.*` | configuration | CONFIGURATION | built |
 | SimpleJWT `token_blacklist` tables | Rotated and logged-out refresh tokens | accounts | FOUNDATION | built |
 
 ---
@@ -189,11 +189,11 @@ per-view calls that require it.
 | Dotted path | Verbs | Access | Old source | New route | New app | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | `crm.api.doc.get_data` | GET/POST | auth | `frappe_core/api/doc.py:get_data` | `GET /api/v1/<resource>/list-view/`, `POST /api/v1/<resource>/list-view/` (a mixin each resource opts in to, S24; `doctype` leaves the input) | configuration | — |
-| `crm.api.doc.get_fields` | GET/POST | auth | `crm_app/api/doc.py:get_fields` | `GET /api/v1/meta/fields/` (`doctype` kept as input) | configuration | — |
-| `crm.api.doc.get_filterable_fields` | GET/POST | auth | `crm_app/api/doc.py:get_filterable_fields` | `GET /api/v1/meta/filterable-fields/` (`doctype` kept as input) | configuration | — |
-| `crm.api.doc.get_group_by_fields` | GET/POST | auth | `crm_app/api/doc.py:get_group_by_fields` | `GET /api/v1/meta/group-by-fields/` (`doctype` kept as input) | configuration | — |
+| `crm.api.doc.get_fields` | GET/POST | auth | `crm_app/api/doc.py:get_fields` | `GET /api/v1/meta/fields/` (`doctype` kept as input) | configuration | built |
+| `crm.api.doc.get_filterable_fields` | GET/POST | auth | `crm_app/api/doc.py:get_filterable_fields` | `GET /api/v1/meta/filterable-fields/` (`doctype` kept as input) | configuration | built |
+| `crm.api.doc.get_group_by_fields` | GET/POST | auth | `crm_app/api/doc.py:get_group_by_fields` | `GET /api/v1/meta/group-by-fields/` (`doctype` kept as input) | configuration | built |
 | `crm.api.doc.get_quick_filters` | GET/POST | auth | `crm_app/api/doc.py:get_quick_filters` | `GET /api/v1/meta/quick-filters/` (`doctype` kept as input) | configuration | — |
-| `crm.api.doc.sort_options` | GET/POST | auth | `crm_app/api/doc.py:sort_options` | `GET /api/v1/meta/sort-options/` (`doctype` kept as input) | configuration | — |
+| `crm.api.doc.sort_options` | GET/POST | auth | `crm_app/api/doc.py:sort_options` | `GET /api/v1/meta/sort-options/` (`doctype` kept as input) | configuration | built |
 | `crm.api.doc.update_quick_filters` | GET/POST | auth | `crm_app/api/doc.py:update_quick_filters` | `POST /api/v1/meta/quick-filters/update/` (`doctype` kept as input) | configuration | — |
 | `crm.api.exchange_rate.get_exchange_rate` | GET/POST | auth | `crm_app/api/exchange_rate.py:get_exchange_rate` | `GET /api/v1/exchange-rate/` | configuration | built |
 | `crm.api.get_translations` | GET/POST | guest | `crm_app/api/misc.py:get_translations` | `GET /api/v1/translations/` | configuration | built |
@@ -213,10 +213,10 @@ per-view calls that require it.
 | `crm.fcrm.doctype.crm_view_settings.crm_view_settings.update` | POST/PUT | auth | `crm_app/api/view_settings.py:update` | `POST /api/v1/view-settings/update-view/` (the view, with its `name`, in the body) | configuration | — |
 | `crm.www.crm.get_context_for_dev` | POST | guest | `crm_app/api/boot.py:get_context_for_dev` | `POST /api/v1/boot/` | configuration | built |
 | `frappe.apps.get_apps` | GET/POST | auth | `crm_app/api/desk.py:get_apps` | `GET /api/v1/desk/apps/` | configuration | built |
-| `frappe.desk.form.load.getdoctype` | GET/POST | auth | `crm_app/api/form_load.py:getdoctype` | `GET /api/v1/meta/doctype/` (`doctype` kept as input) | configuration | — |
+| `frappe.desk.form.load.getdoctype` | GET/POST | auth | `crm_app/api/form_load.py:getdoctype` | `GET /api/v1/meta/doctype/` (`doctype` kept as input) | configuration | built |
 | `frappe.integrations.frappe_providers.frappecloud_billing.current_site_info` | GET/POST | auth | `crm_app/api/desk.py:current_site_info` | `GET /api/v1/desk/site-info/` | configuration | built |
-| `frappe.model.utils.user_settings.get` | GET/POST | auth | `crm_app/api/user_settings.py:get` | `GET /api/v1/user-settings/` (`doctype` kept as input) | configuration | — |
-| `frappe.model.utils.user_settings.save` | GET/POST | auth | `crm_app/api/user_settings.py:save` | `POST /api/v1/user-settings/` (`doctype` kept as input) | configuration | — |
+| `frappe.model.utils.user_settings.get` | GET/POST | auth | `crm_app/api/user_settings.py:get` | `GET /api/v1/user-settings/` (`doctype` kept as input) | configuration | built |
+| `frappe.model.utils.user_settings.save` | GET/POST | auth | `crm_app/api/user_settings.py:save` | `POST /api/v1/user-settings/` (`doctype` kept as input) | configuration | built |
 | `frappe.onboarding.get_onboarding_status` | GET/POST | auth | `crm_app/api/onboarding.py:get_onboarding_status` | `GET /api/v1/onboarding/status/` | configuration | built |
 | `frappe.onboarding.update_user_onboarding_status` | GET/POST | auth | `crm_app/api/onboarding.py:update_user_onboarding_status` | `POST /api/v1/onboarding/status/` | configuration | built |
 | `frappe.utils.telemetry.pulse.client.boot_config` | GET/POST | auth | `crm_app/api/desk.py:boot_config` | `GET /api/v1/desk/telemetry-config/` | configuration | built |
