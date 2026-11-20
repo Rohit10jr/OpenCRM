@@ -131,10 +131,25 @@ def test_infrastructure_fields_are_hidden_from_an_ordinary_user(alice, account, 
 
 
 @pytest.mark.parametrize("field", ["name", "email_id", "enable_outgoing"])
-def test_the_picker_still_gets_what_it_reads(manager, account, api_as, field):
-    """PE-27: the Profile picker's list is a System Manager's now."""
+def test_a_system_manager_gets_what_the_picker_reads(manager, account, api_as, field):
+    """PE-27: the Profile picker's list is a System Manager's now (old name:
+    test_the_picker_still_gets_what_it_reads)."""
     body = api_as(manager).get(f"{ACCOUNTS}{account.name}/").json()["message"]
     assert field in body
+
+
+@pytest.mark.parametrize("caller", ["alice", "sales_manager"])
+def test_value_of_an_unrestricted_field_is_hidden_by_the_row_rule(
+    request, account, api_as, caller
+):
+    """PE-27 on `value/` with a field the restricted-field check does not refuse, the
+    one the picker reads: the row rule alone answers no row."""
+    client = api_as(request.getfixturevalue(caller))
+    response = client.get(
+        f"{ACCOUNTS}value/", {"fieldname": "email_id", "filters": '{"name": "Support"}'}
+    )
+    assert response.status_code == 200
+    assert response.json()["message"] == {}
 
 
 def test_a_manager_sees_the_infrastructure(manager, account, api_as):

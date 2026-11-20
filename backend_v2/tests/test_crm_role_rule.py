@@ -71,6 +71,7 @@ def test_an_outsider_is_refused_an_industry_by_name(outsider, industry, api_as, 
 def test_an_outsider_cannot_create_an_industry(outsider, api_as):
     response = api_as(outsider).post(INDUSTRIES, {"industry": "Mining"}, format="json")
     assert response.status_code == 403
+    assert response.json()["message"] == "Not permitted to create CRM Industry"
     assert not CRMIndustry.objects.filter(pk="Mining").exists()
 
 
@@ -120,6 +121,7 @@ def test_an_outsider_cannot_create_an_address(outsider, api_as):
         ADDRESSES, DEPOT, format="json"
     )
     assert response.status_code == 403
+    assert response.json()["message"] == "Not permitted to create Address"
     assert not Address.objects.filter(address_title="Depot").exists()
 
 
