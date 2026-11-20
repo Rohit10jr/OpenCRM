@@ -20,6 +20,26 @@ TRUE_SECRET_HINTS = ("password", "secret", "token")
 
 # Fields that only resemble credentials, with the reason that each is harmless.
 REVIEWED_NOT_CREDENTIALS = {
+    ("configuration.EmailAccount", "awaiting_password"): (
+        "A boolean meaning the password will be entered later; it holds no secret and is "
+        "restricted to managers with the rest of the mail-server description."
+    ),
+    ("configuration.EmailAccount", "no_smtp_authentication"): (
+        "A boolean meaning the relay takes no login; it holds no secret and is restricted "
+        "to managers with the rest of the mail-server description."
+    ),
+    ("configuration.EmailAccount", "ascii_encode_password"): (
+        "A boolean choosing how the password is encoded for the server; it holds no secret "
+        "and says nothing about the password's value."
+    ),
+    ("configuration.UserEmail", "awaiting_password"): (
+        "A boolean fetched from the user's Email Account; it holds no secret and only says "
+        "whether that account's password is still to be entered."
+    ),
+    ("configuration.UserEmail", "used_oauth"): (
+        "A boolean that stays off, since this backend has no OAuth mail; it holds no token "
+        "or other credential material."
+    ),
     ("accounts.User", "last_reset_password_key_generated_on"): (
         "This is the timestamp at which the current reset key was issued, not the key "
         "itself. It remains sensitive because exposing it reveals reset activity."
@@ -40,6 +60,11 @@ REVIEWED_NOT_CREDENTIALS = {
 
 # Real credentials that are intentionally protected by access rather than encryption.
 REVIEWED_RESTRICTED_ONLY = {
+    ("configuration.EmailAccount", "api_key"): (
+        "The Frappe Mail API key, stored as plain restricted text as in backend/; its "
+        "secret half, api_secret, is encrypted and sensitive. Managers read the key back on "
+        "the Email Account screen; everyone else gets it absent and value/ refused."
+    ),
     ("configuration.FCRMSettings", "access_key"): (
         "The exchange-rate provider key, stored as plain restricted text as in backend/. "
         "Managers read it back on the Dashboard settings screen (DashboardSettings.vue:157), "
@@ -194,6 +219,9 @@ def test_known_credentials_remain_covered():
         ("accounts.User", "password"),
         ("accounts.User", "reset_password_key"),
         ("accounts.User", "token_version"),
+        ("configuration.EmailAccount", "api_key"),
+        ("configuration.EmailAccount", "api_secret"),
+        ("configuration.EmailAccount", "password"),
         ("configuration.FCRMSettings", "access_key"),
         ("tests_support.SecuredDocument", "secret"),
         ("tests_support.SecuredDocument", "encrypted_secret"),

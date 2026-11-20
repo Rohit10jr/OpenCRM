@@ -6,6 +6,7 @@ Ported from `backend/frappe_platform/models.py:1616-1839`.
 from django.conf import settings
 from django.db import IntegrityError, models, transaction
 
+from core.fields import EncryptedCharField
 from core.models import BaseDocument, SingletonDocument
 from core.naming import FieldValue, Hash
 
@@ -431,3 +432,154 @@ def add_standard_dropdown_items(settings, *, user, force: bool = False) -> int:
         row.save(user=user)
         written += 1
     return written
+
+
+class EmailAccount(BaseDocument):
+    """Frappe's `Email Account`, the outgoing and incoming mail configuration (old
+    `frappe_platform/models.py:1390-1481`). Everyone reads it (the Profile picker lists
+    them); the manager pair or Administrator writes it. `password` and `api_secret` are
+    encrypted at rest and never served; the eleven fields that describe how mail is sent
+    are restricted to the same callers (spec section 4.4)."""
+
+    DOCTYPE = "Email Account"
+    NAME_STRATEGY = FieldValue("email_account_name", label="Email Account Name")
+    EMAIL_FIELDS = ("email_id",)
+    SENSITIVE_FIELDS = ("password", "api_secret")
+    RESTRICTED_FIELDS = (
+        "smtp_server",
+        "smtp_port",
+        "email_server",
+        "incoming_port",
+        "login_id",
+        "domain",
+        "api_key",
+        "frappe_mail_site",
+        "signature",
+        "no_smtp_authentication",
+        "awaiting_password",
+    )
+
+    email_account_name = models.CharField(max_length=140)
+    email_id = models.CharField(max_length=140, blank=True, default="")
+    service = models.CharField(max_length=140, blank=True, default="")
+    enable_incoming = models.BooleanField(default=False)
+    enable_outgoing = models.BooleanField(default=False)
+    default_incoming = models.BooleanField(default=False)
+    default_outgoing = models.BooleanField(default=False)
+    email_sync_option = models.CharField(max_length=50, blank=True, default="ALL")
+    initial_sync_count = models.IntegerField(default=100)
+    create_contact = models.BooleanField(default=True)
+    track_email_status = models.BooleanField(default=True)
+    use_tls = models.BooleanField(default=True)
+    use_imap = models.BooleanField(default=True)
+    smtp_server = models.CharField(max_length=140, blank=True, default="")
+    smtp_port = models.IntegerField(null=True, blank=True)
+    email_server = models.CharField(max_length=140, blank=True, default="")
+    # An encrypted secret longer than about 143 bytes does not fit 280 (parity).
+    password = EncryptedCharField(max_length=280, blank=True, default="")
+    no_smtp_authentication = models.BooleanField(default=False)
+    add_signature = models.BooleanField(default=False)
+    signature = models.TextField(blank=True, default="")
+    api_key = models.CharField(max_length=280, blank=True, default="")
+    api_secret = EncryptedCharField(max_length=280, blank=True, default="")
+    frappe_mail_site = models.CharField(max_length=280, blank=True, default="")
+    append_to = models.CharField(max_length=140, blank=True, default="")
+    domain = models.CharField(max_length=140, blank=True, default="")
+    login_id = models.CharField(max_length=140, blank=True, default="")
+    login_id_is_different = models.BooleanField(default=False)
+    awaiting_password = models.BooleanField(default=False)
+    ascii_encode_password = models.BooleanField(default=False)
+    use_ssl = models.BooleanField(default=False)
+    use_ssl_for_outgoing = models.BooleanField(default=False)
+    use_starttls = models.BooleanField(default=False)
+    validate_ssl_certificate = models.BooleanField(default=False)
+    incoming_port = models.IntegerField(null=True, blank=True)
+    always_use_account_email_id_as_sender = models.BooleanField(default=False)
+
+    class Meta(BaseDocument.Meta):
+        ordering = ["-modified"]
+
+    def save(self, *args, user, **kwargs):
+        result = super().save(*args, user=user, **kwargs)
+        self.link_to_user(user=user)
+        return result
+
+    def link_to_user(self, *, user):
+        """`setup_user_email_inbox` (`email_account.py:1072-1115`; old
+        `frappe_platform/models.py:1522-1550`): the account links itself to the user whose
+        address it is, as a row on that user's `user_emails`, and keeps the row's flags
+        current. A direct call from `save()`, not a signal; a queryset `.update()` does
+        not link."""
+        from accounts.models import User
+
+        address = (self.email_id or "").strip()
+        if not address:
+            return
+        flags = {
+            "email_id": address,
+            "awaiting_password": self.awaiting_password,
+            "enable_outgoing": self.enable_outgoing,
+        }
+        users = User._default_manager.filter(
+            models.Q(email__iexact=address) | models.Q(pk__iexact=address)
+        )
+        for owner in users:
+            existing = UserEmail._default_manager.filter(parent_user=owner, email_account=self)
+            if existing.exists():
+                existing.update(**flags)
+                continue
+            UserEmail(
+                parent_user=owner,
+                email_account=self,
+                idx=UserEmail._default_manager.filter(parent_user=owner).count() + 1,
+                **flags,
+            ).save(user=user)
+
+
+class UserEmail(BaseDocument):
+    """A row of User's `user_emails`: an outgoing account the user sends from (old
+    `frappe_platform/models.py:1490-1519`). Rows go with their account."""
+
+    DOCTYPE = "User Email"
+    NAME_STRATEGY = Hash()
+    IS_CHILD_TABLE = True
+    CHILD_FIELDS = (
+        "name",
+        "owner",
+        "modified_by",
+        "creation",
+        "modified",
+        "idx",
+        "docstatus",
+        "_assign",
+        "_liked_by",
+        "_comments",
+        "_user_tags",
+        "parent_user",
+        "parentfield",
+        "parenttype",
+        "email_account",
+        "email_id",
+        "awaiting_password",
+        "enable_outgoing",
+        "used_oauth",
+    )
+    FETCH_FROM = {
+        "email_id": ("email_account", "email_id"),
+        "awaiting_password": ("email_account", "awaiting_password"),
+        "enable_outgoing": ("email_account", "enable_outgoing"),
+    }
+
+    parent_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="user_emails"
+    )
+    parenttype = models.CharField(max_length=140, default="User")
+    parentfield = models.CharField(max_length=140, default="user_emails")
+    email_account = models.ForeignKey(EmailAccount, on_delete=models.CASCADE, related_name="+")
+    email_id = models.CharField(max_length=140, blank=True, default="")
+    awaiting_password = models.BooleanField(default=False)
+    enable_outgoing = models.BooleanField(default=False)
+    used_oauth = models.BooleanField(default=False)
+
+    class Meta(BaseDocument.Meta):
+        ordering = ["idx"]

@@ -49,6 +49,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     # Declared now; nothing enforces these until field access and email validation land.
     EMAIL_FIELDS = ("email",)
     ATTACH_FIELDS = ("user_image",)
+    #: The send-from accounts on the Profile screen (CONFIGURATION's User Email rows):
+    #: only System Manager writes them; anyone else's `user_emails` is dropped and the
+    #: rest of the save applies (old `frappe_platform/models.py:245-249`). A user gets a
+    #: row by an Email Account with their address linking itself.
+    PRIVILEGED_WRITE_FIELDS = ("user_emails",)
+    PRIVILEGED_WRITE_ROLES = ("System Manager",)
 
     name = models.CharField(max_length=140, primary_key=True)
     email = models.EmailField(max_length=140, blank=True, default="")

@@ -1,8 +1,9 @@
 """Invitations: the email, the two jobs and `invite_by_email` (specs/ACCOUNTS.md 4.6, 4.9).
 
 Ported (REBUILD_PLAN S14) from ``backend/tests/test_phase5_async.py:138-191`` (both jobs)
-and ``:368-436`` (the invitation email; :377, which needs a saved Email Account, is
-CONFIGURATION's), and ``backend/tests/test_mail_config_account.py:314, :331, :341``.
+and ``:368-436`` (the invitation email; :377, which needs a saved Email Account, was
+ported with CONFIGURATION's Email Account), and
+``backend/tests/test_mail_config_account.py:314, :331, :341``.
 ``crm_app.tasks`` is ``accounts.tasks``; ``session_user`` + ``objects.create`` is
 ``create_for_user``. The email is queued after commit; ``_send_on_commit_now`` runs it at
 once as the old post_save did, and the deferral itself has its own test below. The
@@ -135,6 +136,30 @@ def test_creating_an_invitation_sends_one_email(administrator, _send_on_commit_n
     assert len(mail.outbox) == 1
     assert mail.outbox[0].to == ["invitee@example.com"]
     assert invitation.key in mail.outbox[0].body
+
+
+def test_the_invitation_email_uses_the_default_outgoing_account(
+    administrator, monkeypatch, _send_on_commit_now
+):
+    """Ported from `test_phase5_async.py:377` (CONFIGURATION milestone 4): identity comes
+    from the saved default outgoing Email Account, which beats the config account (the
+    module fixture). Its own SMTP backend is replaced with locmem, as the old test does."""
+    from django.core.mail.backends.locmem import EmailBackend
+
+    from configuration.models import EmailAccount
+    from core import mail as core_mail
+
+    monkeypatch.setattr(core_mail, "open_backend", lambda account: EmailBackend())
+    EmailAccount(
+        email_account_name="Outbound",
+        email_id="sales@acme.com",
+        enable_outgoing=True,
+        default_outgoing=True,
+    ).save(user=administrator)
+
+    mail.outbox.clear()
+    _invitation("invitee2@example.com", administrator=administrator)
+    assert mail.outbox[0].from_email == "Outbound <sales@acme.com>"
 
 
 def test_sending_records_the_timestamp(administrator, _send_on_commit_now):

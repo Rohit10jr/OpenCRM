@@ -49,3 +49,41 @@ def test_the_signature_wraps_the_users_own(auth_api, alice):
     assert auth_api.get("/api/v1/users/signature/").json() == {
         "message": '<br><p class="signature">-- Alice</p>'
     }
+
+
+# --- the Email Account fallback (CONFIGURATION milestone 4, spec section 4.4) -------------
+
+
+def _default_account(user, **fields):
+    from configuration.models import EmailAccount
+
+    values = {
+        "email_account_name": "Default",
+        "email_id": "default@example.com",
+        "default_outgoing": True,
+        "add_signature": True,
+        "signature": "The Team",
+        **fields,
+    }
+    EmailAccount(**values).save(user=user)
+
+
+def test_the_signature_falls_back_to_the_default_outgoing_account(auth_api, administrator):
+    _default_account(administrator)
+    assert auth_api.get("/api/v1/users/signature/").json() == {
+        "message": '<br><p class="signature">The Team</p>'
+    }
+
+
+def test_the_users_own_signature_wins_over_the_account(auth_api, alice, administrator):
+    _default_account(administrator)
+    alice.email_signature = "-- Alice"
+    alice.save(update_fields=["email_signature"])
+    assert auth_api.get("/api/v1/users/signature/").json() == {
+        "message": '<br><p class="signature">-- Alice</p>'
+    }
+
+
+def test_no_fallback_without_add_signature(auth_api, administrator):
+    _default_account(administrator, add_signature=False)
+    assert auth_api.get("/api/v1/users/signature/").json() == {"message": None}

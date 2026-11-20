@@ -45,6 +45,9 @@ def no_config_account():
         yield
 
 
+# The lookup reads saved Email Accounts first (MAIL_ACCOUNT_PROVIDER), so these need the
+# database; with none saved, the config account carries the mail.
+@pytest.mark.django_db
 def test_the_config_account_exists_only_while_email_host_is_set(no_config_account):
     assert mail_service.config_account() is None
     assert mail_service.find_outgoing_account() is None
@@ -119,6 +122,7 @@ def test_the_config_account_sends_through_the_configured_backend(config_account)
 # --- new: the carrier itself (no old test sends through it directly) ---------------------
 
 
+@pytest.mark.django_db
 def test_nothing_to_send_through_raises_upstreams_sentence(no_config_account):
     from core.exceptions import OutgoingEmailError
 
@@ -127,6 +131,7 @@ def test_nothing_to_send_through_raises_upstreams_sentence(no_config_account):
     assert raised.value.message == mail_service.NO_ACCOUNT
 
 
+@pytest.mark.django_db
 def test_the_reset_mail_is_from_the_config_account(config_account):
     from django.core import mail
 

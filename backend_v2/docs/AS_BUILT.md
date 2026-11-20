@@ -153,6 +153,20 @@ settings. A settings record's `value/` refuses a field it does not list (PE-13).
 `.http` generator serves a singleton's document URLs at its root and marks a list-shaped
 read of one `# @retired PE-11`.
 
+Its fourth milestone (§4.4) adds Email Account at `email-accounts/` (everyone reads; the
+manager pair or Administrator writes, renames and deletes; `password` and `api_secret`
+encrypted and never served; eleven mail-server fields restricted) and
+`email-accounts/setup/` (`create_email_account`, credentials checked before the row
+exists). `core/mail.py` holds the server checks (`smtp_settings`, `check_smtp`,
+`check_imap`, `validate_email_account`) and reaches saved accounts through
+`MAIL_ACCOUNT_PROVIDER = "configuration.mail"` (system check `core.E003`):
+`find_outgoing_account` tries a saved account before the config account, `open_backend`
+sends a saved account through its own SMTP settings, and `default_signature()` is the
+signature fallback `accounts` uses. An Email Account's `save()` links it to the user
+whose address it is, as a User Email row on that user's `user_emails`, which only System
+Manager writes through User. Parked for the owner, built as `backend/`: a password sent
+on update is ignored, and a rename keeps `email_account_name`.
+
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
 disabled, and there are no bulk actions.

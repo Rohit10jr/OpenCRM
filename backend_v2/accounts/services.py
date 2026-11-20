@@ -156,9 +156,11 @@ def timezones() -> list[str]:
 
 def user_signature(user) -> str | None:
     """`crm.api.get_user_signature` (old `crm_app/api/misc.py:42-72`): the user's own
-    signature, wrapped. The default outgoing Email Account's signature, the old
-    fallback, arrives with CONFIGURATION (specs/ACCOUNTS.md section 2)."""
-    signature = user.email_signature
+    signature, else the default outgoing Email Account's, wrapped. The fallback comes
+    through `core.mail`, so this app does not import configuration."""
+    from core.mail import default_signature
+
+    signature = user.email_signature or default_signature()
     if not signature:
         return None
     return f'<br><p class="signature">{signature}</p>'

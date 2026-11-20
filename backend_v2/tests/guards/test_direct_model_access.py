@@ -115,6 +115,14 @@ DIRECT_MANAGER_READS = {
         "A write-only update of the authenticated caller's own onboarding column, as "
         "the old update does (crm_app/api/onboarding.py:84), timestamps untouched."
     ),
+    ("configuration/mail.py", "saved_outgoing_account", "EmailAccount._default_manager"): (
+        "The server-side choice of which saved account carries a message, for core.mail; "
+        "no caller sees the row, as the old find_outgoing_account (communication.py:400-440)."
+    ),
+    ("configuration/mail.py", "default_signature", "EmailAccount._default_manager"): (
+        "The signature fallback reads one column of the default outgoing account for the "
+        "caller's own signature, as the old get_user_signature (misc.py:62-67)."
+    ),
     ("accounts/services.py", "login", "get_user_model()._default_manager"): (
         "Authentication must locate the account before a request user exists; lockout "
         "and password verification protect this lookup."

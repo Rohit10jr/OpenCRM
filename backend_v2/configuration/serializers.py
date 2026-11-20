@@ -6,6 +6,7 @@ from .models import (
     SYSDEFAULT_FIELDS,
     Country,
     Currency,
+    EmailAccount,
     FCRMSettings,
     Language,
     SystemSettings,
@@ -99,3 +100,46 @@ class FCRMSettingsSerializer(DocumentSerializer):
     class Meta:
         model = FCRMSettings
         fields = (*DOCUMENT_FIELDS, *FCRM_SETTINGS_FIELDS, "dropdown_items")
+
+
+class EmailAccountSerializer(DocumentSerializer):
+    class Meta:
+        model = EmailAccount
+        fields = (
+            *DOCUMENT_FIELDS,
+            "email_account_name",
+            "email_id",
+            "service",
+            "enable_incoming",
+            "enable_outgoing",
+            "default_incoming",
+            "default_outgoing",
+            "email_sync_option",
+            "initial_sync_count",
+            "create_contact",
+            "track_email_status",
+            "use_tls",
+            "use_imap",
+            "smtp_server",
+            "smtp_port",
+            "email_server",
+            "password",
+            "no_smtp_authentication",
+            "add_signature",
+            "signature",
+            "api_key",
+            "api_secret",
+            "frappe_mail_site",
+            "append_to",
+            "domain",
+            "login_id",
+            "login_id_is_different",
+            "awaiting_password",
+            "ascii_encode_password",
+            "use_ssl",
+            "use_ssl_for_outgoing",
+            "use_starttls",
+            "validate_ssl_certificate",
+            "incoming_port",
+            "always_use_account_email_id_as_sender",
+        )

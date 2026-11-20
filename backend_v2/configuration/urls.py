@@ -6,6 +6,7 @@ from configuration.views import (
     ClearDemoDataView,
     CountryViewSet,
     CurrencyViewSet,
+    EmailAccountViewSet,
     ExchangeRateView,
     FCRMSettingsViewSet,
     LanguageViewSet,
@@ -46,5 +47,6 @@ urlpatterns += singleton_router.urls
 router = DocumentRouter()
 router.register("countries", CountryViewSet, basename="country")
 router.register("currencies", CurrencyViewSet, basename="currency")
+router.register("email-accounts", EmailAccountViewSet, basename="email-account")
 router.register("languages", LanguageViewSet, basename="language")
 urlpatterns += router.urls

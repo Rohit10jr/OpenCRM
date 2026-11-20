@@ -8,6 +8,10 @@ ROOT_URLCONF = "config.test_urls"
 
 DEBUG = False
 DEV_DATA_ALLOWED = True
+# The old test key (backend/config/settings/test.py:70): Email Account stores its password
+# encrypted, and without a key every test that saves one would pass only where a
+# developer's environment happens to supply it. Never a real deployment's key.
+FIELD_ENCRYPTION_KEY = "test-only-field-encryption-key-not-for-any-real-deployment"
 
 # No Celery worker and no SMTP server under test: tasks run inline and mail lands in
 # django.core.mail.outbox. No config account unless a test sets EMAIL_HOST, whatever the
