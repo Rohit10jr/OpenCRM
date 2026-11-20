@@ -210,8 +210,8 @@ refuses it too (`frappe/model/document.py:850-859`). Tested.
   Manager), **deletes the user's hierarchy node with no reports guard**, and answers
   "User {user} has been removed from CRM roles.". `add_existing_users` accepts `users` as
   a JSON string or a single name; `role` defaults to "Sales User" (`user.py:111`).
-  A target of Administrator or Guest answers 403 "Not permitted" (PE-28), after the
-  role value check and after the self check.
+  A target of Administrator or Guest answers 403 "Not permitted" (PE-28), after every
+  other refusal and just before the roles change.
 - **No object rule on the two per-user actions** (A-22): the old code checks only the
   manager pair (`user.py:139,192`), so a Sales Manager changes another user's role
   (`09` 3.2), which `User`'s write rule would refuse. `update-role` and

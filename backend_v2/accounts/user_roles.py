@@ -75,7 +75,6 @@ def update_user_role(user, name, new_role) -> None:
     if new_role not in ASSIGNABLE_ROLES:
         raise ValidationError("Cannot assign this role")
 
-    _refuse_builtin(name)
     account = User._default_manager.filter(pk=name).first()
     if account is None:
         raise ValidationError(f"User {name} not found")
@@ -87,6 +86,7 @@ def update_user_role(user, name, new_role) -> None:
         raise PermissionError("Only System Managers can modify other System Managers")
     if new_role == "Sales Manager" and not is_system_manager:
         raise PermissionError("Only System Managers can assign the Sales Manager role")
+    _refuse_builtin(name)
 
     if new_role == "System Manager":
         _set_roles(account, ["System Manager", "Sales Manager", "Sales User"])
@@ -120,7 +120,6 @@ def remove_crm_roles_from_user(user, name) -> str:
     if name == user.name:
         raise PermissionError("You cannot remove yourself.")
 
-    _refuse_builtin(name)
     account = User._default_manager.filter(pk=name).first()
     if account is None:
         raise ValidationError(f"User {name} not found")
@@ -129,6 +128,7 @@ def remove_crm_roles_from_user(user, name) -> str:
     caller_is_system_manager = "System Manager" in user.get_roles()
     if "System Manager" in roles and not caller_is_system_manager:
         raise PermissionError("Only System Managers can modify other System Managers")
+    _refuse_builtin(name)
 
     if "Sales User" in roles:
         _remove_roles(account, "Sales User")

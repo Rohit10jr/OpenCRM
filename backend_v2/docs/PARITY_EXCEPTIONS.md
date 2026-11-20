@@ -639,9 +639,10 @@ comparison skips that block.
 - **Old backend:** applies no check on the target's name; the role rows of Administrator
   or Guest change like any other user's (`backend/crm_app/api/user.py:111-217`)
 - **backend_v2:** 403 "Not permitted" when the target is Administrator or Guest. The
-  check runs after the role value is checked (`update-role`) and after "You cannot remove
-  yourself." (`remove-crm-roles`); `add-existing` applies it to each name in turn, as
-  every other refusal in that loop
+  check runs after every existing refusal and just before the roles change, so each
+  answer upstream gives (such as "Only System Managers can modify other System Managers"
+  for a Sales Manager acting on Administrator, who holds System Manager) is unchanged;
+  `add-existing` applies it to each name in turn, as every other refusal in that loop
 - **Why:** upstream's framework fixes those two accounts' roles whatever their role rows
   say: v15 `frappe/permissions.py:497-507` answers Guest with the Guest role and
   Administrator with every role, and `frappe/core/doctype/user/user.py:626-628` strips
