@@ -681,6 +681,21 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   (`frontend/src/components/Settings/EmailEdit.vue:104-118`)
 - **Recorded by:** A-48 group 3, 21 Nov 2026
 
+### PE-31. Rename updates the field the name is taken from
+
+- **Status:** approved by the owner (20 Nov 2026; `temp` A-48 3b, DECISIONS 38); built
+  with this entry
+- **Where:** `POST /api/v1/<resource>/<name>/rename/` on every resource named by
+  `FieldValue` (old `frappe.client.rename_doc`); today Email Account
+  (`email_account_name`), and each resource 3c opts in
+- **Old backend:** the record takes the new name and the naming field keeps the old
+  value (`backend/frappe_core/rename.py:41-45`)
+- **backend_v2:** the naming field is set to the new name, in the same transaction. A
+  naming field that is a link keeps its value
+- **Why:** upstream updates it (`frappe/model/rename_doc.py:322-327`, for `field:`
+  autonames)
+- **Recorded by:** A-48 group 3, 21 Nov 2026
+
 ---
 
 ## Candidates — not exceptions yet

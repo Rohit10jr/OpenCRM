@@ -299,10 +299,9 @@ Spec-review addendum: `temp` A-33 (DECISIONS 36-39). Old model and link:
   non-empty `password` or `api_secret` sent on create or PATCH is stored, encrypted, as
   upstream (`EmailEdit.vue:104-118` sends `password` with every save); null or "" leaves
   the stored value. `backend/` discards both (`frappe_core/serializers.py:253-257`).
-- **Rename** keeps `email_account_name` at the old value, as `backend/`
-  (`frappe_core/rename.py:41-45`; `backend_v2/core/rename.py:14-20`). Upstream updates
-  the naming field (`frappe/model/rename_doc.py:319,323-328`). Parked for the owner
-  (DECISIONS 38); a test pins today's behaviour.
+- **Rename** sets `email_account_name` to the new name, as upstream
+  (`frappe/model/rename_doc.py:319,323-328`): **PE-31** (owner, 20 Nov 2026, DECISIONS
+  38). `backend/` keeps the old value (`frappe_core/rename.py:41-45`).
 - **`create_email_account`** (`backend/crm_app/api/settings.py`), checks in this order:
   1. the role check: manager pair or Administrator, else 403 "Not permitted" (`:96`;
      `crm_app/api/user.py:28-34`);

@@ -149,13 +149,13 @@ def test_pe30_a_non_admin_still_cannot_set_it(api_as, alice, account):
 # --- rename (parked question, DECISIONS 38) ------------------------------------------------
 
 
-def test_a_rename_keeps_the_naming_field_at_the_old_value(api_as, manager, account):
-    """Today's behaviour, as backend/: only the key changes. Upstream also updates
-    `email_account_name`; this test pins parity until the owner decides."""
+def test_a_rename_sets_the_naming_field(api_as, manager, account):
+    """PE-31 (owner, 20 Nov 2026): as upstream, the naming field follows the new name;
+    `backend/` kept it at the old value (DECISIONS 38)."""
     response = api_as(manager).post(f"{ACCOUNTS}Support/rename/", {"new_name": "Help Desk"}, format="json")
     assert response.status_code == 200, response.content[:300]
     renamed = EmailAccount.objects.get(pk="Help Desk")
-    assert renamed.email_account_name == "Support"
+    assert renamed.email_account_name == "Help Desk"
 
 
 # --- the link to the user's user_emails ---------------------------------------------------

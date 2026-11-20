@@ -166,8 +166,8 @@ exists). `core/mail.py` holds the server checks (`smtp_settings`, `check_smtp`,
 sends a saved account through its own SMTP settings, and `default_signature()` is the
 signature fallback `accounts` uses. An Email Account's `save()` links it to the user
 whose address it is, as a User Email row on that user's `user_emails`, which only System
-Manager writes through User. Parked for the owner, built as `backend/`: a password sent
-on update is ignored, and a rename keeps `email_account_name`.
+Manager writes through User. A non-empty password or API secret sent on create or
+update is stored (PE-30), and a rename sets `email_account_name` (PE-31).
 
 Its fifth milestone (§4.5) adds field metadata. `configuration/data/doctype_meta.json` is
 the old 39-doctype file, read by `configuration/field_meta.py` (with a model fallback on
@@ -596,7 +596,8 @@ object-write rule. Merge, missing, unchanged, taken, and write-denied refusals k
 old order, 417 status, and wording before `core.naming.validate_name` runs.
 
 `core.rename.rename_document` locks the original and completes the rename in one
-transaction. It inserts a hook-free copy under the new primary key, temporarily parks
+transaction. It inserts a hook-free copy under the new primary key (with a plain
+`FieldValue` naming field set to the new name, PE-31), temporarily parks
 non-key unique values, repoints every reverse FK/O2O (including hidden through-table
 relations), declared polymorphic child parent, declared `DYNAMIC_LINK_FIELDS` pair, and
 (PE-5, approved) every model's declared `TEXT_LINK_FIELDS` column that targets the renamed
