@@ -437,3 +437,9 @@ def test_members_and_existing_invitations_of_any_status_are_skipped(
     created = CRMInvitation.objects.get(email="new@example.com")
     assert (created.status, created.role, len(created.key)) == ("Pending", "Sales User", 40)
     assert [message.to for message in mail.outbox] == [["new@example.com"]]
+
+
+def test_invite_by_email_records_who_invited(manager, api_as):
+    """PE-8: as upstream's before_insert, on this path too (A-64 finding 4)."""
+    api_as(manager).post(INVITE, {"emails": "new@example.com", "role": "Sales User"}, format="json")
+    assert CRMInvitation.objects.get(email="new@example.com").invited_by_id == manager.name
