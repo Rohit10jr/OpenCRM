@@ -117,7 +117,12 @@ def walk() -> list[tuple[str, bool, str]]:
 
         print("\n8. The links are dead now")
         again = post("/api/v1/auth/accept-invitation/", {"key": invite_key})
-        step("the invitation cannot be redeemed twice", again.status_code != 200, f"status {again.status_code}")
+        step(
+            "the invitation cannot be redeemed twice: 417 Invalid or expired key",
+            again.status_code == 417
+            and "Invalid or expired key" in str(again.json().get("message")),
+            f"status {again.status_code}",
+        )
         again = post(
             "/api/v1/auth/update-password/", {"key": reset_key, "new_password": "An0ther!Passw0rd"}
         )
