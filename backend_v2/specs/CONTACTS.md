@@ -152,7 +152,7 @@ rule (owner, 21 Nov 2026).
 
 | Doctype | List | Read | Write | Create | Delete |
 |---|---|---|---|---|---|
-| Contact | everyone (`platform_docs.py:437-440`) | everyone | everyone | everyone | the creator (`owner`), System Manager or Administrator (`:443-455`) |
+| Contact | everyone (`platform_docs.py:437-440`; PE-29 when built) | everyone | everyone | everyone | the creator (`owner`), System Manager or Administrator (`:443-455`) |
 | Contact Email, Contact Phone | through the contact | the contact's read | the contact's write | through `create_new` or the contact's rows | the contact's write; a refused delete is 404 |
 | Address | a CRM role (PE-29; old: everyone, `:424-426`) | a CRM role | a CRM role | a CRM role | System Manager or Administrator (`:429-434`) |
 | CRM Industry | a CRM role (PE-29; old: everyone signed in, no rule registered) | a CRM role | a CRM role | a CRM role | a CRM role, subject to PROTECT and Dynamic Link rows |

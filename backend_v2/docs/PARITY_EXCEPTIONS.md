@@ -624,7 +624,11 @@ comparison skips that block.
 - **backend_v2:** System Manager or Administrator list, read, create, change, rename and
   delete an Email Account and call `setup/`; any other caller gets an empty list, 403
   "No permission for Email Account <name>" on a record, and 403 "Not permitted" on
-  `setup/`. A User's `user_emails` rows stay System Manager's to write
+  `setup/`. A User's `user_emails` rows stay System Manager's to write. As upstream, the
+  Profile "send from" picker (`UserEmailSettings.vue:138-144`) is therefore empty for
+  every caller who is not System Manager or Administrator: the old backend's open read
+  was its fix for that, recorded as upstream bug 17 (`UPSTREAM_BUGS.md`), and this entry
+  takes it back
 - **Why:** upstream's role table (`frappe/email/doctype/email_account/email_account.json`,
   v15): System Manager reads, writes, creates and deletes; Inbox User, a role this
   product does not have, reads
@@ -662,10 +666,14 @@ comparison skips that block.
   (`backend/crm_app/permissions/platform_docs.py:424-434`; DECISIONS 58)
 - **backend_v2:** Sales User, Sales Manager, System Manager or Administrator; a caller
   with none of these gets an empty list, 403 "No permission for <doctype> <name>" on a
-  record, and 403 on create. Address delete stays System Manager's or Administrator's.
-  Salutation and Gender keep their rule (everyone reads, System Manager writes)
-- **Why:** upstream's role tables grant these doctypes to the CRM roles (a user with
-  none keeps only the contacts they created; `backend_v2` grants nothing)
+  record, and 403 "Not permitted to create <doctype>" on create. Address delete stays
+  System Manager's or Administrator's. Salutation and Gender keep their rule (everyone
+  reads, System Manager writes)
+- **Why:** upstream's role tables grant these doctypes to the CRM roles. Upstream also
+  lets a user with none keep the contacts they created, and its Address gives the `All`
+  role read, write and create on the addresses they own (v15
+  `frappe/contacts/doctype/address/address.json`); `backend_v2` grants nothing to a
+  user with no CRM role
 - **Recorded by:** A-48 group 2, 21 Nov 2026
 
 ---
