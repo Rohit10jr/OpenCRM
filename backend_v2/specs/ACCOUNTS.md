@@ -503,7 +503,7 @@ write their own row. `RenameMixin` asks `has_object_rule(user, doc, "write")` to
 gains a `rename_rule` hook defaulting to that, which `UserViewSet` overrides (a change in
 `core`). **A System Manager may rename their own account**, as upstream allows: the answer
 is 200 with the new name; the caller's next call with their old token is 401, and their
-refresh token is blacklisted (§10.4). *[Marked for the owner: the supervisor has asked.]*
+refresh token is blacklisted (§10.4). (Owner, 21 Nov 2026.)
 
 ### 10.2 Normalising, and the refusals in upstream's order
 
@@ -587,7 +587,7 @@ does not accept a token issued to the earlier account.
   (k + j + 1) / 2⁶², where k and j are the two accounts' version changes. Improbable,
   not impossible. Overflow cannot happen: a value starts at or below 2⁶², a bump adds 1, and the column
   holds up to 2⁶³ − 1.
-- **Existing rows (proposed, marked for the owner):** a data migration gives every
+- **Existing rows (owner, 21 Nov 2026):** a data migration gives every
   existing row a fresh random version, the built-ins included, so the rule above holds
   for accounts created before this change as well. It signs everyone out once.
 - The migration to bigint **cannot be reversed** once any value exceeds 2³¹ − 1.
@@ -658,7 +658,7 @@ A rename before the worker runs sends no mail. The invitation is still accepted 
   - a Sales Manager: 417;
   - a System Manager: 200;
   - a System Manager's self-rename: 200, then the next call with the old access token is
-    401 and the old refresh token is refused (marked line).
+    401 and the old refresh token is refused.
 - **Refusals:**
   - Administrator and Guest, for Administrator and a System Manager alike: row 3;
   - a bad address, a list, and a display name: row 4;
