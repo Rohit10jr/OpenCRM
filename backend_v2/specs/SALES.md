@@ -9,8 +9,9 @@ App `sales`. **The largest unit**, and the one the frontend's two main screens d
 The `PORT_MAP.md` rows under **SALES**:
 
 - **Doctypes:** CRM Lead, CRM Deal; the reference data CRM Lead Status, CRM Deal Status,
-  CRM Lead Source, CRM Lost Reason, CRM Territory (a tree), CRM Communication Status,
-  CRM Product; child tables CRM Products, CRM Contacts (a deal's contacts), CRM Status
+  CRM Lead Source, CRM Lost Reason, CRM Communication Status, CRM Product (CRM Territory
+  moved to CONTACTS, owner 20 Nov 2026, `CONTACTS.md` §11.1; Lead and Deal `territory`
+  point at `contacts.CRMTerritory`); child tables CRM Products, CRM Contacts (a deal's contacts), CRM Status
   Change Log
 - **Method paths (8):** `convert_to_deal`, `create_deal`, the deal-contact calls
   (`add_contact`, `remove_contact`, `set_primary_contact`, `get_deal_contacts`), and
@@ -37,7 +38,8 @@ engine a lead or deal calls after owner sync), SLA (the deadline a lead or deal 
 - `docs/FINDINGS.md` entries 7, 8, 9 and 14
 - Tests to read and write again: `test_crm_models.py`, `test_crm_behaviour.py`,
   `test_conversion.py`, `test_lead_endpoints.py`, `test_status_lifecycle.py`,
-  `test_owner_assignment.py`, `test_territory_tree.py`, `test_deal_forecasting.py`,
+  `test_owner_assignment.py`, `test_deal_forecasting.py` (`test_territory_tree.py` is
+  CONTACTS'),
   `test_list_definitions.py`
 - **Tests to port** (REBUILD_PLAN S14): `test_deal_endpoints.py`, `test_permissions.py`
   (the org-hierarchy matrix), the lead and deal cases of `test_hierarchy_access.py`
@@ -62,7 +64,8 @@ engine a lead or deal calls after owner sync), SLA (the deadline a lead or deal 
 - **A deal contact's details are fetched from the linked Contact on every save.**
 - **Conversion** creates the deal, and reuses or creates the contact and organization
   exactly as the old backend does. `create_deal` keeps the modal's contact on the deal.
-- **The territory tree** answers the `descendants of` / `ancestors of` operators.
+- **The territory tree** is CONTACTS' (§11.1); a Lead or Deal filter with `descendants
+  of` / `ancestors of` on `territory` resolves through it.
 - **CRM Product is open to every CRM role**, reviewed and kept as upstream's role table
   grants (REBUILD_PLAN S21).
 
