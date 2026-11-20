@@ -1,10 +1,12 @@
 """Serializers for the accounts resources."""
 
-import secrets
+from rest_framework import serializers
 
-from core.exceptions import ValidationError
+from core.exceptions import PermissionError, ValidationError
+from core.models import validate_email_address
 from core.serializers import DocumentSerializer
 
+from .invitations import INVITABLE_ROLES, new_invitation_key
 from .models import CRMInvitation, CRMSalesHierarchy, User
 
 DOCUMENT_FIELDS = (
@@ -106,8 +108,23 @@ class CRMInvitationSerializer(DocumentSerializer):
     #: (fieldname, label) for upstream's "Value cannot be changed for <label>".
     SET_ONCE_FIELDS = (("email", "Email"), ("role", "Role"))
 
+    def get_fields(self):
+        fields = super().get_fields()
+        if "role" in fields and not fields["role"].read_only:
+            # Upstream's validate_can_invite runs before its Select check, so any text
+            # reaches create's 403; a change is the set-once refusal.
+            fields["role"] = serializers.CharField(
+                required=False, allow_blank=True, allow_null=True
+            )
+        return fields
+
     def create(self, validated_data):
-        validated_data["key"] = secrets.token_hex(20)
+        # Upstream's order: before_insert checks the address, then validate the role
+        # (crm_invitation.py, before_insert and validate_can_invite).
+        validate_email_address(validated_data.get("email") or "")
+        if validated_data.get("role") not in INVITABLE_ROLES:
+            raise PermissionError("Cannot invite for this role")
+        validated_data["key"] = new_invitation_key()
         validated_data["status"] = "Pending"
         validated_data["invited_by"] = self.user
         return super().create(validated_data)
@@ -117,7 +134,7 @@ class CRMInvitationSerializer(DocumentSerializer):
             if fieldname in validated_data and validated_data[fieldname] != getattr(
                 instance, fieldname
             ):
-                raise ValidationError(f"Value cannot be changed for {label}")
+                raise ValidationError(f"Value cannot be changed for <strong>{label}</strong>")
         return super().update(instance, validated_data)
 
     class Meta:

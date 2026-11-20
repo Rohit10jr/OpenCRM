@@ -111,9 +111,10 @@ one sentence on every branch; `auth/update-password/` sets a password by reset k
 revocation trigger besides a save while disabled; `auth/accept-invitation/` redeems by
 key. Reset keys (`accounts/password_reset.py`) are SHA-256 at rest and claimed by one
 conditional update. `CRMInvitation` (`/api/v1/invitations/`) is listed, read and deleted
-by the manager pair only, with `key` sensitive; its object rule refuses `create` and
-`write` for every caller (PE-8, proposed), so `invitations/invite-by-email/` is the only
-way one comes to exist, and the only place a key is minted. Its `save()` queues
+by the manager pair only, with `key` sensitive; System Manager or Administrator also
+create and change one through the resource (PE-8), with `email` and `role` set once.
+The key is minted by `accounts.invitations.new_invitation_key`, called by the resource
+create and by `invitations/invite-by-email/`, never by the model. Its `save()` queues
 `accounts.send_invitation_email` with `transaction.on_commit` on every insert — a test
 that wants the mail at once patches `accounts.models.transaction` (see
 `tests/test_invitations.py`), and one test proves the deferral. System mail goes through

@@ -197,13 +197,18 @@ comparison skips that block.
   resource, every field writable, and a row created there has no key
   (`backend/crm_app/permissions/platform_docs.py:403-407`)
 - **backend_v2:** System Manager or Administrator create and change an invitation
-  through the resource. `email` and `role` are written on create and then set once: a
-  change answers 417 "Value cannot be changed for Email" (or "Role"); the same value
-  sent back is accepted. On create the server sets `key` (as `invite_by_email` mints it),
-  `status` "Pending" and `invited_by` (the caller), and the invitation mail goes out;
-  `status`, `invited_by`, `email_sent_at` and `accepted_at` are never written through the
-  resource. A Sales Manager lists, reads and deletes invitations and invites through
-  `invite_by_email`
+  through the resource. A create checks, in upstream's order, the address (417 "<email>
+  is not a valid Email Address") and then the role (403 "Cannot invite for this role"
+  unless it is Sales User, Sales Manager or System Manager). Upstream's role-profile check
+  on an existing user (`validate_existing_user`) is not carried: there is no role
+  profile here. `email` and `role` are written on create and then set once: a change
+  answers 417 "Value cannot be changed for <strong>Email</strong>" (or Role), upstream's
+  text; the same value sent back is accepted. On create the server sets `key` (the same
+  generator `invite_by_email` uses), `status` "Pending" and `invited_by` (the caller), and
+  the invitation mail goes out; `status`, `invited_by`, `email_sent_at` and `accepted_at`
+  are never written through the resource. A Sales Manager lists, reads and deletes
+  invitations and invites through `invite_by_email`, which also sets `invited_by` to the
+  caller (the old backend leaves it empty there)
 - **Why:** `invite_by_email` holds the role checks; the resource is for an
   administrator's scripts. Upstream sets `key`, `invited_by` and `status` in
   `before_insert` (`crm/fcrm/doctype/crm_invitation/crm_invitation.py`) and refuses a

@@ -318,9 +318,40 @@ def test_email_and_role_are_set_once(
     )
 
     assert response.status_code == 417
-    assert response.json()["message"] == f"Value cannot be changed for {label}"
+    assert response.json()["message"] == f"Value cannot be changed for <strong>{label}</strong>"
     invitation.refresh_from_db()
     assert (invitation.role, invitation.email) == ("Sales User", "held@example.com")
+
+
+@pytest.mark.parametrize("role", ["", None, "Guest", "Administrator"])
+def test_a_create_with_a_role_that_cannot_be_invited_is_refused(administrator, api_as, role):
+    """Upstream's validate_can_invite (A-64 finding 1)."""
+    mail.outbox.clear()
+    response = api_as(administrator).post(
+        "/api/v1/invitations/", {"email": "direct@example.com", "role": role}, format="json"
+    )
+    assert response.status_code == 403
+    assert response.json()["message"] == "Cannot invite for this role"
+    assert not CRMInvitation.objects.filter(email="direct@example.com").exists()
+    assert mail.outbox == []
+
+
+@pytest.mark.parametrize("email", ["Guest", "not-an-email"])
+def test_a_create_with_a_bad_address_is_refused(administrator, api_as, email):
+    """Upstream's before_insert: validate_email_address(email, True) (A-64 finding 2)."""
+    response = api_as(administrator).post(
+        "/api/v1/invitations/", {"email": email, "role": "Sales User"}, format="json"
+    )
+    assert response.status_code == 417
+    assert response.json()["message"] == f"{email} is not a valid Email Address"
+    assert not CRMInvitation.objects.filter(email=email).exists()
+
+
+def test_the_address_is_checked_before_the_role(administrator, api_as):
+    response = api_as(administrator).post(
+        "/api/v1/invitations/", {"email": "Guest", "role": ""}, format="json"
+    )
+    assert response.status_code == 417
 
 
 def test_the_same_email_and_role_sent_back_are_accepted(administrator, api_as):
