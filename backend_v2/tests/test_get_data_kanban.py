@@ -150,6 +150,18 @@ def test_pe22_a_link_target_no_resource_serves_gives_no_columns(auth_api, monkey
     assert call(auth_api, column_field="widget_owner")["kanban_columns"] == []
 
 
+def test_more_kanban_columns_than_a_page_holds_are_taken(auth_api):
+    """PE-23 withdrawn (owner, 20 Nov 2026): no cap on sent columns, as `backend/`."""
+    from core.query import MAX_PAGE_LENGTH
+
+    columns = [{"name": str(index)} for index in range(MAX_PAGE_LENGTH + 1)]
+    response = auth_api.post(
+        URL, {"view": KANBAN, "column_field": "status", "kanban_columns": columns}, format="json"
+    )
+    assert response.status_code == 200, response.content[:300]
+    assert len(response.json()["message"]["data"]) == MAX_PAGE_LENGTH + 1
+
+
 def test_pe12e_a_column_order_that_is_not_a_list_is_417(widgets, auth_api):
     response = auth_api.post(
         URL, {"view": KANBAN, "column_field": "status", "kanban_columns": [{"name": "Open", "order": 5}]}, format="json"
