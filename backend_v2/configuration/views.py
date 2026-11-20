@@ -22,7 +22,9 @@ from configuration import (
     email_accounts,
     exchange_rate,
     field_helpers,
+    fields_layout,
     metadata,
+    quick_filters,
     user_settings,
 )
 from configuration.models import SystemSettings
@@ -30,6 +32,9 @@ from configuration.serializers import (
     DOCUMENT_FIELDS,
     FCRM_SETTINGS_FIELDS,
     CountrySerializer,
+    CRMFieldsLayoutSerializer,
+    CRMFormScriptSerializer,
+    CRMGlobalSettingsSerializer,
     CurrencySerializer,
     EmailAccountSerializer,
     FCRMSettingsSerializer,
@@ -445,3 +450,127 @@ class GroupByFieldsView(_FieldHelperView):
     """`crm.api.doc.get_group_by_fields`."""
 
     helper = staticmethod(field_helpers.get_group_by_fields)
+
+
+def _is_admin_or_manager(user) -> bool:
+    return (
+        user.name == ADMINISTRATOR
+        or user.has_role(ROLE_SYSTEM_MANAGER)
+        or user.has_role(ROLE_SALES_MANAGER)
+    )
+
+
+class CRMFieldsLayoutViewSet(DocumentViewSet):
+    """Everyone reads a layout; Administrator or the manager pair creates, writes and
+    deletes one (old `metadata_docs.py:126-132`). A layout's field lists hold fieldnames
+    (PE-18). Every column readable, filterable and sortable."""
+
+    access = Access.ruled()
+    serializer_class = CRMFieldsLayoutSerializer
+    readable_fields = CRMFieldsLayoutSerializer.Meta.fields
+    filterable_fields = CRMFieldsLayoutSerializer.Meta.fields
+    sortable_fields = CRMFieldsLayoutSerializer.Meta.fields
+    searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        return None
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        if ptype in ("read", "select"):
+            return True
+        return _is_admin_or_manager(user)
+
+    @action(detail=False, methods=("get",), url_path="layout")
+    def layout(self, request):
+        """`get_fields_layout`, for any signed-in caller (configuration/fields_layout.py)."""
+        inputs = build_payload(request)
+        tabs = fields_layout.get_fields_layout(
+            inputs.get("doctype"),
+            inputs.get("type"),
+            user=request.user,
+            parent_doctype=inputs.get("parent_doctype"),
+        )
+        return Response(Envelope(tabs, "message"))
+
+    @action(detail=False, methods=("get",), url_path="sidepanel-sections")
+    def sidepanel_sections(self, request):
+        """`get_sidepanel_sections`, for any signed-in caller."""
+        inputs = build_payload(request)
+        sections = fields_layout.get_sidepanel_sections(inputs.get("doctype"), user=request.user)
+        return Response(Envelope(sections, "message"))
+
+    @action(detail=False, methods=("post",), url_path="save")
+    def save_layout(self, request):
+        """`save_fields_layout`: System Manager or Sales Manager."""
+        inputs = build_payload(request)
+        stored = fields_layout.save_fields_layout(
+            inputs.get("doctype"), inputs.get("type"), inputs.get("layout"), user=request.user
+        )
+        return Response(Envelope(stored, "message"))
+
+
+class CRMFormScriptViewSet(DocumentViewSet):
+    """Everyone lists and reads a form script; System Manager or Administrator creates,
+    changes and deletes one (PE-17). Every column readable, filterable and sortable."""
+
+    access = Access.ruled()
+    serializer_class = CRMFormScriptSerializer
+    readable_fields = CRMFormScriptSerializer.Meta.fields
+    filterable_fields = CRMFormScriptSerializer.Meta.fields
+    sortable_fields = CRMFormScriptSerializer.Meta.fields
+    searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        return None
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        if ptype in ("read", "select"):
+            return True
+        return _is_system_admin(user)
+
+
+class CRMGlobalSettingsViewSet(DocumentViewSet):
+    """Open to every role, as upstream's role table (`crm_global_settings.json`). Every
+    column readable, filterable and sortable."""
+
+    access = Access.open(
+        reason="Holds only a doctype, a type and a JSON list of fieldnames; upstream "
+        "grants all three roles full access, deliberately (test_route_surface.py:77-80)."
+    )
+    serializer_class = CRMGlobalSettingsSerializer
+    readable_fields = CRMGlobalSettingsSerializer.Meta.fields
+    filterable_fields = CRMGlobalSettingsSerializer.Meta.fields
+    sortable_fields = CRMGlobalSettingsSerializer.Meta.fields
+    searchable_fields = ()
+
+
+class QuickFiltersView(BaseAPIView):
+    """`crm.api.doc.get_quick_filters`, for any signed-in caller
+    (configuration/quick_filters.py)."""
+
+    def get(self, request):
+        inputs = self.get_inputs(request)
+        return Response(
+            quick_filters.get_quick_filters(
+                inputs.get("doctype"), user=request.user, cached=inputs.get("cached", True)
+            )
+        )
+
+
+class UpdateQuickFiltersView(BaseAPIView):
+    """`crm.api.doc.update_quick_filters`, for any signed-in caller, as `backend/`;
+    answers `None`."""
+
+    def post(self, request):
+        inputs = self.get_inputs(request)
+        quick_filters.update_quick_filters(
+            parse_json_param(inputs.get("quick_filters"), []),
+            parse_json_param(inputs.get("old_filters"), []),
+            inputs.get("doctype"),
+            user=request.user,
+        )
+        return Response(None)

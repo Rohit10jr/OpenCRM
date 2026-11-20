@@ -311,7 +311,10 @@ comparison skips that block.
 - **Where:** `GET /api/v1/meta/doctype/`, `meta/fields/`, `meta/sort-options/`,
   `meta/filterable-fields/`, `meta/group-by-fields/` (old `getdoctype`, `get_fields`,
   `sort_options`, `get_filterable_fields`, `get_group_by_fields`), for a withheld doctype
-  (Version now; ToDo and Data Import Log when built)
+  (Version now; ToDo and Data Import Log when built); and, with CONFIGURATION milestone 6,
+  the layout calls (`get_fields_layout`, `get_sidepanel_sections`,
+  `save_fields_layout`) and the quick-filter calls (`get_quick_filters`,
+  `update_quick_filters`)
 - **Old backend:** answers any registered doctype (`crm_app/api/form_load.py:177`,
   `crm_app/api/doc.py:90,346`, `frappe_core/metadata.py:117,154`)
 - **backend_v2:** a withheld doctype answers 404 "DocType X not found" on every call that
@@ -319,7 +322,7 @@ comparison skips that block.
 - **Why:** a doctype that is not served has no screen to describe
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
-### PE-15. A child table answers `getdoctype` and the layout calls only
+### PE-15. A child table answers `getdoctype` and the layout read and save only
 
 - **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
   the owner (`temp` A-35, DECISIONS 42, 18 Nov 2026); `getdoctype`'s half built in
@@ -328,8 +331,9 @@ comparison skips that block.
   and later units' rows). Seen in `docs/http/07` 9.2, 9.3
 - **Old backend:** answers every metadata call for a child table
 - **backend_v2:** `getdoctype` answers a child table (`Grid.vue:545`,
-  `stores/meta.js:9-17`), and so will milestone 6's layout calls when they are built;
-  `get_fields`,
+  `stores/meta.js:9-17`), and so will milestone 6's `get_fields_layout` and
+  `save_fields_layout` (the grid row editor); `get_sidepanel_sections`, the quick-filter
+  calls, `get_fields`,
   `sort_options`, `get_filterable_fields` and `get_group_by_fields` answer 404.
   `API_CONTRACT.md:209` says 404 for every child table; the contract is the owner's to
   change and is not edited here
@@ -342,11 +346,62 @@ comparison skips that block.
 - **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
   the owner (`temp` A-35, DECISIONS 43, 18 Nov 2026); built in `f6e6822`, `94d5c15`
 - **Where:** `getdoctype`'s fields, `meta/fields/`, `meta/filterable-fields/`,
-  `meta/group-by-fields/`, `meta/sort-options/`, and later `get_data`'s `fields` block
+  `meta/group-by-fields/`, `meta/sort-options/`; with milestone 6, the layout and
+  quick-filter calls (the Required Fields section and the default layout included); and
+  later `get_data`'s `fields` block
 - **Old backend:** lists every field name
 - **backend_v2:** metadata answers list only the fields the caller may read. The fields
   that remain keep their original `idx`; gaps are allowed
 - **Why:** the answer describes what the caller's own documents contain
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-12c. A broken layout or quick-filter entry is refused or skipped
+
+- **Status:** approved — decided by the supervisor on the owner's behalf (`temp` A-37,
+  A-38, 18 Nov 2026; it only replaces a crash); built in `17241b1`, `90fa788`, `816bcb7`,
+  `20e7989`
+- **Where:** `save_fields_layout` and the CRM Fields Layout resource's create and PATCH;
+  `get_fields_layout` and `get_sidepanel_sections` on a stored layout; `get_quick_filters`
+- **Old backend:** a `layout` that is not valid JSON is stored, and that layout then
+  fails `layout/` and `sidepanel-sections/` for every viewer
+  (`backend/crm_app/api/fields_layout.py:123,220`). A quick-filter `json` entry that is
+  a list or a dict fails the call for every later caller; a number entry is skipped
+  (`backend/crm_app/api/doc.py:173-177`). A stored `json` that is a dict, or a string
+  that parses to one, has its keys read as fieldnames (`:170-177`)
+- **backend_v2:** a layout that is not valid JSON, or is nested too deep to read, is 417
+  "Layout must be valid JSON" on save and on read. A quick-filter entry that is not a
+  string is skipped, and a stored `json` that is not a list (or a string that does not
+  parse to one) counts as no entries
+- **Why:** replaces a crash with an error; the screen only ever stores a list of
+  fieldnames
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-17. CRM Form Script is written by System Manager or Administrator
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-37, A-38, DECISIONS 45, 18 Nov 2026); built in `17241b1`
+- **Where:** `POST`, `PATCH` and `DELETE /api/v1/form-scripts/...` (old
+  `/api/resource/CRM Form Script`)
+- **Old backend:** System Manager, Sales Manager or Administrator create, change and
+  delete a form script (`backend/crm_app/permissions/metadata_docs.py:99-113`)
+- **backend_v2:** System Manager or Administrator create, change and delete a form
+  script; everyone lists and reads one, as before
+- **Why:** upstream's role table gives write to System Manager alone
+- **Recorded by:** CONFIGURATION, 18 Nov 2026
+
+### PE-18. A layout's field lists hold fieldnames
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-37, A-38, DECISIONS 46, 18 Nov 2026); built in `17241b1`,
+  `8c04d80`
+- **Where:** `save_fields_layout`, the CRM Fields Layout resource's create and PATCH,
+  `get_fields_layout`, `get_sidepanel_sections`
+- **Old backend:** an entry of a layout's field list that is not a fieldname is stored,
+  and passed through on read (`backend/crm_app/api/fields_layout.py:156-158,232-234`)
+- **backend_v2:** a layout's field lists hold fieldnames; anything else is refused on
+  save (417 "A layout's field lists hold fieldnames only") and left out on read
+- **Why:** every editor saves fieldnames, and the field's properties come from the
+  doctype's own metadata
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
 ---

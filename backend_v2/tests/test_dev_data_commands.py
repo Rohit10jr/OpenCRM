@@ -80,7 +80,8 @@ def test_seed_creates_the_four_users_with_passwords_and_roles(passwords):
         assert account.check_password(password)
         assert set(account.groups.values_list("name", flat=True)) == roles
     assert "users: 3 created, 4 reset" in output.getvalue()
-    assert "3 row(s) created" in output.getvalue()
+    # With CONFIGURATION's steps: 14 layouts, 6 quick filters, 3 form scripts.
+    assert "26 row(s) created" in output.getvalue()
 
 
 def test_seed_refuses_before_writing_when_a_password_is_missing(
@@ -157,7 +158,8 @@ def test_clear_removes_only_the_three_non_builtin_seed_users(passwords, make_use
     assert set(Group.objects.values_list("name", flat=True)) == role_names
     assert set(SEEDED_ROLES) <= role_names
     assert "users: 3" in output.getvalue()
-    assert "3 row(s) removed" in output.getvalue()
+    # With CONFIGURATION's steps: 14 layouts, 6 quick filters, 3 form scripts.
+    assert "26 row(s) removed" in output.getvalue()
 
 
 def test_demo_is_accepted_and_reports_that_it_adds_nothing_yet(passwords):
@@ -218,7 +220,9 @@ def test_clear_deletes_only_the_accounts_the_seed_created(make_user, passwords):
     pre_existing = make_user("ada@example.com", first_name="Real Ada")
 
     call_command("seed_dev_data", stdout=io.StringIO())
-    recorded = set(DevDataRecord.objects.values_list("object_pk", flat=True))
+    recorded = set(
+        DevDataRecord.objects.filter(step="users").values_list("object_pk", flat=True)
+    )
     assert recorded == {"grace@example.com", "alan@example.com"}
 
     call_command("clear_dev_data", stdout=io.StringIO())
@@ -235,7 +239,7 @@ def test_a_second_seed_keeps_the_first_seeds_record(passwords):
     call_command("seed_dev_data", stdout=io.StringIO())
     call_command("seed_dev_data", stdout=io.StringIO())
 
-    assert DevDataRecord.objects.count() == 3
+    assert DevDataRecord.objects.filter(step="users").count() == 3
     call_command("clear_dev_data", stdout=io.StringIO())
     assert not User.objects.filter(
         pk__in=["ada@example.com", "grace@example.com", "alan@example.com"]

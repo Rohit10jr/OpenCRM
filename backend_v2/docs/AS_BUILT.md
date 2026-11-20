@@ -173,13 +173,33 @@ the old 39-doctype file, read by `configuration/field_meta.py` (with a model fal
 `scripts/generate_field_meta.py`; `tests/test_field_meta.py` compares the two, and CI
 checks out upstream frappe/crm so it runs there. `configuration/metadata.py` says what
 exists: a declared doctype that is served, or a child of a served resource; a withheld
-doctype is 404 (PE-14), a child answers only `meta/doctype/` (PE-15), and every answer
+doctype is 404 (PE-14), a child answers `meta/doctype/` (and, from milestone 6, the
+layout calls) but no other field helper (PE-15), and every answer
 leaves out the fields the caller may not read (PE-16). Routes: `meta/doctype/`
 (`getdoctype`), `meta/fields/`, `meta/sort-options/`, `meta/filterable-fields/`,
 `meta/group-by-fields/`, and `user-settings/` (the caller's own `UserSettings` row, a plain
 model). `configuration/export_fields.py` gives a resource's export its field labels and
 types through `export_field_info_for(model)`. The `.http` generator makes a `meta/` block
 about an unbuilt doctype wait for its unit.
+
+Its sixth milestone (§4.6) adds layouts, form scripts and quick filters. Resources:
+`fields-layouts/` (everyone reads; Administrator or the manager pair writes),
+`form-scripts/` (everyone reads; System Manager or Administrator writes, PE-17) and
+`global-settings/` (open to every role). `configuration/layouts.py` holds the rule both
+the resource and the layout calls apply: a layout is valid JSON (PE-12c) whose field
+lists hold fieldnames (PE-18), refused on save and left out on read.
+`configuration/fields_layout.py` serves `fields-layouts/layout/`,
+`sidepanel-sections/` and `save/` (the default layout walks the metadata file's breaks;
+save is System Manager or Sales Manager by role), and `configuration/quick_filters.py`
+serves `meta/quick-filters/` and `meta/quick-filters/update/`. All five check the doctype
+through `model_or_404`: a child table answers the layout and its save, nothing else
+(PE-15), and fields the caller may not read are left out (PE-16).
+`configuration/form_scripts.py` has `get_form_script`, an internal helper for
+`get_data`, not a route. The default layouts, quick filters and product form scripts
+are `seed_dev_data` steps in `configuration/dev_data.py`, from
+`configuration/data/default_rows.json` (DECISIONS 44, migration or seed, is parked for
+the owner). The `.http` generator also makes a layout call about an unbuilt doctype
+wait, and `WAITS_WITH` names the blocks that read rows an earlier waiting block writes.
 
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
@@ -288,7 +308,9 @@ routed model, or for an unrouted model with an explicit `ROW_RULES` provider.
 ada, grace, and alan from four environment passwords; every seed restores enabled
 state, the exact groups, and the password. The seed records each row it creates in
 `core.models.DevDataRecord` (`core/dev_records.py`), and clear deletes only recorded rows,
-then forgets them: an account that existed before the seed is never deleted. Both commands are atomic and report counts without printing a
+then forgets them: an account that existed before the seed is never deleted.
+CONFIGURATION appends three steps after the users: `fields_layouts`, `quick_filters`
+and `form_scripts` (§4.6 above). Both commands are atomic and report counts without printing a
 password. `--demo` is accepted but deliberately adds nothing until later units append
 their own explicit steps.
 Both commands refuse to run unless `DEV_DATA_ALLOWED` is true. The base settings read it

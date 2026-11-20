@@ -8,7 +8,7 @@ from django.db import IntegrityError, models, transaction
 
 from core.fields import EncryptedCharField
 from core.models import BaseDocument, SingletonDocument
-from core.naming import FieldValue, Hash
+from core.naming import FieldValue, Format, Hash, Prompt
 
 SYSTEM_DATE_FORMATS = (
     "yyyy-mm-dd",
@@ -616,3 +616,82 @@ class UserSettings(models.Model):
     def store(cls, user, doctype: str, data: str) -> None:
         """Upsert on (user, doctype), as `sync_user_settings`' ON CONFLICT clause."""
         cls._default_manager.update_or_create(user=user, doctype=doctype, defaults={"data": data})
+
+
+LAYOUT_TYPES = ("Quick Entry", "Side Panel", "Data Fields", "Grid Row", "Required Fields")
+SCRIPT_VIEWS = ("Form", "List")
+GLOBAL_SETTING_TYPES = ("Quick Filters", "Sidebar Items")
+
+
+class CRMFieldsLayout(BaseDocument):
+    """A form layout: tabs, sections and columns of fieldnames, stored as JSON text, one
+    row per (dt, type) (old `crm_app/models/metadata.py:110-124`; spec section 4.6)."""
+
+    DOCTYPE = "CRM Fields Layout"
+    NAME_STRATEGY = Format("{dt}-{type}")
+
+    dt = models.CharField(max_length=140, db_index=True)
+    type = models.CharField(
+        max_length=40, choices=_choices(LAYOUT_TYPES), blank=True, default=""
+    )
+    layout = models.TextField(blank=True, default="")
+
+    class Meta(BaseDocument.Meta):
+        ordering = ["name"]
+
+    @classmethod
+    def row_for(cls, dt: str, type: str):
+        """The stored layout for a doctype and type, or `None`. Every layout is readable
+        by everyone, so there is no row rule to apply."""
+        return cls._default_manager.filter(dt=dt, type=type).first()
+
+
+class CRMFormScript(BaseDocument):
+    """A client-side script the browser runs on a form or list (old
+    `crm_app/models/metadata.py:127-144`). Stored and served, never evaluated here."""
+
+    DOCTYPE = "CRM Form Script"
+    NAME_STRATEGY = Prompt()
+
+    dt = models.CharField(max_length=140, db_index=True)
+    view = models.CharField(max_length=20, choices=_choices(SCRIPT_VIEWS), default="Form")
+    script = models.TextField(blank=True, default="")
+    enabled = models.BooleanField(default=False)
+    is_standard = models.BooleanField(default=False)
+
+    class Meta(BaseDocument.Meta):
+        ordering = ["name"]
+
+    @classmethod
+    def enabled_scripts(cls, dt: str, view: str = "Form") -> list[str]:
+        """The enabled scripts' text for a doctype and view, in name order, which is the
+        order the browser runs them in (as `backend/`'s default ordering)."""
+        return list(
+            cls._default_manager.filter(dt=dt, view=view, enabled=True)
+            .order_by("name")
+            .values_list("script", flat=True)
+        )
+
+
+class CRMGlobalSettings(BaseDocument):
+    """Site-wide settings per (dt, type), not a singleton: the quick filters of a list
+    are the row for (dt, "Quick Filters") (old `crm_app/models/metadata.py:298-313`)."""
+
+    DOCTYPE = "CRM Global Settings"
+    NAME_STRATEGY = Hash()
+
+    dt = models.CharField(max_length=140, default="DocType", db_index=True)
+    type = models.CharField(max_length=40, choices=_choices(GLOBAL_SETTING_TYPES))
+    json = models.JSONField(null=True, blank=True)
+
+    class Meta(BaseDocument.Meta):
+        ordering = ["name"]
+        indexes = [
+            models.Index(fields=["dt", "type"], name="global_settings_lookup_idx"),
+        ]
+
+    @classmethod
+    def first_row(cls, dt: str, type: str):
+        """The first row by name for a doctype and type, or `None`: several can exist
+        (hash names, no unique constraint). Every row is open to everyone."""
+        return cls._default_manager.filter(dt=dt, type=type).order_by("name").first()

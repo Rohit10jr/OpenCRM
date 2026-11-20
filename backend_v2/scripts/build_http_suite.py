@@ -453,13 +453,28 @@ def _url_key(entry: RouteEntry) -> str | None:
     return match.group(1) if match else None
 
 
+#: Routes answering 404 for a doctype that is not served (configuration/metadata.py).
+#: `save/` checks the caller's roles first, so a refused save (07 6.4) would answer its
+#: 403 now; it waits anyway, and pytest covers that 403 (A-38).
+DOCTYPE_CHECKING_PREFIXES = (
+    "/api/v1/meta/",
+    "/api/v1/fields-layouts/layout/",
+    "/api/v1/fields-layouts/sidepanel-sections/",
+    "/api/v1/fields-layouts/save/",
+)
+
+
 def _waits_for_its_doctype(
     block: HttpBlock, url: str, entry: RouteEntry, routes: RouteMap | None
 ) -> bool:
-    """A field-metadata route (`meta/...`) asked about a doctype whose resource is not
-    built yet waits for that unit: it would answer 404 until then. An unknown doctype is
-    left alone, since its 404 is what the block expects (CONFIGURATION milestone 5)."""
-    if routes is None or not any("/api/v1/meta/" in path for _, path in entry.routes):
+    """A route that checks the doctype it is asked about (the meta/ and layout calls)
+    asked about a doctype whose resource is not built yet waits for that unit: it would
+    answer 404 until then. An unknown doctype is left alone, since its 404 is what the
+    block expects (CONFIGURATION milestones 5 and 6). user-settings/ takes a doctype too
+    but does not check it, so it runs."""
+    if routes is None or not any(
+        path.startswith(DOCTYPE_CHECKING_PREFIXES) for _, path in entry.routes
+    ):
         return False
     doctype = _payload(block, url).get("doctype")
     resource = routes.doctypes.get(unquote(doctype)) if isinstance(doctype, str) else None
@@ -598,6 +613,32 @@ def _wait_after_waiting(blocks: list[HttpBlock]) -> None:
             waiting.setdefault(section, []).append((marker, variables))
 
 
+#: A block that reads rows an earlier block writes, with no variable between them to
+#: show it, waits with that block: (file, block) -> the block it waits with
+#: (CONFIGURATION section 4.6). 8.5 and 8.6 delete the rows 2.5 reads and 6.5 writes, in
+#: another section (0.14 deletes 6.5's row at the start of every run).
+WAITS_WITH = {
+    ("07_views_and_metadata.http", "2.5"): "2.3",
+    ("07_views_and_metadata.http", "6.7"): "6.5",
+    ("07_views_and_metadata.http", "8.5"): "2.5",
+    ("07_views_and_metadata.http", "8.6"): "6.5",
+}
+
+
+def _wait_with_named(blocks: list[HttpBlock], filename: str) -> None:
+    """Each block in `WAITS_WITH` takes the waiting marker of the block it names, if
+    that block waits; in file order, so a chain follows."""
+    markers: dict[str, str] = {}
+    for block in blocks:
+        number = (block.title or "").split(" ", 1)[0]
+        named = WAITS_WITH.get((filename, number))
+        if named in markers and not any(line.startswith("# @waiting ") for line in block.lines):
+            _annotate(block, markers[named])
+        marker = next((line for line in block.lines if line.startswith("# @waiting ")), None)
+        if marker:
+            markers[number] = marker
+
+
 def rewrite_http(text: str, route_map: RouteMap, filename: str = "fixture.http") -> str:
     document = parse_http(text)
     _mark_cleanup_blocks(document.blocks)
@@ -641,6 +682,7 @@ def rewrite_http(text: str, route_map: RouteMap, filename: str = "fixture.http")
                 resource_names.add(name)
 
     _wait_after_waiting(document.blocks)
+    _wait_with_named(document.blocks, filename)
 
     for block in document.blocks:
         block.lines = [

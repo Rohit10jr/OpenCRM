@@ -25,7 +25,7 @@ status is wrong is worse than no status at all.
 |---|---|---|---|---|
 | FOUNDATION | [`FOUNDATION.md`](FOUNDATION.md) | `core`, and the first part of `accounts` | — | **Done** — gate passed 16 Nov 2026 (PRs #64, #65, #66) |
 | ACCOUNTS | [`ACCOUNTS.md`](ACCOUNTS.md) | `accounts` | FOUNDATION, SHARED_ACTIONS | Running — gate passed 18 Nov 2026 (PRs #74, #75, #76, `temp` A-23, A-24, A-26); **Done** once they merge |
-| CONFIGURATION | [`CONFIGURATION.md`](CONFIGURATION.md) | `configuration` | FOUNDATION, SHARED_ACTIONS, ACCOUNTS | Running — spec Ready for milestones 1-5 (`temp` A-27, A-28, A-30, A-33, A-35; later milestones need a spec addendum each); milestones 1 (Desk plumbing), 2 (reference data and boot), 3 (FCRM Settings, exchange rate), 4 (Email Account) and 5 (field metadata) built |
+| CONFIGURATION | [`CONFIGURATION.md`](CONFIGURATION.md) | `configuration` | FOUNDATION, SHARED_ACTIONS, ACCOUNTS | Running — spec Ready for milestones 1-6 (`temp` A-27, A-28, A-30, A-33, A-35, A-37; later milestones need a spec addendum each); milestones 1 (Desk plumbing), 2 (reference data and boot), 3 (FCRM Settings, exchange rate), 4 (Email Account), 5 (field metadata) and 6 (layouts, form scripts, quick filters) built |
 | SHARED_ACTIONS | [`SHARED_ACTIONS.md`](SHARED_ACTIONS.md) | `core` (the mixins in `core/mixins/`, the conditions evaluator) | FOUNDATION | **Done** — gate passed 16 Nov 2026 (PRs #67, #68; #67 landed via #71) |
 | CONTACTS | [`CONTACTS.md`](CONTACTS.md) | `contacts` | ACCOUNTS, SHARED_ACTIONS | Provisional |
 | NOTIFICATIONS | [`NOTIFICATIONS.md`](NOTIFICATIONS.md) | `notifications` | ACCOUNTS | Provisional |

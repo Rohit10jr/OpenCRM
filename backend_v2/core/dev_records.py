@@ -7,14 +7,19 @@ never deleted. A future setup wizard loading demo data on a real site needs exac
 
 from __future__ import annotations
 
+from django.utils import timezone
+
 from core.models import DevDataRecord
 
 
 def record_created(step: str, instance) -> None:
-    DevDataRecord.objects.get_or_create(
+    """Records a row the seed just created. A record left from an earlier seed whose row
+    was deleted and is now created again describes the new row from here on: its
+    `creation` and `step` are refreshed, so `still_seeded` keeps counting it (A-38)."""
+    DevDataRecord.objects.update_or_create(
         model_label=instance._meta.label,
         object_pk=str(instance.pk),
-        defaults={"step": step},
+        defaults={"step": step, "creation": timezone.now()},
     )
 
 

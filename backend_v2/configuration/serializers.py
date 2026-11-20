@@ -2,9 +2,13 @@
 
 from core.serializers import DocumentSerializer
 
+from .layouts import validated_layout_text
 from .models import (
     SYSDEFAULT_FIELDS,
     Country,
+    CRMFieldsLayout,
+    CRMFormScript,
+    CRMGlobalSettings,
     Currency,
     EmailAccount,
     FCRMSettings,
@@ -143,3 +147,25 @@ class EmailAccountSerializer(DocumentSerializer):
             "incoming_port",
             "always_use_account_email_id_as_sender",
         )
+
+
+class CRMFieldsLayoutSerializer(DocumentSerializer):
+    class Meta:
+        model = CRMFieldsLayout
+        fields = (*DOCUMENT_FIELDS, "dt", "type", "layout")
+
+    def validate_layout(self, value):
+        """Valid JSON whose field lists hold fieldnames only (PE-12c, PE-18)."""
+        return validated_layout_text(value)
+
+
+class CRMFormScriptSerializer(DocumentSerializer):
+    class Meta:
+        model = CRMFormScript
+        fields = (*DOCUMENT_FIELDS, "dt", "view", "script", "enabled", "is_standard")
+
+
+class CRMGlobalSettingsSerializer(DocumentSerializer):
+    class Meta:
+        model = CRMGlobalSettings
+        fields = (*DOCUMENT_FIELDS, "dt", "type", "json")
