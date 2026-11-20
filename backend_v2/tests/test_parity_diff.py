@@ -8,6 +8,7 @@ from scripts.parity_diff import (
     IgnoreRule,
     ParityRunner,
     body_difference,
+    load_ignore_rules,
     response_difference,
     selected_files,
 )
@@ -235,6 +236,9 @@ def test_the_lockout_file_runs_each_backend_in_turn(temporary_path: Path, name, 
     def transport(side):
         def request(method, url, **kwargs):
             order.append(side)
+            # each side locks on its third attempt, as block 1.3 expects
+            if order.count(side) == 3:
+                return response(403, '{"message":"locked"}')
             return response(401, '{"message":"no"}')
         return request
 
@@ -312,11 +316,25 @@ def test_a_timestamp_format_change_is_reported():
     ) is None
 
 
-def test_a_timestamp_in_another_key_is_compared_exactly():
+def test_an_iso_value_is_normalised_whatever_its_key():
+    """A-48 group 5 item 3: the value's shape decides, not the key's name."""
     assert body_difference(
         {"due_date": "2026-11-18T10:00:00Z"}, {"due_date": "2026-11-19T10:00:00Z"}, []
-    )
-    assert body_difference({"note": "2026-11-18T10:00:00Z"}, {"note": "2026-11-19T10:00:00Z"}, [])
+    ) is None
+    assert body_difference({"note": "2026-11-18"}, {"note": "2026-11-19"}, []) is None
+    assert body_difference(
+        {"x": "2026-11-18 10:00:00.123+05:30"}, {"x": "2026-11-19 11:01:02.654+05:30"}, []
+    ) is None
+
+
+def test_a_value_that_is_not_iso_is_compared_exactly_even_in_a_timestamp_key():
+    assert body_difference({"creation": "yesterday"}, {"creation": "today"}, [])
+    assert body_difference({"sent_at": "18/11/2026"}, {"sent_at": "19/11/2026"}, [])
+    assert body_difference(
+        {"note": "due 2026-11-18"}, {"note": "due 2026-11-19"}, []
+    ), "a date inside text is not a whole ISO value"
+    assert body_difference({"modified": "2026-11-18"}, {"modified": "not a date"}, [])
+    assert body_difference({"n": "20261118"}, {"n": "20261119"}, [])
 
 
 def test_two_different_ten_digit_numbers_differ():
@@ -344,3 +362,134 @@ def test_rows_named_by_generated_hashes_are_compared_by_position():
     difference = body_difference(old, new, [])
     assert difference == '$[0].role: "Sales User" != "Sales Manager"'
     assert body_difference(old, [{"name": "dd33ee44ff", "role": "Sales User"}], []) is None
+
+
+# --- A-48 group 5: the lockout's expected status, and scoped ignore rules ---------------
+
+
+def test_the_lockout_file_holds_each_side_to_the_expected_status(temporary_path: Path):
+    """Item 5: in 99_lockout both sides answering 401 where the block expects the lock
+    (403) is a difference, though the two answers agree."""
+    lines = []
+    old = temporary_path / "old" / "99_lockout.http"
+    new = temporary_path / "new" / "99_lockout.http"
+    for path, host in ((old, "http://old.test"), (new, "http://new.test")):
+        path.parent.mkdir()
+        path.write_text(LOCKOUT_TEXT.format(host=host), encoding="utf-8")
+
+    def transport(method, url, **kwargs):
+        return response(401, '{"message":"no"}')
+
+    runner = ParityRunner(
+        rules=[], old_request=transport, new_request=transport, output=lines.append
+    )
+    assert not runner.run_pair(old, new)
+    assert any("1.3" in line and "$.status: old 401 not 403" in line for line in lines)
+    assert all("[same]" in line for line in lines if "1.1" in line or "1.2" in line)
+
+
+def test_another_file_is_not_held_to_the_expected_status(temporary_path: Path):
+    old, new = write_pair(temporary_path, LOCKOUT_TEXT.format(host="http://old.test"),
+                          LOCKOUT_TEXT.format(host="http://new.test"))
+
+    def transport(method, url, **kwargs):
+        return response(401, '{"message":"no"}')
+
+    runner = ParityRunner(rules=[], old_request=transport, new_request=transport,
+                          output=lambda line: None)
+    assert runner.run_pair(old, new)
+
+
+REGISTER = """\
+### PE-7. Something approved
+
+- **Status:** approved by the owner (20 Nov 2026); built
+- **Where:** here
+
+### PE-23. Something proposed
+
+- **Status:** proposed — decided by the supervisor
+"""
+
+
+def write_rules(temporary_path: Path, rules) -> tuple[Path, Path]:
+    import json
+
+    rules_path = temporary_path / "ignore.json"
+    rules_path.write_text(json.dumps({"rules": rules}), encoding="utf-8")
+    register = temporary_path / "PARITY_EXCEPTIONS.md"
+    register.write_text(REGISTER, encoding="utf-8")
+    return rules_path, register
+
+
+def test_a_scoped_rule_applies_to_its_file_and_block_only(temporary_path: Path):
+    rules_path, register = write_rules(temporary_path, [{
+        "path": "$.message.name", "comment": "PE-7", "file": "09_users.http",
+        "block": "2.3", "pe": "PE-7",
+    }])
+    rules = load_ignore_rules(rules_path, register)
+    old, new = {"message": {"name": "a"}}, {"message": {"name": "b"}}
+    assert body_difference(old, new, rules, where=("09_users.http", "2.3")) is None
+    assert body_difference(old, new, rules, where=("09_users.http", "2.4"))
+    assert body_difference(old, new, rules, where=("01_auth.http", "2.3"))
+    assert body_difference(old, new, rules)
+
+
+def test_an_unscoped_rule_still_applies_everywhere(temporary_path: Path):
+    rules_path, register = write_rules(
+        temporary_path, [{"path": "$.message.access", "comment": "issued independently"}]
+    )
+    rules = load_ignore_rules(rules_path, register)
+    old, new = {"message": {"access": "a"}}, {"message": {"access": "b"}}
+    assert body_difference(old, new, rules, where=("01_auth.http", "1.1")) is None
+    assert body_difference(old, new, rules) is None
+
+
+@pytest.mark.parametrize("scope", [
+    {"file": "09_users.http"},
+    {"file": "09_users.http", "block": "2.3"},
+    {"pe": "PE-7"},
+    {"file": "09_users.http", "block": "", "pe": "PE-7"},
+])
+def test_a_partial_scope_is_refused(temporary_path: Path, scope):
+    rules_path, register = write_rules(
+        temporary_path, [{"path": "$.x", "comment": "c", **scope}]
+    )
+    with pytest.raises(ValueError, match="file, block and pe go together"):
+        load_ignore_rules(rules_path, register)
+
+
+@pytest.mark.parametrize("pe", ["PE-23", "PE-99"])
+def test_a_rule_needs_an_approved_exception(temporary_path: Path, pe):
+    rules_path, register = write_rules(temporary_path, [{
+        "path": "$.x", "comment": "c", "file": "a.http", "block": "1.1", "pe": pe,
+    }])
+    with pytest.raises(ValueError, match=f"{pe} is not an approved exception"):
+        load_ignore_rules(rules_path, register)
+
+
+def test_the_shipped_rules_load_against_the_real_register():
+    from scripts.parity_diff import DEFAULT_IGNORES
+
+    assert load_ignore_rules(DEFAULT_IGNORES)
+
+
+def test_a_scoped_rule_reaches_the_block_through_the_runner(temporary_path: Path):
+    old_text = "### 2.3 read -> 200\nGET http://old.test/u\n"
+    new_text = "### 2.3 read -> 200\nGET http://new.test/u\n"
+    (temporary_path / "old").mkdir()
+    (temporary_path / "new").mkdir()
+    old = temporary_path / "old" / "09_users.http"
+    new = temporary_path / "new" / "09_users.http"
+    old.write_text(old_text, encoding="utf-8")
+    new.write_text(new_text, encoding="utf-8")
+
+    def transport(body):
+        return lambda method, url, **kwargs: response(200, body)
+
+    rule = IgnoreRule("$.message.name", "PE-7", "09_users.http", "2.3", "PE-7")
+    runner = ParityRunner(
+        rules=[rule], old_request=transport('{"message":{"name":"a"}}'),
+        new_request=transport('{"message":{"name":"b"}}'), output=lambda line: None,
+    )
+    assert runner.run_pair(old, new)

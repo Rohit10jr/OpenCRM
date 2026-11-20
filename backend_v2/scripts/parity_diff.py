@@ -26,27 +26,72 @@ NUMBER_RE = re.compile(r"^(\d+(?:\.\d+)+[a-z]?)\b")
 CONTRACT_HEADERS = ("Allow", "WWW-Authenticate", "Retry-After")
 
 
+DEFAULT_REGISTER = Path(__file__).resolve().parents[1] / "docs" / "PARITY_EXCEPTIONS.md"
+PE_HEADING_RE = re.compile(r"^### (PE-\d+[a-z]?)\.", re.MULTILINE)
+
+
 @dataclass(frozen=True)
 class IgnoreRule:
+    """A path whose value may differ. A rule for an approved parity exception names the
+    `.http` file, the block number and the PE, and applies to that block only; a rule
+    without them (a value each server issues independently, such as a token) applies
+    everywhere."""
+
     path: str
     comment: str
+    file: str | None = None
+    block: str | None = None
+    pe: str | None = None
+
+    def applies_to(self, where: tuple[str, str | None] | None) -> bool:
+        return self.file is None or where == (self.file, self.block)
 
 
-def load_ignore_rules(path: Path) -> list[IgnoreRule]:
+def approved_exceptions(register: Path) -> set[str]:
+    """The PE numbers whose entry's status starts with "approved"."""
+    text = register.read_text(encoding="utf-8")
+    headings = list(PE_HEADING_RE.finditer(text))
+    approved = set()
+    for index, heading in enumerate(headings):
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(text)
+        status = re.search(r"^- \*\*Status:\*\*\s*(\S+)", text[heading.end():end], re.MULTILINE)
+        if status and status.group(1).startswith("approved"):
+            approved.add(heading.group(1))
+    return approved
+
+
+def load_ignore_rules(path: Path, register: Path = DEFAULT_REGISTER) -> list[IgnoreRule]:
     document = json.loads(path.read_text(encoding="utf-8"))
     rules = document.get("rules")
     if not isinstance(rules, list):
         raise ValueError("parity ignore file must contain a rules list")
     parsed = []
+    approved = None
     for rule in rules:
         if not isinstance(rule, dict) or not isinstance(rule.get("path"), str) or not rule.get("comment"):
             raise ValueError("each parity ignore rule needs a path and comment")
-        parsed.append(IgnoreRule(rule["path"], rule["comment"]))
+        scope = [rule.get(key) for key in ("file", "block", "pe")]
+        if any(scope) and not all(isinstance(value, str) and value for value in scope):
+            raise ValueError(
+                f"parity ignore rule {rule['path']}: file, block and pe go together"
+            )
+        if rule.get("pe"):
+            if approved is None:
+                approved = approved_exceptions(register)
+            if rule["pe"] not in approved:
+                raise ValueError(
+                    f"parity ignore rule {rule['path']}: {rule['pe']} is not an approved exception"
+                )
+        parsed.append(IgnoreRule(rule["path"], rule["comment"], *scope))
     return parsed
 
 
-def ignored(path: str, rules: list[IgnoreRule]) -> bool:
+def ignored(
+    path: str, rules: list[IgnoreRule], where: tuple[str, str | None] | None = None
+) -> bool:
     for rule in rules:
+        if not rule.applies_to(where):
+            continue
         if rule.path == path:
             return True
         if rule.path.startswith("$..") and path.rsplit(".", 1)[-1] == rule.path[3:]:
@@ -58,15 +103,18 @@ def ignored(path: str, rules: list[IgnoreRule]) -> bool:
 #: at least one of them a letter (so a ten-digit phone number is never one). Generated
 #: names legitimately differ between two servers (API_CONTRACT.md), also inside a message.
 GENERATED_NAME_RE = re.compile(r"(?<![0-9a-z])(?=[0-9]*[a-f])[0-9a-f]{10}(?![0-9a-z])")
-#: Keys whose values are timestamps. API_CONTRACT.md lists timestamps beside generated
-#: names as legitimately differing; only their digits are blanked, so the format
-#: (separator, precision, zone) is still compared, and no other key is touched.
-TIMESTAMP_KEYS = ("creation", "modified")
-TIMESTAMP_SUFFIXES = ("_at", "_on")
+#: A whole value that is an ISO date or datetime. API_CONTRACT.md lists timestamps beside
+#: generated names as legitimately differing; only their digits are blanked, so the
+#: format (separator, precision, zone) is still compared. Any key qualifies: the shape of
+#: the value decides, not its key's name.
+ISO_TIMESTAMP_RE = re.compile(
+    r"\d{4}-\d{2}-\d{2}"
+    r"(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}(?::?\d{2})?)?)?"
+)
 
 
-def is_timestamp_key(key: str | None) -> bool:
-    return bool(key) and (key in TIMESTAMP_KEYS or key.endswith(TIMESTAMP_SUFFIXES))
+def is_iso_timestamp(value: str) -> bool:
+    return ISO_TIMESTAMP_RE.fullmatch(value) is not None
 
 
 class _Comparison:
@@ -74,8 +122,9 @@ class _Comparison:
     which must be one-to-one across the whole response (the same old name always pairs
     with the same new name, and two old names never share one)."""
 
-    def __init__(self, rules: list[IgnoreRule]):
+    def __init__(self, rules: list[IgnoreRule], where: tuple[str, str | None] | None = None):
         self.rules = rules
+        self.where = where
         self.differences: list[str] = []
         self.old_to_new: dict[str, str] = {}
         self.new_to_old: dict[str, str] = {}
@@ -88,10 +137,10 @@ class _Comparison:
             return False
         return self.new_to_old.setdefault(new_token, old_token) == old_token
 
-    def strings_match(self, left: str, right: str, key: str | None) -> bool:
+    def strings_match(self, left: str, right: str) -> bool:
         if left == right:
             return True
-        if is_timestamp_key(key):
+        if is_iso_timestamp(left) and is_iso_timestamp(right):
             return re.sub(r"\d", "0", left) == re.sub(r"\d", "0", right)
         old_tokens = GENERATED_NAME_RE.findall(left)
         new_tokens = GENERATED_NAME_RE.findall(right)
@@ -103,11 +152,11 @@ class _Comparison:
             return False
         return all(self._pair(old, new) for old, new in zip(old_tokens, new_tokens))
 
-    def compare(self, left, right, path: str = "$", key: str | None = None) -> None:
+    def compare(self, left, right, path: str = "$") -> None:
         if type(left) is not type(right):
             self.add(f"{path}: type {type(left).__name__} != {type(right).__name__}")
             return
-        if ignored(path, self.rules):
+        if ignored(path, self.rules, self.where):
             return
         if isinstance(left, dict):
             for child_key in sorted(left.keys() | right.keys()):
@@ -117,12 +166,12 @@ class _Comparison:
                 elif child_key not in right:
                     self.add(f"{child}: missing from new response")
                 else:
-                    self.compare(left[child_key], right[child_key], child, child_key)
+                    self.compare(left[child_key], right[child_key], child)
             return
         if isinstance(left, list):
             self._compare_lists(left, right, path)
             return
-        if isinstance(left, str) and self.strings_match(left, right, key):
+        if isinstance(left, str) and self.strings_match(left, right):
             return
         if left != right:
             old_value = json.dumps(left, ensure_ascii=False)[:80]
@@ -168,20 +217,32 @@ class _Comparison:
             self.compare(old_value, new_value, f"{path}[{index}]")
 
 
-def body_differences(left, right, rules: list[IgnoreRule]) -> list[str]:
-    comparison = _Comparison(rules)
+def body_differences(
+    left, right, rules: list[IgnoreRule], where: tuple[str, str | None] | None = None
+) -> list[str]:
+    comparison = _Comparison(rules, where)
     comparison.compare(left, right)
     return comparison.differences
 
 
-def body_difference(left, right, rules: list[IgnoreRule], path: str = "$") -> str | None:
-    comparison = _Comparison(rules)
+def body_difference(
+    left,
+    right,
+    rules: list[IgnoreRule],
+    path: str = "$",
+    where: tuple[str, str | None] | None = None,
+) -> str | None:
+    comparison = _Comparison(rules, where)
     comparison.compare(left, right, path)
     return "; ".join(comparison.differences) or None
 
 
 def response_difference(
-    old_response, new_response, rules: list[IgnoreRule], resource_envelope: bool = False
+    old_response,
+    new_response,
+    rules: list[IgnoreRule],
+    resource_envelope: bool = False,
+    where: tuple[str, str | None] | None = None,
 ) -> str | None:
     """With `resource_envelope` (a block marked `# @resource-envelope`), the old
     `/api/resource/` answer — `{"data": ...}` and 201 on create — is compared with the
@@ -222,7 +283,7 @@ def response_difference(
             old_body = {"message": old_body["data"], **{
                 key: value for key, value in old_body.items() if key != "data"
             }}
-        differences.extend(body_differences(old_body, new_body, rules))
+        differences.extend(body_differences(old_body, new_body, rules, where))
     return "; ".join(differences) or None
 
 
@@ -318,7 +379,13 @@ class ParityRunner:
             plan, old_results, new_results
         ):
             envelope = marked(new_block, "# @resource-envelope")
-            self._compare(old_block, old_result, new_result, counts, envelope)
+            # In 99_lockout both sides could agree and still not lock: each side's status
+            # is also held to the block's expected one.
+            expected = new_block.expected_statuses if sequential else set()
+            self._compare(
+                old_block, old_result, new_result, counts, envelope, expected,
+                (new_path.name, block_key(new_block)),
+            )
         self.output(
             f"  {counts['same']} same, {counts['differs']} differs, {counts['skipped']} skipped"
         )
@@ -333,7 +400,14 @@ class ParityRunner:
         return results
 
     def _compare(
-        self, old_block: HttpBlock, old_result, new_result, counts: dict, envelope: bool = False
+        self,
+        old_block: HttpBlock,
+        old_result,
+        new_result,
+        counts: dict,
+        envelope: bool = False,
+        expected: set[int] | frozenset[int] = frozenset(),
+        where: tuple[str, str | None] | None = None,
     ) -> None:
         if old_result and new_result and old_result.outcome == new_result.outcome == "skipped":
             counts["skipped"] += 1
@@ -350,8 +424,13 @@ class ParityRunner:
         if old_result is None or new_result is None or old_result.response is None or new_result.response is None:
             difference = "$: response missing"
         else:
-            difference = response_difference(
-                old_result.response, new_result.response, self.rules, envelope
+            unexpected = [
+                f"$.status: {side} {result.response.status_code} not {'|'.join(map(str, sorted(expected)))}"
+                for side, result in (("old", old_result), ("new", new_result))
+                if expected and result.response.status_code not in expected
+            ]
+            difference = "; ".join(unexpected) or response_difference(
+                old_result.response, new_result.response, self.rules, envelope, where
             )
         outcome = "differs" if difference else "same"
         counts[outcome] += 1
