@@ -201,6 +201,21 @@ comparison skips that block.
   (`InviteUserPage.vue:175-205`, `:86`), and `invite_by_email` holds the role checks
 - **Recorded by:** ACCOUNTS, 18 Nov 2026
 
+### PE-9. The User document's `assignmentruleuser_set` is always empty
+
+- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
+  the owner (`temp` A-26, DECISIONS 29, 18 Nov 2026); built as described
+- **Where:** `GET` and `PATCH /api/v1/users/<name>/`, the `assignmentruleuser_set` key.
+  Seen in `docs/http/09_users_and_invitations.http` 2.3-2.6, 6.2, 6.4 and
+  `00_walkthrough.http` 4.9
+- **Old backend:** emits the rows and accepts them (`backend/frappe_core/children.py:38-51`,
+  `backend/frappe_core/serializers.py:76-77,188-192`)
+- **backend_v2:** the User document's `assignmentruleuser_set` is always empty and is not
+  written through User; ASSIGNMENTS decides the read side
+- **Why:** Assignment Rule is ASSIGNMENTS' model, not yet built; no `frontend/src` file
+  reads the key
+- **Recorded by:** ACCOUNTS, 18 Nov 2026
+
 ---
 
 ## Candidates — not exceptions yet

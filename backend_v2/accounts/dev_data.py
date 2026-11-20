@@ -6,6 +6,8 @@ from django.contrib.auth.models import Group
 from django.core.management.base import CommandError
 from django.utils.translation import gettext as _
 
+from core import dev_records
+
 from .models import User
 from .roles import (
     ADMINISTRATOR,
@@ -13,6 +15,8 @@ from .roles import (
     ROLE_SALES_USER,
     ROLE_SYSTEM_MANAGER,
 )
+
+STEP = "users"
 
 PASSWORD_VARIABLES = (
     "ADMIN_PWD",
@@ -65,7 +69,8 @@ def seed_users(user: User, force: bool = False) -> int:
     )
     for name, first_name, roles, password_variable in desired_users:
         account = User.objects.filter(name=name).first()
-        if account is None:
+        is_new = account is None
+        if is_new:
             account = User(
                 name=name,
                 email=name,
@@ -79,15 +84,22 @@ def seed_users(user: User, force: bool = False) -> int:
         account.set_password(passwords[password_variable])
         account.save()
         account.groups.set([groups[role] for role in roles])
+        if is_new:
+            dev_records.record_created(STEP, account)
 
     return created
 
 
 def clear_users(user: User, force: bool = False) -> int:
-    """Remove only the three non-built-in accounts owned by this seed step."""
+    """Remove only the suite accounts this step created and recorded; an account that
+    existed before the seed is never deleted (DECISIONS 9). Built-ins never qualify."""
     del user, force
     names = [name for name, _first_name, _role, _variable in SEEDED_USERS]
-    existing = User.objects.filter(name__in=names)
-    removed = existing.count()
-    existing.delete()
+    recorded = set(dev_records.recorded_pks(STEP, User)) & set(names)
+    seeded = dev_records.still_seeded(
+        STEP, User, User.objects.filter(name__in=recorded)
+    )
+    removed = len(seeded)
+    User.objects.filter(pk__in=[account.pk for account in seeded]).delete()
+    dev_records.forget(STEP, User)
     return removed

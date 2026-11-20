@@ -120,10 +120,9 @@ that wants the mail at once patches `accounts.models.transaction` (see
 `core/mail.py`: today only the settings-configured account (`EMAIL_HOST`), which
 CONFIGURATION extends with saved Email Accounts tried first. `accounts.tasks.BEAT_SCHEDULE`
 runs `expire_invitations` at 00:00 and `flush_expired_tokens` at 01:00. No beat entry or
-task names a queue, and the settings set no `CELERY_TASK_DEFAULT_QUEUE`, so every
-`backend_v2` task lands on Celery's own default queue, `celery`; the old backend routes its
-entries to a queue named `default` (`backend/config/settings/base.py:317`,
-`config/celery.py:28`). A worker must consume `celery` until that is decided.
+task names a queue; `CELERY_TASK_DEFAULT_QUEUE = "default"` in the base settings puts
+every `backend_v2` task on the queue the old backend uses
+(`backend/config/settings/base.py:317`), so a worker started the old way receives them.
 
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
@@ -230,12 +229,14 @@ routed model, or for an unrouted model with an explicit `ROW_RULES` provider.
 `seed_dev_data` and `clear_dev_data` run the one explicit step list in
 `core.dev_data.STEPS`. FOUNDATION's account step creates or restores Administrator,
 ada, grace, and alan from four environment passwords; every seed restores enabled
-state, the exact groups, and the password, while clear removes only the three seeded
-non-built-in users. Both commands are atomic and report counts without printing a
+state, the exact groups, and the password. The seed records each row it creates in
+`core.models.DevDataRecord` (`core/dev_records.py`), and clear deletes only recorded rows,
+then forgets them: an account that existed before the seed is never deleted. Both commands are atomic and report counts without printing a
 password. `--demo` is accepted but deliberately adds nothing until later units append
 their own explicit steps.
-Both commands refuse to run unless `DEV_DATA_ALLOWED` is true. It defaults off in base
-settings and is enabled only by the local-development and test settings modules.
+Both commands refuse to run unless `DEV_DATA_ALLOWED` is true. The base settings read it
+from the environment, default off: it belongs in the `.env` of the database it names
+(DECISIONS 9). Only the test settings turn it on, for the scratch test database.
 
 `scripts/build_http_suite.py` parses all 15 old `docs/http/*.http` files and deterministically
 regenerates their REST copies in `backend_v2/http/` from `PORT_MAP.md`. It keeps waiting
@@ -806,19 +807,41 @@ on port 8000, keep the new server on 8001, and then run from `backend_v2/`:
   --old http://localhost:8000 --new http://localhost:8001
 ```
 
-The comparison reports `same`, `differs` with the first short JSON path difference, or
-`skipped` for waiting, negative, and PE-3 blocks. Each server has its own response-label
-and variable state, so one server's login token is never sent to the other. Rules in
-`scripts/parity_ignore.json` ignore only values: the path must exist on both sides and
-its type must match. Today's runnable FOUNDATION blocks need exactly two rules,
-`$.message.access` and `$.message.refresh`; timestamps and generated record names are
-not yet returned by a runnable block, so their paths must be added with comments only
-when the owning units make those blocks runnable. Error `exception` and
-`_server_messages` values are never ignored.
+The comparison reports `same`, `differs` with **every** differing path, or `skipped` for
+waiting, negative, and PE-3 blocks. Each server has its own response-label and variable
+state, so one server's login token is never sent to the other. How it compares (ACCOUNTS,
+A-25 and A-26):
 
-`99_lockout.http` locks this machine out for 60 seconds. Run it by itself and last. The
-diff refuses to combine it with other files unless `--include-lockout` is explicit; with
-that flag it reorders the lockout file to the end. Neither script starts or stops a
+- **Status**, then the headers, then the body; a header difference never hides the body.
+  `WWW-Authenticate` and `Retry-After` are compared exactly. `Allow` is compared only on a
+  405, and only for presence: the method sets differ by design (S7, PE-1).
+- **Resource envelope:** a block marked `# @resource-envelope` compares the old
+  `{"data": ...}` (201 on create) with the REST `{"message": ...}` (200).
+- **Rows by name:** a list whose rows all carry `name` is compared row by row, matched by
+  name, with names only one side holds and a change of order reported separately.
+- **Timestamps:** only under `creation`, `modified` and keys ending `_at` or `_on`, and
+  there only the digits are blanked, so the format (separator, precision, zone) still
+  counts. A timestamp anywhere else is compared exactly.
+- **Generated names:** a ten-character lowercase hex token with at least one letter a-f is
+  normalised, and old and new tokens must pair one-to-one across the response. A wrong
+  link to another generated record is therefore still seen when the pairing breaks, but
+  not when it is consistent — the limit of the rule.
+- Rules in `scripts/parity_ignore.json` ignore only values: the path must exist on both
+  sides and its type must match. Two rules today, `$.message.access` and
+  `$.message.refresh`. Error `exception` and `_server_messages` values are never ignored.
+
+`99_lockout.http` locks this machine out for 60 seconds. Run it by itself and last; it
+runs against each backend in turn, not interleaved, so the failed logins land inside one
+server's window. The diff refuses to combine it with other files unless
+`--include-lockout` is explicit; with that flag it reorders the lockout file to the end.
+
+`scripts/walk_auth_flow.py` walks onboarding end to end (invite-by-email, the emailed
+accept link, set password, log in, forgot password) on its own test database;
+`tests/test_walk_auth_flow.py` runs it under pytest. `kombu` is pinned to 5.6.2, the old
+backend's version, because 5.7 refuses the pinned redis-py 5.3.1 on a real broker. The
+Celery settings (queue `default`, late acknowledgement, prefetch one, JSON, results kept a
+day) are the old backend's. The one-off script that reset the old `opencrm` database's
+suite roles (A-25) ran once from the main checkout and is not in the tree. Neither script starts or stops a
 server, and both report an unreachable configured server without a traceback.
 
 ### Traps — read before starting a server or running tests

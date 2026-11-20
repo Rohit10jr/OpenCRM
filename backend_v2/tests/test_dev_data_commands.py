@@ -166,3 +166,93 @@ def test_demo_is_accepted_and_reports_that_it_adds_nothing_yet(passwords):
     call_command("seed_dev_data", demo=True, stdout=output)
 
     assert "Demo records are not available yet." in output.getvalue()
+
+
+# --- ACCOUNTS milestone 3: the flag comes from the database's .env (DECISIONS 9) ----------
+
+FLAG_PROBE = (
+    "import os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.local'); "
+    "import django; from django.conf import settings; "
+    "print(f'FLAG:{settings.DEV_DATA_ALLOWED}')"
+)
+
+
+@pytest.mark.parametrize("value,expected", [("False", "FLAG:False"), ("True", "FLAG:True")])
+def test_the_local_settings_take_the_flag_from_the_environment(value, expected):
+    """No settings module turns it on any more: the environment (the database's .env)
+    decides. The explicit value overrides whatever the developer's .env says."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    env = dict(
+        os.environ,
+        DEV_DATA_ALLOWED=value,
+        DJANGO_SETTINGS_MODULE="config.settings.local",
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", FLAG_PROBE],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert expected in result.stdout.splitlines()
+
+
+def test_the_test_settings_keep_it_on_for_the_scratch_database():
+    from django.conf import settings
+
+    assert settings.DEV_DATA_ALLOWED is True
+
+
+# --- ACCOUNTS milestone 3: clear deletes only what the seed created (DECISIONS 9) -------
+
+
+def test_clear_deletes_only_the_accounts_the_seed_created(make_user, passwords):
+    from core.models import DevDataRecord
+
+    pre_existing = make_user("ada@example.com", first_name="Real Ada")
+
+    call_command("seed_dev_data", stdout=io.StringIO())
+    recorded = set(DevDataRecord.objects.values_list("object_pk", flat=True))
+    assert recorded == {"grace@example.com", "alan@example.com"}
+
+    call_command("clear_dev_data", stdout=io.StringIO())
+
+    assert User.objects.filter(pk=pre_existing.pk).exists(), "never created by the seed"
+    assert not User.objects.filter(pk__in=["grace@example.com", "alan@example.com"]).exists()
+    assert User.objects.filter(pk="Administrator").exists()
+    assert not DevDataRecord.objects.exists()
+
+
+def test_a_second_seed_keeps_the_first_seeds_record(passwords):
+    from core.models import DevDataRecord
+
+    call_command("seed_dev_data", stdout=io.StringIO())
+    call_command("seed_dev_data", stdout=io.StringIO())
+
+    assert DevDataRecord.objects.count() == 3
+    call_command("clear_dev_data", stdout=io.StringIO())
+    assert not User.objects.filter(
+        pk__in=["ada@example.com", "grace@example.com", "alan@example.com"]
+    ).exists()
+
+
+def test_a_stale_record_never_deletes_a_hand_made_row(make_user, passwords):
+    """A-26: the seeded grace is deleted by hand and a new one made under the same name;
+    clear leaves the new one and forgets the record."""
+    from core.models import DevDataRecord
+
+    call_command("seed_dev_data", stdout=io.StringIO())
+    User.objects.filter(pk="grace@example.com").delete()
+    make_user("grace@example.com", first_name="Real Grace")
+
+    call_command("clear_dev_data", stdout=io.StringIO())
+
+    assert User.objects.filter(pk="grace@example.com", first_name="Real Grace").exists()
+    assert not User.objects.filter(pk__in=["ada@example.com", "alan@example.com"]).exists()
+    assert not DevDataRecord.objects.exists()

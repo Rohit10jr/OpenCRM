@@ -66,16 +66,23 @@ class UserSerializer(DocumentSerializer):
             fields["name"].read_only = True
         return fields
 
+    #: Child-table keys the old User document always carries (its serializer emits every
+    #: reverse FK it discovers, backend/frappe_core/children.py:38-51), empty here until
+    #: their units build them: User Email (CONFIGURATION) and Assignment Rule User
+    #: (ASSIGNMENTS). Never written through User.
+    EMPTY_CHILD_KEYS = ("user_emails", "assignmentruleuser_set")
+
     def to_internal_value(self, data):
-        if isinstance(data, dict) and "user_emails" in data:
-            # User Email arrives with CONFIGURATION (specs/ACCOUNTS.md section 2).
-            data = {key: value for key, value in data.items() if key != "user_emails"}
+        if isinstance(data, dict):
+            data = {
+                key: value for key, value in data.items() if key not in self.EMPTY_CHILD_KEYS
+            }
         return super().to_internal_value(data)
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        # The old serializer always emits the child table, empty for a user with no rows.
-        data["user_emails"] = []
+        for key in self.EMPTY_CHILD_KEYS:
+            data[key] = []
         return data
 
 

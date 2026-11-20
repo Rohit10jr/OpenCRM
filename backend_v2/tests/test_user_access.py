@@ -243,3 +243,21 @@ def test_a_create_differing_only_by_case_is_a_duplicate_not_an_update(
     assert response.status_code == 409
     alice.refresh_from_db()
     assert alice.first_name == "Alice"
+
+
+def test_the_user_document_carries_assignmentruleuser_set_empty(auth_api, alice):
+    """The old User document carries it (A-25); empty until ASSIGNMENTS."""
+    body = auth_api.get(f"{USERS}{alice.name}/").json()["message"]
+    assert body["assignmentruleuser_set"] == []
+
+
+def test_assignmentruleuser_set_is_never_written_through_user(alice, api_as):
+    response = api_as(alice).patch(
+        f"{USERS}{alice.name}/",
+        {"assignmentruleuser_set": [{"parent": "x"}], "first_name": "Al"},
+        format="json",
+    )
+    assert response.status_code == 200
+    assert response.json()["message"]["assignmentruleuser_set"] == []
+    alice.refresh_from_db()
+    assert alice.first_name == "Al"

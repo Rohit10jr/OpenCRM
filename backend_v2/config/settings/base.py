@@ -14,7 +14,9 @@ environ.Env.read_env(str(ENV_FILE))
 SECRET_KEY = env("DJANGO_SECRET_KEY", default="django-insecure-fallback-for-tests-only")
 FIELD_ENCRYPTION_KEY = env("FIELD_ENCRYPTION_KEY", default="")
 DEBUG = env.bool("DJANGO_DEBUG", default=False)
-DEV_DATA_ALLOWED = False
+# The flag belongs to the database it names (owner, DECISIONS 9): set it in that database's
+# .env, never in a settings file. Off unless the environment turns it on.
+DEV_DATA_ALLOWED = env.bool("DEV_DATA_ALLOWED", default=False)
 ALLOWED_HOSTS = env.list(
     "DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"]
 )
@@ -187,6 +189,17 @@ CELERY_RESULT_BACKEND = env(
 )
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_ENABLE_UTC = True
+# As the old backend has them (backend/config/settings/base.py:316-326). The queue its
+# tasks and beat entries use, so a worker started the old way receives these too; late
+# acknowledgement with a prefetch of one, so a task a dying worker held is redelivered;
+# JSON only; results expire after a day.
+CELERY_TASK_DEFAULT_QUEUE = "default"
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_RESULT_EXPIRES = 60 * 60 * 24
 
 CHANNEL_LAYERS = {
     "default": {

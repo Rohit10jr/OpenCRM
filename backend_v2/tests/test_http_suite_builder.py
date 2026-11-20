@@ -155,6 +155,11 @@ POST {{host}}/api/method/login
     assert "GET {{host}}/api/v1/auth/token/refresh/" in result
     assert "GET {{host}}/api/v1/auth/logout/" in result
     assert result.count("-> 405") == 4
+    # A-25: the added case on a route that is not guest carries the bearer token, so it
+    # reaches the method check (405) instead of failing authentication (401).
+    blocks = {(block.title or "").split(" ")[0]: block for block in parse_http(result).blocks}
+    assert "Authorization: Bearer {{token}}" in blocks["1.12a"].lines
+    assert not any(line.startswith("Authorization") for line in blocks["2.11a"].lines)
 
 
 def test_pe3_filter_get_blocks_are_comments_not_requests():
@@ -381,3 +386,28 @@ Content-Type: application/json
     assert block.request == ("POST", "{{host}}/api/v1/users/search/")
     assert block.headers_and_body()[1] == '{"txt": "ada"}'
     assert "# @waiting" not in result
+
+
+def test_the_unknown_path_case_expects_404_not_405():
+    """PE-1: an unknown URL is 404 DoesNotExistError; only a known route refuses a verb
+    with 405 (A-25, 00_walkthrough 1.4)."""
+    route_map = parse_route_map(
+        ROUTE_MAP_TEXT
+        + """
+## Routes that are not a dotted path or a doctype
+| Route | New app | Unit | Status |
+|---|---|---|---|
+| `/api/method/crm.api.no_such_thing` → `/api/v1/no-such-thing/` — negative 404 case; neither route is served | config | FOUNDATION | built |
+"""
+    )
+    source = """\
+### 1.4 A method that does not exist -> 405, exc_type DoesNotExistError
+# @expect $.exc_type == DoesNotExistError
+GET http://localhost:8000/api/method/crm.api.no_such_thing
+"""
+    result = rewrite_http(source, route_map)
+    block = next(block for block in parse_http(result).blocks if block.request)
+    assert block.request == ("GET", "{{host}}/api/v1/no-such-thing/")
+    assert "-> 404" in block.title
+    assert "# @expect $.exc_type == DoesNotExistError" in block.lines
+    assert "# @expect $.exc_type == MethodNotAllowed" not in block.lines

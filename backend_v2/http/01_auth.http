@@ -108,6 +108,7 @@ GET {{host}}/api/v1/auth/login/
 # @negative
 # @expect $.exc_type == MethodNotAllowed
 POST {{host}}/api/v1/auth/me/
+Authorization: Bearer {{token}}
 ### 1.13 the Frappe legacy `cmd` parameter is ignored, not an error -> 200
 POST {{host}}/api/v1/auth/login/
 Content-Type: application/json

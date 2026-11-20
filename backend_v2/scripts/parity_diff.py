@@ -54,56 +54,176 @@ def ignored(path: str, rules: list[IgnoreRule]) -> bool:
     return False
 
 
-def body_difference(left, right, rules: list[IgnoreRule], path: str = "$") -> str | None:
-    if type(left) is not type(right):
-        return f"{path}: type {type(left).__name__} != {type(right).__name__}"
-    if ignored(path, rules):
-        return None
-    if isinstance(left, dict):
-        for key in sorted(left.keys() | right.keys()):
-            child = f"{path}.{key}"
-            if key not in left:
-                return f"{child}: missing from old response"
-            if key not in right:
-                return f"{child}: missing from new response"
-            if difference := body_difference(left[key], right[key], rules, child):
-                return difference
-        return None
-    if isinstance(left, list):
+#: A `Hash(10)` document name, as both backends generate it: ten lowercase hex characters,
+#: at least one of them a letter (so a ten-digit phone number is never one). Generated
+#: names legitimately differ between two servers (API_CONTRACT.md), also inside a message.
+GENERATED_NAME_RE = re.compile(r"(?<![0-9a-z])(?=[0-9]*[a-f])[0-9a-f]{10}(?![0-9a-z])")
+#: Keys whose values are timestamps. API_CONTRACT.md lists timestamps beside generated
+#: names as legitimately differing; only their digits are blanked, so the format
+#: (separator, precision, zone) is still compared, and no other key is touched.
+TIMESTAMP_KEYS = ("creation", "modified")
+TIMESTAMP_SUFFIXES = ("_at", "_on")
+
+
+def is_timestamp_key(key: str | None) -> bool:
+    return bool(key) and (key in TIMESTAMP_KEYS or key.endswith(TIMESTAMP_SUFFIXES))
+
+
+class _Comparison:
+    """One response's comparison: every differing path, and the generated-name pairing,
+    which must be one-to-one across the whole response (the same old name always pairs
+    with the same new name, and two old names never share one)."""
+
+    def __init__(self, rules: list[IgnoreRule]):
+        self.rules = rules
+        self.differences: list[str] = []
+        self.old_to_new: dict[str, str] = {}
+        self.new_to_old: dict[str, str] = {}
+
+    def add(self, text: str) -> None:
+        self.differences.append(text)
+
+    def _pair(self, old_token: str, new_token: str) -> bool:
+        if self.old_to_new.setdefault(old_token, new_token) != new_token:
+            return False
+        return self.new_to_old.setdefault(new_token, old_token) == old_token
+
+    def strings_match(self, left: str, right: str, key: str | None) -> bool:
+        if left == right:
+            return True
+        if is_timestamp_key(key):
+            return re.sub(r"\d", "0", left) == re.sub(r"\d", "0", right)
+        old_tokens = GENERATED_NAME_RE.findall(left)
+        new_tokens = GENERATED_NAME_RE.findall(right)
+        if not old_tokens or len(old_tokens) != len(new_tokens):
+            return False
+        if GENERATED_NAME_RE.sub("<generated>", left) != GENERATED_NAME_RE.sub(
+            "<generated>", right
+        ):
+            return False
+        return all(self._pair(old, new) for old, new in zip(old_tokens, new_tokens))
+
+    def compare(self, left, right, path: str = "$", key: str | None = None) -> None:
+        if type(left) is not type(right):
+            self.add(f"{path}: type {type(left).__name__} != {type(right).__name__}")
+            return
+        if ignored(path, self.rules):
+            return
+        if isinstance(left, dict):
+            for child_key in sorted(left.keys() | right.keys()):
+                child = f"{path}.{child_key}"
+                if child_key not in left:
+                    self.add(f"{child}: missing from old response")
+                elif child_key not in right:
+                    self.add(f"{child}: missing from new response")
+                else:
+                    self.compare(left[child_key], right[child_key], child, child_key)
+            return
+        if isinstance(left, list):
+            self._compare_lists(left, right, path)
+            return
+        if isinstance(left, str) and self.strings_match(left, right, key):
+            return
+        if left != right:
+            old_value = json.dumps(left, ensure_ascii=False)[:80]
+            new_value = json.dumps(right, ensure_ascii=False)[:80]
+            self.add(f"{path}: {old_value} != {new_value}")
+
+    def _compare_lists(self, left: list, right: list, path: str) -> None:
+        def names(rows):
+            if rows and all(isinstance(row, dict) and "name" in row for row in rows):
+                return [str(row["name"]) for row in rows]
+            return None
+
+        old_names, new_names = names(left), names(right)
+        generated = (
+            old_names is not None
+            and new_names is not None
+            and all(GENERATED_NAME_RE.fullmatch(name) for name in old_names + new_names)
+        )
+        if generated:
+            # Rows named by generated hashes cannot match by name across two servers:
+            # pair them by position, and the one-to-one name pairing checks the names.
+            old_names = new_names = None
+        if old_names is not None and new_names is not None and old_names != new_names:
+            # Rows of documents: compare the rows both sides hold, matched by name, and
+            # report the names only one side holds.
+            if len(left) != len(right):
+                self.add(f"{path}: length {len(left)} != {len(right)}")
+            old_by_name = dict(zip(old_names, left))
+            new_by_name = dict(zip(new_names, right))
+            if missing := [name for name in old_names if name not in new_by_name]:
+                self.add(f"{path}: names only in old {missing}")
+            if extra := [name for name in new_names if name not in old_by_name]:
+                self.add(f"{path}: names only in new {extra}")
+            common = [name for name in old_names if name in new_by_name]
+            if [n for n in new_names if n in old_by_name] != common:
+                self.add(f"{path}: order of shared names differs")
+            for name in common:
+                self.compare(old_by_name[name], new_by_name[name], f"{path}[name={name}]")
+            return
         if len(left) != len(right):
-            return f"{path}: length {len(left)} != {len(right)}"
+            self.add(f"{path}: length {len(left)} != {len(right)}")
         for index, (old_value, new_value) in enumerate(zip(left, right)):
-            if difference := body_difference(old_value, new_value, rules, f"{path}[{index}]"):
-                return difference
-        return None
-    if left != right:
-        old_value = json.dumps(left, ensure_ascii=False)[:80]
-        new_value = json.dumps(right, ensure_ascii=False)[:80]
-        return f"{path}: {old_value} != {new_value}"
-    return None
+            self.compare(old_value, new_value, f"{path}[{index}]")
 
 
-def response_difference(old_response, new_response, rules: list[IgnoreRule]) -> str | None:
-    if old_response.status_code != new_response.status_code:
+def body_differences(left, right, rules: list[IgnoreRule]) -> list[str]:
+    comparison = _Comparison(rules)
+    comparison.compare(left, right)
+    return comparison.differences
+
+
+def body_difference(left, right, rules: list[IgnoreRule], path: str = "$") -> str | None:
+    comparison = _Comparison(rules)
+    comparison.compare(left, right, path)
+    return "; ".join(comparison.differences) or None
+
+
+def response_difference(
+    old_response, new_response, rules: list[IgnoreRule], resource_envelope: bool = False
+) -> str | None:
+    """With `resource_envelope` (a block marked `# @resource-envelope`), the old
+    `/api/resource/` answer — `{"data": ...}` and 201 on create — is compared with the
+    REST copy's `{"message": ...}` and 200, the shape the route answers by design."""
+    old_status = old_response.status_code
+    if resource_envelope and old_status == 201:
+        old_status = 200
+    if old_status != new_response.status_code:
         return f"$.status: {old_response.status_code} != {new_response.status_code}"
+    differences = []
     for header in CONTRACT_HEADERS:
         old_present = header in old_response.headers
         new_present = header in new_response.headers
+        if header == "Allow":
+            # The method sets differ by design (S7, PE-1); the contract promises only that
+            # a 405 carries an Allow header (API_CONTRACT.md), so only that is compared.
+            if old_response.status_code == 405 and old_present != new_present:
+                differences.append(f"$.headers.Allow: present {old_present} != {new_present}")
+            continue
         old_value = old_response.headers.get(header)
         new_value = new_response.headers.get(header)
-        if header == "Allow" and old_present and new_present:
-            old_value = sorted({method.strip().upper() for method in old_value.split(",")})
-            new_value = sorted({method.strip().upper() for method in new_value.split(",")})
         if old_present != new_present or old_value != new_value:
-            return f"$.headers.{header}: {old_value!r} != {new_value!r}"
+            differences.append(f"$.headers.{header}: {old_value!r} != {new_value!r}")
+    # A header difference does not hide the body: one block can report both.
     try:
         old_body = old_response.json()
         new_body = new_response.json()
     except ValueError:
         if old_response.text != new_response.text:
-            return "$: response text differs"
-        return None
-    return body_difference(old_body, new_body, rules)
+            differences.append("$: response text differs")
+    else:
+        if (
+            resource_envelope
+            and isinstance(old_body, dict)
+            and "data" in old_body
+            and "message" not in old_body
+        ):
+            old_body = {"message": old_body["data"], **{
+                key: value for key, value in old_body.items() if key != "data"
+            }}
+        differences.extend(body_differences(old_body, new_body, rules))
+    return "; ".join(differences) or None
 
 
 def block_key(block: HttpBlock) -> str | None:
@@ -152,8 +272,12 @@ class ParityRunner:
         old_blocks = parse_http(old_path.read_text(encoding="utf-8")).blocks
         new_blocks = parse_http(new_path.read_text(encoding="utf-8")).blocks
         new_by_key = {block_key(block): index for index, block in enumerate(new_blocks) if block_key(block)}
-        old_cursor = new_cursor = 0
+        # 99_lockout runs against each backend in turn (ACCOUNTS spec section 7, A-18):
+        # alternating the two servers spreads the failed logins past the lockout window,
+        # so neither would lock.
+        sequential = new_path.name == "99_lockout.http"
         counts = {"same": 0, "differs": 0, "skipped": 0}
+        plan = []
         for old_index, old_block in enumerate(old_blocks):
             if old_block.request is None or not (key := block_key(old_block)):
                 continue
@@ -163,8 +287,6 @@ class ParityRunner:
                 self.output(f"  [differs] {old_block.title} -- REST copy is missing")
                 continue
             new_block = new_blocks[new_index]
-            old_cursor = self._advance_variables(old_blocks, old_cursor, old_index, self.old)
-            new_cursor = self._advance_variables(new_blocks, new_cursor, new_index, self.new)
             reason = None
             if marked(new_block, "# @waiting"):
                 reason = "waiting for its unit"
@@ -176,32 +298,63 @@ class ParityRunner:
                 counts["skipped"] += 1
                 self.output(f"  [skipped] {old_block.title} -- {reason}")
                 continue
-            old_result = self.old.run_block(old_block, check=False)
-            new_result = self.new.run_block(new_block, check=False)
-            if old_result and new_result and old_result.outcome == new_result.outcome == "skipped":
-                counts["skipped"] += 1
-                self.output(f"  [skipped] {old_block.title} -- cleanup reference unavailable")
-                continue
-            failure = next(
-                (result.detail for result in (old_result, new_result) if result and result.outcome == "fail"),
-                None,
-            )
-            if failure:
-                counts["differs"] += 1
-                self.output(self.old.redact(f"  [differs] {old_block.title} -- {failure}"))
-                continue
-            if old_result is None or new_result is None or old_result.response is None or new_result.response is None:
-                difference = "$: response missing"
-            else:
-                difference = response_difference(old_result.response, new_result.response, self.rules)
-            outcome = "differs" if difference else "same"
-            counts[outcome] += 1
-            detail = f" -- {difference}" if difference else ""
-            self.output(self.old.redact(f"  [{outcome}] {old_block.title}{detail}"))
+            plan.append((old_index, old_block, new_index, new_block))
+
+        if sequential:
+            old_results = self._run_in_turn(old_blocks, [(i, b) for i, b, _, _ in plan], self.old)
+            new_results = self._run_in_turn(new_blocks, [(i, b) for _, _, i, b in plan], self.new)
+        else:
+            old_results, new_results = [], []
+            old_cursor = new_cursor = 0
+            for old_index, old_block, new_index, new_block in plan:
+                old_cursor = self._advance_variables(old_blocks, old_cursor, old_index, self.old)
+                new_cursor = self._advance_variables(new_blocks, new_cursor, new_index, self.new)
+                old_results.append(self.old.run_block(old_block, check=False))
+                new_results.append(self.new.run_block(new_block, check=False))
+
+        for (_, old_block, _, new_block), old_result, new_result in zip(
+            plan, old_results, new_results
+        ):
+            envelope = marked(new_block, "# @resource-envelope")
+            self._compare(old_block, old_result, new_result, counts, envelope)
         self.output(
             f"  {counts['same']} same, {counts['differs']} differs, {counts['skipped']} skipped"
         )
         return counts["differs"] == 0
+
+    def _run_in_turn(self, blocks: list[HttpBlock], indexed, runner: HttpRunner) -> list:
+        cursor = 0
+        results = []
+        for index, block in indexed:
+            cursor = self._advance_variables(blocks, cursor, index, runner)
+            results.append(runner.run_block(block, check=False))
+        return results
+
+    def _compare(
+        self, old_block: HttpBlock, old_result, new_result, counts: dict, envelope: bool = False
+    ) -> None:
+        if old_result and new_result and old_result.outcome == new_result.outcome == "skipped":
+            counts["skipped"] += 1
+            self.output(f"  [skipped] {old_block.title} -- cleanup reference unavailable")
+            return
+        failure = next(
+            (result.detail for result in (old_result, new_result) if result and result.outcome == "fail"),
+            None,
+        )
+        if failure:
+            counts["differs"] += 1
+            self.output(self.old.redact(f"  [differs] {old_block.title} -- {failure}"))
+            return
+        if old_result is None or new_result is None or old_result.response is None or new_result.response is None:
+            difference = "$: response missing"
+        else:
+            difference = response_difference(
+                old_result.response, new_result.response, self.rules, envelope
+            )
+        outcome = "differs" if difference else "same"
+        counts[outcome] += 1
+        detail = f" -- {difference}" if difference else ""
+        self.output(self.old.redact(f"  [{outcome}] {old_block.title}{detail}"))
 
 
 def selected_files(paths: list[Path], include_lockout: bool) -> list[Path]:
