@@ -4,6 +4,7 @@ import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
+from core.doctypes import declared_doctypes, model_for_doctype
 from core.mixins import linked as linked_mixin
 from core.mixins.linked import linked_documents
 from tests_support.models import (
@@ -200,8 +201,27 @@ def test_dialog_deduplicates_by_name_alone_across_models(auth_api, alice):
     assert rows[0]["reference_docname"] == "shared-name"
 
 
+@pytest.fixture
+def renamed_doctypes(monkeypatch):
+    """Rename four test doctypes for one test.
+
+    `declared_doctypes()` is a process-wide cache keyed by `DOCTYPE`: filled while the
+    names are patched, it would keep them after monkeypatch restores the classes, and every
+    later lookup of the real names on that worker would miss (PR #77's CI, gw3).
+    """
+    declared_doctypes.cache_clear()
+    monkeypatch.setattr(WidgetRow, "DOCTYPE", "A Child FK Source")
+    monkeypatch.setattr(DynamicReference, "DOCTYPE", "B Parent Pair Source")
+    monkeypatch.setattr(WidgetNote, "DOCTYPE", "C Child Pair Source")
+    monkeypatch.setattr(PointingDocument, "DOCTYPE", "Z Direct FK Source")
+    # Fill the cache under the patched names, as the first lookup on a worker can.
+    assert model_for_doctype("Z Direct FK Source") is PointingDocument
+    yield
+    declared_doctypes.cache_clear()
+
+
 def test_dialog_uses_old_phase_and_doctype_order_before_deduplication(
-    auth_api, alice, monkeypatch
+    auth_api, alice, renamed_doctypes
 ):
     target = save(Widget(widget_name="Target", widget_owner=alice), alice)
     fk_parent = save(
@@ -213,10 +233,6 @@ def test_dialog_uses_old_phase_and_doctype_order_before_deduplication(
     dynamic_parent_z = save(
         Widget(widget_name="Dynamic child parent Z", widget_owner=alice), alice
     )
-    monkeypatch.setattr(WidgetRow, "DOCTYPE", "A Child FK Source")
-    monkeypatch.setattr(DynamicReference, "DOCTYPE", "B Parent Pair Source")
-    monkeypatch.setattr(WidgetNote, "DOCTYPE", "C Child Pair Source")
-    monkeypatch.setattr(PointingDocument, "DOCTYPE", "Z Direct FK Source")
     save(WidgetRow(parent=fk_parent, value="fk", related_widget=target), alice)
     save(PointingDocument(name="shared-name", widget=target), alice)
     save(
@@ -274,6 +290,15 @@ def test_dialog_uses_old_phase_and_doctype_order_before_deduplication(
             "reference_doctype": Widget.DOCTYPE,
         },
     ]
+
+
+def test_the_real_doctypes_resolve_after_the_renamed_ones():
+    """Runs after the dialog test above, whose fixture fills the doctype cache under
+    patched names; without that fixture's clean-up this lookup misses."""
+    assert model_for_doctype(PointingDocument.DOCTYPE) is PointingDocument
+    assert model_for_doctype(DynamicReference.DOCTYPE) is DynamicReference
+    assert model_for_doctype(WidgetRow.DOCTYPE) is WidgetRow
+    assert model_for_doctype(WidgetNote.DOCTYPE) is WidgetNote
 
 
 def test_source_read_refusal_and_missing_source_keep_old_wording(

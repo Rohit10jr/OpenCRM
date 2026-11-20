@@ -124,6 +124,13 @@ task names a queue; `CELERY_TASK_DEFAULT_QUEUE = "default"` in the base settings
 every `backend_v2` task on the queue the old backend uses
 (`backend/config/settings/base.py:317`), so a worker started the old way receives them.
 
+CONFIGURATION's first milestone (`configuration/views.py`, `specs/CONFIGURATION.md` §4.1)
+serves the Desk plumbing with no model: `desk/apps/` (the CRM entry for a CRM role, `[]`
+otherwise), `desk/site-info/` (`{}`, System Manager or Administrator), `desk/telemetry-config/`
+(on only when both `POSTHOG_PROJECT_ID` and `POSTHOG_HOST` are set), `demo/clear/` (POST,
+the manager pair or Administrator, answers `null`) and the guest `translations/` (`{}`).
+Administrator passes each gate by name, not by its groups.
+
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
 disabled, and there are no bulk actions.
