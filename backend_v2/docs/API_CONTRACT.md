@@ -206,7 +206,8 @@ contract, not style — see the consumers listed at the top of that file.
 | Non-guest method called with no token | 401 | `Not permitted` — **the reference for every new route that replaces a method path** |
 | Old resource route called with no token | 401 | `Authentication credentials were not provided.` |
 | Any route called with an invalid or expired token — guest routes included, because authentication runs first | 401 | SimpleJWT's sentence, taken from its `detail` |
-| An input naming an unknown doctype, a child table or a withheld doctype — field metadata, saved views, `getdoctype` | 404 | `DocType <DocType> not found` — **identical for all three** |
+| An input naming an unknown doctype or a withheld doctype — field metadata, saved views, layouts, quick filters, `getdoctype` | 404 | `DocType <DocType> not found` — **identical for both** |
+| An input naming a child table — every such call except `getdoctype` and the layout read and save, which answer it | 404 | `DocType <DocType> not found` |
 | Document not found | 404 | `<DocType> <name> not found` |
 | Document read/write/delete refused | 403 | `No permission for <DocType> <name>` |
 | Create refused | 403 | `Not permitted to create <DocType>` |
