@@ -145,6 +145,45 @@ def test_an_empty_role_is_refused_not_defaulted(grace, make_user, api_as):
     assert response.json()["messages"] == ["Cannot assign this role"]
 
 
+@pytest.mark.parametrize("target", ["Administrator", "Guest"])
+def test_update_role_refuses_a_builtin_account(boss, api_as, target):
+    """PE-28."""
+    before = roles(boss._meta.model.objects.get(pk=target))
+    response = update_role(api_as(boss), target, "Sales User")
+    assert response.status_code == 403
+    assert response.json()["messages"] == ["Not permitted"]
+    assert roles(boss._meta.model.objects.get(pk=target)) == before
+
+
+@pytest.mark.parametrize("target", ["Administrator", "Guest"])
+def test_add_existing_users_refuses_a_builtin_account(boss, api_as, target):
+    """PE-28: the per-name check is update_user_role's."""
+    response = api_as(boss).post(
+        f"{USERS}add-existing/", {"users": [target], "role": "Sales User"}, format="json"
+    )
+    assert response.status_code == 403
+    assert response.json()["messages"] == ["Not permitted"]
+
+
+@pytest.mark.parametrize("target", ["Administrator", "Guest"])
+def test_remove_crm_roles_refuses_a_builtin_account(boss, administrator, api_as, target):
+    """PE-28."""
+    before = roles(administrator)
+    response = api_as(boss).post(f"{USERS}{target}/remove-crm-roles/", {}, format="json")
+    assert response.status_code == 403
+    assert response.json()["messages"] == ["Not permitted"]
+    assert roles(administrator) == before
+
+
+def test_administrator_removing_itself_still_gets_the_self_message(administrator, api_as):
+    """The self check runs first, as upstream (user.py:190-191)."""
+    response = api_as(administrator).post(
+        f"{USERS}Administrator/remove-crm-roles/", {}, format="json"
+    )
+    assert response.status_code == 403
+    assert response.json()["messages"] == ["You cannot remove yourself."]
+
+
 def test_a_caller_who_demotes_themselves_is_refused_for_the_next_name(
     grace, bob, api_as
 ):
