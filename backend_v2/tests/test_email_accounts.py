@@ -1,7 +1,7 @@
 """Email Account: new tests for what no old test covers (specs/CONFIGURATION.md 4.4).
 
-The resource's closed doors for a non-manager, the sensitive fields, parity on update
-(decision 4), rename (parked question, today's behaviour pinned), the link to the user's
+The resource's closed doors for a non-manager, the sensitive fields, the credentials a
+create or update stores (PE-30), rename (parked question, today's behaviour pinned), the link to the user's
 `user_emails`, and the saved-account provider core.mail reaches (decision 7). No test
 opens a real mail connection.
 """
@@ -99,6 +99,51 @@ def test_a_password_sent_on_update_is_stored(api_as, manager, account):
     account.refresh_from_db()
     assert account.get_password("password") == "new-secret"
     assert account.smtp_port == 25
+
+
+@pytest.mark.parametrize("empty", ["", None])
+@pytest.mark.parametrize("field", ["password", "api_secret"])
+def test_pe30_an_empty_secret_leaves_the_stored_one(api_as, manager, administrator, field, empty):
+    row = make(administrator, password="secret-1", api_secret="secret-1")
+    response = api_as(manager).patch(f"{ACCOUNTS}{row.name}/", {field: empty}, format="json")
+    assert response.status_code == 200, response.content[:300]
+    row.refresh_from_db()
+    assert row.get_password(field) == "secret-1"
+
+
+def test_pe30_an_api_secret_sent_on_update_is_stored(api_as, manager, account):
+    api_as(manager).patch(f"{ACCOUNTS}{account.name}/", {"api_secret": "k-2"}, format="json")
+    account.refresh_from_db()
+    assert account.get_password("api_secret") == "k-2"
+
+
+def test_pe30_a_password_sent_on_create_is_stored_and_never_answered(api_as, manager):
+    response = api_as(manager).post(
+        ACCOUNTS,
+        {"email_account_name": "Sales", "email_id": "sales@example.com", "password": "pw-create"},
+        format="json",
+    )
+    assert response.status_code == 200, response.content[:300]
+    assert "pw-create" not in response.content.decode()
+    assert "password" not in response.json()["message"]
+    stored = EmailAccount.objects.get(pk="Sales")
+    assert stored.get_password("password") == "pw-create"
+    assert "pw-create" not in EmailAccount.objects.filter(pk="Sales").values_list("password", flat=True)[0]
+
+
+def test_pe30_the_update_answer_carries_no_secret(api_as, manager, account):
+    response = api_as(manager).patch(
+        f"{ACCOUNTS}{account.name}/", {"password": "never-shown"}, format="json"
+    )
+    assert "never-shown" not in response.content.decode()
+    assert "password" not in response.json()["message"]
+
+
+def test_pe30_a_non_admin_still_cannot_set_it(api_as, alice, account):
+    response = api_as(alice).patch(f"{ACCOUNTS}{account.name}/", {"password": "x"}, format="json")
+    assert response.status_code == 403
+    account.refresh_from_db()
+    assert account.get_password("password") == "secret-1"
 
 
 # --- rename (parked question, DECISIONS 38) ------------------------------------------------
