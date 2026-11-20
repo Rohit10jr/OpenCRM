@@ -533,8 +533,7 @@ Upstream order: the document is fetched (`rename_doc.py:150`), `before_rename` r
 
 **Who sees what for the built-ins:** anyone — Administrator and a System Manager
 included — gets row 3's sentence, because row 3 comes before the rule. That is
-upstream's order. So rows 3-6 tell a caller without the right to rename whether a
-record exists and whether a name is taken, as upstream's do.
+upstream's order. Rows 3-6 answer before the rule, in upstream's order.
 
 ### 10.3 One transaction
 
@@ -570,11 +569,8 @@ fresh user under the seed name. Accepted.
 
 ### 10.5 Token binding: a random version per account
 
-A token's `user_id` claim is the user's name (`config/settings/base.py:124-125`), so a
-token is bound to a name, not to an account. Today a new account starts at
-`token_version = 0`. An account created under a name used before — after a rename, or a
-delete — would therefore accept the earlier account's tokens that carry the same
-version.
+A token is valid for one account. An account created under a name that was used before
+does not accept a token issued to the earlier account.
 
 - `token_version` becomes a `PositiveBigIntegerField` whose **default is a callable**
   returning `secrets.randbelow(2**62) + 1`. Every creation path gets it:
@@ -592,13 +588,8 @@ version.
   not impossible. Overflow cannot happen: a value starts at or below 2⁶², a bump adds 1, and the column
   holds up to 2⁶³ − 1.
 - **Existing rows (proposed, marked for the owner):** a data migration gives every
-  existing row a fresh random version, the built-ins included (migration 0002 creates
-  Administrator and Guest at 0). It signs everyone out once. Without it, two gaps
-  remain for accounts created before it:
-  - a rename into a name used before is still safe (the rename draws a fresh value),
-    but a delete and re-create of an existing account is not;
-  - a refresh token stored in `OutstandingToken` before its version claim was added
-    reads as version 0.
+  existing row a fresh random version, the built-ins included, so the rule above holds
+  for accounts created before this change as well. It signs everyone out once.
 - The migration to bigint **cannot be reversed** once any value exceeds 2³¹ − 1.
   Recorded.
 
