@@ -1060,10 +1060,9 @@ Quick filters keep the key `(dt, type)`, not upstream's `dt` alone (`install.py:
 CRM Global Settings has a `type` column here, and quick filters are one type of several
 (`CRMGlobalSettings.first_row(dt, type)`).
 
-*[Marked for the owner]* The one exception: plain restore re-syncs the two standard
+The one exception (owner, 21 Nov 2026): plain restore re-syncs the two standard
 product-details scripts the app ships when their text drifted, and nothing else.
-Upstream overwrites them (`crm_products.py:95-98`); S20 says plain "changes nothing that
-exists".
+Upstream overwrites them (`crm_products.py:95-98`), and S20 names this exception.
 
 Salutations, genders, countries, currencies and languages are the port's own: upstream's
 `after_install` writes none of them; the old backend's seed does
@@ -1155,7 +1154,7 @@ because pytest-django runs transactional tests last.
 | `:101-107` quick filter rows match the data file | — | the migration's 6 rows match the file, `type="Quick Filters"` |
 | `:109-123` a second seed keeps one record per row | — | dropped: nothing is recorded |
 | `:125-140` a row deleted and seeded again is still cleared | — | dropped: `clear_dev_data` never removes a default; one test asserts that for all four kinds |
-| `:142-154` a drifted product script gets its text back | — | plain restore re-syncs it (the marked line); the forecasting script's drift is kept |
+| `:142-154` a drifted product script gets its text back | — | plain restore re-syncs it; the forecasting script's drift is kept |
 | `:156-160` clear removes only the scripts the seed created (creates `Forecasting Script`) | — | dropped with the clear functions |
 | `tests/test_layout_resources.py:143-147` POSTs `CRM Lead-Quick Entry` | now a default: 409 | POSTs a pair with no default (`dt="CRM Task", type="Quick Entry"`), same assertions with the name `CRM Task-Quick Entry` |
 | `:151`, `:169` create `CRM Lead-Side Panel` | now a default | `dt="CRM Task"`, `type="Side Panel"`; same assertions |
@@ -1181,7 +1180,7 @@ because pytest-django runs transactional tests last.
   the four steps' records are gone, and `clear_dev_data` leaves every row.
 - **Restore plain:**
   - a deleted default comes back, for each kind;
-  - an edited default stays edited (the marked line excepted);
+  - an edited default stays edited (the two standard product scripts excepted);
   - an administrator's own row is untouched;
   - a second run writes 0;
   - a missing FCRM Settings row comes back with its six items;
