@@ -227,7 +227,7 @@ group-by path (the caller's saved standard view, the definition's columns, rows,
 fields and `parse`, the `fields` block with the old types, PE-16 last), `is_default`
 from a named view under the read rule, group-by options, and the kanban branch (columns
 from a served Link target or a field's choices, the definition's kanban defaults, a
-manual card order, `all_count`, PE-23's cap). A resource names its definition as
+manual card order, `all_count`; any number of sent columns). A resource names its definition as
 `list_view_class`, a class in its app's `list_views.py` (FOUNDATION Q6): the base
 `ListView` is the old fallback, `accounts/list_views.py` holds `UserListView` (User has
 no list-view route), and `tests_support` defines Widget's. A card's four badge counts

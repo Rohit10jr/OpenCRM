@@ -522,19 +522,10 @@ comparison skips that block.
   withheld doctype or a settings record
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
-### PE-23. A list view takes at most `MAX_PAGE_LENGTH` kanban columns
+### PE-23. Removed
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-40, 18 Nov 2026); built in `f743a80`
-- **Where:** `GET` and `POST /api/v1/<resource>/list-view/` with `kanban_columns`
-- **Old backend:** accepts any number of sent columns
-  (`backend/frappe_core/api/doc.py:484-526`)
-- **backend_v2:** a sent `kanban_columns` list longer than `MAX_PAGE_LENGTH` is 417 "At
-  most 500 kanban columns". A
-  column's `page_length` of 0 still means no limit, and `page_length=0` every row, as
-  before
-- **Why:** the same limit as a list page's length
-- **Recorded by:** CONFIGURATION, 18 Nov 2026
+Withdrawn by the owner (20 Nov 2026; `temp` A-48 3e): the list view takes any number of
+sent kanban columns again, as the old backend and upstream. The number is not reused.
 
 ### PE-12e. List-view crashes answer as errors
 

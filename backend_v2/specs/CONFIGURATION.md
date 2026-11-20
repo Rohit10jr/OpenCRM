@@ -819,9 +819,9 @@ Settings. Paths in this section are `backend/frappe_core/api/doc.py` unless name
 - **Crashes become 417 (PE-12e):** a `columns` or `kanban_columns` entry that is not an
   object; a `rows` or `kanban_fields` entry that is not a string; a column's `order`
   that is not a list. A `custom_view_name` that is not an integer counts as no view.
-- **A cap (PE-23):** a sent `kanban_columns` list longer than `MAX_PAGE_LENGTH` is 417.
-  A column's `page_length` of 0 still means no limit, and `page_length=0` every row
-  (parity).
+- **No cap on sent columns** (PE-23 withdrawn by the owner, 20 Nov 2026): any number of
+  `kanban_columns` is taken, as `backend/`. A column's `page_length` of 0 still means no
+  limit, and `page_length=0` every row (parity).
 - **Gating.** Ported now onto `test-widgets/list-view/`: all of `test_get_data.py`
   (`:301` with a real view row; `:322`, `:345` with `hidden_fields`; `:284` with the
   second resource; `:442`, `:448` become 401 and the route's 404). Twins now:
