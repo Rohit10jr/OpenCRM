@@ -166,13 +166,27 @@ def test_add_existing_users_refuses_a_builtin_account(boss, api_as, target):
 
 
 @pytest.mark.parametrize("target", ["Administrator", "Guest"])
-def test_remove_crm_roles_refuses_a_builtin_account(boss, administrator, api_as, target):
+def test_remove_crm_roles_refuses_a_builtin_account(boss, api_as, target):
     """PE-28."""
-    before = roles(administrator)
+    account = boss._meta.model.objects.get(pk=target)
+    before = roles(account)
     response = api_as(boss).post(f"{USERS}{target}/remove-crm-roles/", {}, format="json")
     assert response.status_code == 403
     assert response.json()["messages"] == ["Not permitted"]
-    assert roles(administrator) == before
+    assert roles(account) == before
+
+
+@pytest.mark.parametrize("path", ["update-role", "remove-crm-roles"])
+def test_a_sales_manager_on_administrator_keeps_the_upstream_refusal(grace, api_as, path):
+    """PE-28 runs after the target-role checks: Administrator holds System Manager, so a
+    Sales Manager gets upstream's sentence, not "Not permitted" (A-64 finding 5)."""
+    response = api_as(grace).post(
+        f"{USERS}Administrator/{path}/", {"new_role": "Sales User"}, format="json"
+    )
+    assert response.status_code == 403
+    assert response.json()["messages"] == [
+        "Only System Managers can modify other System Managers"
+    ]
 
 
 def test_administrator_removing_itself_still_gets_the_self_message(administrator, api_as):
