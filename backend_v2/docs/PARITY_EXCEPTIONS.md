@@ -172,8 +172,8 @@ comparison skips that block.
 
 ### PE-7. `name` cannot be changed through the User resource
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-21 D-B, DECISIONS, 18 Nov 2026); built as described
+- **Status:** approved by the owner (20 Nov 2026); first decided by the supervisor (`temp`
+  A-21 D-B, DECISIONS, 18 Nov 2026); built as described
 - **Where:** `PATCH /api/v1/users/<name>/` (old `PUT /api/resource/User/<name>`) with a
   `name` in the body. No `.http` block found
 - **Old backend:** accepts `name` as a writable field on update (`backend/frappe_platform/
@@ -186,52 +186,57 @@ comparison skips that block.
   `rename_doc`, which `User` does not serve here
 - **Recorded by:** ACCOUNTS, 18 Nov 2026
 
-### PE-8. CRM Invitation is created by `invite_by_email` alone
+### PE-8. CRM Invitation is created and changed through the resource by System Manager or Administrator
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-24, DECISIONS 27, 18 Nov 2026); built as described
+- **Status:** approved by the owner (20 Nov 2026), rewriting the supervisor's first
+  decision (`temp` A-24, DECISIONS 27, 18 Nov 2026); to be built (`temp` A-48 2b). Until
+  then the resource refuses create and change for everyone
 - **Where:** `POST /api/v1/invitations/` and `PATCH /api/v1/invitations/<name>/` (old
   `/api/resource/CRM Invitation`). No `.http` block found
 - **Old backend:** the manager pair may create and change an invitation through the
   resource (`backend/crm_app/permissions/platform_docs.py:403-407`)
-- **backend_v2:** CRM Invitation cannot be created or changed through its resource;
-  invitations are created by `invite_by_email` alone. Listing, reading and deleting stay
-  with the manager pair
-- **Why:** the frontend only lists, deletes and calls `invite_by_email`
-  (`InviteUserPage.vue:175-205`, `:86`), and `invite_by_email` holds the role checks
+- **backend_v2:** System Manager or Administrator create and change an invitation
+  through the resource; `email` and `role` are writable, `key`, `status` and
+  `invited_by` are set by the server. A Sales Manager lists, reads and deletes
+  invitations and invites through `invite_by_email`
+- **Why:** `invite_by_email` holds the role checks; the resource is for an
+  administrator's scripts
 - **Recorded by:** ACCOUNTS, 18 Nov 2026
 
 ### PE-9. The User document's `assignmentruleuser_set` is always empty
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-26, DECISIONS 29, 18 Nov 2026); built as described
+- **Status:** approved by the owner (20 Nov 2026); first decided by the supervisor (`temp`
+  A-26, DECISIONS 29, 18 Nov 2026); built as described
 - **Where:** `GET` and `PATCH /api/v1/users/<name>/`, the `assignmentruleuser_set` key.
   Seen in `docs/http/09_users_and_invitations.http` 2.3-2.6, 6.2, 6.4 and
   `00_walkthrough.http` 4.9
 - **Old backend:** emits the rows and accepts them (`backend/frappe_core/children.py:38-51`,
   `backend/frappe_core/serializers.py:76-77,188-192`)
 - **backend_v2:** the User document's `assignmentruleuser_set` is always empty and is not
-  written through User; ASSIGNMENTS decides the read side
+  written through User; ASSIGNMENTS decides the read side. Whether the key leaves the
+  User document is decided in ASSIGNMENTS
 - **Why:** Assignment Rule is ASSIGNMENTS' model, not yet built; no `frontend/src` file
   reads the key
 - **Recorded by:** ACCOUNTS, 18 Nov 2026
 
 ### PE-10. `get_exchange_rate` accepts only a known date and currency shape
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-30, DECISIONS 33, 18 Nov 2026); built in `c072147`, `9aa9a82`
+- **Status:** approved by the owner (20 Nov 2026), widening the supervisor's first
+  decision (`temp` A-30, DECISIONS 33, 18 Nov 2026); built in `c072147`, `9aa9a82`; the
+  currency rule below is to be built (`temp` A-48 3d). Until then a currency is exactly
+  three ASCII letters
 - **Where:** `GET /api/v1/exchange-rate/` (old `crm.api.exchange_rate.get_exchange_rate`)
-- `get_exchange_rate` accepts `date` only as `latest` or an ISO date (ASCII digits, a real
-  calendar date) and currencies only as three-letter codes (ASCII letters, either case);
-  the old backend passes them through. A lowercase code is used as given, as the old
-  backend uses it, and cached under its own key.
+- `date` is `latest` or an ISO date (ASCII digits, a real calendar date); a currency is
+  ASCII letters and digits, 2 to 5 characters. The old backend passes both through. A
+  lowercase code is used as given, as the old backend uses it, and cached under its own
+  key.
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
 ### PE-11. A settings record has no list route
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-30, DECISIONS 35, 18 Nov 2026); built in `ff874c1`, with the
-  `.http` generator's handling in `e0656cd`
+- **Status:** approved by the owner (20 Nov 2026); first decided by the supervisor (`temp`
+  A-30, DECISIONS 35, 18 Nov 2026); built in `ff874c1`, with the `.http` generator's
+  handling in `e0656cd`
 - **Where:** `GET /api/v1/crm-settings/` (old `GET /api/resource/FCRM Settings` with
   `fields` or `filters`). Seen in `docs/http/12_settings_singletons.http` 1.3-1.5 and
   `backend/tests/test_settings_access.py` `test_the_key_cannot_be_probed_by_filtering`
@@ -306,8 +311,8 @@ comparison skips that block.
 
 ### PE-14. A withheld doctype is not found by the metadata calls
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-35, DECISIONS 42, 18 Nov 2026); built in `f6e6822`, `94d5c15`
+- **Status:** approved by the owner (20 Nov 2026); first decided by the supervisor (`temp`
+  A-35, DECISIONS 42, 18 Nov 2026); built in `f6e6822`, `94d5c15`
 - **Where:** `GET /api/v1/meta/doctype/`, `meta/fields/`, `meta/sort-options/`,
   `meta/filterable-fields/`, `meta/group-by-fields/` (old `getdoctype`, `get_fields`,
   `sort_options`, `get_filterable_fields`, `get_group_by_fields`), for a withheld doctype
@@ -320,14 +325,16 @@ comparison skips that block.
   `crm_app/api/doc.py:90,346`, `frappe_core/metadata.py:117,154`)
 - **backend_v2:** a withheld doctype answers 404 "DocType X not found" on every call that
   validates a doctype, as `API_CONTRACT.md:209` says
-- **Why:** a doctype that is not served has no screen to describe
+- **Why:** a doctype that is not served has no screen to describe. Upstream answers these
+  calls for any doctype and lists every field (`frappe/desk/form/load.py:65-86`,
+  `crm/api/doc.py`); the old backend does the same
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
 ### PE-15. A child table answers `getdoctype` and the layout read and save only
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-35, DECISIONS 42, 18 Nov 2026); `getdoctype`'s half built in
-  `f6e6822`, `94d5c15`; the layout calls come with CONFIGURATION milestone 6
+- **Status:** approved by the owner (20 Nov 2026); first decided by the supervisor (`temp`
+  A-35, DECISIONS 42, 18 Nov 2026); `getdoctype`'s half built in `f6e6822`, `94d5c15`; the
+  layout calls come with CONFIGURATION milestone 6
 - **Where:** the metadata calls above, for a child table (CRM Dropdown Item, User Email,
   and later units' rows). Seen in `docs/http/07` 9.2, 9.3
 - **Old backend:** answers every metadata call for a child table
@@ -337,17 +344,16 @@ comparison skips that block.
   calls, `get_fields`,
   `sort_options`, `get_filterable_fields` and `get_group_by_fields` answer 404. With
   milestone 7, the saved-view calls merge no default rows or columns for a child table
-  (`list_definition_for`).
-  `API_CONTRACT.md:209` says 404 for every child table; the contract is the owner's to
-  change and is not edited here
+  (`list_definition_for`), as `API_CONTRACT.md:210` says
 - **Why:** the grids call `getdoctype` for their rows; no screen calls the other four for a
-  child
+  child. Upstream answers these calls for any doctype and lists every field
+  (`frappe/desk/form/load.py:65-86`, `crm/api/doc.py`); the old backend does the same
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
 ### PE-16. Metadata answers list only the fields the caller may read
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-35, DECISIONS 43, 18 Nov 2026); built in `f6e6822`, `94d5c15`
+- **Status:** approved by the owner (20 Nov 2026); first decided by the supervisor (`temp`
+  A-35, DECISIONS 43, 18 Nov 2026); built in `f6e6822`, `94d5c15`
 - **Where:** `getdoctype`'s fields, `meta/fields/`, `meta/filterable-fields/`,
   `meta/group-by-fields/`, `meta/sort-options/`; with milestone 6, the layout and
   quick-filter calls (the Required Fields section and the default layout included); with
@@ -357,7 +363,9 @@ comparison skips that block.
 - **Old backend:** lists every field name
 - **backend_v2:** metadata answers list only the fields the caller may read. The fields
   that remain keep their original `idx`; gaps are allowed
-- **Why:** the answer describes what the caller's own documents contain
+- **Why:** the answer describes what the caller's own documents contain. Upstream answers
+  these calls for any doctype and lists every field (`frappe/desk/form/load.py:65-86`,
+  `crm/api/doc.py`); the old backend does the same
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
 ### PE-12c. A broken layout or quick-filter entry is refused or skipped
@@ -383,8 +391,8 @@ comparison skips that block.
 
 ### PE-17. CRM Form Script is written by System Manager or Administrator
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-37, A-38, DECISIONS 45, 18 Nov 2026); built in `17241b1`
+- **Status:** approved by the owner (20 Nov 2026); first decided by the supervisor (`temp`
+  A-37, A-38, DECISIONS 45, 18 Nov 2026); built in `17241b1`
 - **Where:** `POST`, `PATCH` and `DELETE /api/v1/form-scripts/...` (old
   `/api/resource/CRM Form Script`)
 - **Old backend:** System Manager, Sales Manager or Administrator create, change and
@@ -396,9 +404,8 @@ comparison skips that block.
 
 ### PE-18. A layout's field lists hold fieldnames
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-37, A-38, DECISIONS 46, 18 Nov 2026); built in `17241b1`,
-  `8c04d80`
+- **Status:** approved by the owner (20 Nov 2026); first decided by the supervisor (`temp`
+  A-37, A-38, DECISIONS 46, 18 Nov 2026); built in `17241b1`, `8c04d80`
 - **Where:** `save_fields_layout`, the CRM Fields Layout resource's create and PATCH,
   `get_fields_layout`, `get_sidepanel_sections`
 - **Old backend:** an entry of a layout's field list that is not a fieldname is stored,
@@ -411,8 +418,8 @@ comparison skips that block.
 
 ### PE-19. A saved view's owner and flags are set by the dedicated calls
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-39, DECISIONS 49, 18 Nov 2026); built in `c590ac3`
+- **Status:** approved by the owner (20 Nov 2026); first decided by the supervisor (`temp`
+  A-39, DECISIONS 49, 18 Nov 2026); built in `c590ac3`
 - **Where:** `POST` and `PATCH /api/v1/view-settings/...` (old
   `/api/resource/CRM View Settings`)
 - **Old backend:** accepts `user`, `public`, `is_standard` and `is_default` as written
@@ -426,8 +433,8 @@ comparison skips that block.
 
 ### PE-20. `public` acts on a view the caller may read
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-39, DECISIONS 50, 18 Nov 2026); built in `f7c4ea5`
+- **Status:** approved by the owner (20 Nov 2026); first decided by the supervisor (`temp`
+  A-39, DECISIONS 50, 18 Nov 2026); built in `f7c4ea5`
 - **Where:** `POST /api/v1/view-settings/<name>/public/` (old
   `crm.fcrm.doctype.crm_view_settings.crm_view_settings.public`)
 - **Old backend:** checks the caller's role only
@@ -439,8 +446,8 @@ comparison skips that block.
 
 ### PE-21. `set_as_default` and the kanban column refresh act on views the caller may use
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-39, DECISIONS 51, 18 Nov 2026); built in `f7c4ea5`
+- **Status:** approved by the owner (20 Nov 2026); first decided by the supervisor (`temp`
+  A-39, DECISIONS 51, 18 Nov 2026); built in `f7c4ea5`
 - **Where:** `POST /api/v1/view-settings/set-as-default/` and
   `POST /api/v1/view-settings/<name>/kanban-columns/` (old `set_as_default` and
   `fetch_and_update_kanban_columns`); and, with CONFIGURATION milestone 8, the named
@@ -489,8 +496,8 @@ comparison skips that block.
 
 ### PE-22. `get_data` is served for the resources that opt in to a list view
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-40, 18 Nov 2026); built in `717fdd3`, `f743a80`
+- **Status:** approved by the owner (20 Nov 2026); first decided by the supervisor (`temp`
+  A-40, 18 Nov 2026); built in `717fdd3`, `f743a80`
 - **Where:** `GET` and `POST /api/v1/<resource>/list-view/` (old `crm.api.doc.get_data`)
 - **Old backend:** answers `get_data` for any registered doctype, and builds the column
   list whether or not the link target is served (`backend/frappe_core/api/doc.py:229`,
@@ -542,29 +549,31 @@ comparison skips that block.
 - **Why:** replaces a crash with an error
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
-### PE-24. Rename is served for the resources that opt in
+### PE-24. Rename is served where upstream allows a rename
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-41, A-42, DECISIONS 58 and, for the child-row caches, 60; 19 Nov
-  2026); to be built in CONTACTS
-- **Where:** `POST /api/v1/<resource>/<name>/rename/` (old `frappe.client.rename_doc`),
-  for Address, CRM Industry, Salutation and Gender; and the Contact Email and Contact
-  Phone row routes, `PATCH /api/v1/contacts/<name>/email-ids/<row>/` and
-  `.../phone-nos/<row>/` (old `frappe.client.set_value` on the row)
+- **Status:** approved by the owner (20 Nov 2026), rewriting the supervisor's first
+  decision (`temp` A-41, A-42, DECISIONS 58 and, for the child-row caches, 60; 19 Nov
+  2026; rewritten by `temp` A-48 3c); to be built, for the resources already built
+  first and for later units as they are built
+- **Where:** `POST /api/v1/<resource>/<name>/rename/` (old `frappe.client.rename_doc`);
+  and the Contact Email and Contact Phone row routes,
+  `PATCH /api/v1/contacts/<name>/email-ids/<row>/` and `.../phone-nos/<row>/` (old
+  `frappe.client.set_value` on the row)
 - **Old backend:** the rename call accepts any doctype
   (`backend/crm_app/api/client.py:462-495`); the row edit writes the underscore caches
   of the row (`:421-446`)
-- **backend_v2:** rename is served for the resources that opt in; Contact and CRM
-  Organization do, Address, CRM Industry, Salutation and Gender do not. A child-row
-  write never writes the underscore caches
-- **Why:** each resource serves the actions its screens use (S24), and the caches are
-  written by their own calls (`API_CONTRACT.md:239`)
+- **backend_v2:** rename is served for the doctypes upstream marks `allow_rename`, and
+  needs the write rule. Not served: Gender, CRM Task, CRM View Settings, CRM Global
+  Settings, CRM Sales Hierarchy. A child-row write never writes the underscore caches
+- **Why:** upstream refuses a rename where `allow_rename` is off
+  (`frappe/model/rename_doc.py:379-380`); the caches are written by their own calls
+  (`API_CONTRACT.md:240`)
 - **Recorded by:** CONTACTS, 19 Nov 2026
 
 ### PE-25. "Remove contact" clears the document's own contact field and table
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-42, DECISIONS 59, 19 Nov 2026); built in `c1490cd`
+- **Status:** approved by the owner (20 Nov 2026); first decided by the supervisor (`temp`
+  A-42, DECISIONS 59, 19 Nov 2026); built in `c1490cd`
 - **Where:** `POST /api/v1/<resource>/<name>/linked-documents/` with `remove_contact`,
   and `POST /api/v1/<resource>/bulk-delete/` on a resource that removes contacts (old
   `remove_linked_doc_reference` and `delete_bulk_docs`)
@@ -577,9 +586,8 @@ comparison skips that block.
 
 ### PE-26. Deleting a linked document needs its delete rule
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-42, A-45, DECISIONS 59, 19 Nov 2026); built in `c1490cd`,
-  `a39108f`
+- **Status:** approved by the owner (20 Nov 2026); first decided by the supervisor (`temp`
+  A-42, A-45, DECISIONS 59, 19 Nov 2026); built in `c1490cd`, `a39108f`
 - **Where:** `POST /api/v1/<resource>/<name>/linked-documents/` with `delete`, and
   `POST /api/v1/<resource>/bulk-delete/` with `delete_linked`
 - **Old backend:** checks the write rule. Upstream's unlink answers 403 and rolls the
