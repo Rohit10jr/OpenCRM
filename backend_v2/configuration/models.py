@@ -7,7 +7,7 @@ from django.conf import settings
 from django.db import IntegrityError, models, transaction
 
 from core.models import BaseDocument, SingletonDocument
-from core.naming import FieldValue
+from core.naming import FieldValue, Hash
 
 SYSTEM_DATE_FORMATS = (
     "yyyy-mm-dd",
@@ -217,3 +217,217 @@ class SystemSettings(SingletonDocument):
     def sysdefaults(self) -> dict[str, str]:
         """`frappe.defaults.get_defaults()` for the seven keys, as strings."""
         return {field: str(getattr(self, field) or "") for field in SYSDEFAULT_FIELDS}
+
+
+SERVICE_PROVIDERS = (
+    "frankfurter.app",
+    "fawazahmed-exchange-api",
+    "exchangerate.host",
+    "exchangerate-api",
+)
+TIMELINE_TIMESTAMP_FORMATS = ("Relative", "Exact")
+TIMELINE_SORT_ORDERS = ("Oldest First", "Newest First")
+DROPDOWN_TYPES = ("Route", "Separator")
+
+
+class FCRMSettings(SingletonDocument):
+    """The CRM's own settings single, read by every screen (old
+    `crm_app/models/metadata.py:316-379`). All 16 fields; the behaviour that reads each
+    is its own unit's. No save hooks, as in `backend/` (spec section 4.3)."""
+
+    DOCTYPE = "FCRM Settings"
+    #: Upstream bug #20: the provider credential is restricted to the manager pair.
+    RESTRICTED_FIELDS = ("access_key",)
+    #: Attach fields; attach-on-save itself is ACTIVITIES'.
+    ATTACH_FIELDS = ("brand_logo", "favicon")
+    TEXT_LINK_FIELDS = {"currency": ("configuration.Currency", "Currency")}
+
+    brand_name = models.CharField(max_length=140, blank=True, default="")
+    brand_logo = models.CharField(max_length=500, blank=True, default="")
+    favicon = models.CharField(max_length=500, blank=True, default="")
+    enable_forecasting = models.BooleanField(default=False)
+    enable_sales_hierarchy = models.BooleanField(default=False)
+    currency = models.CharField(max_length=140, blank=True, default="")
+    service_provider = models.CharField(
+        max_length=40,
+        choices=_choices(SERVICE_PROVIDERS),
+        blank=True,
+        default="frankfurter.app",
+    )
+    access_key = models.CharField(max_length=280, blank=True, default="")
+    auto_update_expected_deal_value = models.BooleanField(default=True)
+    update_timestamp_on_new_communication = models.BooleanField(default=True)
+    auto_mark_replied_on_response = models.BooleanField(default=False)
+    auto_reopen_on_new_communication = models.BooleanField(default=False)
+    crm_timeline_timestamp_format = models.CharField(
+        max_length=20, choices=_choices(TIMELINE_TIMESTAMP_FORMATS), default="Relative"
+    )
+    crm_timeline_sort_order = models.CharField(
+        max_length=20, choices=_choices(TIMELINE_SORT_ORDERS), default="Oldest First"
+    )
+    persona_captured = models.BooleanField(default=False)
+
+    class Meta(SingletonDocument.Meta):
+        verbose_name = "FCRM Settings"
+
+    @classmethod
+    def load(cls, *, user):
+        """The old loader's name (`backend/crm_app/models/metadata.py:369-376`): the same as
+        `load_or_create`, so a later port that calls `load` still gets the standard items
+        on a row it creates."""
+        return cls.load_or_create(user=user)
+
+    @classmethod
+    def load_or_create(cls, *, user):
+        """The row; if it is missing, written with `user` as actor and given the standard
+        items. A row that exists is never refilled (old `metadata.py:369-376`)."""
+        document = cls._default_manager.filter(pk=cls.singleton_name()).first()
+        if document is not None:
+            return document
+        try:
+            with transaction.atomic():
+                document = cls(name=cls.singleton_name())
+                document.save(user=user)
+                add_standard_dropdown_items(document, user=user)
+                return document
+        except IntegrityError:
+            return cls._default_manager.get(pk=cls.singleton_name())
+
+
+class CRMDropdownItem(BaseDocument):
+    """A row of FCRM Settings' `dropdown_items`, the sidebar's user menu. Read and written
+    inline only; no route of its own."""
+
+    DOCTYPE = "CRM Dropdown Item"
+    NAME_STRATEGY = Hash()
+    IS_CHILD_TABLE = True
+    CHILD_FIELDS = (
+        "name",
+        "owner",
+        "modified_by",
+        "creation",
+        "modified",
+        "idx",
+        "docstatus",
+        "_assign",
+        "_liked_by",
+        "_comments",
+        "_user_tags",
+        "parent_settings",
+        "parentfield",
+        "parenttype",
+        "name1",
+        "label",
+        "type",
+        "route",
+        "icon",
+        "hidden",
+        "is_standard",
+        "open_in_new_window",
+    )
+
+    parent_settings = models.ForeignKey(
+        FCRMSettings, on_delete=models.CASCADE, related_name="dropdown_items"
+    )
+    parenttype = models.CharField(max_length=140, default="FCRM Settings")
+    parentfield = models.CharField(max_length=140, default="dropdown_items")
+    # `name1` is upstream's fieldname: `name` is the key.
+    name1 = models.CharField(max_length=140, blank=True, default="")
+    label = models.CharField(max_length=140, blank=True, default="")
+    type = models.CharField(
+        max_length=20, choices=_choices(DROPDOWN_TYPES), blank=True, default=""
+    )
+    route = models.CharField(max_length=280, blank=True, default="")
+    icon = models.TextField(blank=True, default="")
+    hidden = models.BooleanField(default=False)
+    is_standard = models.BooleanField(default=False)
+    open_in_new_window = models.BooleanField(default=True)
+
+    class Meta(BaseDocument.Meta):
+        ordering = ["idx"]
+
+
+#: `crm/hooks.py:314-357` `standard_dropdown_items`, verbatim (old `metadata.py:412-446`).
+STANDARD_DROPDOWN_ITEMS = (
+    {"name1": "app_selector", "label": "Apps", "type": "Route", "route": "#", "is_standard": True},
+    {
+        "name1": "settings",
+        "label": "Settings",
+        "type": "Route",
+        "icon": "settings",
+        "route": "#",
+        "is_standard": True,
+    },
+    {
+        "name1": "login_to_fc",
+        "label": "Login to Frappe Cloud",
+        "type": "Route",
+        "route": "#",
+        "is_standard": True,
+    },
+    {
+        "name1": "about",
+        "label": "About",
+        "type": "Route",
+        "icon": "info",
+        "route": "#",
+        "is_standard": True,
+    },
+    {"name1": "separator", "label": "", "type": "Separator", "is_standard": True},
+    {
+        "name1": "logout",
+        "label": "Log out",
+        "type": "Route",
+        "icon": "log-out",
+        "route": "#",
+        "is_standard": True,
+    },
+)
+
+#: What `force` puts back on a standard row; `hidden` and `open_in_new_window` stay as an
+#: administrator set them.
+_RESTORED_DROPDOWN_FIELDS = ("label", "type", "route", "icon")
+
+
+def add_standard_dropdown_items(settings, *, user, force: bool = False) -> int:
+    """`crm/install.py:530-542`: the standard items, unless the row has any; returns the
+    rows written (old `metadata.py:449-491`, ported whole).
+
+    `force` restores the standard rows by `name1` (label, type, route and icon back to
+    what the app ships, a missing one re-added at the end) and leaves custom rows alone.
+    Its operator command is milestone 6's.
+    """
+    rows = settings.dropdown_items
+    if not rows.exists():
+        for idx, item in enumerate(STANDARD_DROPDOWN_ITEMS, start=1):
+            CRMDropdownItem(parent_settings=settings, idx=idx, **item).save(user=user)
+        return len(STANDARD_DROPDOWN_ITEMS)
+    if not force:
+        return 0
+
+    written = 0
+    next_idx = (rows.aggregate(models.Max("idx"))["idx__max"] or 0) + 1
+    for item in STANDARD_DROPDOWN_ITEMS:
+        shipped = {field: item.get(field, "") for field in _RESTORED_DROPDOWN_FIELDS}
+        row = rows.filter(name1=item["name1"]).first()
+        if row is None:
+            CRMDropdownItem(
+                parent_settings=settings,
+                idx=next_idx,
+                name1=item["name1"],
+                is_standard=True,
+                **shipped,
+            ).save(user=user)
+            next_idx += 1
+            written += 1
+            continue
+        if row.is_standard and all(
+            getattr(row, field) == value for field, value in shipped.items()
+        ):
+            continue
+        for field, value in shipped.items():
+            setattr(row, field, value)
+        row.is_standard = True
+        row.save(user=user)
+        written += 1
+    return written

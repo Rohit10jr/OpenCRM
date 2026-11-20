@@ -72,9 +72,9 @@ Content-Type: application/json
 # ---- cleanup first -------------------------------------------------------------------------
 
 ### 0.5 hierarchy off, in case an earlier run died with it on -> 200
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-PUT {{settings}}
+PATCH {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -514,6 +514,7 @@ Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"user": "{{sales}}"}
+
 ### 5.2 a Sales Manager may not either (System Manager only; the tree decides what she can see) -> 403
 # @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == PermissionError
@@ -522,6 +523,7 @@ Authorization: Bearer {{mtoken}}
 Content-Type: application/json
 
 {"user": "{{manager}}"}
+
 ### 5.3 Administrator builds it: grace at the root -> 200
 # @resource-envelope {"data"}/201 -> {"message"}/200
 # @name n_grace_req
@@ -530,6 +532,7 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"user": "{{manager}}", "is_group": 1}
+
 ###
 @n_grace = {{n_grace_req.response.body.$.message.name}}
 
@@ -543,6 +546,7 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"user": "{{sales}}", "reports_to": "{{n_grace}}"}
+
 ###
 @n_ada = {{n_ada_req.response.body.$.message.name}}
 
@@ -567,6 +571,7 @@ Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"reports_to": "{{n_ada}}"}
+
 ### 5.8 nor delete a node -> 403
 # @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == PermissionError
@@ -582,9 +587,9 @@ Authorization: Bearer {{mtoken}}
 # ---- hierarchy ON: the tree now decides ----------------------------------------------------------------
 
 ### 6.1 switch it on (manager-writable setting, Administrator here) -> 200
-# @waiting CONFIGURATION
-# @expect $.data.enable_sales_hierarchy == true
-PUT {{settings}}
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.enable_sales_hierarchy == true
+PATCH {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -661,6 +666,7 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"new_role": "Sales User"}
+
 ### 6.13 the dashboard reads through the same permission layer (base_queryset), so a manager in the
 # @waiting DASHBOARD
 # tree counts her subtree's leads plus the demo rows she may see, never the whole company -> 200
@@ -673,9 +679,9 @@ Content-Type: application/json
 {"name": "total_leads", "type": "number", "from_date": "2026-01-01", "to_date": "2026-12-31"}
 
 ### 6.14 switch it off again -> 200
-# @waiting CONFIGURATION
-# @expect $.data.enable_sales_hierarchy == false
-PUT {{settings}}
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.enable_sales_hierarchy == false
+PATCH {{host}}/api/v1/crm-settings/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 

@@ -382,12 +382,15 @@ Content-Type: application/json
 # @expect $.message.name == ZZ Inserted
 # @expect $.message.website == https://inserted.example
 # @not-served PE-3: frappe.client.get by filters has no REST route
+
 ### 2.6 filters matching nothing -> 404
 # @expect $.exc_type == DoesNotExistError
 # @not-served PE-3: frappe.client.get by filters has no REST route
+
 ### 2.7 neither name nor filters -> 417
 # @expect $.message == name or filters is required
 # @not-served PE-3: frappe.client.get by filters has no REST route
+
 ### 2.8 an unknown doctype -> 404
 # @negative
 # @expect $.exc_type == DoesNotExistError
@@ -558,23 +561,16 @@ Authorization: Bearer {{mtoken}}
 ### 5.1 oauth_providers, guest-callable -> [] (no Social Login Key doctype here; same as an unconfigured site)
 # @expect $.message count 0
 GET {{host}}/api/v1/auth/oauth-providers/
-### 5.2 get_exchange_rate, same currency -> 1
-# @waiting CONFIGURATION
-# @expect $.message == 1
-POST {{host}}/api/method/crm.api.exchange_rate.get_exchange_rate
-Authorization: Bearer {{token}}
-Content-Type: application/json
 
-{"from_currency": "USD", "to_currency": "USD"}
+### 5.2 get_exchange_rate, same currency -> 1
+# @expect $.message == 1
+GET {{host}}/api/v1/exchange-rate/?from_currency=USD&to_currency=USD
+Authorization: Bearer {{token}}
 
 ### 5.3 different currencies with no provider configured -> 1, never 0 (a missing rate must not zero a deal)
-# @waiting CONFIGURATION
 # @expect $.message == 1
-POST {{host}}/api/method/crm.api.exchange_rate.get_exchange_rate
+GET {{host}}/api/v1/exchange-rate/?from_currency=EUR&to_currency=USD&date=2026-09-01
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{"from_currency": "EUR", "to_currency": "USD", "date": "2026-09-01"}
 
 ### 5.4 get_first_lead -> the oldest unconverted lead's name
 # @waiting SALES
@@ -611,6 +607,9 @@ Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"txt": "a", "page_length": 50}
+
+# ---- teardown ------------------------------------------------------------------------------------------
+
 ### 6.1 delete files -> 200
 # @waiting ACTIVITIES
 DELETE {{file}}/{{pub}}
@@ -672,27 +671,33 @@ Authorization: Bearer {{token}}
 # @expect $.message[0].name == crm
 GET {{host}}/api/v1/desk/apps/
 Authorization: Bearer {{token}}
+
 ### 9.2 ...and for a Sales User too: check_app_permission passes on FCRM module access -> 200
 # @expect $.message count 1
 # @expect $.message[0].route == /crm
 GET {{host}}/api/v1/desk/apps/
 Authorization: Bearer {{stoken}}
+
 ### 9.3 get_timezones -> 200, the options PreferencesSettings.vue puts in the dropdown
 # @expect $.message.timezones contains Asia/Kolkata
 GET {{host}}/api/v1/users/timezones/
 Authorization: Bearer {{token}}
+
 ### 9.4 current_site_info as Administrator -> 200, and empty: this port is never a Frappe Cloud site
 # @expect $.message exists
 GET {{host}}/api/v1/desk/site-info/
 Authorization: Bearer {{token}}
+
 ### 9.5 ...but System Manager only, so the Sales User -> 403 (only_for with message=False)
 # @expect $.message == Not permitted
 GET {{host}}/api/v1/desk/site-info/
 Authorization: Bearer {{stoken}}
+
 ### 9.6 boot_config -> 200, off until POSTHOG_PROJECT_ID and POSTHOG_HOST are both set
 # @expect $.message.enabled == false
 GET {{host}}/api/v1/desk/telemetry-config/
 Authorization: Bearer {{token}}
+
 ### 9.7 clear_demo_data as Administrator -> 200, and a no-op: no demo state is ever recorded here
 POST {{host}}/api/v1/demo/clear/
 Authorization: Bearer {{token}}

@@ -17,10 +17,14 @@ from accounts.roles import (
     ROLE_SALES_USER,
     ROLE_SYSTEM_MANAGER,
 )
+from configuration import exchange_rate
 from configuration.models import SystemSettings
 from configuration.serializers import (
+    DOCUMENT_FIELDS,
+    FCRM_SETTINGS_FIELDS,
     CountrySerializer,
     CurrencySerializer,
+    FCRMSettingsSerializer,
     LanguageSerializer,
     SystemSettingsSerializer,
 )
@@ -269,3 +273,42 @@ class CurrencyViewSet(LinkSearchMixin, DocumentViewSet):
         if ptype == "read":
             return _reads_currency(user)
         return _is_system_admin(user)
+
+
+class FCRMSettingsViewSet(SingletonViewSet):
+    """Everyone reads it (the timeline reads it on every screen); the manager pair or
+    Administrator writes it (old `platform_docs.py:302-315`). `access_key` is restricted
+    to the same callers. Every column readable, filterable and sortable."""
+
+    access = Access.ruled()
+    serializer_class = FCRMSettingsSerializer
+    readable_fields = (*DOCUMENT_FIELDS, *FCRM_SETTINGS_FIELDS)
+    filterable_fields = readable_fields
+    sortable_fields = readable_fields
+    searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        return None
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        if user.name == ADMINISTRATOR or ptype == "read":
+            return True
+        return user.has_role(ROLE_SYSTEM_MANAGER) or user.has_role(ROLE_SALES_MANAGER)
+
+
+class ExchangeRateView(BaseAPIView):
+    """`crm.api.exchange_rate.get_exchange_rate`: signed-in callers; the rate between two
+    currencies (configuration/exchange_rate.py; spec section 4.3)."""
+
+    def get(self, request):
+        inputs = self.get_inputs(request)
+        return Response(
+            exchange_rate.get_exchange_rate(
+                inputs.get("from_currency"),
+                inputs.get("to_currency"),
+                inputs.get("date"),
+                user=request.user,
+            )
+        )

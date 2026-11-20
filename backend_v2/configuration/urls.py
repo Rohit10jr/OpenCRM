@@ -6,6 +6,8 @@ from configuration.views import (
     ClearDemoDataView,
     CountryViewSet,
     CurrencyViewSet,
+    ExchangeRateView,
+    FCRMSettingsViewSet,
     LanguageViewSet,
     OnboardingStatusView,
     SiteInfoView,
@@ -26,6 +28,7 @@ urlpatterns = [
     ),
     re_path(r"^demo/clear/?$", ClearDemoDataView.as_view(), name="demo-clear"),
     re_path(r"^translations/?$", TranslationsView.as_view(), name="translations"),
+    re_path(r"^exchange-rate/?$", ExchangeRateView.as_view(), name="exchange-rate"),
     re_path(
         r"^onboarding/status/?$",
         OnboardingStatusView.as_view(),
@@ -37,6 +40,7 @@ singleton_router = SingletonRouter()
 singleton_router.register(
     "system-settings", SystemSettingsViewSet, basename="system-settings"
 )
+singleton_router.register("crm-settings", FCRMSettingsViewSet, basename="crm-settings")
 urlpatterns += singleton_router.urls
 
 router = DocumentRouter()

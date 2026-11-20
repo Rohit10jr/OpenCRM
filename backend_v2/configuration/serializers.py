@@ -2,7 +2,14 @@
 
 from core.serializers import DocumentSerializer
 
-from .models import SYSDEFAULT_FIELDS, Country, Currency, Language, SystemSettings
+from .models import (
+    SYSDEFAULT_FIELDS,
+    Country,
+    Currency,
+    FCRMSettings,
+    Language,
+    SystemSettings,
+)
 
 DOCUMENT_FIELDS = (
     "name",
@@ -65,3 +72,30 @@ class CurrencySerializer(DocumentSerializer):
             "number_format",
             "symbol_on_right",
         )
+
+
+FCRM_SETTINGS_FIELDS = (
+    "brand_name",
+    "brand_logo",
+    "favicon",
+    "enable_forecasting",
+    "enable_sales_hierarchy",
+    "currency",
+    "service_provider",
+    "access_key",
+    "auto_update_expected_deal_value",
+    "update_timestamp_on_new_communication",
+    "auto_mark_replied_on_response",
+    "auto_reopen_on_new_communication",
+    "crm_timeline_timestamp_format",
+    "crm_timeline_sort_order",
+    "persona_captured",
+)
+
+
+class FCRMSettingsSerializer(DocumentSerializer):
+    CHILD_TABLES = {"dropdown_items": ("configuration.CRMDropdownItem", "parent_settings")}
+
+    class Meta:
+        model = FCRMSettings
+        fields = (*DOCUMENT_FIELDS, *FCRM_SETTINGS_FIELDS, "dropdown_items")

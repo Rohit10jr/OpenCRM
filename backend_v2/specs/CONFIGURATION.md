@@ -1,6 +1,6 @@
 # CONFIGURATION — CRM settings, email accounts, saved views, layouts and the list engine
 
-**Status: Ready for milestones 1-2 — rewritten 18 Nov 2026** from the spec check
+**Status: Ready for milestones 1-3 (milestone 3: addendum A-30) — rewritten 18 Nov 2026** from the spec check
 (`tasks\CONFIGURATION_00_spec_check_verdict.md`, `temp` A-27); spec review A-28. **Approval is staged** (A-27, DECISIONS 30, flagged for the owner): the facts and
 the route map below cover the whole unit, but the spec review approves **milestones 1
 and 2 only**; each later milestone needs the decisions marked "open" in §6 settled and a
@@ -180,19 +180,92 @@ unit's own doctypes, and their real gate is SALES and ACTIVITIES (§9).
 
 ### 4.3 FCRM Settings and exchange rate (milestone 3)
 
-- Everyone reads FCRM Settings (the timeline reads it on every screen); the manager pair
-  writes it (`platform_docs.py:302-315`). `access_key` is restricted to managers (upstream
-  bug #20). `backend/` stores it as plain restricted text, so the credential guard
-  (`tests/guards/test_model_fields.py`) gets a written, reviewed exception for it
-  (decision 15).
-- CRM Dropdown Item: the standard rows come from `FCRMSettings.load` and the setup data;
-  `seed --force` restores them (`metadata.py:448-491`).
-- **`get_exchange_rate`**: the same currency, or `ENABLE_EXCHANGE_RATE_API` off, answers
-  `1`; cache key `exchange_rate_<from>_<to>_<date>` for a day, "latest" keyed by today;
-  a five-second timeout, no retry; free providers fall back to each other, paid ones do
-  not; four error sentences (`exchange_rate.py:160-166`, `:200-222`), one worded
-  differently for managers. No `frontend/src` file calls it; its callers are the deal and
-  organization saves and `refresh_exchange_rates`.
+Spec-review addendum: `temp` A-30 (DECISIONS 31-35).
+
+- **Rules:** everyone reads FCRM Settings (the timeline reads it on every screen); the
+  manager pair (Sales Manager, System Manager) or Administrator writes it
+  (`platform_docs.py:302-315`). Route `crm-settings/`, a singleton: GET, PATCH, `value/`;
+  no list route (PE-11). `GET crm-settings/` on a missing row answers 404, as `backend/`
+  (`docs/FINDINGS.md:1373-1375`); only internal callers re-create it.
+- **Fields:** all 16 are built now, with the old defaults and choices
+  (`backend/crm_app/models/metadata.py:316-353`, choices `:27-58`); only the behaviour
+  that reads each waits for its unit. Every column readable, filterable and sortable.
+
+  | Field | Type, default |
+  |---|---|
+  | `brand_name` | text, `""` |
+  | `brand_logo`, `favicon` | text (500), `""`; `ATTACH_FIELDS` (attach-on-save is ACTIVITIES') |
+  | `enable_forecasting`, `enable_sales_hierarchy` | bool, false |
+  | `currency` | text, `""`; a validated text link to Currency (417 for an unknown one), as on System Settings |
+  | `service_provider` | `frankfurter.app`, `fawazahmed-exchange-api`, `exchangerate.host`, `exchangerate-api`; default `frankfurter.app` |
+  | `access_key` | text (280), `""`; `RESTRICTED_FIELDS` |
+  | `auto_update_expected_deal_value`, `update_timestamp_on_new_communication` | bool, true |
+  | `auto_mark_replied_on_response`, `auto_reopen_on_new_communication`, `persona_captured` | bool, false |
+  | `crm_timeline_timestamp_format` | `Relative` / `Exact`, default `Relative` |
+  | `crm_timeline_sort_order` | `Oldest First` / `Newest First`, default `Oldest First` |
+  | `dropdown_items` | CRM Dropdown Item rows, inline |
+
+- **`access_key`** is restricted to the manager pair and Administrator (upstream bug #20):
+  for anyone else it is absent from the body (`test_settings_access.py:160`) and
+  `value/?field=access_key` answers 403. `backend/` stores it as plain restricted text;
+  the credential guard (`tests/guards/test_model_fields.py`, a FOUNDATION file) gets
+  `"access_key"` in `CREDENTIAL_HINTS`, `("configuration.FCRMSettings", "access_key")` in
+  `test_known_credentials_remain_covered`, and a `REVIEWED_RESTRICTED_ONLY` entry saying
+  managers read it back (`DashboardSettings.vue:157`) (decision 15).
+- **No save hooks:** none of upstream's `validate`, `setup_forecasting`,
+  `make_currency_read_only`, `restore_*` or `after_migrate` is built, as in `backend/`
+  (`metadata.py:317-379`; `docs/FINDINGS.md:1371-1373`). A manager may empty the dropdown
+  table.
+- **CRM Dropdown Item:** read and written inline only, replaced wholesale on a parent
+  write (`backend/frappe_core/children.py:221-250`); no route; its writers are the
+  parent's. `CHILD_FIELDS`: the standard stamps, `parent_settings`, `parentfield`,
+  `parenttype`, `name1`, `label`, `type`, `route`, `icon`, `hidden`, `is_standard`,
+  `open_in_new_window`. `is_standard` and `name1` mark a standard row and stay writable
+  by a manager, as in `backend/` (upstream marks them read-only). Row names change on
+  every save in both backends, so the body comparison ignores child `name`s.
+- **The row and its six standard items** (decision 13; A-30 question 2): the data
+  migration writes the FCRM Settings row with the six standard items of `crm/hooks.py:314-357`,
+  as Administrator, each row named with `core.naming`'s hash, `idx` 1-6, and leaves an
+  existing row alone. `load_or_create(user)` takes the caller as actor and adds the
+  standard items **only when it creates the row** (`backend/`'s `if created`,
+  `metadata.py:369-376`), never on a row that exists. `add_standard_dropdown_items(settings,
+  *, user, force=False)` is ported whole, force branch included; the operator command
+  that calls it with `force` (`seed_defaults --force`, `setup.py:508-515`) is milestone 6's.
+- **The outbound HTTP helper** (decision 5): `backend/crm_app/integrations/http.py` ported
+  whole as `core/http.py`. The exchange-rate call uses `timeout=5, attempts=1`
+  (`exchange_rate.py:123-126`), so the retry and redact code is tested by patching the
+  session. The reason for retrying POST (`integrations/http.py:20-25`) concerns telephony
+  and is a note for INTEGRATIONS' callers.
+- **`get_exchange_rate`** (`backend/crm_app/api/exchange_rate.py`): the same currency, an
+  empty or missing currency, or `ENABLE_EXCHANGE_RATE_API` off answers `1`; the cache key
+  is `exchange_rate_<from>_<to>_<date>`, "latest" keyed by today, kept 24 hours; a failure
+  is never cached; a five-second timeout, no retry; the free providers fall back to each
+  other, the paid ones do not. All four error sentences are 417 (`:157-165`, `:189-214`);
+  the manager wording fires only when the provider is `fawazahmed-exchange-api` and both
+  free providers fail (`:108-114`, `:198-209`), "manager" meaning System Manager, Sales
+  Manager or Administrator (`:217-226`). `ENABLE_EXCHANGE_RATE_API` is on in base, off
+  in the test settings, and listed in `.env.example`; tests patch `_get`. No
+  `frontend/src` file calls it; its callers are the deal and organization saves and
+  `refresh_exchange_rates` (SALES).
+  - PE-10 (proposed): `get_exchange_rate` accepts `date` only as `latest` or an ISO date
+    (ASCII digits, a real date) and currencies only as three-letter codes (ASCII
+    letters, either case, used as given); the old backend passes them through.
+  - PE-12: a missing `from_currency` or `to_currency` answers `1`, as an empty one does
+    (`:56`); a transport error or malformed JSON from a paid provider falls through to
+    the generic 417 (`:168-186`); a provider's answer counts only as a positive number.
+- **Tests:** `test_settings_access.py:126-175` (`:177-190` is INTEGRATIONS'); fixtures
+  that create the row (`test_settings_access.py:60-65`, `test_dropdown_items.py:71,81`,
+  `test_singleton_names.py:29,37,56`) update the migrated row instead;
+  `test_dropdown_items.py:79-89` (two cases about the old data-fix migration) become "the
+  migration writes the row with six items and leaves an existing row alone";
+  `test_loading_the_settings_for_the_first_time_seeds_them` deletes the row first;
+  `test_singleton_names.py:21-50` and `test_phase7_review_fixes.py:114-125` are ported
+  here. `refresh_exchange_rates` and `test_exchange_rate.py:176` go to SALES;
+  `test_seed_defaults.py`'s dropdown cases wait for milestone 6. `value/?field=dropdown_items`
+  answers 417 (a child table is not a readable column).
+- **`.http`:** `12` 1.3 maps to 1.2's check on `GET crm-settings/`; 1.4 is covered by
+  1.11 (`value/?field=access_key`, 403); 1.5 and `test_settings_access.py`'s
+  `test_the_key_cannot_be_probed_by_filtering` retire under PE-11 (no list route).
 
 ### 4.4 Email Account and User Email (milestone 4)
 
@@ -336,7 +409,7 @@ what `backend/` tracks, decided at milestone 7 (decision 14).
 | 13 | Migration or seed for reference rows and the two settings rows | decided: a data migration (§4.2), not dev data |
 | 8 | Who edits `accounts` for §8 | decided: this unit, in milestone 4, one commit per file's concern |
 | 15 | Guard exceptions for `access_key`, `api_key` | decided: written, reviewed entries at the milestone that builds each (3, 4) |
-| 5 | The outbound HTTP helper before INTEGRATIONS | **open — before milestone 3** [supervisor's default: a minimal helper in `core`, carried to INTEGRATIONS] |
+| 5 | The outbound HTTP helper before INTEGRATIONS | decided (A-30, DECISIONS 31): `backend/crm_app/integrations/http.py` ported whole as `core/http.py` (§4.3) |
 | 4 | `POST /api/v1/email-accounts/` served? A PATCH re-validates? | **open — before milestone 4** [default: parity — served, no re-validation, a new password ignored; ask first] |
 | 7 | Where mail validation lives; how `core/mail.py` reaches an Email Account | **open — before milestone 4** [default: a provider hook in `core`, as export's] |
 | 2, 9 | What "doctype exists" means; what a child table and a withheld doctype answer, per call; copying or regenerating `doctype_meta.json` and where its generator lives | **open — before milestone 5** [default: 404 for a withheld doctype (`API_CONTRACT.md:209`); child tables only where a screen needs them — `getdoctype`, the layout calls, `get_fields`, `user_settings`] |
@@ -397,9 +470,9 @@ Moved here by ACCOUNTS' spec rewrite (`temp` A-21 D-D; flagged for the owner).
 |---|---|---|
 | **1. Desk plumbing** | `get_apps`, `current_site_info`, `boot_config`, `clear_demo_data`, `get_translations`; no model; the two `POSTHOG_*` settings | yes |
 | **2. Reference data and boot** | Country, Currency, Language, System Settings and their data migration; `FRAPPE_SYSDEFAULTS`; `get_context_for_dev` (re-creating a missing System Settings row); both onboarding calls; link search on Language, Currency and Country | yes |
-| 3. FCRM Settings | FCRM Settings, CRM Dropdown Item, `get_exchange_rate`, `ENABLE_EXCHANGE_RATE_API` | once decision 5 is taken |
+| **3. FCRM Settings** | FCRM Settings (16 fields), CRM Dropdown Item and its standard rows, `core/http.py`, `get_exchange_rate`, `ENABLE_EXCHANGE_RATE_API`; PE-10 to PE-12 | yes (A-30) |
 | 4. Email Account | Email Account, User Email, `create_email_account`, validation, rename, §8 | once decisions 4, 7 are taken; pytest only |
 | 5. Field metadata | the metadata file and generator, the four field helpers, `getdoctype`, `user_settings`, export's provider | on this unit's own doctypes and `tests_support` |
-| 6. Layouts, scripts, quick filters | CRM Fields Layout and its three calls, CRM Form Script, CRM Global Settings, the quick-filter calls, default seeds | partly; content cases name Lead or Task |
+| 6. Layouts, scripts, quick filters | CRM Fields Layout and its three calls, CRM Form Script, CRM Global Settings, the quick-filter calls, default seeds, and the operator command that restores standard rows (`seed_defaults --force`, which calls `add_standard_dropdown_items(force=True)`) | partly; content cases name Lead or Task |
 | 7. Saved views | CRM View Settings, the eight calls, `get_views` | rules yes; default columns need a list definition |
 | 8. List engine | `get_data` as the list-view mixin, the list-definition convention, `User.default_list_data` | on `tests_support` and `User` only; the real gate is SALES and ACTIVITIES |

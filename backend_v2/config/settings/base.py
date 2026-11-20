@@ -140,6 +140,11 @@ CORS_ALLOW_CREDENTIALS = True
 POSTHOG_PROJECT_ID = env("POSTHOG_PROJECT_ID", default="")
 POSTHOG_HOST = env("POSTHOG_HOST", default="")
 
+# Exchange rates (old backend/config/settings/base.py:288-292): a deal or organization in
+# another currency asks the provider chosen on FCRM Settings for its rate. Set false on a
+# site with no outbound internet, and every such rate is 1 instead of a refused save.
+ENABLE_EXCHANGE_RATE_API = env.bool("ENABLE_EXCHANGE_RATE_API", default=True)
+
 # The formats System Settings starts from (old backend/config/settings/base.py:305-313):
 # Frappe's own fallbacks. `currency` empty is a fresh site before its setup wizard picked
 # one; the frontend shows USD for it.

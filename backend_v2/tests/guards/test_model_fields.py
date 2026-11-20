@@ -7,7 +7,15 @@ from core.doctypes import is_child_table
 from core.field_access import encrypted_fields, restricted_fields, sensitive_fields
 
 
-CREDENTIAL_HINTS = ("password", "secret", "token", "api_key", "auth", "credential")
+CREDENTIAL_HINTS = (
+    "password",
+    "secret",
+    "token",
+    "api_key",
+    "access_key",
+    "auth",
+    "credential",
+)
 TRUE_SECRET_HINTS = ("password", "secret", "token")
 
 # Fields that only resemble credentials, with the reason that each is harmless.
@@ -32,6 +40,11 @@ REVIEWED_NOT_CREDENTIALS = {
 
 # Real credentials that are intentionally protected by access rather than encryption.
 REVIEWED_RESTRICTED_ONLY = {
+    ("configuration.FCRMSettings", "access_key"): (
+        "The exchange-rate provider key, stored as plain restricted text as in backend/. "
+        "Managers read it back on the Dashboard settings screen (DashboardSettings.vue:157), "
+        "so it cannot be write-only; everyone else gets it absent and value/ refused."
+    ),
     ("token_blacklist.OutstandingToken", "token"): (
         "SimpleJWT owns this server-only model and requires the encoded token for its "
         "blacklist checks. The model has no CRM resource route, so clients cannot read, "
@@ -181,6 +194,7 @@ def test_known_credentials_remain_covered():
         ("accounts.User", "password"),
         ("accounts.User", "reset_password_key"),
         ("accounts.User", "token_version"),
+        ("configuration.FCRMSettings", "access_key"),
         ("tests_support.SecuredDocument", "secret"),
         ("tests_support.SecuredDocument", "encrypted_secret"),
     }
