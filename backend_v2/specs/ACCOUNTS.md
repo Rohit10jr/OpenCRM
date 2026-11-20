@@ -50,9 +50,8 @@ is an email address (`accounts/models.py:45,98-101`): a user named `info`, `dire
 `add-existing`, `signature`, `timezones`, `search` or `value` cannot be reached by its
 document route — the known S25 (8) limit.
 
-**Not served:** `frappe.client.rename_doc` for `User` (the old backend serves it behind
-the write rule, `backend/crm_app/api/client.py:493`); `User` does not opt in to rename
-(§4.1). Recorded in the route map.
+**Rename** (`frappe.client.rename_doc`) for `User` and CRM Invitation: served, as §10
+says (owner, 20 Nov 2026). It was not served before.
 
 **Moved out (decided A-21 D-D, flagged for the owner):** the **User Email** child table,
 its Email Account hook and `test_user_emails.py` go to CONFIGURATION with Email Account
@@ -173,16 +172,16 @@ and no `frontend/src` file reads them on a User. No parity exception is used. In
   149-188`) skips non-`BaseDocument` models today; extend it to `User`. The write-stamp guard
   (`test_write_stamps.py`) does not apply (no stamps). Each new direct `User` or
   invitation read gets a reviewed entry in `test_direct_model_access.py`.
-- **Opt-ins:** search only (§4.3). Never export (it always fetches `owner`,
-  `core/mixins/export.py:118`), rename (it would copy `password` and `token_version`),
-  bulk update or bulk delete.
+- **Opt-ins:** search (§4.3) and rename (§10). Never export (it always fetches `owner`,
+  `core/mixins/export.py:118`), bulk update or bulk delete.
 - A test proves the object rule runs: a Sales User's PATCH of another user's row is
   refused.
 
 **`name` cannot be changed through the User resource (decided A-21 D-B; PE-7
 proposed).** On PATCH a sent `name` is **ignored**, as other read-only fields are (the
 profile screens may post the unchanged name back); the old backend accepts it. Frappe v15
-refuses it too (`frappe/model/document.py:850-859`). Tested.
+refuses it too (`frappe/model/document.py:850-859`). Tested. A User is renamed by its
+own route (§10).
 
 ### 4.2 Roles and the user directory
 
@@ -244,8 +243,9 @@ enabled / Website User rules (`backend/crm_app/api/client.py:45-60`, FINDINGS 46
   required" (`:133`); "Password size exceeded the maximum allowed size." above 512
   characters (`:42,136`); "Provide either a reset key or your current password" (`:147`);
   401 "Invalid password" (`:248,257`); the two 410 sentences (`password_reset.py:56-57`).
-- **Revocation (finding 11):** `token_version` bumps in exactly two places — a save while
-  disabled (built in FOUNDATION) and `update_password` with a truthy
+- **Revocation (finding 11):** `token_version` changes in three places — a save while
+  disabled (built in FOUNDATION), a rename (§10, a fresh random value), and
+  `update_password` with a truthy
   `logout_all_sessions`, which also blacklists every outstanding refresh token
   (`:275-305`). The bump runs **before** the new pair is issued (`:169-174`), so the
   returned tokens are valid. `change_password` and a plain reset revoke nothing
@@ -481,3 +481,218 @@ version is built: D-B and A-24 are decisions to build the change and flag it.
 3. **`rebuild/accounts-3` — tooling and the gate:** dev-data safety; `parity_diff.py`;
    the `opencrm` check and role script; the `walk_auth_flow.py` equivalent; the `.http`
    and body-diff acceptance.
+
+## 10. Rename for User and CRM Invitation (addendum, 20 Nov 2026)
+
+Owner's decision (`temp` A-48 3c, A-51); written from the spec check and review
+(`temp` A-53, A-54). A built-later addition to milestone-built ACCOUNTS: it has its own
+brief. It changes these passages, which are corrected in the same commits as the code:
+this file's §1 (rename not served), §4.1 (opt-ins; PE-7's last sentence), §4.4
+(revocation); `docs/AS_BUILT.md:64-70` (a missing claim counts as 0; the two triggers),
+`:97-99` (User never renames), `:590-594` (the mixin's order, which gains two hooks);
+`specs/FOUNDATION.md:108-112` (`token_version`); `docs/PORT_MAP.md:235`
+(`rename_doc`'s row); PE-24 (§10.6).
+
+### 10.1 Route and who may call it
+
+`POST /api/v1/users/<name>/rename/` (old `frappe.client.rename_doc` with `doctype=User`),
+through `RenameMixin` and `core.rename.rename_document`. No merge.
+
+**System Manager or Administrator only**, not the User write rule, which also lets a user
+write their own row. `RenameMixin` asks `has_object_rule(user, doc, "write")` today; it
+gains a `rename_rule` hook defaulting to that, which `UserViewSet` overrides (a change in
+`core`). **A System Manager may rename their own account**, as upstream allows: the answer
+is 200 with the new name; the caller's next call with their old token is 401, and their
+refresh token is blacklisted (§10.4). *[Marked for the owner: the supervisor has asked.]*
+
+### 10.2 Normalising, and the refusals in upstream's order
+
+`RenameMixin` gains a `before_rename(instance, old, new)` hook, called right after the
+record is found, which **returns the name every later check and `rename_document` use**
+(upstream `rename_doc.py:151-152` lets `before_rename` replace `new` the same way). User's
+hook strips and lowercases the new name, as `User.save` does
+(`accounts/models.py:119-122`); `rename_document` writes with `bulk_create`
+(`core/rename.py:110`), which skips `save()`. Messages print the name **as normalised**,
+except row 3, which names the old record.
+
+Upstream order: the document is fetched (`rename_doc.py:150`), `before_rename` runs
+(`:151`; User's checks, `frappe/core/doctype/user/user.py:563-581`, v15), then
+`validate_rename` (`:153`): exists, same name, taken (`:348-365`), then permission
+(`:371-372`).
+
+| # | Check | Answer, all **417** |
+|---|---|---|
+| 1 | `merge` sent | `Merging documents is not supported` (mixin, unchanged) |
+| 2 | no such record | `Can't rename X to Y because X doesn't exist.` (mixin) |
+| 3 | hook: the old name is Administrator or Guest | `User X cannot be renamed` |
+| 4 | hook: the new name is not exactly one plain address — `validate_email_address(new)` (`core/models.py:23-44`) raises, or returns anything but the normalised name (so a list `a@x.com, b@x.com` and a display name `Bob <b@x.com>` are refused) | `Y is not a valid Email Address`, the validator's sentence |
+| 5 | same name, after normalising | `No changes made because old and new name are the same.` |
+| 6 | name taken: for User, through a `name_taken(new, old)` hook, **case-insensitive and excluding `pk=old`**, so a legacy mixed-case row can fix its own case | `Another User with name Y exists, select another name` |
+| 7 | the rename rule (§10.1) | `You need write permission on User X to rename` |
+| 8 | `validate_name` | as today; for User it cannot fire after row 4, since an address has none of the forbidden characters |
+
+**Who sees what for the built-ins:** anyone — Administrator and a System Manager
+included — gets row 3's sentence, because row 3 comes before the rule. That is
+upstream's order. So rows 3-6 tell a caller without the right to rename whether a
+record exists and whether a name is taken, as upstream's do.
+
+### 10.3 One transaction
+
+`rename_document` gains an `on_renamed(old, new)` hook, called inside its atomic block
+after the copy and the repointing, before the old row is deleted. Every User step below
+runs there. The cache delete is the only step outside, on `transaction.on_commit`. **No
+step calls `save()` on either instance:**
+- the copy is stale, and would write an old `token_version` back;
+- saving the old instance would re-insert the deleted row;
+- a disabled user's `save()` bumps the version again (`accounts/models.py:110-131`).
+
+### 10.4 What User's hook does
+
+1. **One update:**
+   `User.objects.filter(pk=new).update(email=new, reset_password_key="",
+   last_reset_password_key_generated_on=None, token_version=<fresh random>)`.
+   - `email` follows the name (upstream `user.py:599-600`; `temp` A-48 3b).
+   - The reset key is cleared, so a link mailed to the old address cannot reset the
+     renamed account.
+   - A **fresh random** `token_version` (§10.5), not `+ 1`.
+2. **Every outstanding refresh token is blacklisted**, as `logout_all_sessions` does
+   (`accounts/front_door.py:112-120`). The blacklisting moves to
+   `accounts/authentication.py` as `revoke_all_tokens(user)`, shared by both. It runs
+   after the FK repoint, so `OutstandingToken.user` already names the new row. Upstream
+   clears the sessions of both names (`user.py:602-603`).
+3. **On commit:** `cache.delete("login_attempts:<old>")`. Rate-limit buckets expire by
+   themselves.
+
+**Dev data: no repoint.** `clear_dev_data`'s user step intersects its records with the
+fixed seed names (`accounts/dev_data.py:97-98`), so a renamed seed user is simply no
+longer a dev row: `clear_dev_data` leaves it, and the next `seed_dev_data` creates a
+fresh user under the seed name. Accepted.
+
+### 10.5 Token binding: a random version per account
+
+A token's `user_id` claim is the user's name (`config/settings/base.py:124-125`), so a
+token is bound to a name, not to an account. Today a new account starts at
+`token_version = 0`. An account created under a name used before — after a rename, or a
+delete — would therefore accept the earlier account's tokens that carry the same
+version.
+
+- `token_version` becomes a `PositiveBigIntegerField` whose **default is a callable**
+  returning `secrets.randbelow(2**62) + 1`. Every creation path gets it:
+  - `POST /users/`;
+  - invitation accept (`accounts/invitations.py:123-127`);
+  - the seed (`accounts/dev_data.py:74-85`);
+  - the admin, `createsuperuser` and fixtures.
+
+  An explicit value is kept, so the rename's copy keeps the account's value until
+  §10.4's update replaces it.
+- A rename draws a fresh random value (§10.4), so renaming into a name used before is
+  safe whatever the earlier values were.
+- **Bound:** an earlier account's tokens match the new account only by chance, about
+  (k + j + 1) / 2⁶², where k and j are the two accounts' version changes. Improbable,
+  not impossible. Overflow cannot happen: a value starts at or below 2⁶², a bump adds 1, and the column
+  holds up to 2⁶³ − 1.
+- **Existing rows (proposed, marked for the owner):** a data migration gives every
+  existing row a fresh random version, the built-ins included (migration 0002 creates
+  Administrator and Guest at 0). It signs everyone out once. Without it, two gaps
+  remain for accounts created before it:
+  - a rename into a name used before is still safe (the rename draws a fresh value),
+    but a delete and re-create of an existing account is not;
+  - a refresh token stored in `OutstandingToken` before its version claim was added
+    reads as version 0.
+- The migration to bigint **cannot be reversed** once any value exceeds 2³¹ − 1.
+  Recorded.
+
+### 10.6 `_assign` and `_liked_by` follow, as their own exception
+
+Upstream renames Link fields and `owner` / `modified_by` (`user.py:583-594`) and leaves
+`_assign` and `_liked_by` naming the old user. v2 rewrites them through a new
+`core/rename.py` helper, `_repoint_json_name_lists(old, new)`, called by User's hook:
+- every model with the column, every row whose JSON list holds the old name;
+- each element that is an **exact match on the normalised old name** becomes the new
+  name, with order and duplicates kept; a near-match (`xa@x.com`) is not touched;
+- a plain `update()`: `modified` is not bumped and no save hook runs. It is the one
+  writer of the caches besides their own calls, which ACTIVITIES and ASSIGNMENTS
+  otherwise require.
+
+`_comments` text is left as it is. **PE-24** is amended for User: rename needs System
+Manager or Administrator, not the write rule; and "the caches are written by their own
+calls" gains this one writer. **New PE-32:** a User rename
+- is System Manager's or Administrator's;
+- revokes the user's tokens;
+- clears the reset key;
+- rewrites `_assign` and `_liked_by`;
+- leaves the user names inside `UserSettings.data` and a saved view's `filters` as they
+  are.
+
+Also part of PE-32: every account starts at a random token version.
+
+### 10.7 Followed by the generic rename, proved by tests
+
+- `owner` and `modified_by`: FKs to User (`core/models.py`).
+- The auth M2M rows (`groups`, `user_permissions`) and SimpleJWT's `OutstandingToken`:
+  expected to be reached as hidden reverse relations. Not checked yet; a test each.
+- The sales-hierarchy node: its key is a CASCADE FK, so a missed repoint would delete it
+  silently. A test.
+
+### 10.8 Not mirrored from upstream
+
+| Upstream | Here |
+|---|---|
+| the "renamed from" comment | dropped; ACTIVITIES decides |
+| Notification Settings renamed with the user (`user.py:596-597`) | NOTIFICATIONS carries it |
+| a Channels group keyed by the user's name | NOTIFICATIONS carries it |
+| user names inside `UserSettings.data` and a saved view's `filters` | left as they are (PE-32) |
+| attachments | no File model yet; ACTIVITIES carries it |
+| assignment rule rows naming a user as text | ASSIGNMENTS carries it |
+
+**Recorded:** a pending invitation to the old address, accepted after the rename,
+creates a new account under the old name. It is a new account with its own random
+version, so the renamed user's tokens do not work for it.
+
+### 10.9 CRM Invitation rename
+
+`POST /api/v1/invitations/<name>/rename/`, with the resource's write rule. It depends on
+A-48 2b landing first: today write is refused for everyone. Nothing points at an
+invitation, and `email` and `role` are set once (A-50), so nothing else changes.
+**Recorded race:** the mail task finds the invitation by name (`accounts/tasks.py:31`).
+A rename before the worker runs sends no mail. The invitation is still accepted by its
+`key`, which the rename keeps.
+
+### 10.10 Tests (their own commit)
+
+`backend/tests` has no User rename case to port (to confirm in the brief).
+
+- **Who:**
+  - a Sales User on their own row: 417, row 7;
+  - a Sales Manager: 417;
+  - a System Manager: 200;
+  - a System Manager's self-rename: 200, then the next call with the old access token is
+    401 and the old refresh token is refused (marked line).
+- **Refusals:**
+  - Administrator and Guest, for Administrator and a System Manager alike: row 3;
+  - a bad address, a list, and a display name: row 4;
+  - the same name after normalising (`" A@x.com "` for `a@x.com`): row 5;
+  - another account's name differing only by case: row 6;
+  - a legacy mixed-case row renamed to its own lowercase form: 200;
+  - a leading space never ends as an IntegrityError.
+- **What follows:**
+  - `email`, `owner` and `modified_by`;
+  - `groups`, `user_permissions` and `OutstandingToken`;
+  - the sales-hierarchy node;
+  - `_assign` and `_liked_by`: an exact match is rewritten, a near-match is not, and
+    `modified` is unchanged;
+  - the reset key and its timestamp are cleared.
+- **Tokens:**
+  - a `BlacklistedToken` row for each outstanding jti;
+  - the old access and refresh tokens are refused, and a fresh login works;
+  - after the rename, an account is created under the old name **through invitation
+    accept and through `POST /users/`** (not the conftest helper), and it refuses the
+    renamed user's old access and refresh tokens;
+  - deleting and re-creating an account refuses the first account's tokens;
+  - each creation path never starts at 0;
+  - the rename's new version differs from the old one.
+- **Atomic:** a forced failure in the hook leaves the old row, its tokens and its version
+  as they were.
+- **Lockout:** the old key is gone, asserted after `on_commit` runs (captured).
+- **Invitation:** renamed by a System Manager (once 2b is in), it is still accepted by
+  its key.
