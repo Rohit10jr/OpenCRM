@@ -254,11 +254,11 @@ def test_a_rolled_back_create_sends_nothing(administrator, django_capture_on_com
     assert not CRMInvitation.objects.filter(email="rolled.back@example.com").exists()
 
 
-# --- PE-8 (proposed): created by invite_by_email alone, never changed through the resource ---
+# --- PE-8 (owner, 20 Nov 2026): the resource is System Manager's; email and role set once ---
 
 
-@pytest.mark.parametrize("roles", [["Sales Manager"], ["System Manager"]])
-def test_no_caller_creates_an_invitation_through_the_resource(make_user, api_as, roles):
+@pytest.mark.parametrize("roles", [["Sales Manager"], ["Sales User"]])
+def test_only_a_system_manager_creates_one_through_the_resource(make_user, api_as, roles):
     caller = make_user("caller@example.com", roles=roles)
     mail.outbox.clear()
 
@@ -273,25 +273,86 @@ def test_no_caller_creates_an_invitation_through_the_resource(make_user, api_as,
     assert mail.outbox == []
 
 
-def test_administrator_cannot_create_one_through_the_resource_either(administrator, api_as):
-    response = api_as(administrator).post(
+@pytest.mark.parametrize("roles", [["System Manager"], None])
+def test_a_system_manager_or_administrator_creates_one_the_server_fills_in(
+    make_user, administrator, api_as, roles, _send_on_commit_now
+):
+    caller = make_user("caller@example.com", roles=roles) if roles else administrator
+    mail.outbox.clear()
+
+    response = api_as(caller).post(
         "/api/v1/invitations/",
-        {"email": "direct@example.com", "role": "Sales User", "status": "Pending"},
+        {
+            "email": "direct@example.com",
+            "role": "Sales Manager",
+            "status": "Accepted",
+            "invited_by": "Guest",
+            "key": "chosen-by-caller",
+        },
         format="json",
     )
-    assert response.status_code == 403
+
+    assert response.status_code == 200, response.content[:300]
+    created = CRMInvitation.objects.get(email="direct@example.com")
+    assert created.role == "Sales Manager"
+    assert created.status == "Pending"
+    assert created.invited_by_id == caller.name
+    assert len(created.key) == 40 and created.key != "chosen-by-caller"
+    assert "key" not in response.json()["message"]
+    assert [message.to for message in mail.outbox] == [["direct@example.com"]]
 
 
-@pytest.mark.parametrize("roles", [["Sales Manager"], ["System Manager"]])
+@pytest.mark.parametrize(
+    "change,label",
+    [({"role": "System Manager"}, "Role"), ({"email": "someone.else@example.com"}, "Email")],
+)
+@pytest.mark.parametrize("roles", [["System Manager"], None])
+def test_email_and_role_are_set_once(
+    make_user, administrator, api_as, roles, change, label
+):
+    invitation = _invitation("held@example.com", status="Expired", administrator=administrator)
+    caller = make_user("caller@example.com", roles=roles) if roles else administrator
+
+    response = api_as(caller).patch(
+        f"/api/v1/invitations/{invitation.pk}/", change, format="json"
+    )
+
+    assert response.status_code == 417
+    assert response.json()["message"] == f"Value cannot be changed for {label}"
+    invitation.refresh_from_db()
+    assert (invitation.role, invitation.email) == ("Sales User", "held@example.com")
+
+
+def test_the_same_email_and_role_sent_back_are_accepted(administrator, api_as):
+    invitation = _invitation("held@example.com", status="Expired", administrator=administrator)
+    response = api_as(administrator).patch(
+        f"/api/v1/invitations/{invitation.pk}/",
+        {"email": "held@example.com", "role": "Sales User"},
+        format="json",
+    )
+    assert response.status_code == 200, response.content[:300]
+
+
+@pytest.mark.parametrize("change", [{"status": "Pending"}, {"accepted_at": "2026-11-20 10:00:00"}])
+def test_the_server_set_fields_are_ignored_on_change(administrator, api_as, change):
+    invitation = _invitation("held@example.com", status="Expired", administrator=administrator)
+    response = api_as(administrator).patch(
+        f"/api/v1/invitations/{invitation.pk}/", change, format="json"
+    )
+    assert response.status_code == 200
+    invitation.refresh_from_db()
+    assert (invitation.status, invitation.accepted_at) == ("Expired", None)
+
+
 @pytest.mark.parametrize(
     "change",
     [{"role": "System Manager"}, {"email": "someone.else@example.com"}, {"status": "Pending"}],
 )
-def test_no_caller_changes_an_invitation_through_the_resource(
-    make_user, administrator, api_as, roles, change
+def test_a_sales_manager_changes_nothing_through_the_resource(
+    make_user, administrator, api_as, change
 ):
     invitation = _invitation("held@example.com", status="Expired", administrator=administrator)
-    caller = make_user("caller@example.com", roles=roles)
+    caller = make_user("caller@example.com", roles=["Sales Manager"])
 
     response = api_as(caller).patch(
         f"/api/v1/invitations/{invitation.pk}/", change, format="json"

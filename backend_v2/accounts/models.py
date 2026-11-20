@@ -171,14 +171,16 @@ class CRMInvitation(BaseDocument):
     """An invitation to join with a role (old `crm_app/models/metadata.py`).
 
     `key` is a bearer token: whoever holds it redeems the invitation and its role. It is
-    minted only by `invite_by_email`, never here — a row created through the resource has
-    none, and accepting refuses an empty key, which is what stops a Sales Manager posting
-    a System Manager invitation (specs/ACCOUNTS.md section 4.6).
+    minted by `invite_by_email`, and by the resource's create, which only System Manager
+    or Administrator may call (PE-8); accepting refuses an empty key
+    (specs/ACCOUNTS.md section 4.6).
     """
 
     DOCTYPE = "CRM Invitation"
     NAME_STRATEGY = Hash()
     SENSITIVE_FIELDS = ("key",)
+    #: Set by the server (PE-8): never written through the resource.
+    READONLY_FIELDS = ("invited_by", "status", "email_sent_at", "accepted_at")
 
     email = models.CharField(max_length=140)
     role = models.CharField(max_length=40, choices=INVITATION_ROLE_CHOICES)

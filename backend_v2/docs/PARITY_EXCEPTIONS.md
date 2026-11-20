@@ -189,18 +189,25 @@ comparison skips that block.
 ### PE-8. CRM Invitation is created and changed through the resource by System Manager or Administrator
 
 - **Status:** approved by the owner (20 Nov 2026), rewriting the supervisor's first
-  decision (`temp` A-24, DECISIONS 27, 18 Nov 2026); to be built (`temp` A-48 2b). Until
-  then the resource refuses create and change for everyone
+  decision (`temp` A-24, DECISIONS 27, 18 Nov 2026; set-once `temp` A-50); built with
+  this text (`temp` A-48 2b)
 - **Where:** `POST /api/v1/invitations/` and `PATCH /api/v1/invitations/<name>/` (old
   `/api/resource/CRM Invitation`). No `.http` block found
 - **Old backend:** the manager pair may create and change an invitation through the
-  resource (`backend/crm_app/permissions/platform_docs.py:403-407`)
+  resource, every field writable, and a row created there has no key
+  (`backend/crm_app/permissions/platform_docs.py:403-407`)
 - **backend_v2:** System Manager or Administrator create and change an invitation
-  through the resource; `email` and `role` are writable, `key`, `status` and
-  `invited_by` are set by the server. A Sales Manager lists, reads and deletes
-  invitations and invites through `invite_by_email`
+  through the resource. `email` and `role` are written on create and then set once: a
+  change answers 417 "Value cannot be changed for Email" (or "Role"); the same value
+  sent back is accepted. On create the server sets `key` (as `invite_by_email` mints it),
+  `status` "Pending" and `invited_by` (the caller), and the invitation mail goes out;
+  `status`, `invited_by`, `email_sent_at` and `accepted_at` are never written through the
+  resource. A Sales Manager lists, reads and deletes invitations and invites through
+  `invite_by_email`
 - **Why:** `invite_by_email` holds the role checks; the resource is for an
-  administrator's scripts
+  administrator's scripts. Upstream sets `key`, `invited_by` and `status` in
+  `before_insert` (`crm/fcrm/doctype/crm_invitation/crm_invitation.py`) and refuses a
+  changed set-once field (`frappe/model/document.py:697-721`)
 - **Recorded by:** ACCOUNTS, 18 Nov 2026
 
 ### PE-9. The User document's `assignmentruleuser_set` is always empty

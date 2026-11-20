@@ -1,5 +1,8 @@
 """Serializers for the accounts resources."""
 
+import secrets
+
+from core.exceptions import ValidationError
 from core.serializers import DocumentSerializer
 
 from .models import CRMInvitation, CRMSalesHierarchy, User
@@ -93,7 +96,29 @@ class UserSerializer(DocumentSerializer):
 
 
 class CRMInvitationSerializer(DocumentSerializer):
-    """`key` is sensitive on the model and never on the wire, even for a manager."""
+    """`key` is sensitive on the model and never on the wire, even for a manager.
+
+    PE-8: through the resource, `email` and `role` are written on create and then set once
+    (upstream's `set_only_once`, `frappe/model/document.py:697-721`); `key`, `status` and
+    `invited_by` are set by the server on create, as upstream's `before_insert`
+    (`crm_invitation.py`)."""
+
+    #: (fieldname, label) for upstream's "Value cannot be changed for <label>".
+    SET_ONCE_FIELDS = (("email", "Email"), ("role", "Role"))
+
+    def create(self, validated_data):
+        validated_data["key"] = secrets.token_hex(20)
+        validated_data["status"] = "Pending"
+        validated_data["invited_by"] = self.user
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        for fieldname, label in self.SET_ONCE_FIELDS:
+            if fieldname in validated_data and validated_data[fieldname] != getattr(
+                instance, fieldname
+            ):
+                raise ValidationError(f"Value cannot be changed for {label}")
+        return super().update(instance, validated_data)
 
     class Meta:
         model = CRMInvitation
