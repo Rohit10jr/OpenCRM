@@ -5,7 +5,10 @@ migration; there are no legacy rows here).
 Email Account: who may change it, who may see what, and where the secret lives
 (specs/CONFIGURATION.md 4.4). `PUT`/`DELETE /api/resource/Email Account/<name>` and
 `frappe.client.set_value` are `PATCH`/`DELETE /api/v1/email-accounts/<name>/`; the old
-resource answered under `data`, here under `message`. Expected answers are unchanged.
+resource answered under `data`, here under `message`. Expected answers are unchanged,
+except where PE-27 (owner, 20 Nov 2026) changes who may list and read: System Manager or
+Administrator only, so a Sales User or Sales Manager gets an empty list and 403. The old
+tests' "manager" (a Sales Manager) is a System Manager here; each changed test says so.
 """
 
 import pytest
@@ -34,7 +37,13 @@ def account(administrator):
 
 @pytest.fixture
 def manager(make_user):
-    return make_user("manager@example.com", roles=["Sales Manager"])
+    """PE-27: the old tests' Sales Manager is a System Manager here."""
+    return make_user("manager@example.com", roles=["System Manager"])
+
+
+@pytest.fixture
+def sales_manager(make_user):
+    return make_user("sales.manager@example.com", roles=["Sales Manager"])
 
 
 # --- the row rule --------------------------------------------------------------------------
@@ -74,9 +83,40 @@ def test_a_manager_can_still_edit(manager, account, api_as):
     assert account.smtp_port == 2525
 
 
-def test_an_ordinary_user_can_still_list_accounts(alice, account, api_as):
-    rows = api_as(alice).get(ACCOUNTS).json()["message"]
+def test_pe27_only_a_system_manager_lists_accounts(alice, sales_manager, manager, account, api_as):
+    """PE-27; the old test let an ordinary user list them."""
+    assert api_as(alice).get(ACCOUNTS).json()["message"] == []
+    assert api_as(sales_manager).get(ACCOUNTS).json()["message"] == []
+    rows = api_as(manager).get(ACCOUNTS).json()["message"]
     assert [r["email_id"] for r in rows] == ["support@example.com"]
+
+
+@pytest.mark.parametrize("method", ["get", "patch", "delete"])
+def test_pe27_a_sales_manager_is_refused_by_name(sales_manager, account, api_as, method):
+    client = api_as(sales_manager)
+    path = f"{ACCOUNTS}{account.name}/"
+    response = getattr(client, method)(path, {"smtp_port": 25}, format="json") if method == "patch" \
+        else getattr(client, method)(path)
+    assert response.status_code == 403
+    assert response.json()["message"] == f"No permission for Email Account {account.name}"
+    account.refresh_from_db()
+    assert account.smtp_port != 25
+
+
+def test_pe27_a_sales_manager_cannot_create_one(sales_manager, api_as):
+    response = api_as(sales_manager).post(
+        ACCOUNTS, {"email_account_name": "Other", "email_id": "o@example.com"}, format="json"
+    )
+    assert response.status_code == 403
+    assert not EmailAccount.objects.filter(pk="Other").exists()
+
+
+def test_pe27_a_sales_manager_cannot_rename_one(sales_manager, account, api_as):
+    response = api_as(sales_manager).post(
+        f"{ACCOUNTS}{account.name}/rename/", {"new_name": "Help"}, format="json"
+    )
+    assert response.status_code == 417
+    assert EmailAccount.objects.filter(pk=account.name).exists()
 
 
 # --- restricted fields ---------------------------------------------------------------------
@@ -84,13 +124,16 @@ def test_an_ordinary_user_can_still_list_accounts(alice, account, api_as):
 
 @pytest.mark.parametrize("field", ["smtp_server", "login_id", "api_key", "domain"])
 def test_infrastructure_fields_are_hidden_from_an_ordinary_user(alice, account, api_as, field):
-    body = api_as(alice).get(f"{ACCOUNTS}{account.name}/").json()["message"]
-    assert field not in body
+    """PE-27: the whole record is refused now, so no field of it is on the wire."""
+    response = api_as(alice).get(f"{ACCOUNTS}{account.name}/")
+    assert response.status_code == 403
+    assert field not in response.content.decode()
 
 
 @pytest.mark.parametrize("field", ["name", "email_id", "enable_outgoing"])
-def test_the_picker_still_gets_what_it_reads(alice, account, api_as, field):
-    body = api_as(alice).get(f"{ACCOUNTS}{account.name}/").json()["message"]
+def test_the_picker_still_gets_what_it_reads(manager, account, api_as, field):
+    """PE-27: the Profile picker's list is a System Manager's now."""
+    body = api_as(manager).get(f"{ACCOUNTS}{account.name}/").json()["message"]
     assert field in body
 
 
@@ -100,8 +143,8 @@ def test_a_manager_sees_the_infrastructure(manager, account, api_as):
 
 
 def test_the_list_path_hides_them_too(alice, account, api_as):
-    rows = api_as(alice).get(ACCOUNTS, {"fields": '["*"]'}).json()["message"]
-    assert "smtp_server" not in rows[0]
+    """PE-27: the list is empty for an ordinary user."""
+    assert api_as(alice).get(ACCOUNTS, {"fields": '["*"]'}).json()["message"] == []
 
 
 def test_naming_a_restricted_field_explicitly_is_refused(alice, account, api_as):
@@ -182,9 +225,9 @@ RESTRICTED = (
 @pytest.mark.parametrize("field", RESTRICTED)
 def test_a_non_manager_cannot_reach_a_restricted_field_by_any_door(alice, account, api_as, field):
     client = api_as(alice)
-    assert field not in client.get(f"{ACCOUNTS}{account.name}/").json()["message"]
-    rows = client.get(ACCOUNTS, {"fields": '["*"]'}).json()["message"]
-    assert field not in rows[0]
+    # PE-27: the record and the list are refused before any field is.
+    assert client.get(f"{ACCOUNTS}{account.name}/").status_code == 403
+    assert client.get(ACCOUNTS, {"fields": '["*"]'}).json()["message"] == []
     assert client.get(ACCOUNTS, {"fields": f'["{field}"]'}).status_code == 417
     assert client.get(ACCOUNTS, {"filters": f'[["{field}","is","set"]]'}).status_code == 400
     # backend/frappe_core/query.py:157-158: a ValidationError naming the field.

@@ -599,6 +599,25 @@ comparison skips that block.
 - **Why:** the linked delete asks what the record route asks
 - **Recorded by:** CONTACTS, 19 Nov 2026
 
+### PE-27. Email Account is System Manager's and Administrator's
+
+- **Status:** approved by the owner (20 Nov 2026; `temp` A-48 2a); built with this entry
+- **Where:** `/api/v1/email-accounts/...` (list, create, read, PATCH, delete, rename)
+  and `POST /api/v1/email-accounts/setup/` (old `/api/resource/Email Account`,
+  `crm.api.settings.create_email_account`)
+- **Old backend:** every signed-in user lists and reads an Email Account; the manager
+  pair creates, changes and deletes one, and calls `create_email_account`
+  (`backend/crm_app/permissions/platform_docs.py:49-53,158-186`,
+  `backend/crm_app/api/settings.py`)
+- **backend_v2:** System Manager or Administrator list, read, create, change, rename and
+  delete an Email Account and call `setup/`; any other caller gets an empty list, 403
+  "No permission for Email Account <name>" on a record, and 403 "Not permitted" on
+  `setup/`. A User's `user_emails` rows stay System Manager's to write
+- **Why:** upstream's role table (`frappe/email/doctype/email_account/email_account.json`,
+  v15): System Manager reads, writes, creates and deletes; Inbox User, a role this
+  product does not have, reads
+- **Recorded by:** A-48 group 2, 20 Nov 2026
+
 ---
 
 ## Candidates — not exceptions yet

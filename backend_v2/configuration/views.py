@@ -333,12 +333,11 @@ class ExchangeRateView(BaseAPIView):
 
 
 class EmailAccountViewSet(RenameMixin, DocumentViewSet):
-    """Everyone reads an Email Account (the Profile picker lists them); the manager pair
-    or Administrator creates, writes, renames and deletes (old `platform_docs.py:158-186`).
-    Saved through the resource without validation, service defaults or the name check,
-    and a `password` or `api_secret` sent on update is ignored, as in `backend/`
-    (decision 4). The sensitive and restricted fields are applied by the model's
-    declarations on every route."""
+    """System Manager or Administrator lists, reads, creates, writes, renames and deletes
+    an Email Account; anyone else gets an empty list and 403 (PE-27). Saved through the
+    resource without validation, service defaults or the name check, and a `password` or
+    `api_secret` sent on update is ignored, as in `backend/` (decision 4). The sensitive
+    and restricted fields are applied by the model's declarations on every route."""
 
     access = Access.ruled()
     serializer_class = EmailAccountSerializer
@@ -349,13 +348,11 @@ class EmailAccountViewSet(RenameMixin, DocumentViewSet):
 
     @staticmethod
     def list_rule(user):
-        return None
+        return None if _is_system_admin(user) else Q(pk__in=[])
 
     @staticmethod
     def has_object_rule(user, document, ptype):
-        if user.name == ADMINISTRATOR or ptype == "read":
-            return True
-        return user.has_role(ROLE_SYSTEM_MANAGER) or user.has_role(ROLE_SALES_MANAGER)
+        return _is_system_admin(user)
 
     @action(detail=False, methods=("post",), url_path="setup")
     def setup(self, request):

@@ -74,7 +74,7 @@ COMMON_DEFAULTS = {
 def create_email_account(data, *, user):
     """`crm/api/settings.py:5-53`, as the old backend serves it.
 
-    1. the manager pair or Administrator, else 403 "Not permitted";
+    1. System Manager or Administrator, else 403 "Not permitted" (PE-27);
     2. `data` an object, else 417 "Invalid data";
     3. an unknown service answers the string "Service not supported";
     4. "Email account name is required";
@@ -83,7 +83,7 @@ def create_email_account(data, *, user):
        is a 417 with its text, as upstream's `except Exception as e: frappe.throw(str(e))`;
     7. the insert; a duplicate name is a 409 here, after validation.
     """
-    only_for(["System Manager", "Sales Manager"], user)
+    only_for(["System Manager"], user)
 
     payload = parse_json_param(data, {}) or {}
     if not isinstance(payload, dict):
