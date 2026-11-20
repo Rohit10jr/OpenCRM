@@ -51,6 +51,19 @@ def _repoint_dynamic_links(doctype: str, old: str, new: str) -> None:
             ).update(**{name_field: new})
 
 
+def _repoint_text_links(model, old: str, new: str) -> None:
+    # PE-5 (approved 17 Nov 2026): the old backend left these dangling.
+    for other_model in apps.get_models():
+        text_links = getattr(other_model, "TEXT_LINK_FIELDS", None) or {}
+        for fieldname, (target_label, _) in text_links.items():
+            # Resolved as core.links resolves it, so the label's case does not matter.
+            if apps.get_model(target_label) is not model:
+                continue
+            other_model._default_manager.filter(**{fieldname: old}).update(
+                **{fieldname: new}
+            )
+
+
 def _unique_columns(model) -> list:
     fields = []
     by_name = {field.name: field for field in model._meta.concrete_fields}
@@ -98,6 +111,7 @@ def rename_document(model, old: str, new: str) -> str:
         _repoint_foreign_keys(model, old, new)
         _repoint_child_parents(model, old, new)
         _repoint_dynamic_links(doctype, old, new)
+        _repoint_text_links(model, old, new)
         model._default_manager.filter(pk=old).delete()
         if parked:
             model._default_manager.filter(pk=new).update(**parked)

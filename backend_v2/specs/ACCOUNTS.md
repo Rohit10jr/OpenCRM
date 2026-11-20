@@ -135,5 +135,6 @@ mechanism is tested on `tests_support`; the cases below prove it on real records
 - User overrides the search mixin's `search_filters` hook with `ignore_user_type`
   and the enabled / Website User rules (`backend/crm_app/api/client.py:45-60`,
   FINDINGS 46).
-- PE-6 (proposed): if approved, the bulk-delete worker also refuses a disabled
-  requester; if rejected, the bulk-update worker stops refusing one.
+- PE-6 (approved 17 Nov 2026, built in the SHARED_ACTIONS follow-ups): both queued
+  bulk workers refuse a missing or disabled requester. Disabling a user is ACCOUNTS'
+  route, so a test there proves it on a real disable.

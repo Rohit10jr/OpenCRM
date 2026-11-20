@@ -109,12 +109,51 @@ def test_rename_repoints_every_old_reference_shape_without_deleting_rows(
         Widget.DOCTYPE,
         "New Widget",
     )
-    assert text_link.widget_name == "Old Widget"
+    assert text_link.widget_name == "New Widget"  # PE-5
     assert PointingDocument.objects.filter(pk=pointer.pk).exists()
     assert DynamicReference.objects.filter(pk=dynamic.pk).exists()
     assert WidgetRow.objects.filter(pk=row.pk).exists()
     assert WidgetNote.objects.filter(pk=poly_row.pk).exists()
     assert Version.objects.filter(pk=version.pk).exists()
+
+
+def test_rename_repoints_declared_text_links_only_where_they_match(
+    auth_api, alice
+):
+    """PE-5: the old backend kept the old name here (no old test covered it)."""
+    target = widget(alice, "Mr")
+    other = widget(alice, "Mrs")
+    matching = save(
+        TextLinkDocument(widget_name=target.pk, audit_widget_name=target.pk), alice
+    )
+    unrelated = save(TextLinkDocument(widget_name=other.pk), alice)
+
+    response = rename(auth_api, target.pk, "Mr.")
+
+    assert response.status_code == 200
+    matching.refresh_from_db()
+    unrelated.refresh_from_db()
+    assert (matching.widget_name, matching.audit_widget_name) == ("Mr.", "Mr.")
+    assert unrelated.widget_name == "Mrs"
+
+
+def test_rename_resolves_a_text_link_label_regardless_of_case(
+    auth_api, alice, monkeypatch
+):
+    """core.links accepts any case in the declared label, so rename must too (A-20)."""
+    monkeypatch.setattr(
+        TextLinkDocument,
+        "TEXT_LINK_FIELDS",
+        {"widget_name": ("tests_support.widget", "Widget")},
+    )
+    target = widget(alice, "Lower Label")
+    document = save(TextLinkDocument(widget_name=target.pk), alice)
+
+    response = rename(auth_api, target.pk, "Lower Label Renamed")
+
+    assert response.status_code == 200
+    document.refresh_from_db()
+    assert document.widget_name == "Lower Label Renamed"
 
 
 def test_rename_parks_and_restores_a_non_key_unique_value(auth_api, alice):

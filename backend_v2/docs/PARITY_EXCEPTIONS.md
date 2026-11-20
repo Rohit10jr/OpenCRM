@@ -131,8 +131,7 @@ comparison skips that block.
 
 ### PE-5. Rename also repoints Links stored as plain text
 
-- **Status:** proposed — parked for the owner (`temp` A-9, 16 Nov 2026). The parity
-  version (no repointing) is what is built until this says `approved`
+- **Status:** approved — owner, 17 Nov 2026 (proposed 16 Nov 2026)
 - **Where:** the rename mixin (`frappe.client.rename_doc` →
   `POST /api/v1/<resource>/<name>/rename/`), on any resource another model names through a
   `TEXT_LINK_FIELDS` column. No `.http` block found
@@ -142,28 +141,33 @@ comparison skips that block.
   rename never calls it). After a rename those columns keep the old name, which now names
   nothing
 - **backend_v2:** also rewrites every declared `TEXT_LINK_FIELDS` column that names the
-  old name, in the same transaction
+  old name, in the same transaction (`backend_v2/core/rename.py:_repoint_text_links`)
 - **Why:** a dangling reference users can see (the old name shown, the link broken). The
   per-model declarations make it a small change. It changes what users see, so only the
-  owner approves it
+  owner approves it. The gap is the port's, not Frappe's: upstream's `rename_doc` repoints
+  every Link field, all of them text columns (`git show
+  version-15:frappe/model/rename_doc.py`, `:171-172` and `update_link_field_values` `:412`)
 - **Recorded by:** SHARED_ACTIONS, 16 Nov 2026
 
 ### PE-6. Both queued bulk workers refuse a missing or disabled requester
 
-- **Status:** proposed — parked for the owner (`temp` A-11 finding 1, DECISIONS 16,
-  16 Nov 2026)
+- **Status:** approved — owner, 17 Nov 2026 (proposed 16 Nov 2026)
 - **Where:** the queued halves of bulk update (`core.bulk_update_docs`, 20–500 documents)
   and bulk delete (`core.delete_bulk_docs`, more than ten). No `.http` block found
 - **Old backend:** neither worker checks `enabled`: each binds the requesting user and
   re-checks the row rules as that user (`backend/crm_app/bulk_update.py:111-134`,
   `backend/crm_app/tasks.py:321-345`). A user disabled after queuing still has the job run
 - **backend_v2:** both workers refuse a requester who is missing or disabled; bulk update
-  fails every document, bulk delete deletes nothing. **Today only the bulk-update worker
-  does this** (`core/tasks.py`, built before the divergence was noticed) — an unapproved
-  difference until this entry is decided; bulk delete keeps the old behaviour
+  fails every document; bulk delete refuses the batch as it refuses a missing requester
+  and deletes nothing. When the batch names at least one existing document the job raises
+  `PermissionError` (`No permission to delete <DocType> <name>`); an empty or
+  already-deleted batch returns `"success"`, as for any requester
+  (`backend_v2/core/mixins/bulk_delete.py:authorize_bulk_delete`)
+  (`backend_v2/core/tasks.py`, `bulk_update_docs` and `delete_bulk_docs`)
 - **Why:** a queued job outlives its request; disabling an account should revoke what it
   queued. Other users can see the difference (records not updated or deleted), so only
-  the owner approves it
+  the owner approves it. Upstream has the same gap: its worker only sets the user
+  (`frappe.set_user`), with no `enabled` check
 - **Recorded by:** SHARED_ACTIONS, 16 Nov 2026
 
 ---

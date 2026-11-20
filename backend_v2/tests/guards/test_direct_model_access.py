@@ -108,6 +108,10 @@ DIRECT_MANAGER_READS = {
         "Rename performs write-only updates of every declared doctype/name pair; these "
         "are references being preserved, not resource rows being disclosed."
     ),
+    ("core/rename.py", "_repoint_text_links", "other_model._default_manager"): (
+        "Rename (PE-5) performs write-only updates of every declared plain-text Link "
+        "column holding the old name; references being preserved, nothing disclosed."
+    ),
     ("core/rename.py", "rename_document", "model._default_manager"): (
         "The authorized rename locks and copies the original through its manager, then "
         "deletes the old key and restores parked unique values in one transaction."

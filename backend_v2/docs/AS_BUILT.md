@@ -422,9 +422,9 @@ old order, 417 status, and wording before `core.naming.validate_name` runs.
 `core.rename.rename_document` locks the original and completes the rename in one
 transaction. It inserts a hook-free copy under the new primary key, temporarily parks
 non-key unique values, repoints every reverse FK/O2O (including hidden through-table
-relations), declared polymorphic child parent, and declared `DYNAMIC_LINK_FIELDS` pair,
-then deletes the old row and restores the unique values. `TEXT_LINK_FIELDS` deliberately
-keep the old name for parity while PE-5 remains proposed. The dynamic-link declaration
+relations), declared polymorphic child parent, declared `DYNAMIC_LINK_FIELDS` pair, and
+(PE-5, approved) every model's declared `TEXT_LINK_FIELDS` column that targets the renamed
+model and holds the old name, then deletes the old row and restores the unique values. The dynamic-link declaration
 guard scans every concrete, managed model in project apps, including `tests_support`;
 like the direct-manager guard, it identifies project apps by their path directly under
 `backend_v2/`, excluding Django and third-party apps. It covers the old seven pair shapes
@@ -479,7 +479,7 @@ object-delete rule runs on the loaded visible instances. Missing names are dropp
 the first invisible name in sorted order, then the first object-denied name, refuses
 the batch. Ten authorized existing targets run inline and eleven queue
 `core.delete_bulk_docs`; both answer `{"message": "success"}`. The worker reloads the
-requesting user, repeats authorization, accepts only a `DocumentViewSet` opted in with
+requesting user, treats a disabled one as missing (PE-6), repeats authorization, accepts only a `DocumentViewSet` opted in with
 the mixin, and calls the perform half directly so it never re-enqueues. Its queued
 URLconf is limited to the production URLconf or the running settings' URLconf; an omitted
 value selects production, and any other value is refused before authorization.
