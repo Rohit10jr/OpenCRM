@@ -28,6 +28,13 @@ def only_for(roles, user) -> None:
         raise PermissionError("Not permitted")
 
 
+def _refuse_builtin(name) -> None:
+    """PE-28: Administrator and Guest are never the target of a role action; their
+    roles are fixed by the framework upstream, whatever their role rows say."""
+    if name in User.BUILTIN_NAMES:
+        raise PermissionError("Not permitted")
+
+
 def _set_roles(account, roles) -> None:
     for role in roles:
         group, _ = Group.objects.get_or_create(name=role)
@@ -68,6 +75,7 @@ def update_user_role(user, name, new_role) -> None:
     if new_role not in ASSIGNABLE_ROLES:
         raise ValidationError("Cannot assign this role")
 
+    _refuse_builtin(name)
     account = User._default_manager.filter(pk=name).first()
     if account is None:
         raise ValidationError(f"User {name} not found")
@@ -112,6 +120,7 @@ def remove_crm_roles_from_user(user, name) -> str:
     if name == user.name:
         raise PermissionError("You cannot remove yourself.")
 
+    _refuse_builtin(name)
     account = User._default_manager.filter(pk=name).first()
     if account is None:
         raise ValidationError(f"User {name} not found")
