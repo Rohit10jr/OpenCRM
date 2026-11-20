@@ -666,6 +666,21 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   user with no CRM role
 - **Recorded by:** A-48 group 2, 21 Nov 2026
 
+### PE-30. A password sent to an Email Account is stored
+
+- **Status:** approved by the owner (20 Nov 2026; `temp` A-48 3a, A-63 item 2, DECISIONS
+  37); built with this entry
+- **Where:** `POST /api/v1/email-accounts/` and `PATCH /api/v1/email-accounts/<name>/`
+  (old `/api/resource/Email Account`)
+- **Old backend:** a `password` or `api_secret` in a create or an update through the
+  resource is discarded (`backend/frappe_core/serializers.py:250-257`)
+- **backend_v2:** a non-empty `password` or `api_secret` sent on create or PATCH is
+  stored, encrypted at rest; null or "" leaves the stored value as it is. Neither is
+  ever in a response, and both stay refused in `fields`, `filters` and `value/`
+- **Why:** upstream stores it, and the account screen sends `password` with every save
+  (`frontend/src/components/Settings/EmailEdit.vue:104-118`)
+- **Recorded by:** A-48 group 3, 21 Nov 2026
+
 ---
 
 ## Candidates — not exceptions yet

@@ -295,11 +295,10 @@ Spec-review addendum: `temp` A-33 (DECISIONS 36-39). Old model and link:
   `Access.open`.
 - **Through the resource** (decision 4, parity): `POST email-accounts/` is served for the
   manager pair; a create or PATCH is saved **without** validation, service defaults or
-  the name check, as in `backend/`; a `password` or `api_secret` sent on update is
-  ignored with 200 (`frappe_core/serializers.py:253-257`). **Known difference from
-  upstream, parked for the owner (DECISIONS 37):** `EmailEdit.vue:104-118` sends
-  `password` with every save and upstream stores it; here, as in `backend/`, it is
-  discarded.
+  the name check, as in `backend/`. **PE-30** (owner, 20 Nov 2026, DECISIONS 37): a
+  non-empty `password` or `api_secret` sent on create or PATCH is stored, encrypted, as
+  upstream (`EmailEdit.vue:104-118` sends `password` with every save); null or "" leaves
+  the stored value. `backend/` discards both (`frappe_core/serializers.py:253-257`).
 - **Rename** keeps `email_account_name` at the old value, as `backend/`
   (`frappe_core/rename.py:41-45`; `backend_v2/core/rename.py:14-20`). Upstream updates
   the naming field (`frappe/model/rename_doc.py:319,323-328`). Parked for the owner
@@ -877,7 +876,7 @@ Settings. Paths in this section are `backend/frappe_core/api/doc.py` unless name
 | 8 | Who edits `accounts` for §8 | decided: this unit, in milestone 4, one commit per file's concern |
 | 15 | Guard exceptions for `access_key`, `api_key` | decided: written, reviewed entries at the milestone that builds each (3, 4) |
 | 5 | The outbound HTTP helper before INTEGRATIONS | decided (A-30, DECISIONS 31): `backend/crm_app/integrations/http.py` ported whole as `core/http.py` (§4.3) |
-| 4 | `POST /api/v1/email-accounts/` served? A PATCH re-validates? | decided (A-33, DECISIONS 36): parity, served (for System Manager or Administrator since PE-27), no re-validation, a sent password ignored (section 4.4); the discarded password and the stale naming field after a rename are parked for the owner (DECISIONS 37, 38) |
+| 4 | `POST /api/v1/email-accounts/` served? A PATCH re-validates? | decided (A-33, DECISIONS 36): parity, served (for System Manager or Administrator since PE-27), no re-validation (section 4.4); the owner then decided the sent password is stored (PE-30, DECISIONS 37) and a rename updates the naming field (PE-31, DECISIONS 38) |
 | 7 | Where mail validation lives; how `core/mail.py` reaches an Email Account | decided (A-33, DECISIONS 39): the validators in `core/mail.py`; saved accounts through `MAIL_ACCOUNT_PROVIDER = "configuration.mail"`, with a system check (section 4.4) |
 | 2, 9 | What "doctype exists" means; what a child table and a withheld doctype answer, per call; copying or regenerating `doctype_meta.json` and where its generator lives | decided (A-35, DECISIONS 41, 42): the file copied and its generator and staleness test ported, wired into CI; a doctype exists when declared and served or a served child; withheld 404 everywhere (PE-14); a child answers `getdoctype` and the layout calls only (PE-15) (section 4.5) |
 | 10 | Sensitive column names in field metadata | decided (A-35, DECISIONS 43): every metadata answer leaves out the fields the caller may not read, sensitive and restricted (PE-16) |

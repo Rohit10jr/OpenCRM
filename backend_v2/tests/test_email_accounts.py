@@ -90,14 +90,14 @@ def test_a_secret_is_refused_by_name_filter_and_value(api_as, administrator, acc
     assert value.json()["message"] == f"Field {field!r} is not readable"
 
 
-def test_a_password_sent_on_update_is_ignored(api_as, manager, account):
-    """Parity (decision 4; known difference from upstream, DECISIONS 37)."""
+def test_a_password_sent_on_update_is_stored(api_as, manager, account):
+    """PE-30 (owner, 20 Nov 2026), as upstream; was parity (decision 4, DECISIONS 37)."""
     response = api_as(manager).patch(
         f"{ACCOUNTS}{account.name}/", {"password": "new-secret", "smtp_port": 25}, format="json"
     )
     assert response.status_code == 200, response.content[:300]
     account.refresh_from_db()
-    assert account.get_password("password") == "secret-1"
+    assert account.get_password("password") == "new-secret"
     assert account.smtp_port == 25
 
 

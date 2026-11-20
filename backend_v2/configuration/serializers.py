@@ -2,6 +2,8 @@
 
 import json
 
+from rest_framework import serializers
+
 from core.exceptions import ValidationError
 from core.serializers import DocumentSerializer
 
@@ -112,6 +114,33 @@ class FCRMSettingsSerializer(DocumentSerializer):
 
 
 class EmailAccountSerializer(DocumentSerializer):
+    """PE-30: a non-empty `password` or `api_secret` sent on create or PATCH is stored
+    (encrypted by the model); null or "" leaves the stored value. Both stay sensitive:
+    write-only here, never in a response, a filter or `fields`."""
+
+    #: The credentials the resource takes in but never shows.
+    WRITE_ONLY_SECRETS = ("password", "api_secret")
+
+    def get_fields(self):
+        fields = super().get_fields()
+        for name in self.WRITE_ONLY_SECRETS:
+            fields[name] = serializers.CharField(
+                write_only=True, required=False, allow_blank=True, allow_null=True
+            )
+        return fields
+
+    def _keep_stored_when_empty(self, validated_data):
+        for name in self.WRITE_ONLY_SECRETS:
+            if name in validated_data and not validated_data[name]:
+                validated_data.pop(name)
+        return validated_data
+
+    def create(self, validated_data):
+        return super().create(self._keep_stored_when_empty(validated_data))
+
+    def update(self, instance, validated_data):
+        return super().update(instance, self._keep_stored_when_empty(validated_data))
+
     class Meta:
         model = EmailAccount
         fields = (

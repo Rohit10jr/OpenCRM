@@ -335,8 +335,8 @@ class ExchangeRateView(BaseAPIView):
 class EmailAccountViewSet(RenameMixin, DocumentViewSet):
     """System Manager or Administrator lists, reads, creates, writes, renames and deletes
     an Email Account; anyone else gets an empty list and 403 (PE-27). Saved through the
-    resource without validation, service defaults or the name check, and a `password` or
-    `api_secret` sent on update is ignored, as in `backend/` (decision 4). The sensitive
+    resource without validation, service defaults or the name check, as in `backend/`
+    (decision 4); a non-empty `password` or `api_secret` is stored (PE-30). The sensitive
     and restricted fields are applied by the model's declarations on every route."""
 
     access = Access.ruled()
