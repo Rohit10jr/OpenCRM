@@ -593,7 +593,9 @@ No production resource opts in yet; `tests_support.WidgetViewSet` proves the mec
 `merge`; the URL supplies the old name and surplus body keys are ignored. The lookup
 starts from the model's default manager so list-invisible rows still reach the static
 object-write rule. Merge, missing, unchanged, taken, and write-denied refusals keep the
-old order, 417 status, and wording before `core.naming.validate_name` runs.
+old order, 417 status, and wording before `core.naming.validate_name` runs. A resource
+opts in where upstream's `allow_rename` is on (PE-24): today Email Account, Currency,
+CRM Fields Layout, CRM Form Script, Salutation, Address and CRM Industry.
 
 `core.rename.rename_document` locks the original and completes the rename in one
 transaction. It inserts a hook-free copy under the new primary key (with a plain

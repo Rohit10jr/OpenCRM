@@ -555,8 +555,10 @@ sent kanban columns again, as the old backend and upstream. The number is not re
 
 - **Status:** approved by the owner (20 Nov 2026), rewriting the supervisor's first
   decision (`temp` A-41, A-42, DECISIONS 58 and, for the child-row caches, 60; 19 Nov
-  2026; rewritten by `temp` A-48 3c); to be built, for the resources already built
-  first and for later units as they are built
+  2026; rewritten by `temp` A-48 3c; Currency added by `temp` A-63 item 1); built for
+  the resources already served: Email Account (before), Currency, CRM Fields Layout, CRM
+  Form Script, Salutation, Address and CRM Industry; later units as they are built. User
+  and CRM Invitation come with ACCOUNTS §10
 - **Where:** `POST /api/v1/<resource>/<name>/rename/` (old `frappe.client.rename_doc`);
   and the Contact Email and Contact Phone row routes,
   `PATCH /api/v1/contacts/<name>/email-ids/<row>/` and `.../phone-nos/<row>/` (old
@@ -565,8 +567,9 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   (`backend/crm_app/api/client.py:462-495`); the row edit writes the underscore caches
   of the row (`:421-446`)
 - **backend_v2:** rename is served for the doctypes upstream marks `allow_rename`, and
-  needs the write rule. Not served: Gender, CRM Task, CRM View Settings, CRM Global
-  Settings, CRM Sales Hierarchy. A child-row write never writes the underscore caches
+  needs the write rule. Not served: Gender, Country, Language, CRM Task, CRM View
+  Settings, CRM Global Settings, CRM Sales Hierarchy. A rename sets a `FieldValue` naming
+  field (PE-31). A child-row write never writes the underscore caches
 - **Why:** upstream refuses a rename where `allow_rename` is off
   (`frappe/model/rename_doc.py:379-380`); the caches are written by their own calls
   (`API_CONTRACT.md:240`)

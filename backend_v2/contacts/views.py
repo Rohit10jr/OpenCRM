@@ -18,7 +18,7 @@ from contacts.serializers import (
     SalutationSerializer,
 )
 from core.access import Access
-from core.mixins import LinkSearchMixin
+from core.mixins import LinkSearchMixin, RenameMixin
 from core.views import DocumentViewSet
 
 
@@ -47,7 +47,7 @@ def _read_all_write_admin(user, ptype) -> bool:
     return _is_system_admin(user)
 
 
-class SalutationViewSet(LinkSearchMixin, DocumentViewSet):
+class SalutationViewSet(RenameMixin, LinkSearchMixin, DocumentViewSet):
     """Every column readable, filterable and sortable; search matches `name`."""
 
     access = Access.ruled()
@@ -121,7 +121,7 @@ def address_query_filters(filters):
     return result
 
 
-class AddressViewSet(LinkSearchMixin, DocumentViewSet):
+class AddressViewSet(RenameMixin, LinkSearchMixin, DocumentViewSet):
     """A caller with a CRM role reads, writes and creates an address (PE-29); System
     Manager or Administrator deletes one (old `platform_docs.py:424-434`). Every column
     readable, filterable and sortable; search matches the name, hides disabled addresses
@@ -158,7 +158,7 @@ class AddressViewSet(LinkSearchMixin, DocumentViewSet):
         return super().search_filters(filters, flags, user)
 
 
-class CRMIndustryViewSet(LinkSearchMixin, DocumentViewSet):
+class CRMIndustryViewSet(RenameMixin, LinkSearchMixin, DocumentViewSet):
     """Every caller with a CRM role reads, writes, creates and deletes (PE-29; `backend/`
     registers no rule, DECISIONS 58). Every column readable, filterable and sortable."""
 
