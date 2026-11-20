@@ -263,3 +263,26 @@ def test_new_name_is_validated_last(auth_api, alice):
     assert response.json()["message"] == (
         "Name cannot contain special characters like '<', '>'"
     )
+
+
+# --- PE-31 (owner, 20 Nov 2026): the naming field follows the new name ---------------------
+
+
+def test_pe31_a_field_named_document_takes_the_new_name_in_its_field(administrator):
+    from core.rename import rename_document
+    from tests_support.models import FieldDocument
+
+    save(FieldDocument(title="Old Title"), administrator)
+    assert rename_document(FieldDocument, "Old Title", "New Title") == "New Title"
+
+    renamed = FieldDocument.objects.get(pk="New Title")
+    assert renamed.title == "New Title"
+    assert not FieldDocument.objects.filter(pk="Old Title").exists()
+
+
+def test_pe31_a_document_not_named_by_a_field_keeps_its_fields(auth_api, alice):
+    """Widget's name is not taken from `widget_name`, so the rename leaves it."""
+    widget(alice, "W-1")
+    response = rename(auth_api, "W-1", "W-2")
+    assert response.status_code == 200, response.content[:300]
+    assert Widget.objects.get(pk="W-2").widget_name == "W-1"
