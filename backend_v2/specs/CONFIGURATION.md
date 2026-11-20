@@ -1103,7 +1103,7 @@ administrator created under another name or key), and any business record.
 (`FCRMSettings.restore_defaults`) is served."** (`REBUILD_PLAN.md:68`, 461bd8a). If the
 owner chooses the command only, S20 changes in the same commit as this addendum (the docs
 branch is not pushed).
-*[Marked; the supervisor recommends the command only, and so do I.]* Not served; the
+*[Marked for the owner. Recommended: the command only.]* Not served; the
 command is the way, as in the old backend. The facts:
 - upstream serves `restore_defaults` through `run_doc_method`, which asks only read on
   FCRM Settings (`frappe/handler.py:339`). Every CRM role has read
