@@ -5,6 +5,9 @@ from django.contrib.auth.models import PermissionsMixin
 from django.db import models
 from django.utils import timezone
 
+from core.models import TreeDocument
+from core.naming import Hash
+
 from .roles import ADMINISTRATOR, GUEST, ROLE_ADMINISTRATOR, ROLE_SYSTEM_MANAGER
 
 
@@ -37,6 +40,11 @@ class UserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin):
     """Frappe User, whose primary key is normally its normalized email address."""
+
+    # Not a BaseDocument (Django needs AbstractBaseUser), but a doctype like any other:
+    # the old registry gave it one (backend/frappe_core/registry.py:198-205), and the
+    # delete check, the cascade and the DocType search look it up by this name.
+    DOCTYPE = "User"
 
     # Declared now; nothing enforces these until field access and email validation land.
     EMAIL_FIELDS = ("email",)
@@ -89,7 +97,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self) -> str:
         return str(self.name)
 
-    def save(self, *args, **kwargs):
+    def save(self, *args, user=None, **kwargs):
+        # The resource recipe passes the actor (`save(user=...)`); `User` keeps no
+        # owner/modified_by stamps (specs/ACCOUNTS.md section 4.1), so it is ignored.
+        del user
+        if self._state.adding:
+            # As BaseDocument does: a create never turns into an update of a row whose
+            # name differs only by case once lowercased below.
+            kwargs.setdefault("force_insert", True)
         if not self.full_name:
             self.full_name = " ".join(
                 part for part in (self.first_name, self.last_name) if part
@@ -130,3 +145,30 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def has_role(self, role: str) -> bool:
         return role in self.get_roles()
+
+
+class CRMSalesHierarchy(TreeDocument):
+    """The org chart the sales row rules walk (old `crm_app/models/metadata.py:257-290`)."""
+
+    DOCTYPE = "CRM Sales Hierarchy"
+    NAME_STRATEGY = Hash()
+    PARENT_FIELD = "reports_to"
+    FETCH_FROM = {"full_name": ("user", "full_name")}
+
+    full_name = models.CharField(max_length=280, blank=True, default="")
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="hierarchy_nodes",
+        db_index=True,
+    )
+    reports_to = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="reports"
+    )
+    old_parent = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    is_group = models.BooleanField(default=False)
+
+    class Meta(TreeDocument.Meta):
+        ordering = ["lft"]

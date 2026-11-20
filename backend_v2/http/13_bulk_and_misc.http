@@ -556,10 +556,8 @@ Authorization: Bearer {{mtoken}}
 # ---- the stubs the login and settings screens depend on ------------------------------------------
 
 ### 5.1 oauth_providers, guest-callable -> [] (no Social Login Key doctype here; same as an unconfigured site)
-# @waiting ACCOUNTS
 # @expect $.message count 0
-GET {{host}}/api/method/crm.api.auth.oauth_providers
-
+GET {{host}}/api/v1/auth/oauth-providers/
 ### 5.2 get_exchange_rate, same currency -> 1
 # @waiting CONFIGURATION
 # @expect $.message == 1
@@ -606,17 +604,13 @@ Content-Type: application/json
 {"docname": "x", "new_name": "y"}
 
 ### 5.8 search_link on User is permission-filtered: a Sales User never sees Administrator
-# @waiting SHARED_ACTIONS
 # @expect $.message excludes "Administrator"
 # @expect $.message contains ada@example.com
-POST {{host}}/api/method/frappe.desk.search.search_link
+POST {{host}}/api/v1/users/search/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
-{"doctype": "User", "txt": "a", "page_length": 50}
-
-# ---- teardown ------------------------------------------------------------------------------------------
-
+{"txt": "a", "page_length": 50}
 ### 6.1 delete files -> 200
 # @waiting ACTIVITIES
 DELETE {{file}}/{{pub}}
@@ -688,11 +682,9 @@ GET {{host}}/api/method/frappe.apps.get_apps
 Authorization: Bearer {{stoken}}
 
 ### 9.3 get_timezones -> 200, the options PreferencesSettings.vue puts in the dropdown
-# @waiting ACCOUNTS
 # @expect $.message.timezones contains Asia/Kolkata
-GET {{host}}/api/method/frappe.core.doctype.user.user.get_timezones
+GET {{host}}/api/v1/users/timezones/
 Authorization: Bearer {{token}}
-
 ### 9.4 current_site_info as Administrator -> 200, and empty: this port is never a Frappe Cloud site
 # @waiting CONFIGURATION
 # @expect $.message exists

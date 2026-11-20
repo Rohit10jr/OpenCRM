@@ -98,3 +98,24 @@ def test_a_rotated_refresh_token_is_outstanding(alice):
     rotated = _refresh(_login(alice)["refresh"]).json()["message"]["refresh"]
     jti = RefreshToken(rotated)["jti"]
     assert OutstandingToken.objects.filter(jti=jti, user=alice).exists()
+
+
+# --- ACCOUNTS: ported from backend/tests/test_token_version.py:278-300 (User route) -------
+
+
+def test_the_version_is_not_readable_on_the_user_route(alice, auth_api):
+    body = auth_api.get(f"/api/v1/users/{alice.pk}/").json()["message"]
+    assert "token_version" not in body
+
+
+def test_the_version_cannot_be_filtered_on(alice, auth_api):
+    response = auth_api.get("/api/v1/users/", {"filters": '[["token_version","=",0]]'})
+    assert response.status_code == 400, response.content[:300]
+    assert "exc_type" in response.json(), "an error body, no rows"
+
+
+def test_the_version_cannot_be_written(alice, auth_api):
+    """Writing it back to an old value would revive revoked tokens."""
+    auth_api.patch(f"/api/v1/users/{alice.pk}/", {"token_version": 5}, format="json")
+    alice.refresh_from_db()
+    assert alice.token_version == 0

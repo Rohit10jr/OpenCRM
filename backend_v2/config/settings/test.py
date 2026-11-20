@@ -9,6 +9,14 @@ ROOT_URLCONF = "config.test_urls"
 DEBUG = False
 DEV_DATA_ALLOWED = True
 
+# No Celery worker and no SMTP server under test: tasks run inline and mail lands in
+# django.core.mail.outbox. No config account unless a test sets EMAIL_HOST, whatever the
+# developer's .env says (backend/config/settings/test.py).
+CELERY_TASK_ALWAYS_EAGER = True
+CELERY_TASK_EAGER_PROPAGATES = True
+EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+EMAIL_HOST = ""
+
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",

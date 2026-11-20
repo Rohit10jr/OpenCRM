@@ -396,7 +396,9 @@ def connect_cascades() -> None:
     for model in apps.get_models():
         if (
             isinstance(model, type)
-            and issubclass(model, BaseDocument)
+            # `User` declares a doctype without being a BaseDocument; the old backend
+            # cascades every registered non-child doctype (crm_app/apps.py:30-34).
+            and (issubclass(model, BaseDocument) or getattr(model, "DOCTYPE", None))
             and not model._meta.abstract
             and not is_child_table(model)
             and doctype_of(model) not in REFERENCE_DOCTYPES

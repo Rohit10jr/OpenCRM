@@ -102,10 +102,15 @@ def record_login_success(*keys: str) -> None:
 def rate_limit(
     limit: int = 5,
     seconds: int = 86400,
-    key: str | Callable[[dict], str] | None = None,
+    key: str | Callable[..., str] | None = None,
     normalise=None,
+    pass_user: bool = False,
 ):
-    """Limit a view method using the request passed explicitly to that method."""
+    """Limit a view method using the request passed explicitly to that method.
+
+    With ``pass_user``, a callable ``key`` is called as ``key(inputs, user)``, where
+    ``user`` is the request's authenticated user or ``None``.
+    """
 
     def decorator(func):
         @wraps(func)
@@ -122,7 +127,13 @@ def rate_limit(
                 inputs = build_payload(request) if request is not None else {}
                 if callable(key):
                     try:
-                        value = key(inputs) or ""
+                        if pass_user:
+                            user = getattr(request, "user", None)
+                            if not getattr(user, "is_authenticated", False):
+                                user = None
+                            value = key(inputs, user) or ""
+                        else:
+                            value = key(inputs) or ""
                     except Exception:
                         value = ""
                 else:

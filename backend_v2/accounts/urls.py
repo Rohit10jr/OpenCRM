@@ -1,7 +1,23 @@
 from django.urls import re_path
 
-from accounts.views import LoggedUserView, LoginView, LogoutView, RefreshTokenView
+from accounts.views import (
+    ChangePasswordView,
+    LoggedUserView,
+    LoginView,
+    LogoutView,
+    OAuthProvidersView,
+    RefreshTokenView,
+    UserViewSet,
+    CRMSalesHierarchyViewSet,
+)
+from core.routers import DocumentRouter
 
+
+router = DocumentRouter()
+router.register("users", UserViewSet, basename="user")
+router.register(
+    "sales-hierarchies", CRMSalesHierarchyViewSet, basename="sales-hierarchy"
+)
 
 urlpatterns = [
     re_path(r"^auth/login/?$", LoginView.as_view(), name="auth-login"),
@@ -12,4 +28,15 @@ urlpatterns = [
     ),
     re_path(r"^auth/logout/?$", LogoutView.as_view(), name="auth-logout"),
     re_path(r"^auth/me/?$", LoggedUserView.as_view(), name="auth-me"),
+    re_path(
+        r"^auth/change-password/?$",
+        ChangePasswordView.as_view(),
+        name="auth-change-password",
+    ),
+    re_path(
+        r"^auth/oauth-providers/?$",
+        OAuthProvidersView.as_view(),
+        name="auth-oauth-providers",
+    ),
+    *router.urls,
 ]

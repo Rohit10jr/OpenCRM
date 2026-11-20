@@ -575,7 +575,7 @@ POST {{host}}/api/method/crm.api.session.get_organizations
 Authorization: Bearer {{token}}
 
 ### 7.2 search_link, the Link autocomplete -> [{value, description}] matching the text
-# @waiting SHARED_ACTIONS
+# @waiting CONTACTS
 # (filtered by industry as well, so the result is the same whether or not 5.1 renamed it)
 # @expect $.message count 1
 # @expect $.message[0].value contains Org
@@ -587,7 +587,7 @@ Content-Type: application/json
 {"doctype": "CRM Organization", "txt": "ZZ", "filters": {"industry": "ZZ Industry"}}
 
 ### 7.3 search_link with filters narrows further -> 0
-# @waiting SHARED_ACTIONS
+# @waiting CONTACTS
 # @expect $.message count 0
 POST {{host}}/api/method/frappe.desk.search.search_link
 Authorization: Bearer {{token}}

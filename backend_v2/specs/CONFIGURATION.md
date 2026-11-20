@@ -129,3 +129,27 @@ mechanism is tested on `tests_support`; the cases below prove it on real records
 - Language keeps `language_name` (its `SEARCH_FIELD`) in its readable and filterable
   fields: link search drops a `SEARCH_FIELD` that is hidden or outside the
   allowlists (A-12).
+
+## 8. Carried from ACCOUNTS
+
+Moved here by ACCOUNTS' spec rewrite (`temp` A-21 D-D, 18 Nov 2026; flagged for the owner).
+
+- **User Email**, with Email Account: the child model (`backend/frappe_platform/models.py:1491-1554`),
+  the Email Account `post_save` hook that fills it, `User.PRIVILEGED_WRITE_FIELDS =
+  ("user_emails",)` (System Manager only, old `:248-249`) and `test_user_emails.py`. Until
+  then a User document returns `user_emails: []` and drops an incoming `user_emails`;
+  make it return the rows (`backend/frappe_core/children.py:38-51`,
+  `serializers.py:125-129`) and accept the privileged write.
+- **`get_user_signature`'s fallback**: with no `email_signature`, the default outgoing
+  Email Account's signature when `add_signature` is set (`backend/crm_app/api/misc.py:62-67`).
+- **The outgoing-account lookup**: add the Email Account steps of
+  `backend/crm_app/communication.py:find_outgoing_account` (`:400-440`) to the carrier
+  ACCOUNTS built in `core`, tried **before** the settings-configured account, in the old
+  order; and replace the carrier's small settings object with the unsaved `EmailAccount`
+  the old backend builds (`backend/crm_app/communication.py:372-398`). Port
+  `test_mail_config_account.py:262` and `test_phase5_async.py:377` here (both need a
+  saved Email Account).
+- **`User.default_list_data`** (the User list view, old `:309-318`), with the other list
+  views.
+- `test_language.py:65` and `test_onboarding_status.py` write `User` through ACCOUNTS'
+  `/api/v1/users/<name>/` route.

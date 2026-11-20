@@ -133,6 +133,45 @@ FRONTEND_ORIGIN = env("FRONTEND_ORIGIN", default="http://localhost:8080")
 CORS_ALLOWED_ORIGINS = [FRONTEND_ORIGIN]
 CORS_ALLOW_CREDENTIALS = True
 
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
+
+# One hour to choose a password; an invitation's three days are separate.
+PASSWORD_RESET_LINK_EXPIRY_MINUTES = env.int(
+    "PASSWORD_RESET_LINK_EXPIRY_MINUTES", default=60
+)
+
+# The settings-configured outgoing account, as backend/config/settings/base.py has it:
+# Django's own names, so get_connection() reads them; EMAIL_HOST empty means no account.
+EMAIL_BACKEND = env(
+    "EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend"
+)
+EMAIL_HOST = env("EMAIL_HOST", default="")
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
+# Never alongside SSL: Django's SMTP backend refuses both flags.
+EMAIL_USE_TLS = (
+    env.bool("EMAIL_USE_TLS", default=bool(EMAIL_HOST_USER)) and not EMAIL_USE_SSL
+)
+EMAIL_PORT = env.int("EMAIL_PORT", default=0) or (
+    465 if EMAIL_USE_SSL else 587 if EMAIL_USE_TLS else 25
+)
+DEFAULT_FROM_EMAIL = (
+    env("DEFAULT_FROM_EMAIL", default="")
+    or EMAIL_HOST_USER
+    or "notifications@example.com"
+)
+EMAIL_SENDER_NAME = env("EMAIL_SENDER_NAME", default="Frappe")
+EMAIL_ALWAYS_USE_ACCOUNT_EMAIL_ID_AS_SENDER = env.bool(
+    "EMAIL_ALWAYS_USE_ACCOUNT_EMAIL_ID_AS_SENDER", default=False
+)
+MAIL_CONNECT_TIMEOUT = env.int("MAIL_CONNECT_TIMEOUT", default=10)
+
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",

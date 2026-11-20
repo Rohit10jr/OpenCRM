@@ -90,10 +90,13 @@ on seed data from a unit the scan cannot see.
 
 ### Doctypes (2)
 
-| DocType | Kind | Naming | Old protection | Declared fields | Old model | New app | Status |
-|---|---|---|---|---|---|---|---|
-| User | main | default | ruled: list rule, object rule; no `User` route until ACCOUNTS, so these protections are not yet enforced and tested on a route | S: `groups`, `user_permissions`, `is_superuser`, `is_staff`, `reset_password_key`, `last_reset_password_key_generated_on`, `token_version`; RO: `enabled`, `user_type` | `frappe_platform.User` | accounts | — |
-| Version | withheld | `Hash(10)` | withheld — `specs/UNROUTED_DOCTYPES.md` |  | `frappe_core.Version` | core | built |
+The `User` row is ACCOUNTS' to build (`specs/ACCOUNTS.md` §1): its routes are written
+here, and ACCOUNTS marks it built.
+
+| DocType | Kind | Naming | Old protection | Declared fields | Old model | New route | New app | Status |
+|---|---|---|---|---|---|---|---|---|
+| User | main | default | ruled: list rule, object rule (`backend/crm_app/permissions/platform_docs.py:90-136`), enforced and tested on `/api/v1/users/` by ACCOUNTS | S: `password`, `last_login`, `groups`, `user_permissions`, `is_superuser`, `is_staff`, `reset_password_key`, `last_reset_password_key_generated_on`, `token_version`; RO: `enabled`, `user_type`, and `name` on update (PE-7, proposed) | `frappe_platform.User` | `GET /api/v1/users/`, `POST /api/v1/users/`, `GET /api/v1/users/value/`, `GET /api/v1/users/search/`, `POST /api/v1/users/search/`, `GET /api/v1/users/<name>/`, `PATCH /api/v1/users/<name>/`, `DELETE /api/v1/users/<name>/`, `GET /api/v1/users/<name>/permissions/`. `frappe.client.rename_doc` on `User` is not served | accounts | built |
+| Version | withheld | `Hash(10)` | withheld — `specs/UNROUTED_DOCTYPES.md` |  | `frappe_core.Version` | not served (withheld) | core | built |
 
 ### Method paths (12)
 
@@ -124,35 +127,42 @@ the alias `refresh_token`, all in the body. The old paths also answered a second
 
 ## ACCOUNTS
 
-### Doctypes (3)
+### Doctypes (2)
 
-| DocType | Kind | Naming | Old protection | Declared fields | Old model | New app | Status |
-|---|---|---|---|---|---|---|---|
-| CRM Invitation | main | `Hash(10)` | ruled: list rule, object rule | S: `key` | `crm_app.CRMInvitation` | accounts | — |
-| CRM Sales Hierarchy | main | `Hash(10)` | ruled: list rule, object rule |  | `crm_app.CRMSalesHierarchy` | accounts | — |
-| User Email | child | `Hash(10)` | n/a |  | `frappe_platform.UserEmail` | accounts | — |
+`User`'s row is under FOUNDATION; ACCOUNTS builds it. User Email moved to CONFIGURATION
+with Email Account (`temp` A-21 D-D).
+
+| DocType | Kind | Naming | Old protection | Declared fields | Old model | New route | New app | Status |
+|---|---|---|---|---|---|---|---|---|
+| CRM Invitation | main | `Hash(10)` | ruled: list rule, object rule | S: `key` | `crm_app.CRMInvitation` | `GET /api/v1/invitations/`, `POST /api/v1/invitations/`, `GET /api/v1/invitations/value/`, `GET /api/v1/invitations/<name>/`, `PATCH /api/v1/invitations/<name>/`, `DELETE /api/v1/invitations/<name>/`, `GET /api/v1/invitations/<name>/permissions/` | accounts | — |
+| CRM Sales Hierarchy | main | `Hash(10)` | ruled: list rule, object rule |  | `crm_app.CRMSalesHierarchy` | `GET /api/v1/sales-hierarchies/`, `POST /api/v1/sales-hierarchies/`, `GET /api/v1/sales-hierarchies/value/`, `GET /api/v1/sales-hierarchies/<name>/`, `PATCH /api/v1/sales-hierarchies/<name>/`, `DELETE /api/v1/sales-hierarchies/<name>/`, `GET /api/v1/sales-hierarchies/<name>/permissions/` | accounts | built |
 
 ### Method paths (13)
 
-| Dotted path | Verbs | Access | Old source | New app | Status |
-|---|---|---|---|---|---|
-| `crm.api.accept_invitation` | GET/POST | guest | `crm_app/api/auth_pages.py:accept_invitation` | accounts | — |
-| `crm.api.auth.oauth_providers` | GET/POST | guest | `crm_app/api/auth.py:oauth_providers` | accounts | — |
-| `crm.api.get_user_signature` | GET/POST | auth | `crm_app/api/misc.py:get_user_signature` | accounts | — |
-| `crm.api.invite_by_email` | GET/POST | auth | `crm_app/api/misc.py:invite_by_email` | accounts | — |
-| `crm.api.session.get_user_info` | GET/POST | auth | `crm_app/api/session.py:get_user_info` | accounts | — |
-| `crm.api.session.get_users` | GET/POST | auth | `crm_app/api/session.py:get_users` | accounts | — |
-| `crm.api.user.add_existing_users` | GET/POST | auth | `crm_app/api/user.py:add_existing_users` | accounts | — |
-| `crm.api.user.change_password` | GET/POST | auth | `crm_app/api/user.py:change_password` | accounts | — |
-| `crm.api.user.remove_crm_roles_from_user` | GET/POST | auth | `crm_app/api/user.py:remove_crm_roles_from_user` | accounts | — |
-| `crm.api.user.update_user_role` | GET/POST | auth | `crm_app/api/user.py:update_user_role` | accounts | — |
-| `frappe.core.doctype.user.user.get_timezones` | GET/POST | auth | `crm_app/api/desk.py:get_timezones` | accounts | — |
-| `frappe.core.doctype.user.user.reset_password` | POST | guest | `crm_app/api/auth_pages.py:reset_password` | accounts | — |
-| `frappe.core.doctype.user.user.update_password` | POST | guest | `crm_app/api/auth_pages.py:update_password` | accounts | — |
+Inputs keep their names. Only the user moves into the URL, for the two per-user role
+actions (`user` in the old body, `<name>` in the new route). For a route served by `GET`
+alone, an old `POST` body moves into the query string: a reshaped input
+(`scripts/build_http_suite.py` does the same for the REST copy of each block).
+
+| Dotted path | Verbs | Access | Old source | New route | New app | Status |
+|---|---|---|---|---|---|---|
+| `crm.api.accept_invitation` | GET/POST | guest | `crm_app/api/auth_pages.py:accept_invitation` | `POST /api/v1/auth/accept-invitation/` | accounts | — |
+| `crm.api.auth.oauth_providers` | GET/POST | guest | `crm_app/api/auth.py:oauth_providers` | `GET /api/v1/auth/oauth-providers/` | accounts | built |
+| `crm.api.get_user_signature` | GET/POST | auth | `crm_app/api/misc.py:get_user_signature` | `GET /api/v1/users/signature/` | accounts | built |
+| `crm.api.invite_by_email` | GET/POST | auth | `crm_app/api/misc.py:invite_by_email` | `POST /api/v1/invitations/invite-by-email/` | accounts | — |
+| `crm.api.session.get_user_info` | GET/POST | auth | `crm_app/api/session.py:get_user_info` | `GET /api/v1/users/info/`, `POST /api/v1/users/info/` (a list of up to 200 names) | accounts | built |
+| `crm.api.session.get_users` | GET/POST | auth | `crm_app/api/session.py:get_users` | `GET /api/v1/users/directory/` | accounts | built |
+| `crm.api.user.add_existing_users` | GET/POST | auth | `crm_app/api/user.py:add_existing_users` | `POST /api/v1/users/add-existing/` | accounts | built |
+| `crm.api.user.change_password` | GET/POST | auth | `crm_app/api/user.py:change_password` | `POST /api/v1/auth/change-password/` | accounts | built |
+| `crm.api.user.remove_crm_roles_from_user` | GET/POST | auth | `crm_app/api/user.py:remove_crm_roles_from_user` | `POST /api/v1/users/<name>/remove-crm-roles/` (`user` in the URL) | accounts | built |
+| `crm.api.user.update_user_role` | GET/POST | auth | `crm_app/api/user.py:update_user_role` | `POST /api/v1/users/<name>/update-role/` (`user` in the URL) | accounts | built |
+| `frappe.core.doctype.user.user.get_timezones` | GET/POST | auth | `crm_app/api/desk.py:get_timezones` | `GET /api/v1/users/timezones/` | accounts | built |
+| `frappe.core.doctype.user.user.reset_password` | POST | guest | `crm_app/api/auth_pages.py:reset_password` | `POST /api/v1/auth/reset-password/` | accounts | — |
+| `frappe.core.doctype.user.user.update_password` | POST | guest | `crm_app/api/auth_pages.py:update_password` | `POST /api/v1/auth/update-password/` | accounts | — |
 
 ## CONFIGURATION
 
-### Doctypes (11)
+### Doctypes (12)
 
 | DocType | Kind | Naming | Old protection | Declared fields | Old model | New app | Status |
 |---|---|---|---|---|---|---|---|
@@ -167,6 +177,7 @@ the alias `refresh_token`, all in the body. The old paths also answered a second
 | Language | main | `FieldValue('language_code')` | ruled: list rule, object rule |  | `frappe_platform.Language` | configuration | — |
 | System Settings | single | default | ruled: list rule, object rule |  | `frappe_platform.SystemSettings` | configuration | — |
 | CRM Dropdown Item | child | `Hash(10)` | n/a |  | `crm_app.CRMDropdownItem` | configuration | — |
+| User Email | child | `Hash(10)` | n/a; `user_emails` on `User` is System Manager only (`PRIVILEGED_WRITE_FIELDS`) |  | `frappe_platform.UserEmail` | configuration (moved from ACCOUNTS, `temp` A-21 D-D) | — |
 
 ### Method paths (32)
 

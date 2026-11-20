@@ -150,10 +150,11 @@ def test_every_production_document_model_is_served_or_withheld():
     served = {
         _model(viewset) for viewset in _resource_viewsets(("config.urls",))
     }
+    # `User` declares a doctype without being a BaseDocument (specs/ACCOUNTS.md 4.1).
     production = {
         model
         for model in apps.get_models()
-        if issubclass(model, BaseDocument)
+        if (issubclass(model, BaseDocument) or getattr(model, "DOCTYPE", None))
         and not is_child_table(model)
         and model._meta.app_label not in TEST_MODEL_EXCLUSIONS
     }
