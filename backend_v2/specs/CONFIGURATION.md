@@ -942,9 +942,8 @@ Moved here by ACCOUNTS' spec rewrite (`temp` A-21 D-D; flagged for the owner).
 Owner's change to REBUILD_PLAN S20 (`temp` A-48 group 4); spec-checked and reviewed
 (`temp` A-57, A-58), approved (`temp` A-59). It replaces §4.6 "The default rows", §4.3's
 operator command, and decision 13's parked part, and CONTACTS' seeding of industries,
-salutations and genders (`specs/CONTACTS.md` §4 "Reference rows", decision H). This
-section overrides S20's sentence "The settings action upstream offers for this
-(`FCRMSettings.restore_defaults`) is served." (`REBUILD_PLAN.md:68`), as §10.4 says.
+salutations and genders (`specs/CONTACTS.md` §4 "Reference rows", decision H). No route
+serves the restore (§10.4).
 
 ### 10.1 What moves
 
@@ -1097,14 +1096,10 @@ administrator created under another name or key), and any business record.
 - exit code 0. Any error rolls the transaction back and exits non-zero, as a
   `CommandError`.
 
-### 10.4 A settings route: not served (marked for the owner)
+### 10.4 A settings route: not served
 
-**This overrides S20's sentence "The settings action upstream offers for this
-(`FCRMSettings.restore_defaults`) is served."** (`REBUILD_PLAN.md:68`, 461bd8a). If the
-owner chooses the command only, S20 changes in the same commit as this addendum (the docs
-branch is not pushed).
-*[Marked for the owner. Recommended: the command only.]* Not served; the
-command is the way, as in the old backend. The facts:
+Not served; the command is the way, as in the old backend (owner, 21 Nov 2026; S20,
+`REBUILD_PLAN.md:68`, says the same). The facts:
 - upstream serves `restore_defaults` through `run_doc_method`, which asks only read on
   FCRM Settings (`frappe/handler.py:339`). Every CRM role has read
   (`fcrm_settings.json`);
@@ -1113,8 +1108,6 @@ command is the way, as in the old backend. The facts:
   `backend/crm_app/data/doctype_meta.json:3159`);
 - the old backend has no HTTP route, only the `seed_defaults` command.
 
-If a route is decided later, its actor is the caller, and its roles go in a new
-exception.
 
 ### 10.5 Differences to record
 
@@ -1218,4 +1211,3 @@ because pytest-django runs transactional tests last.
    dropdown branch and its test are deleted, and the §10.6 rewrites and changes are made.
 3. **The restore command:** `configuration/restore.py`, `contacts/restore.py`,
    `core/defaults.py`, the command, and their tests.
-4. **The route:** only if the owner decides on one.
