@@ -46,6 +46,20 @@ class IgnoreRule:
     def applies_to(self, where: tuple[str, str | None] | None) -> bool:
         return self.file is None or where == (self.file, self.block)
 
+    @property
+    def whole_answer(self) -> bool:
+        """Path `$` on a scoped rule: the block's whole answer, status included, is
+        expected to differ under its PE."""
+        return self.path == "$"
+
+
+def expected_difference(
+    rules: list[IgnoreRule], where: tuple[str, str | None] | None
+) -> IgnoreRule | None:
+    return next(
+        (rule for rule in rules if rule.whole_answer and rule.applies_to(where)), None
+    )
+
 
 def approved_exceptions(register: Path) -> set[str]:
     """The PE numbers whose entry's status starts with "approved"."""
@@ -75,6 +89,8 @@ def load_ignore_rules(path: Path, register: Path = DEFAULT_REGISTER) -> list[Ign
             raise ValueError(
                 f"parity ignore rule {rule['path']}: file, block and pe go together"
             )
+        if rule["path"] == "$" and not any(scope):
+            raise ValueError("parity ignore rule $: the whole answer needs a file, block and pe")
         if rule.get("pe"):
             if approved is None:
                 approved = approved_exceptions(register)
@@ -90,7 +106,8 @@ def ignored(
     path: str, rules: list[IgnoreRule], where: tuple[str, str | None] | None = None
 ) -> bool:
     for rule in rules:
-        if not rule.applies_to(where):
+        # A whole-answer rule is the runner's outcome, never a body path's.
+        if rule.whole_answer or not rule.applies_to(where):
             continue
         if rule.path == path:
             return True
@@ -103,14 +120,22 @@ def ignored(
 #: at least one of them a letter (so a ten-digit phone number is never one). Generated
 #: names legitimately differ between two servers (API_CONTRACT.md), also inside a message.
 GENERATED_NAME_RE = re.compile(r"(?<![0-9a-z])(?=[0-9]*[a-f])[0-9a-f]{10}(?![0-9a-z])")
-#: A whole value that is an ISO date or datetime. API_CONTRACT.md lists timestamps beside
-#: generated names as legitimately differing; only their digits are blanked, so the
-#: format (separator, precision, zone) is still compared. Any key qualifies: the shape of
-#: the value decides, not its key's name.
+#: Keys whose values are server-set timestamps. API_CONTRACT.md lists timestamps beside
+#: generated names as legitimately differing. A value is normalised only under such a key
+#: AND when both values are whole ISO dates or datetimes; only their digits are blanked,
+#: so the format (separator, precision, zone) is still compared. A date the caller sets
+#: (`due_date`, `closed_date`) is compared exactly; another server-set key is added here
+#: by name when a unit meets it.
+TIMESTAMP_KEYS = ("creation", "modified")
+TIMESTAMP_SUFFIXES = ("_at", "_on")
 ISO_TIMESTAMP_RE = re.compile(
     r"\d{4}-\d{2}-\d{2}"
     r"(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}(?::?\d{2})?)?)?"
 )
+
+
+def is_timestamp_key(key: str | None) -> bool:
+    return bool(key) and (key in TIMESTAMP_KEYS or key.endswith(TIMESTAMP_SUFFIXES))
 
 
 def is_iso_timestamp(value: str) -> bool:
@@ -137,10 +162,10 @@ class _Comparison:
             return False
         return self.new_to_old.setdefault(new_token, old_token) == old_token
 
-    def strings_match(self, left: str, right: str) -> bool:
+    def strings_match(self, left: str, right: str, key: str | None) -> bool:
         if left == right:
             return True
-        if is_iso_timestamp(left) and is_iso_timestamp(right):
+        if is_timestamp_key(key) and is_iso_timestamp(left) and is_iso_timestamp(right):
             return re.sub(r"\d", "0", left) == re.sub(r"\d", "0", right)
         old_tokens = GENERATED_NAME_RE.findall(left)
         new_tokens = GENERATED_NAME_RE.findall(right)
@@ -152,7 +177,7 @@ class _Comparison:
             return False
         return all(self._pair(old, new) for old, new in zip(old_tokens, new_tokens))
 
-    def compare(self, left, right, path: str = "$") -> None:
+    def compare(self, left, right, path: str = "$", key: str | None = None) -> None:
         if type(left) is not type(right):
             self.add(f"{path}: type {type(left).__name__} != {type(right).__name__}")
             return
@@ -166,12 +191,12 @@ class _Comparison:
                 elif child_key not in right:
                     self.add(f"{child}: missing from new response")
                 else:
-                    self.compare(left[child_key], right[child_key], child)
+                    self.compare(left[child_key], right[child_key], child, child_key)
             return
         if isinstance(left, list):
             self._compare_lists(left, right, path)
             return
-        if isinstance(left, str) and self.strings_match(left, right):
+        if isinstance(left, str) and self.strings_match(left, right, key):
             return
         if left != right:
             old_value = json.dumps(left, ensure_ascii=False)[:80]
@@ -337,7 +362,7 @@ class ParityRunner:
         # alternating the two servers spreads the failed logins past the lockout window,
         # so neither would lock.
         sequential = new_path.name == "99_lockout.http"
-        counts = {"same": 0, "differs": 0, "skipped": 0}
+        counts = {"same": 0, "expected": 0, "differs": 0, "skipped": 0}
         plan = []
         for old_index, old_block in enumerate(old_blocks):
             if old_block.request is None or not (key := block_key(old_block)):
@@ -387,7 +412,8 @@ class ParityRunner:
                 (new_path.name, block_key(new_block)),
             )
         self.output(
-            f"  {counts['same']} same, {counts['differs']} differs, {counts['skipped']} skipped"
+            f"  {counts['same']} same, {counts['expected']} expected, "
+            f"{counts['differs']} differs, {counts['skipped']} skipped"
         )
         return counts["differs"] == 0
 
@@ -432,6 +458,25 @@ class ParityRunner:
             difference = "; ".join(unexpected) or response_difference(
                 old_result.response, new_result.response, self.rules, envelope, where
             )
+            rule = None if unexpected else expected_difference(self.rules, where)
+            if rule is not None:
+                # An approved exception changes this block's answer. Equal answers mean
+                # the rule no longer matches anything, so it must be noticed and removed.
+                if difference:
+                    counts["expected"] += 1
+                    # The PE number is ours, not the server's: kept out of the redaction,
+                    # which masks any text equal to a .env value.
+                    self.output(
+                        f"  [expected ({rule.pe})] "
+                        + self.old.redact(f"{old_block.title} -- {difference}")
+                    )
+                    return
+                counts["differs"] += 1
+                self.output(
+                    f"  [differs] {self.old.redact(old_block.title)} -- expected to differ "
+                    f"under {rule.pe}, but the answers are equal: remove the rule"
+                )
+                return
         outcome = "differs" if difference else "same"
         counts[outcome] += 1
         detail = f" -- {difference}" if difference else ""

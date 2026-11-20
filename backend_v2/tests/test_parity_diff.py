@@ -316,14 +316,25 @@ def test_a_timestamp_format_change_is_reported():
     ) is None
 
 
-def test_an_iso_value_is_normalised_whatever_its_key():
-    """A-48 group 5 item 3: the value's shape decides, not the key's name."""
+def test_a_date_under_another_key_is_compared_exactly():
+    """A-56: a timestamp key AND an ISO value on both sides; a date the caller sets, or one
+    shifted by a time-zone bug, is a real difference."""
     assert body_difference(
         {"due_date": "2026-11-18T10:00:00Z"}, {"due_date": "2026-11-19T10:00:00Z"}, []
-    ) is None
-    assert body_difference({"note": "2026-11-18"}, {"note": "2026-11-19"}, []) is None
+    )
+    assert body_difference({"closed_date": "2026-11-18"}, {"closed_date": "2026-11-19"}, [])
+    assert body_difference({"based_on": "Lead 1"}, {"based_on": "Lead 2"}, [])
+
+
+def test_a_timestamp_key_with_iso_values_is_normalised():
     assert body_difference(
-        {"x": "2026-11-18 10:00:00.123+05:30"}, {"x": "2026-11-19 11:01:02.654+05:30"}, []
+        {"modified": "2026-11-18 10:00:00.123456"}, {"modified": "2026-11-19 11:01:02.654321"}, []
+    ) is None
+    assert body_difference({"sent_on": "2026-11-18"}, {"sent_on": "2026-11-19"}, []) is None
+    assert body_difference(
+        {"email_sent_at": "2026-11-18T10:00:00+05:30"},
+        {"email_sent_at": "2026-11-19T11:01:02+05:30"},
+        [],
     ) is None
 
 
@@ -334,7 +345,7 @@ def test_a_value_that_is_not_iso_is_compared_exactly_even_in_a_timestamp_key():
         {"note": "due 2026-11-18"}, {"note": "due 2026-11-19"}, []
     ), "a date inside text is not a whole ISO value"
     assert body_difference({"modified": "2026-11-18"}, {"modified": "not a date"}, [])
-    assert body_difference({"n": "20261118"}, {"n": "20261119"}, [])
+    assert body_difference({"creation": "20261118"}, {"creation": "20261119"}, [])
 
 
 def test_two_different_ten_digit_numbers_differ():
@@ -493,3 +504,68 @@ def test_a_scoped_rule_reaches_the_block_through_the_runner(temporary_path: Path
         new_request=transport('{"message":{"name":"b"}}'), output=lambda line: None,
     )
     assert runner.run_pair(old, new)
+
+
+# --- A-56: a whole answer expected to differ under an approved exception ----------------
+
+
+def run_one_block(temporary_path: Path, rules, old_answer, new_answer):
+    for side in ("old", "new"):
+        (temporary_path / side).mkdir()
+        (temporary_path / side / "09_users.http").write_text(
+            f"### 2.3 read -> 200\nGET http://{side}.test/u\n", encoding="utf-8"
+        )
+    lines = []
+
+    def transport(answer):
+        return lambda method, url, **kwargs: response(*answer)
+
+    runner = ParityRunner(
+        rules=rules, old_request=transport(old_answer), new_request=transport(new_answer),
+        output=lines.append, dotenv_path=temporary_path / "no.env",
+    )
+    okay = runner.run_pair(temporary_path / "old" / "09_users.http",
+                           temporary_path / "new" / "09_users.http")
+    return okay, lines
+
+
+WHOLE = IgnoreRule("$", "a new rule", "09_users.http", "2.3", "PE-7")
+
+
+def test_a_whole_answer_rule_reports_its_own_outcome(temporary_path: Path):
+    okay, lines = run_one_block(
+        temporary_path, [WHOLE], (200, '{"message":"x"}'), (403, '{"message":"no"}')
+    )
+    assert okay
+    assert any(line.startswith("  [expected (PE-7)] 2.3") and "$.status: 200 != 403" in line
+               for line in lines)
+    assert lines[-1] == "  0 same, 1 expected, 0 differs, 0 skipped"
+
+
+def test_a_whole_answer_rule_whose_answers_are_equal_is_an_error(temporary_path: Path):
+    okay, lines = run_one_block(
+        temporary_path, [WHOLE], (200, '{"message":"x"}'), (200, '{"message":"x"}')
+    )
+    assert not okay
+    assert any("[differs] 2.3" in line and "expected to differ under PE-7" in line
+               and "remove the rule" in line for line in lines)
+
+
+def test_a_whole_answer_rule_is_for_its_block_only(temporary_path: Path):
+    other = IgnoreRule("$", "c", "09_users.http", "2.4", "PE-7")
+    okay, lines = run_one_block(
+        temporary_path, [other], (200, '{"message":"x"}'), (403, '{"message":"no"}')
+    )
+    assert not okay
+    assert any("[differs] 2.3" in line for line in lines)
+
+
+def test_a_whole_answer_rule_does_not_ignore_body_paths():
+    old, new = {"message": "a"}, {"message": "b"}
+    assert body_difference(old, new, [WHOLE], where=("09_users.http", "2.3"))
+
+
+def test_a_whole_answer_rule_needs_its_scope(temporary_path: Path):
+    rules_path, register = write_rules(temporary_path, [{"path": "$", "comment": "c"}])
+    with pytest.raises(ValueError, match="whole answer needs a file, block and pe"):
+        load_ignore_rules(rules_path, register)
