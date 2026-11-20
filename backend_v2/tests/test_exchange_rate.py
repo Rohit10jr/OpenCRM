@@ -156,12 +156,13 @@ GENERIC = "Failed to fetch exchange rate from {0} to {1} on {2}. Please check yo
 @pytest.mark.parametrize(
     ("from_currency", "to_currency", "date"),
     [
-        ("EU", "USD", None),
-        ("EURO", "USD", None),
+        ("E", "USD", None),
+        ("EUROPE", "USD", None),
         ("EUR", "US/", None),
+        ("U-SD", "EUR", None),
+        ("ÜSD", "EUR", None),
         ("EUR", "USD", "yesterday"),
         ("EUR", "USD", "2026-10-01/../x"),
-        ("E1R", "USD", None),
         ("EUR", "USD", "２０２６-１０-０１"),
         ("EUR", "USD", "2026-99-99"),
     ],

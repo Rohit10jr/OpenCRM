@@ -247,9 +247,10 @@ Spec-review addendum: `temp` A-30 (DECISIONS 31-35).
   in the test settings, and listed in `.env.example`; tests patch `_get`. No
   `frontend/src` file calls it; its callers are the deal and organization saves and
   `refresh_exchange_rates` (SALES).
-  - PE-10 (proposed): `get_exchange_rate` accepts `date` only as `latest` or an ISO date
-    (ASCII digits, a real date) and currencies only as three-letter codes (ASCII
-    letters, either case, used as given); the old backend passes them through.
+  - PE-10 (approved by the owner, 20 Nov 2026): `get_exchange_rate` accepts `date` only
+    as `latest` or an ISO date (ASCII digits, a real date) and a currency only as 2 to 5
+    ASCII letters or digits (either case, used as given); the old backend passes them
+    through.
   - PE-12: a missing `from_currency` or `to_currency` answers `1`, as an empty one does
     (`:56`); a transport error or malformed JSON from a paid provider falls through to
     the generic 417 (`:168-186`); a provider's answer counts only as a positive number.

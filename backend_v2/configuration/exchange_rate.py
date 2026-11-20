@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 #: `exchange_rate.py` passes `timeout=5` to every request.
 TIMEOUT = 5
 
-_CURRENCY_RE = re.compile(r"[A-Za-z]{3}", re.ASCII)
+_CURRENCY_RE = re.compile(r"[A-Za-z0-9]{2,5}", re.ASCII)
 _DATE_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", re.ASCII)
 
 
@@ -71,7 +71,7 @@ def get_exchange_rate(from_currency, to_currency, date=None, *, user):
 
 
 def _accepted(from_currency, to_currency, date) -> bool:
-    """PE-10: `latest` or an ISO date; three-letter currency codes."""
+    """PE-10: `latest` or an ISO date; a currency of 2 to 5 ASCII letters or digits."""
     return (
         isinstance(from_currency, str)
         and isinstance(to_currency, str)

@@ -235,8 +235,7 @@ comparison skips that block.
 
 - **Status:** approved by the owner (20 Nov 2026), widening the supervisor's first
   decision (`temp` A-30, DECISIONS 33, 18 Nov 2026); built in `c072147`, `9aa9a82`; the
-  currency rule below is to be built (`temp` A-48 3d). Until then a currency is exactly
-  three ASCII letters
+  currency rule below built with this text (`temp` A-48 3d)
 - **Where:** `GET /api/v1/exchange-rate/` (old `crm.api.exchange_rate.get_exchange_rate`)
 - `date` is `latest` or an ISO date (ASCII digits, a real calendar date); a currency is
   ASCII letters and digits, 2 to 5 characters. The old backend passes both through. A
