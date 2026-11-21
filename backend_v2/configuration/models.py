@@ -386,53 +386,17 @@ STANDARD_DROPDOWN_ITEMS = (
     },
 )
 
-#: What `force` puts back on a standard row; `hidden` and `open_in_new_window` stay as an
-#: administrator set them.
-_RESTORED_DROPDOWN_FIELDS = ("label", "type", "route", "icon")
-
-
-def add_standard_dropdown_items(settings, *, user, force: bool = False) -> int:
+def add_standard_dropdown_items(settings, *, user) -> int:
     """`crm/install.py:530-542`: the standard items, unless the row has any; returns the
-    rows written (old `metadata.py:449-491`, ported whole).
-
-    `force` restores the standard rows by `name1` (label, type, route and icon back to
-    what the app ships, a missing one re-added at the end) and leaves custom rows alone.
-    Its operator command is milestone 6's.
-    """
+    rows written (old `metadata.py:449-491`). The old backend's forced branch is not
+    carried: upstream's `add_standard_dropdown_items` has none (specs/CONFIGURATION.md
+    §10.3, temp A-59)."""
     rows = settings.dropdown_items
-    if not rows.exists():
-        for idx, item in enumerate(STANDARD_DROPDOWN_ITEMS, start=1):
-            CRMDropdownItem(parent_settings=settings, idx=idx, **item).save(user=user)
-        return len(STANDARD_DROPDOWN_ITEMS)
-    if not force:
+    if rows.exists():
         return 0
-
-    written = 0
-    next_idx = (rows.aggregate(models.Max("idx"))["idx__max"] or 0) + 1
-    for item in STANDARD_DROPDOWN_ITEMS:
-        shipped = {field: item.get(field, "") for field in _RESTORED_DROPDOWN_FIELDS}
-        row = rows.filter(name1=item["name1"]).first()
-        if row is None:
-            CRMDropdownItem(
-                parent_settings=settings,
-                idx=next_idx,
-                name1=item["name1"],
-                is_standard=True,
-                **shipped,
-            ).save(user=user)
-            next_idx += 1
-            written += 1
-            continue
-        if row.is_standard and all(
-            getattr(row, field) == value for field, value in shipped.items()
-        ):
-            continue
-        for field, value in shipped.items():
-            setattr(row, field, value)
-        row.is_standard = True
-        row.save(user=user)
-        written += 1
-    return written
+    for idx, item in enumerate(STANDARD_DROPDOWN_ITEMS, start=1):
+        CRMDropdownItem(parent_settings=settings, idx=idx, **item).save(user=user)
+    return len(STANDARD_DROPDOWN_ITEMS)
 
 
 class EmailAccount(BaseDocument):

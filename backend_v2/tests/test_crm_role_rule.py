@@ -86,7 +86,9 @@ def test_an_outsider_finds_no_industry_by_search_or_value(outsider, industry, ap
 @pytest.mark.parametrize("role", ["Sales User", "Sales Manager", "System Manager"])
 def test_each_crm_role_reaches_industries(make_user, industry, api_as, role):
     client = api_as(make_user("crm@example.com", roles=[role]))
-    assert [r["name"] for r in client.get(INDUSTRIES).json()["message"]] == ["Robotics"]
+    # The 51 default industries are there too (CONFIGURATION §10, contacts/0004).
+    listed = client.get(INDUSTRIES, {"filters": '{"name": "Robotics"}'}).json()["message"]
+    assert [r["name"] for r in listed] == ["Robotics"]
     assert client.get(f"{INDUSTRIES}{industry.name}/").status_code == 200
 
 
