@@ -275,14 +275,18 @@ class _ManagerReadVisitor(ast.NodeVisitor):
 
 def _source_files():
     excluded_directories = {"migrations", "models", "tests", "management"}
-    # dev_data.py and restore.py are operator paths, called only by management commands
-    # (seed_dev_data, restore_defaults), never by a request (CONFIGURATION §10.3).
-    excluded_names = {"models.py", "admin.py", "apps.py", "dev_data.py", "restore.py"}
+    excluded_names = {"models.py", "admin.py", "apps.py", "dev_data.py"}
+    # Operator paths called only by restore_defaults (CONFIGURATION §10.3), never by a
+    # request; by path, so another app's restore.py is still scanned (A-78 finding 8).
+    excluded_paths = {"configuration/restore.py", "contacts/restore.py"}
 
     def is_excluded(path, root):
         relative = path.relative_to(root)
-        return path.name in excluded_names or any(
-            part in excluded_directories for part in relative.parts[:-1]
+        app_relative = path.relative_to(root.parent).as_posix()
+        return (
+            path.name in excluded_names
+            or app_relative in excluded_paths
+            or any(part in excluded_directories for part in relative.parts[:-1])
         )
 
     def defines_routed_handler(path):
