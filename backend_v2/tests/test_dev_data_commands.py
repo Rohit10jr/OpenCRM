@@ -40,6 +40,13 @@ def _suite_user_rows():
     return rows
 
 
+@pytest.fixture(autouse=True)
+def _dev_data_allowed(settings):
+    """The test settings leave the flag off (A-48 group 5 item 7); these tests run the
+    commands, so they turn it on. A refusal test's override_settings(False) still wins."""
+    settings.DEV_DATA_ALLOWED = True
+
+
 @pytest.fixture
 def passwords(monkeypatch):
     for variable, value in PASSWORDS.items():
@@ -203,10 +210,23 @@ def test_the_local_settings_take_the_flag_from_the_environment(value, expected):
     assert expected in result.stdout.splitlines()
 
 
-def test_the_test_settings_keep_it_on_for_the_scratch_database():
-    from django.conf import settings
+def test_the_test_settings_leave_it_off():
+    """Owner, A-48 group 5 item 7 (was "keep it on for the scratch database"): the test
+    settings module itself does not set the flag."""
+    from config.settings import test as test_settings
 
-    assert settings.DEV_DATA_ALLOWED is True
+    assert not getattr(test_settings, "DEV_DATA_ALLOWED", False)
+
+
+@pytest.mark.parametrize("command", ("seed_dev_data", "clear_dev_data"))
+def test_the_commands_refuse_under_the_plain_test_settings(settings, command):
+    """No module turns it on behind the tests' back: with the settings' own value, the
+    commands refuse with their sentence."""
+    from config.settings import test as test_settings
+
+    settings.DEV_DATA_ALLOWED = getattr(test_settings, "DEV_DATA_ALLOWED", False)
+    with pytest.raises(CommandError, match=rf"{command} refuses to run: DEV_DATA_ALLOWED is not set"):
+        call_command(command, stdout=io.StringIO())
 
 
 # --- ACCOUNTS milestone 3: clear deletes only what the seed created (DECISIONS 9) -------

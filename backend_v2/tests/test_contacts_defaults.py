@@ -21,6 +21,12 @@ from contacts.models import CRMIndustry, Gender, Salutation
 pytestmark = pytest.mark.django_db
 
 
+@pytest.fixture(autouse=True)
+def _dev_data_allowed(settings):
+    """Two tests run seed_dev_data / clear_dev_data; the test settings leave the flag off."""
+    settings.DEV_DATA_ALLOWED = True
+
+
 def test_the_migrations_wrote_the_reference_lists():
     assert set(Salutation.objects.values_list("pk", flat=True)) >= set(reference_rows.SALUTATIONS)
     assert set(Gender.objects.values_list("pk", flat=True)) >= set(reference_rows.GENDERS)

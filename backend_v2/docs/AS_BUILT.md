@@ -377,7 +377,8 @@ password. `--demo` is accepted but deliberately adds nothing until later units a
 their own explicit steps.
 Both commands refuse to run unless `DEV_DATA_ALLOWED` is true. The base settings read it
 from the environment, default off: it belongs in the `.env` of the database it names
-(DECISIONS 9). Only the test settings turn it on, for the scratch test database.
+(DECISIONS 9). No settings module turns it on, the test settings included: the tests
+that run the two commands turn it on for themselves (A-48 group 5 item 7).
 
 `scripts/build_http_suite.py` parses all 15 old `docs/http/*.http` files and deterministically
 regenerates their REST copies in `backend_v2/http/` from `PORT_MAP.md`. It keeps waiting

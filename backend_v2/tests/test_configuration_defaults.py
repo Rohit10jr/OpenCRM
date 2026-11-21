@@ -22,6 +22,12 @@ from core.models import DevDataRecord
 
 pytestmark = pytest.mark.django_db
 
+
+@pytest.fixture(autouse=True)
+def _dev_data_allowed(settings):
+    """The upgrade test runs clear_dev_data; the test settings leave the flag off."""
+    settings.DEV_DATA_ALLOWED = True
+
 SCRIPT_NAMES = [
     "Forecasting Script",
     "Product Details Script for CRM Deal",
