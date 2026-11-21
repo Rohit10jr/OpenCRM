@@ -596,6 +596,13 @@ No production resource opts in yet; `tests_support.WidgetViewSet` proves the mec
 starts from the model's default manager so list-invisible rows still reach the static
 object-write rule. Merge, missing, unchanged, taken, and write-denied refusals keep the
 old order, 417 status, and wording before `core.naming.validate_name` runs. A resource
+that renames its own way overrides four hooks (ACCOUNTS §10): `before_rename(instance,
+old, new)` right after the record is found, answering the name every later check uses;
+`name_taken(new, old)`; `rename_rule(user, instance)` in place of the write rule; and
+`on_renamed(old, new)`, which `rename_document` calls inside its transaction after the
+repointing and before the old row's delete. `core.rename.repoint_json_name_lists(old,
+new)` rewrites exact matches in every `_assign` / `_liked_by` list with `update()`. A
+resource
 opts in where upstream's `allow_rename` is on (PE-24): today Email Account, Currency,
 CRM Fields Layout, CRM Form Script, Salutation, Address and CRM Industry.
 

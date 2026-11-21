@@ -207,6 +207,14 @@ DIRECT_MANAGER_READS = {
         "Rename must distinguish a missing row from one excluded by its list rule, then "
         "apply the resource's object-write rule to the directly loaded document."
     ),
+    ("core/mixins/rename.py", "RenameMixin.name_taken", "self.document_model._default_manager"): (
+        "The taken check (moved out of rename into its hook) must see every row, list "
+        "rule or not, as upstream's validate_rename does: a hidden row still holds the name."
+    ),
+    ("core/rename.py", "repoint_json_name_lists", "other_model._default_manager"): (
+        "A user rename rewrites the old name in every _assign/_liked_by list, schema-wide "
+        "and write-only, after the User resource has authorized the rename (ACCOUNTS §10.6)."
+    ),
     ("core/rename.py", "_repoint_foreign_keys", "relation.related_model._default_manager"): (
         "Rename performs schema-wide write-only foreign-key updates after the target "
         "resource has already authorized the operation."
