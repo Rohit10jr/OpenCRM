@@ -275,7 +275,9 @@ class _ManagerReadVisitor(ast.NodeVisitor):
 
 def _source_files():
     excluded_directories = {"migrations", "models", "tests", "management"}
-    excluded_names = {"models.py", "admin.py", "apps.py", "dev_data.py"}
+    # dev_data.py and restore.py are operator paths, called only by management commands
+    # (seed_dev_data, restore_defaults), never by a request (CONFIGURATION §10.3).
+    excluded_names = {"models.py", "admin.py", "apps.py", "dev_data.py", "restore.py"}
 
     def is_excluded(path, root):
         relative = path.relative_to(root)

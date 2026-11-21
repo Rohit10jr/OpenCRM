@@ -947,7 +947,9 @@ serves the restore (§10.4).
 
 **Built:** steps 1 and 2 (§10.8) on `rebuild/owner-review-4-defaults` (22 Nov 2026).
 The migration is `configuration/0012_default_rows`, not 0011 as first written: 0011
-is the Email Account secret width (temp A-75). Step 3 is to be built.
+is the Email Account secret width (temp A-75). Step 3, `restore_defaults`, is built
+too (`configuration/restore.py`, `contacts/restore.py`, `core/defaults.py`,
+`core/management/commands/restore_defaults.py`; PE-33).
 
 ### 10.1 What moves
 

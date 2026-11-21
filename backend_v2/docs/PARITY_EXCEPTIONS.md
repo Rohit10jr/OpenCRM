@@ -746,6 +746,27 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   for the one account it was issued to
 - **Recorded by:** ACCOUNTS, 21 Nov 2026
 
+### PE-33. Default rows are written by migration and put back by `restore_defaults`
+
+- **Status:** approved by the owner (20-21 Nov 2026; `temp` A-48 group 4, A-57 to
+  A-62; `specs/CONFIGURATION.md` §10; REBUILD_PLAN S20); built with this entry
+- **Where:** no route. The data migrations `configuration/0012_default_rows` and
+  `contacts/0004_industries`, `manage.py restore_defaults [--force]`, and
+  `seed_dev_data` / `clear_dev_data`
+- **Old backend:** the default layouts, quick filters, form scripts and industries are
+  written by its `seed_defaults` command, run by hand (`backend/crm_app/setup.py:448-553`,
+  `:159`); a database that never ran it has none
+- **backend_v2:** every database has them from its first migrate; `seed_dev_data`
+  writes the development users only, and `clear_dev_data` never removes a default.
+  `restore_defaults` adds what is missing, as Administrator, in one transaction, and
+  changes nothing that exists, except that it resets the two standard product-details
+  scripts to their shipped text, as upstream; `--force` also deletes and re-inserts the
+  14 default layouts. On an upgrade from a database the old seed filled, the migrations
+  change nothing; a default an administrator had deleted comes back once
+- **Why:** upstream writes them on install (`crm/install.py:17-35`) and serves
+  `restore_defaults` as a desk button the port does not have
+- **Recorded by:** CONFIGURATION, 22 Nov 2026
+
 ---
 
 ## Candidates — not exceptions yet

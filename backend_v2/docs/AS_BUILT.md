@@ -400,7 +400,11 @@ app's data migration: historical models, `create` with every column, the writing
 frozen in the migration, data read only from a shared data file or constant, an existing
 row skipped and never updated. A changed default reaches an existing install by a new
 migration that updates only the rows still equal to the old value, frozen as a literal
-there. Add a restore writer for `restore_defaults` (CONFIGURATION §10.3). Never a
+there. Add a restore writer to `core.defaults.RESTORERS` (`(user, force)`, returning
+rows added plus rewritten) so `manage.py restore_defaults` puts a deleted one back
+(CONFIGURATION §10.3; one transaction, as Administrator, not gated by
+`DEV_DATA_ALLOWED`; `--force` rewrites only the 14 default layouts; the two standard
+product-details scripts are re-synced to their shipped text on every run). Never a
 `seed_dev_data` step.
 
 ### Adding development data
