@@ -772,6 +772,27 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   `restore_defaults` as a desk button the port does not have
 - **Recorded by:** CONFIGURATION, 22 Nov 2026
 
+### PE-34. A delete is refused while a text Link or a PROTECT foreign key names the record
+
+- **Status:** approved by the owner (20 Nov 2026, `temp` A-48 6.3; 22 Nov 2026, A-74;
+  `specs/CONTACTS.md` §11.3); built with this entry
+- **Where:** every delete door: `DELETE /api/v1/<resource>/<name>/`,
+  `POST /api/v1/<resource>/bulk-delete/`, and the linked-documents delete
+- **Old backend:** checks dynamic links only (`backend/frappe_core/delete_doc.py:164-180`);
+  a text Link to a deleted record is left dangling, and a PROTECT foreign key is refused
+  by the database with "Cannot delete or cancel because …"
+- **backend_v2:** before the dynamic links, as upstream's order, a text Link
+  (`TEXT_LINK_FIELDS`, singletons included) or a PROTECT foreign key other than `owner` /
+  `modified_by` still naming the record refuses the delete with 417 `LinkExistsError`:
+  "You can disable this {doctype} instead of deleting it." when the record has
+  `enabled` or `disabled`, else "Cannot delete or cancel because {doctype} {name} is
+  linked with {doctype} {name}". Newly refused: a Currency System Settings or FCRM
+  Settings names (the disable sentence); with CONTACTS, a Salutation or Gender a Contact
+  names, an Address a Contact or an Organization names (the disable sentence)
+- **Why:** upstream's `check_if_doc_is_linked` (v15 `frappe/model/delete_doc.py:141-153,
+  276-339`)
+- **Recorded by:** CONTACTS, 22 Nov 2026
+
 ---
 
 ## Candidates — not exceptions yet

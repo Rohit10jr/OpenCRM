@@ -150,6 +150,76 @@ def check_dynamic_links_batch(instances) -> None:
             )
 
 
+#: Standard stamps, not links a delete is refused by (upstream's `check_if_doc_is_linked`
+#: skips `owner` and `modified_by` the same way: they are not Link fields in a doctype).
+_STAMP_FIELDS = frozenset({"owner", "modified_by"})
+
+
+def _static_link_fields(target_model):
+    """`(referencing model, column)` for each declared text Link and each PROTECT
+    foreign key to `target_model`, singletons included; no query."""
+    from django.db import models as django_models
+
+    for model in apps.get_models():
+        if doctype_of(model) in IGNORE_LINKS_ON_DELETE:
+            continue
+        for fieldname, (label, _label_text) in (getattr(model, "TEXT_LINK_FIELDS", None) or {}).items():
+            if apps.get_model(label) is target_model:
+                yield model, fieldname
+        for field in model._meta.concrete_fields:
+            remote = getattr(field, "remote_field", None)
+            if (
+                remote is not None
+                and field.name not in _STAMP_FIELDS
+                and remote.model is target_model
+                and getattr(remote, "on_delete", None) is django_models.PROTECT
+            ):
+                yield model, field.attname
+
+
+def check_static_links_batch(instances) -> None:
+    """CONTACTS §11.3 (owner, temp A-48 6.3, A-74): refuse a delete while a text Link or
+    a PROTECT foreign key still names one of `instances`, before the dynamic links, as
+    upstream's `check_if_doc_is_linked` runs before `check_if_doc_is_dynamically_linked`
+    (v15 `frappe/model/delete_doc.py:141-153`). One query per link column, whatever the
+    batch size. A record with `enabled` or `disabled` answers "You can disable this {0}
+    instead of deleting it.", as upstream does for either link kind."""
+    instances = list(instances)
+    if not instances:
+        return
+    target_model = type(instances[0])
+    target_doctype = doctype_of(target_model)
+    names = [str(instance.pk) for instance in instances]
+    for model, column in _static_link_fields(target_model):
+        row = model._default_manager.filter(**{f"{column}__in": names}).order_by("pk").first()
+        if row is None:
+            continue
+        fields = {field.name for field in target_model._meta.get_fields()}
+        if "enabled" in fields or "disabled" in fields:
+            raise LinkExistsError(
+                _("You can disable this {0} instead of deleting it.").format(target_doctype)
+            )
+        if is_child_table(model):
+            parent = getattr(row, "parent", "") or ""
+            reference_doctype = str(getattr(row, "parenttype", "") or doctype_of(model))
+            reference_name = str(getattr(parent, "pk", parent) or row.pk)
+        else:
+            reference_doctype, reference_name = doctype_of(model), str(row.pk)
+        raise LinkExistsError(
+            link_exists_message(
+                target_doctype,
+                str(getattr(row, column)),
+                reference_doctype,
+                reference_name,
+                _row_position(model, row),
+            )
+        )
+
+
+def check_static_links(instance) -> None:
+    check_static_links_batch([instance])
+
+
 def may_delete(rules, user, document) -> bool:
     """Whether the record route would let `user` delete `document`: its resource is a
     routed document ViewSet that serves DELETE, and the object rule does not refuse. A
@@ -166,6 +236,8 @@ def may_delete(rules, user, document) -> bool:
 
 
 def delete_document(document) -> None:
-    """The delete itself, after the rules: refused by a dynamic link still naming it."""
+    """The delete itself, after the rules: refused by a static, then a dynamic, link
+    still naming it."""
+    check_static_links(document)
     check_dynamic_links(document)
     document.delete()
