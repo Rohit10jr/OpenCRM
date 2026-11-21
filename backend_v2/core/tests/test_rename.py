@@ -280,6 +280,19 @@ def test_pe31_a_field_named_document_takes_the_new_name_in_its_field(administrat
     assert not FieldDocument.objects.filter(pk="Old Title").exists()
 
 
+def test_pe31_a_unique_naming_field_is_not_parked(administrator):
+    """The copy already holds the new name there, so no blank stand-in is written: a
+    row whose unique naming field is already blank does not collide (A-71 finding 6)."""
+    from configuration.models import Currency
+    from core.rename import rename_document
+
+    Currency(currency_name="TST").save(user=administrator)
+    Currency.objects.bulk_create([Currency(name="BLANK", currency_name="")])
+
+    assert rename_document(Currency, "TST", "TSX") == "TSX"
+    assert Currency.objects.get(pk="TSX").currency_name == "TSX"
+
+
 def test_pe31_a_document_not_named_by_a_field_keeps_its_fields(auth_api, alice):
     """Widget's name is not taken from `widget_name`, so the rename leaves it."""
     widget(alice, "W-1")

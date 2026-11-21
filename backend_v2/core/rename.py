@@ -27,8 +27,9 @@ def _copy_under(original, new_name: str):
 
 def _naming_field(model):
     """PE-31: the plain field a `FieldValue` name is taken from, as upstream's
-    `update_autoname_field` sets it (`frappe/model/rename_doc.py:322-327`, `field:`
-    autonames only). A link naming field keeps its value: a new name is not a row."""
+    `update_autoname_field` sets it (`frappe/model/rename_doc.py:323-328`, `field:`
+    autonames only). A link naming field keeps its value, unlike upstream; decided when
+    CRM Telephony Agent (`field:user`) is specified."""
     strategy = getattr(model, "NAME_STRATEGY", None)
     if not isinstance(strategy, FieldValue):
         return None
@@ -112,7 +113,11 @@ def rename_document(model, old: str, new: str) -> str:
         original = model._default_manager.select_for_update().get(pk=old)
         copy = _copy_under(original, new)
         parked = {}
+        naming_field = _naming_field(model)
         for field in _unique_columns(model):
+            if naming_field is not None and field.attname == naming_field.attname:
+                # PE-31 gave the copy the new name here, which no other row holds.
+                continue
             value = getattr(copy, field.attname)
             if value in (None, ""):
                 continue

@@ -702,9 +702,12 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   (`email_account_name`), and each resource 3c opts in
 - **Old backend:** the record takes the new name and the naming field keeps the old
   value (`backend/frappe_core/rename.py:41-45`)
-- **backend_v2:** the naming field is set to the new name, in the same transaction. A
-  naming field that is a link keeps its value
-- **Why:** upstream updates it (`frappe/model/rename_doc.py:322-327`, for `field:`
+- **backend_v2:** the naming field is set to the new name, in the same transaction
+- **Differs from upstream too, for a link naming field:** it keeps its value; upstream
+  writes the new name into any `field:` autoname field, a Link included. The one
+  upstream doctype it reaches is CRM Telephony Agent (`autoname: field:user`,
+  `allow_rename: 1`), not built yet: the rule is decided when INTEGRATIONS specifies it
+- **Why:** upstream updates it (`frappe/model/rename_doc.py:323-328`, for `field:`
   autonames)
 - **Recorded by:** A-48 group 3, 21 Nov 2026
 
