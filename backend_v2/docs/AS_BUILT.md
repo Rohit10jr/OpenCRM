@@ -406,15 +406,18 @@ rows added plus rewritten) so `manage.py restore_defaults` puts a deleted one ba
 (CONFIGURATION §10.3; one transaction, as Administrator, not gated by
 `DEV_DATA_ALLOWED`; `--force` rewrites only the 14 default layouts; the two standard
 product-details scripts are re-synced to their shipped text on every run). Never a
-`seed_dev_data` step.
+`seed_dev_data` step. **`configuration/data/default_rows.json` is frozen for
+`configuration/0012`:** its keys and shape must not change, and a changed value needs a
+follow-up migration as above; a guard test pins the file's hash
+(`tests/guards/test_default_rows_frozen.py`) and points here.
 
 ### Adding development data
 
 Demo records and test users only (default rows are migrations, above). Put an app's seed
 and clear functions in that app (the account example is
 `accounts/dev_data.py`). Each accepts `(user, force)` and returns the number of rows it
-created or removed. Existing rows are normally kept; use `force` only for a row whose
-old restore-defaults behaviour rewrites it. Document-model saves receive the supplied
+created or removed; the seed always passes `force=False`. Existing rows are kept.
+Document-model saves receive the supplied
 user, which the commands resolve to Administrator.
 
 Import both functions in `core/dev_data.py` and append one explicit `DevDataStep` line
@@ -910,8 +913,9 @@ Set-Location backend_v2
 
 The command reports created and reset counts per explicit seed step plus a created-row
 total. It is idempotent: FOUNDATION creates no account on a second run, while every run
-restores the four suite users' passwords, enabled flags, and exact groups. `--force` is
-accepted for later restore-default steps. `--demo` currently adds no rows and says so;
+restores the four suite users' passwords, enabled flags, and exact groups. It has no
+`--force`; default rows come from migrations and `restore_defaults` puts a missing one
+back (§2, "Adding a default row"). `--demo` currently adds no rows and says so;
 later units use it for upstream records from `crm/demo/`.
 
 Remove only rows owned by those steps with:

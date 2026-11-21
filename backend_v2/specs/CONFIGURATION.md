@@ -1013,7 +1013,7 @@ the rows still equal to the old value:
   - a script's `script` text, byte for byte;
   - for each, only the column that changed is compared and written;
 - a row an administrator changed differs from the old value, and is left alone;
-- on a fresh install the migration finds the new value already written by 0011 and does
+- on a fresh install the migration finds the new value already written by 0012 and does
   nothing.
 
 There is no `post_migrate` re-sync. Upstream re-runs `add_default_scripts` on every
@@ -1105,9 +1105,8 @@ administrator created under another name or key), and any business record.
 
 Not served; the command is the way, as in the old backend (owner, 21 Nov 2026; S20,
 `REBUILD_PLAN.md:68`, says the same). The facts:
-- upstream serves `restore_defaults` through `run_doc_method`, which asks only read on
-  FCRM Settings (`frappe/handler.py:339`). Every CRM role has read
-  (`fcrm_settings.json`);
+- upstream offers it as a Desk button on FCRM Settings (`run_doc_method`,
+  `frappe/handler.py:339`); `backend_v2` offers the command only, run by an operator;
 - the button is in the Desk form only (`crm/fcrm/doctype/fcrm_settings/fcrm_settings.js:16-46`);
   no file under `frontend/src` calls it (the field is listed in the old backend's
   `backend/crm_app/data/doctype_meta.json:3159`);
@@ -1119,6 +1118,17 @@ Not served; the command is the way, as in the old backend (owner, 21 Nov 2026; S
 - **On upgrade, a default an administrator deleted comes back once.** The migration
   cannot tell such a database from one the seed never filled. Upstream re-creates only
   the scripts on migrate.
+- **A renamed default layout is added again, and takes over.** Defaults are keyed by
+  their shipped name, so a renamed `CRM Lead-Quick Entry` counts as missing on the
+  migration and on every restore; the re-added default has the same `(dt, type)`, and
+  `CRMFieldsLayout.row_for` (`configuration/models.py:607-610`, the first by name) then
+  returns it rather than the administrator's renamed row. Upstream keys by name too and
+  behaves much the same. Recorded, no remedy (PE-33).
+- **The standard dropdown items are added only when the row has none**, as upstream.
+  The old backend's `seed_defaults --force` also restored them by `name1`, its remedy for
+  upstream bug 47 (`UPSTREAM_BUGS.md`); that branch is not carried (A-59), so an
+  administrator who changes a standard item gets it back only by emptying the menu and
+  running `restore_defaults` (PE-33).
 
 ### 10.6 Tests
 

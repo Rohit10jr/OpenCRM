@@ -762,7 +762,12 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   changes nothing that exists, except that it resets the two standard product-details
   scripts to their shipped text, as upstream; `--force` also deletes and re-inserts the
   14 default layouts. On an upgrade from a database the old seed filled, the migrations
-  change nothing; a default an administrator had deleted comes back once
+  change nothing; a default an administrator had deleted comes back once, and a renamed
+  default layout is added again under its shipped name and is then the one the layout
+  lookup returns (upstream keys by name and behaves much the same)
+- **Not carried:** the old backend's `seed_defaults --force` also restored the standard
+  dropdown items by `name1`, its remedy for upstream bug 47 (`UPSTREAM_BUGS.md`);
+  `backend_v2`, as upstream, adds them only when FCRM Settings has none (`temp` A-59)
 - **Why:** upstream writes them on install (`crm/install.py:17-35`) and serves
   `restore_defaults` as a desk button the port does not have
 - **Recorded by:** CONFIGURATION, 22 Nov 2026
