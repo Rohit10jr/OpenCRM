@@ -52,6 +52,14 @@ def test_the_industries_migration_on_its_own_apps_writes_what_is_missing(adminis
 
     names = set(CRMIndustry.objects.values_list("pk", flat=True))
     assert names == set(reference_rows.INDUSTRIES) | {"Handmade"}
+    # Every column §10.2 lists, on a row the function itself wrote (A-78 finding 4).
+    for name in reference_rows.INDUSTRIES[:3]:
+        row = CRMIndustry.objects.get(pk=name)
+        assert row.industry == name
+        assert row.owner_id == row.modified_by_id == "Administrator"
+        assert row.creation == row.modified
+        assert (row.idx, row.docstatus) == (0, 0)
+        assert (row._assign, row._liked_by, row._comments, row._user_tags) == ([], [], [], "")
 
 
 def test_only_the_users_step_is_left():

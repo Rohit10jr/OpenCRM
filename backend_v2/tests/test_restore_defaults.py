@@ -168,7 +168,7 @@ def test_a_failing_writer_rolls_everything_back(monkeypatch):
     Salutation.objects.filter(pk="Prof").delete()
     CRMIndustry.objects.filter(pk="Banking").delete()
     restorers = list(defaults.RESTORERS)
-    restorers.insert(len(restorers) - 1, ("broken", fail))  # after salutations, before industries
+    restorers.insert(len(restorers) - 1, ("broken", fail))  # after genders, before industries
     monkeypatch.setattr(
         "core.management.commands.restore_defaults.RESTORERS", tuple(restorers)
     )

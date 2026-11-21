@@ -35,6 +35,14 @@ SCRIPT_NAMES = [
 ]
 
 
+def _assert_stamp(row):
+    """§10.2's common columns on a row the migration's own function wrote."""
+    assert row.owner_id == row.modified_by_id == "Administrator"
+    assert row.creation == row.modified
+    assert (row.idx, row.docstatus) == (0, 0)
+    assert (row._assign, row._liked_by, row._comments, row._user_tags) == ([], [], [], "")
+
+
 def _historical(app, migration):
     return MigrationLoader(connection).project_state((app, migration)).apps
 
@@ -112,13 +120,23 @@ def test_the_function_rewrites_only_what_is_missing_with_every_column(administra
 
     module.write_default_rows(_historical("configuration", "0012_default_rows"), None)
 
+    spec = next(
+        s for s in restore.default_rows()["layouts"] if (s["dt"], s["type"]) == ("CRM Task", "Quick Entry")
+    )
     restored = CRMFieldsLayout.objects.get(pk="CRM Task-Quick Entry")
-    assert restored.owner_id == "Administrator" and restored.idx == 0 and restored.docstatus == 0
+    _assert_stamp(restored)
+    assert (restored.dt, restored.type, restored.layout) == ("CRM Task", "Quick Entry", spec["layout"])
     assert CRMFieldsLayout.objects.get(pk="CRM Lead-Quick Entry").layout == "[]"
+
     task = CRMGlobalSettings.objects.get(dt="CRM Task", type="Quick Filters")
+    _assert_stamp(task)
     assert task.json == restore.default_rows()["quick_filters"]["CRM Task"]
+    assert len(task.pk) == 10 and all(c in "0123456789abcdef" for c in task.pk)
+
     script = CRMFormScript.objects.get(pk="Forecasting Script")
-    assert (script.enabled, script.is_standard, script.view) == (True, True, "Form")
+    _assert_stamp(script)
+    assert (script.dt, script.view, script.enabled, script.is_standard) == ("CRM Deal", "Form", True, True)
+    assert script.script == restore.default_rows()["forecasting_script"]
     assert CRMFieldsLayout.objects.count() == 14
     assert CRMGlobalSettings.objects.filter(type="Quick Filters").count() == 6
 

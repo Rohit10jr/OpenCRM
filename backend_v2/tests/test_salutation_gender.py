@@ -4,7 +4,7 @@ Ported (REBUILD_PLAN S14) from ``backend/tests/test_salutation_gender.py:35-63``
 database has upstream's lists, a sales user gets both dropdowns, everyone reads and only
 an admin adds one. The old `frappe.desk.search.search_link` is each resource's own
 `search/`, and the old resource POST's 201 `data` is 200 `message`. `:43-47` (a deleted
-row put back) is in `test_contacts_dev_data.py`; `:66-160` need Contact (milestone 3)
+row put back) is in `test_restore_defaults.py`; `:66-160` need Contact (milestone 3)
 and CRM Lead (SALES). New: CRM Industry open to every CRM user (PE-29).
 """
 
