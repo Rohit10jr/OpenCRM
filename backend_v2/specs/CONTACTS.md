@@ -9,8 +9,9 @@ are `backend/` unless named.
 
 App `contacts`. The `PORT_MAP.md` rows under **CONTACTS**:
 
-- **Doctypes:** Contact, Address, CRM Organization, CRM Industry, and the reference data
-  Salutation and Gender; child tables Contact Email, Contact Phone, Dynamic Link
+- **Doctypes:** Contact, Address, CRM Organization, CRM Industry, CRM Territory (moved
+  from SALES, owner 20 Nov 2026; §11.1), and the reference data Salutation and Gender;
+  child tables Contact Email, Contact Phone, Dynamic Link
 - **Method paths (4):** `crm.api.contact.create_new`, `search_emails`, `set_as_primary`;
   `crm.api.session.get_organizations`. **`crm.api.contact.get_linked_deals` moves to
   SALES** (DECISIONS 57, flagged): it reads only the deal-contacts table and CRM Deal
@@ -21,8 +22,8 @@ App `contacts`. The `PORT_MAP.md` rows under **CONTACTS**:
 
 | Old | New |
 |---|---|
-| Contact, Address, CRM Organization, CRM Industry, Salutation, Gender (`/api/resource/...`) | `/api/v1/contacts/`, `addresses/`, `organizations/`, `industries/`, `salutations/`, `genders/`: list, create, `value/`, record `GET`/`PATCH`/`DELETE`, `permissions/`, and the shared actions of §8 |
-| `crm.api.contact.create_new` | `POST /api/v1/contacts/<name>/create-new/` (`field`, `value` in the body) |
+| Contact, Address, CRM Organization, CRM Industry, CRM Territory, Salutation, Gender (`/api/resource/...`) | `/api/v1/contacts/`, `addresses/`, `organizations/`, `industries/`, `territories/`, `salutations/`, `genders/`: list, create, `value/`, record `GET`/`PATCH`/`DELETE`, `permissions/`, and the shared actions of §8 |
+| `crm.api.contact.create_new` | `POST /api/v1/contacts/<name>/create-new-email-or-phone/` (`field`, `value` in the body; §11.4) |
 | `crm.api.contact.set_as_primary` | `POST /api/v1/contacts/<name>/set-as-primary/` (`field`, `value` in the body) |
 | `crm.api.contact.search_emails` | `GET /api/v1/contacts/search-emails/` (`txt` kept as input). The frontend sends POST (frappe-ui's default); as for the `meta/` calls, the `.http` generator rewrites the method and the frontend changes at S22 |
 | `crm.api.session.get_organizations` | `GET /api/v1/organizations/directory/`, as ACCOUNTS' `get_users` is `users/directory/` |
@@ -50,9 +51,10 @@ supervisor writes it with milestone 4, since builders do not edit the contract.
   (`configuration/data/default_rows.json`); the list engine and `list_view_class`
   (CONFIGURATION §4.8): **the Contacts and Organizations list pages wait for
   CONFIGURATION milestone 8** (`frontend/src/components/ViewControls.vue:518`).
-- **SALES' CRM Territory** for Organization's `territory` foreign key
-  (`core_sales.py:120-122`; `PORT_MAP.md:336`): **parked for the owner** (§6 A).
-  Milestones run with CRM Organization last and stop before it until the owner answers.
+- **Group 3 of the owner's review** (rename where upstream allows it, PE-24; rename sets
+  the naming field, PE-31) before milestone T (§11.1). CRM Territory itself is this
+  unit's now (§6 A answered), so Organization's `territory` foreign key
+  (`core_sales.py:120-122`) points inside the app.
 
 ## 3. Read in `backend/` first
 
@@ -60,7 +62,8 @@ supervisor writes it with milestone 4, since builders do not edit the contract.
   `:529-572`, Dynamic Link `:1560-1598`, Salutation and Gender `:1842-1870`, Address
   `:1873-2030`, the row signals `:2104-2150`
 - `crm_app/models/core_sales.py:58-160` (the exchange-rate mixin, CRM Organization),
-  `models/taxonomy.py:83-91` (CRM Industry)
+  `models/taxonomy.py:83-91` (CRM Industry), `:113-152` (CRM Territory),
+  `crm_app/permissions/tree.py:128-185` (the territory bounds and resolver)
 - `crm_app/api/contact.py`, `api/session.py:150-170`, `api/client.py:64-81` (Address
   search filter), `:393-459` (child-row edit and delete), `:462-495` (rename),
   `:701-733` (search fields)
@@ -128,7 +131,8 @@ with `data`.
 | `test_form_load.py:300-313` | 3 | — |
 | `test_contact_numbers.py` | `:25-150` at 4, without `:88-94` (7) | — |
 | `test_phase3_endpoints.py:154-203`, `:211-312` | the existence checks of `search_emails` (4) and `get_organizations` (5); `:480-491` is named "Not permitted" and asserts `["Invalid field"]` with no status: ported as it asserts | `get_linked_deals`: SALES |
-| `test_envelope.py:165-185` (Organization and Industry PROTECT), `test_null_as_blank.py:22-67`, `test_name_lookup.py:61-93`, `test_crm_behaviour.py:252-259`, `test_route_surface_review.py:173-200`, `test_versions.py:173-182` (Organization untracked); the organization cases of `test_currency.py` and `test_exchange_rate.py` | 5 | §6 A |
+| `test_territory_tree.py` | `:42-57` (bounds, reparenting) at T, on a territory-only fixture; `:59-95` at 5 (§11.1) | — |
+| `test_envelope.py:165-185` (Organization and Industry PROTECT), `test_null_as_blank.py:22-67`, `test_name_lookup.py:61-93`, `test_crm_behaviour.py:252-259`, `test_route_surface_review.py:173-200`, `test_versions.py:173-182` (Organization untracked); the organization cases of `test_currency.py` and `test_exchange_rate.py` | 5 | — |
 | `test_list_definitions.py` (Contact, Organization), `test_phase4_metadata.py:283-287` | 7 | CONFIGURATION milestone 8 |
 | `test_rename.py` | — | all of it: SALES (the `linked` fixture makes a CRM Deal and its contacts row, `:12,34-41`); `:70-92` also ACTIVITIES, `:95-108` NOTIFICATIONS |
 | the Contact and Organization cases of `test_delete_dialog_links.py`, `test_unlink_linked_docs.py` | — | SALES |
@@ -310,12 +314,13 @@ dropping the row signal breaks one of them.
   text and not checked.
 - **CRM Industry:** refused by its PROTECT foreign keys (Organization now; Lead and Deal
   with SALES; `test_envelope.py:165-185`).
-- **Address:** a System Manager may delete an address an organization's text `address`
-  still names; that organization's next save is then 417 "Could not find Address:
-  <name>" until the field is cleared. Reproduced, as `backend/` (DECISIONS 58, flagged;
-  `delete_doc.py:164-180` checks dynamic links only). Upstream refuses the delete.
+- **Address, and every record a text Link names:** refused while a text Link field
+  names it, as upstream (§11.3; the owner, A-48 6.3, replacing decision F): an address
+  an organization's `address` names answers 417 "You can disable this Address instead of
+  deleting it.". Whether a Contact's `address` refuses it too is open with the owner
+  (§11.3, marked); until then `Contact.address` is SET_NULL, as above.
 
-### CRM Organization (milestone 5, §6 A)
+### CRM Organization (milestone 5)
 
 The name is `organization_name`, verbatim. Every save checks the `currency` and
 `address` Links. A full save (not one with `update_fields`) recomputes `exchange_rate`
@@ -341,7 +346,9 @@ Upstream does each of these; `backend/` does not, and neither does `backend_v2`:
 - saving a contact does not copy its `email_id` and `mobile_no` onto the deals where it
   is the primary contact (upstream's `crm.api.contact.validate` hook, `crm/hooks.py:161-163`);
 - phone numbers are not validated (upstream validates `options: Phone` fields);
-- `user` is not filled from a matching User's email (upstream's `set_user`).
+
+`user` *is* filled from a matching User's email, as upstream's `set_user` (the owner,
+A-48 6.2; §11.2), so it is no longer on this list.
 
 ### Reference rows
 
@@ -370,10 +377,10 @@ Upstream does each of these; `backend/` does not, and neither does `backend_v2`:
   - milestone 1: 0.15, 1.1, 8.12; milestone 3: 2.x, 0.5-0.9b, 7.4 (`get_doc_permissions`
     on a Contact), 8.2-8.6b, 8.13; milestone 4: 3.1-3.14; milestone 5: 0.10-0.11, 7.1,
     7.3, 7.5, 8.7-8.8; milestone 6a and 6b: 5.1, 5.3-5.4, 5.6-5.7, 8.14;
-  - waiting for SALES: 0.2-0.4, 4.1-4.5 (`get_linked_deals`), 5.2, 5.5, 8.1, and the
-    territory blocks 0.12-0.14, 1.2-1.4, 6.1-6.4, 8.9-8.11 (or §6 A);
-  - waiting for §6 A: 1.5 and 6.3 (they name `territory`), and 7.2 and 7.6 (they use
-    1.5's organization).
+  - milestone T (§11.1): 0.12-0.14, 1.2-1.4, 6.1, 6.2, 6.4, 8.9-8.11;
+  - milestone 5, after T: 1.5 and 6.3 (they name `territory`), and 7.2 and 7.6 (they
+    use 1.5's organization);
+  - waiting for SALES: 0.2-0.4, 4.1-4.5 (`get_linked_deals`), 5.2, 5.5, 8.1.
 - `docs/http/02_resource_grammar.http`: 11.4 (the industry) at milestone 1; the
   Organization blocks (11.1-11.3, 11.5 and the rest but 10.14) at milestone 5.
 - The body comparison over the same blocks.
@@ -382,16 +389,16 @@ Upstream does each of these; `backend/` does not, and neither does `backend_v2`:
 
 | # | Decision | Status |
 |---|---|---|
-| A | Organization's `territory` foreign key to SALES' CRM Territory | **parked for the owner** (DECISIONS 56): (a) move CRM Territory into CONTACTS (recommended by the reviewer and the supervisor; changes REBUILD_PLAN §4 and PORT_MAP); (b) build Organization without the column, SALES adds it; (c) a text column checked as a Link. Milestones run with Organization last and stop before it |
+| A | Organization's `territory` foreign key to SALES' CRM Territory | **answered by the owner** (20 Nov 2026, DECISIONS 56 (a)): CRM Territory moves into CONTACTS, milestone T (§11.1) |
 | B | `get_linked_deals` | decided by the supervisor, flagged for the owner: moves to SALES (§9); the PORT_MAP unit move is the owner's to approve |
 | C | The child-row routes | proposed (§1), checked at the spec review |
 | D | The four paths' route names | proposed (§1), checked at the spec review |
-| E | Upstream's deal sync, phone validation, `set_user` | decided by the supervisor, flagged for the owner: follow `backend/` (§4) |
-| F | Deleting an address an organization names | decided by the supervisor, flagged for the owner: reproduced (§4) |
-| G | Rename for Address, CRM Industry, Salutation, Gender | decided by the supervisor, flagged for the owner: not opted in (**PE-24**, proposed) |
+| E | Upstream's deal sync, phone validation, `set_user` | **answered by the owner** (A-48 6.2, 6.6, "Carried forward"): `set_user` as upstream (§11.2); phone validation stays out, as `backend/`; the deal sync is SALES' |
+| F | Deleting an address an organization names | **answered by the owner** (A-48 6.3): refused, as upstream (§11.3) |
+| G | Rename for Address, CRM Industry, Salutation, Gender | **answered by the owner** (A-48 3c, **PE-24**): as upstream's `allow_rename`: Address, CRM Industry, Salutation yes; Gender no |
 | H | Seeding | Salutation, Gender and the industries by data migration, put back by `restore_defaults` (owner's S20 change, 20 Nov 2026; `specs/CONFIGURATION.md` §10) |
 | I | Deal contacts on contact delete | decided by the supervisor, flagged for the owner: SALES' (§9) |
-| J | Users with no CRM role | decided by the supervisor, flagged for the owner: the old openness, stated (§4; DECISIONS 58) |
+| J | Users with no CRM role | **answered by the owner** (A-48 2d, A-61 item 4): **PE-29** for Contact, CRM Organization, CRM Industry and Address; Salutation and Gender keep their rule; CRM Territory open with the owner (§11.1, marked) |
 | K | "Remove contact" and deleting linked documents in `core` | decided by the supervisor, flagged for the owner: **PE-25**, **PE-26** (proposed), milestone 0 (DECISIONS 59) |
 | L | Dynamic Link's `link_title` | decided (DECISIONS 65, correcting 60): the linked document's name, as `backend/` stores it |
 
@@ -448,7 +455,9 @@ left.
   (`client.py:701-733`); upstream's Contact `title_field` is not ported. Address
   overrides `search_filters` with the `link_doctype`/`link_name` rewrite
   (`client.py:64-81`) and hides disabled rows.
-- **Not opted in to rename:** Address, CRM Industry, Salutation, Gender (PE-24).
+- **Rename, as upstream's `allow_rename` (PE-24, A-48 3c):** Address, CRM Industry and
+  Salutation yes (v15 `address.json`, `salutation.json`; `crm_industry.json`), Gender no;
+  Contact, CRM Organization and CRM Territory yes.
 - `test_rename.py`'s Contact and Organization cases (a renamed Contact keeps its email
   and phone rows and its deal links, FINDINGS 13) wait for SALES (§3); from
   `test_contact_delete_rule.py`, the Contact permission matrix including its bulk-delete
@@ -487,9 +496,236 @@ Written also as "Carried from CONTACTS" in `SALES.md` and `ACTIVITIES.md`.
 | **3. Contact core** | the model in the old order and labels; Contact Email and Phone inline with `CHILD_FIELDS`; naming; the primary rules and the row signals; validation; the rules; §7a; search | §3's milestone 3 rows; `05` 2.x, 0.5-0.9b, 7.4, 8.2-8.6b, 8.13 |
 | **4. Contact actions** | `create_new`, `set_as_primary` (403 before 404), `search_emails`, PE-12f, the child-row routes (the supervisor writes the `API_CONTRACT.md` exception) | `test_contact_numbers.py:25-150` without `:88-94`; `05` 3.1-3.14; new `search_emails` tests |
 | **6a. Contact's shared actions** | rename (PE-24), bulk delete, linked documents, bulk update, export for Contact; after 0 and 4 | `05` 5.1, 5.3-5.4, 5.6-5.7, 8.14 (the Contact half); `test_contact_delete_rule.py:78-92` |
-| 5. CRM Organization | **waits for §6 A**: the model, exchange rate, text Links, duplicate 409, `get_organizations` | §3's milestone 5 rows; `02` but 10.14; `05` 0.10-0.11, 7.1, 7.3, 7.5, 8.7-8.8 |
-| 6b. Organization's shared actions | as 6a, for CRM Organization; after 5 | the Organization half of the same blocks |
-| 7. List views | `ContactListView`, `OrganizationListView` with the old `default_list_data`; after CONFIGURATION milestone 8 (Contact's half after 3, Organization's after 5) | the CONTACTS definitions in `test_list_definitions.py`; `07` 5.7; `test_contact_numbers.py:88-94` |
+| **T. CRM Territory** | §11.1: the model, the rule, delete, rename, search; after 6a and group 3 (PE-24, PE-31) | `test_territory_tree.py:42-57`; `05` 0.12-0.14, 1.2-1.4, 6.1, 6.2, 6.4, 8.9-8.11 |
+| **5. CRM Organization** | the model, exchange rate, text Links, duplicate 409, `get_organizations`, §11.3's Address case; after T | §3's milestone 5 rows; `test_territory_tree.py:59-95`; `02` but 10.14; `05` 0.10-0.11, 1.5, 6.3, 7.1-7.3, 7.5-7.6, 8.7-8.8 |
+| **6b. Organization's shared actions** | as 6a, for CRM Organization; after 5 | the Organization half of the same blocks |
+| **7. List views** | `ContactListView`, `OrganizationListView` with the old `default_list_data`; after CONFIGURATION milestone 8 (Contact's half after 3, Organization's after 5) | the CONTACTS definitions in `test_list_definitions.py`; `07` 5.7; `test_contact_numbers.py:88-94` |
 
-Until §6 A is answered, milestones 0-4 and 6a are built, then the unit stops; Contact's
-list view (7) waits for CONFIGURATION milestone 8.
+The order is 3, 4, 6a, T, 5, 6b, 7 (A-48; §11.7). Milestone 3 also takes §11.2's save
+path and §11.3's `core` text-link check; milestone 4 takes §11.4 and §11.2's three
+`update()` paths. The list views (7) wait for CONFIGURATION milestone 8.
+
+## 11. Addendum: the owner's review of 20 Nov 2026 (A-48 section 6)
+
+**Status:** spec-checked (`temp` A-65) and approved (`temp` A-67, 21 Nov 2026). Two
+lines are **MARKED**, open with the owner: §11.1 "Who may do what" (CRM Territory under
+PE-29) and §11.3's Contact `address` sentence. The passages of §1-§10 this changes are
+corrected in the same commit.
+
+### 11.1 CRM Territory moves into CONTACTS (A-48 6.1; owner 20 Nov 2026, DECISIONS 56 (a))
+
+- **Model:** `contacts.CRMTerritory(TreeDocument)`, with:
+  - `DOCTYPE = "CRM Territory"`;
+  - `NAME_STRATEGY = FieldValue("territory_name", label="Territory Name")`;
+  - `PARENT_FIELD = "parent_crm_territory"`.
+
+  The columns follow the old order and types (`backend/crm_app/models/taxonomy.py:113-152`):
+  - `territory_name`, Char 140;
+  - `territory_manager`, an FK to User, SET_NULL;
+  - `lft` and `rgt`, from `TreeDocument`;
+  - `is_group`, a boolean;
+  - `old_parent`, a self-FK, SET_NULL (`db_column="old_parent"`);
+  - `parent_crm_territory`, a self-FK, PROTECT (`db_column="parent_crm_territory"`).
+
+  Rows are ordered by name.
+- **The bounds are parity with `backend/`, not with upstream.** Upstream's CRM Territory is
+  a plain `Document` (`crm/fcrm/doctype/crm_territory/crm_territory.py`). The framework
+  gives `NestedSet` only to custom doctypes (v15 `frappe/model/base_document.py:76-85`), so
+  upstream never writes `lft`/`rgt`, and its `descendants of` on a territory matches
+  nothing. `backend/` keeps the bounds and answers the tree operators
+  (`tree.py:128-185`; FINDINGS 14 rests on the same reading). v2 keeps `backend/`'s
+  behaviour: `core.models.TreeDocument` rebuilds on every ordinary write under an
+  advisory lock, and `core/filters.py:229-233` serves the five tree operators. Nothing new
+  in `core`. **New PE line** (number at build): "CRM Territory keeps nested-set bounds and
+  answers `descendants of` / `ancestors of`, as the old backend; upstream's territory has
+  no bounds, so those operators match nothing there."
+- **Resource:** `/api/v1/territories/`, with:
+  - list, create, read, PATCH, delete;
+  - `value/`, `search/`, `permissions/`;
+  - rename (PE-24, A-48 3c; upstream's `allow_rename: 1`).
+
+  Every column is readable, filterable and sortable, as in the old generic resource. T
+  adds no other shared actions.
+- **Who may do what — MARKED, open with the owner (A-65 Q1).**
+  - `backend/` registers no rule: every signed-in user reads, writes, creates and deletes.
+  - Upstream's role table (`crm_territory.json:94-131`) grants System Manager, Sales
+    Manager and Sales User read, write, create and delete, with no `if_owner` row and no
+    `has_permission` hook. That is the table of CRM Industry, which PE-29 already gates.
+  - Recommended: PE-29's rule, which then names CRM Territory.
+  - The precedent: SALES' Lead Status, Deal Status, Lost Reason, Lead Source and
+    Communication Status have the same CRM-only tables.
+
+  Until the answer comes, T is built with the rule left as one switch in `contacts/views.py`.
+- **Delete:** a territory with children is refused by the PROTECT parent FK, with 417
+  `LinkExistsError`. Upstream answers the same through `check_if_doc_is_linked`; there is
+  no `NestedSet.on_trash`. `.http` `05` 6.4 accepts 417|409, and v2 answers 417.
+- **Rename:** PE-31 sets `territory_name`, and the children's `parent_crm_territory` follows
+  through the FK repoint. The bounds are rebuilt with no new code: `rename_document`
+  deletes the old row with a queryset `delete()` (`core/rename.py:115`). That fires
+  `TreeDocument`'s `_rebuild_tree_after_delete` (`core/models.py:436-440`) after the
+  children are repointed, as `backend/` rebuilds through `post_delete`
+  (`tree.py:182-184`). A test pins it: rename a group, check the children's parent and
+  that the bounds are a valid nested set.
+- **Depends on group 3:** T needs PE-24 (rename where upstream allows) and PE-31 (rename
+  sets the naming field) built first.
+- **SALES** points its Lead and Deal `territory` at `contacts.CRMTerritory`; `SALES.md` is
+  corrected in this commit.
+- **Tests:**
+  - At T:
+    - the bounds and reparenting tests of `backend/tests/test_territory_tree.py:42-57`,
+      ported with a territory-only fixture (the old `tree` fixture also creates
+      organizations, `:31-33`);
+    - the rename test above;
+    - the rule (if Q1 is yes): the PE-29 matrix as for CRM Industry;
+    - `.http` `05` 1.2-1.4, 6.1, 6.2, 6.4, 8.9-8.11 and 0.12-0.14.
+  - At milestone 5:
+    - the rest of `test_territory_tree.py` (`:59-95`: `descendants of` over
+      organizations, inclusive, `ancestors of`, a missing node), on the old fixture;
+    - `.http` 1.5, 6.3, 7.2, 7.6.
+
+### 11.2 Contact's `user` from the matching User (A-48 6.2)
+
+Upstream's `Contact.validate` calls `set_user()` (v15
+`frappe/contacts/doctype/contact/contact.py:65-71,131-133`). When `user` is empty and
+`email_id` is set, `user` becomes the User whose `email` equals `email_id`; otherwise it
+stays empty. That runs after the primary email is chosen (`set_primary_email` at `:67`).
+Upstream reaches it from every way the email is worked out, because `create_new` and
+`set_as_primary` call `contact.save()` (`crm/api/contact.py:83,111`), and so does a
+child-row edit.
+
+`backend/` works out `email_id` in three places without a save, using `update()`:
+- `create_new`;
+- `set_as_primary`;
+- the Contact Email row signal.
+
+(`backend/crm_app/api/contact.py:86-97,134-140`, `frappe_platform/models.py:2131-2141`.)
+v2 follows `backend/`, so **`user` is set wherever `email_id` is worked out**: in
+`Contact.save()`, and in those three `update()` calls, which gain `user` in the same
+statement.
+
+- **The match ignores case:** `User.objects.filter(email=email_id.strip().lower())`.
+  v2 lowercases `User.email` on save (`accounts/models.py:119-122`), as upstream does
+  (`user.py:155,179-181`), and upstream's `=` ignores case on its default MariaDB
+  collation (A-65). Frappe on PostgreSQL would match exactly; MariaDB is taken as the
+  reference deployment.
+- **Two Users with the email:** v2's `User.email` is not unique and is not kept equal to
+  `name`. The match takes the one upstream's `get_value` would: its default `order_by`
+  is `modified` (v15 `frappe/database/database.py:623`), and v2 takes the first row by
+  `-modified`. **To confirm at build:** the direction Frappe's query builder gives a bare
+  `modified`. If it is ascending, use `modified`. A test pins the chosen one.
+- **No backfill:** existing contacts get `user` on their next save, as upstream.
+- ACCOUNTS' User-to-Contact sync stays where it is.
+- **New PE** (number at build): "Contact's `user` is filled from the User with the
+  contact's email; the old backend leaves it as sent." Milestone 3, and milestone 4 for
+  the three `update()` paths.
+- **Tests:**
+  - filled on create;
+  - filled on a later save that sets the email;
+  - an explicit `user` is kept;
+  - no match leaves it empty;
+  - a mixed-case `email_id` matches;
+  - two matching Users: the chosen one;
+  - milestone 4: `create-new-email-or-phone/` with an email that matches a User fills
+    `user`, and so does `set-as-primary/`.
+
+### 11.3 A delete is refused while a Link field names the record (A-48 6.3)
+
+Upstream runs `check_if_doc_is_linked` (static Link fields, including Single doctypes)
+**before** `check_if_doc_is_dynamically_linked` (v15 `frappe/model/delete_doc.py:141-153,
+276-339`). When either finds a link and the record has `enabled` or `disabled`, the answer
+is 417 `LinkExistsError` "You can disable this {doctype} instead of deleting it."
+(`:147-151`). Otherwise it is "Cannot delete or cancel because {0} {1} is linked with {2}
+{3} {4}" (`:443-452`).
+
+v2 adds, as upstream, a **general text-link check** in `core/delete.py`, run **before**
+`check_dynamic_links`, on every delete door:
+- the record route;
+- bulk delete;
+- the linked-documents delete.
+
+It goes over every model's `TEXT_LINK_FIELDS` (singletons included) that name the
+record's model, and uses the same two messages (`link_exists_message` for the second).
+This is wider than the Organization case, and the PE text and the tests name each delete
+it newly refuses:
+- **an Address** an Organization's `address` names (the case A-48 decided): "You can
+  disable this Address instead of deleting it.";
+- **a Currency** in use by System Settings' or FCRM Settings' `currency`
+  (`configuration/models.py:152,245`), already built: "You can disable this Currency
+  instead of deleting it." (Currency has `enabled`);
+- **a Salutation or Gender** in use by a Contact's `salutation` / `gender` (with milestone
+  3): the second message (neither has `enabled`/`disabled`).
+
+**New PE** (number at build), replacing decision F: "A delete is refused while a text Link
+field names the record, as upstream; the old backend checks dynamic links only."
+
+Built with Organization (milestone 5) for the Address case. The `core` check and its
+Currency case come with the first milestone that builds it; recommended: milestone 3, as
+its own commit pair, since Salutation and Gender gain their first user there.
+
+- **Contact's `address` — MARKED, open with the owner (A-65 finding 6).** Upstream's
+  `Contact.address` is a Link to Address (v15 `contact.json:190-193`), so upstream also
+  refuses deleting an address a contact names. CONTACTS §4 keeps SET_NULL ("leaves
+  `Contact.address` empty", as `backend/`). Recommended: follow upstream, with
+  `Contact.address` refused like the Organization's. Until the answer comes, the §4
+  Delete line stays as it is, and milestone 3 builds `Contact.address` as SET_NULL.
+- **Tests:**
+  - an address an organization names is refused at each door (record route, bulk delete,
+    linked-documents delete), with the message verbatim;
+  - deleting it works once the field is cleared;
+  - a Currency in use is refused with the disable sentence, and one not in use deletes;
+  - a Salutation or Gender in use is refused (milestone 3);
+  - a `tests_support` case for a model with no `enabled`, for the second message;
+  - static links are checked before dynamic ones: a record named both ways gets the
+    static answer.
+
+### 11.4 The route `create-new` is renamed (A-48 6.4)
+
+The route becomes `POST /api/v1/contacts/<name>/create-new-email-or-phone/` (old
+`crm.api.contact.create_new`; PORT_MAP:275 already says so). §1's table and milestone 4
+follow.
+
+### 11.5 The rules table (A-48 6.5) and what stays out (A-48 6.6)
+
+The §4 table gains PE-29. In every row the CRM-role gate comes first: a caller with none
+gets an empty list and 403 on everything.
+
+- **Contact:** a CRM role reads, writes and creates, as upstream's role table gives Sales
+  User and Sales Manager create and write (`contact.json`). Delete: the owner, System
+  Manager or Administrator, and only if the caller also has a CRM role. Upstream's
+  `All`/`if_owner` row lets any owner delete; under PE-29 an owner with no CRM role gets
+  nothing.
+- **Contact Email and Contact Phone:** through the contact, unchanged.
+- **CRM Organization:** a CRM role, for every action.
+- **CRM Territory:** as Q1 decides (§11.1).
+
+`get_organizations` keeps its own 403 sentence. Phone validation stays out, as in
+`backend/`. The deal sync stays SALES' (A-48 "Carried forward").
+
+**Tests (PE-29 matrix):** for Contact (milestones 3 and 4) and CRM Organization (milestone
+5), a caller with no CRM role gets:
+- an empty list;
+- 403 on read, create (with "Not permitted to create Contact" / "... CRM Organization"),
+  write and delete;
+- an empty `search/`;
+- for Contact, also:
+  - an empty `search_emails`;
+  - 403 from `create-new-email-or-phone/` and `set-as-primary/`;
+  - the child-row routes' 403 and 404, as §4 says.
+
+### 11.6 Answered (A-65)
+
+- **Q2:** case-insensitive (§11.2).
+- **Q1** and **finding 6** are open with the owner. They are marked above.
+
+### 11.7 Milestones after this addendum
+
+In A-48's order:
+1. **3:** Contact core, with §11.2's save path, and §11.3's `core` check with its
+   Currency, Salutation and Gender cases.
+2. **4:** Contact actions, with §11.4 and §11.2's three `update()` paths.
+3. **6a:** Contact's shared actions.
+4. **T:** CRM Territory (§11.1). Its scope is the model, the rule, delete, rename and
+   search. It needs group 3's PE-24 and PE-31.
+5. **5:** Organization, with §11.3's Address case and the Territory tests that need
+   Organization.
+6. **6b**, then **7**.
