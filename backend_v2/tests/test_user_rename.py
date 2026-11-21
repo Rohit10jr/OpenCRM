@@ -12,6 +12,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import CRMInvitation, CRMSalesHierarchy, User
 from accounts.services import issue_tokens
+from core.security import LoginAttemptTracker
 from tests_support.models import Widget
 
 pytestmark = pytest.mark.django_db
@@ -87,13 +88,26 @@ def test_a_builtin_cannot_be_renamed(request, api_as, caller, builtin):
     [
         ("not-an-address", "not-an-address"),
         ("a@x.com, b@x.com", "a@x.com, b@x.com"),
-        ("Bob <b@x.com>", "bob &lt;b@x.com&gt;"),
+        # Printed as typed, as upstream's validate_email_address (A-76 finding 3).
+        ("Bob <b@x.com>", "Bob &lt;b@x.com&gt;"),
     ],
 )
 def test_the_new_name_is_one_plain_address(boss, carol, api_as, new_name, shown):
     response = rename(api_as(boss), carol.name, new_name)
     assert response.status_code == 417
     assert response.json()["message"] == f"{shown} is not a valid Email Address"
+
+
+def test_a_new_name_over_140_characters_is_417_not_500(boss, carol, api_as):
+    """A-76 finding 4: Django's address check allows 320 characters; the column 140."""
+    long_name = "a" * 130 + "@example.com"
+    response = rename(api_as(boss), carol.name, long_name)
+    assert response.status_code == 417
+    assert response.json()["message"] == (
+        f"User {carol.name}: '<strong>Email</strong>' ({long_name}) will get truncated, "
+        "as max characters allowed is 140"
+    )
+    assert User.objects.filter(pk=carol.name).exists()
 
 
 def test_the_same_name_after_normalising_is_no_change(boss, carol, api_as):
@@ -209,6 +223,41 @@ def test_a_new_account_under_the_old_name_refuses_the_old_tokens(boss, carol, ap
     assert refresh(api, old["refresh"]).status_code == 401
 
 
+def test_an_invited_account_under_the_old_name_refuses_the_old_tokens(
+    boss, carol, administrator, api, api_as
+):
+    """A-76 finding 1: the invitation is made before the rename and accepted after;
+    the accept creates a fresh account under the old address (ACCOUNTS §10.8)."""
+    CRMInvitation(email=carol.name, role="Sales User", status="Pending", key="k-old").save(
+        user=administrator
+    )
+    old = issue_tokens(carol)
+    rename(api_as(boss), carol.name, "carol2@example.com")
+
+    accepted = api.post("/api/v1/auth/accept-invitation/", {"key": "k-old"}, format="json")
+    assert accepted.status_code == 200, accepted.content[:300]
+    newcomer = User.objects.get(pk=carol.name)
+
+    assert whoami(api, old["access"]).status_code == 401
+    assert refresh(api, old["refresh"]).status_code == 401
+    fresh = issue_tokens(newcomer)
+    assert whoami(api, fresh["access"]).status_code == 200
+
+
+def test_a_swap_leaves_neither_accounts_old_tokens_valid(boss, make_user, api, api_as):
+    """A-76 finding 2: A to C, then B to A."""
+    a = make_user("a@example.com")
+    b = make_user("b@example.com")
+    a_tokens, b_tokens = issue_tokens(a), issue_tokens(b)
+    client = api_as(boss)
+    assert rename(client, a.name, "c@example.com").status_code == 200
+    assert rename(client, b.name, "a@example.com").status_code == 200
+
+    for tokens in (a_tokens, b_tokens):
+        assert whoami(api, tokens["access"]).status_code == 401
+        assert refresh(api, tokens["refresh"]).status_code == 401
+
+
 def test_a_deleted_and_recreated_account_refuses_the_first_accounts_tokens(administrator, make_user, api):
     first = make_user("again@example.com")
     old = issue_tokens(first)
@@ -216,6 +265,8 @@ def test_a_deleted_and_recreated_account_refuses_the_first_accounts_tokens(admin
     first.delete()
     make_user("again@example.com")
     assert whoami(api, old["access"]).status_code == 401
+    # A-76 finding 2: nothing blacklisted it; the version alone refuses it.
+    assert refresh(api, old["refresh"]).status_code == 401
 
 
 # --- atomic and lockout ------------------------------------------------------------------------
@@ -241,10 +292,23 @@ def test_a_failure_inside_the_rename_leaves_everything(boss, carol, api_as, monk
 
 
 def test_the_old_lockout_key_is_gone_after_commit(boss, carol, api_as, django_capture_on_commit_callbacks):
-    cache.set(f"login_attempts:{carol.name}", {"count": 3, "first_failure_at": 1.0})
+    tracker = LoginAttemptTracker(carol.name)
+    for _ in range(3):
+        tracker.add_failure_attempt()
+    assert cache.get(tracker._cache_key) is not None
     with django_capture_on_commit_callbacks(execute=True):
         assert rename(api_as(boss), carol.name, "carol2@example.com").status_code == 200
-    assert cache.get(f"login_attempts:{carol.name}") is None
+    assert cache.get(tracker._cache_key) is None
+
+
+def test_a_legacy_mixed_case_names_lockout_key_is_found(boss, api_as, django_capture_on_commit_callbacks):
+    """A-76 finding 5: login keys the tracker on the lowercased name."""
+    User.objects.bulk_create([User(name="Legacy@Example.com", email="Legacy@Example.com")])
+    tracker = LoginAttemptTracker("legacy@example.com")
+    tracker.add_failure_attempt()
+    with django_capture_on_commit_callbacks(execute=True):
+        assert rename(api_as(boss), "Legacy@Example.com", "legacy2@example.com").status_code == 200
+    assert cache.get(tracker._cache_key) is None
 
 
 # --- CRM Invitation ----------------------------------------------------------------------------

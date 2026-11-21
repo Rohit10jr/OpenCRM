@@ -103,8 +103,9 @@ rename only — never export, bulk update or bulk delete. Rename (PE-32, ACCOUNT
 name, refuses a built-in and anything but one plain address, checks the name case-
 insensitively, and inside its transaction sets `email`, clears the reset key, draws a
 fresh token version, blacklists the refresh tokens and rewrites `_assign` / `_liked_by`;
-the lockout key of the old name goes on commit. CRM Invitation opts in to rename with its
-write rule. Its directory and role
+the old name's lockout counter is cleared on commit (through `LoginAttemptTracker`, keyed
+as login keys it). (CRM Invitation, too, opts in to rename, with its write rule.) The
+User resource's directory and role
 actions (`directory/`, `info/`, `add-existing/`, `<name>/update-role/`,
 `<name>/remove-crm-roles/`) read `User` directly, as the old endpoints did; the two
 per-user role actions never load the target through `get_object()`.

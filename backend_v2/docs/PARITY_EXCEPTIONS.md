@@ -731,6 +731,17 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   random version, and every outstanding refresh token blacklisted), clears the reset key,
   and rewrites the name in every `_assign` and `_liked_by` list; it leaves the user names
   inside `UserSettings.data` and a saved view's `filters` as they are
+- **Differs from upstream too, on the new name:** it is stripped and lowercased, and it
+  must be exactly one plain address. Upstream strips it and accepts what
+  `validate_email_address` accepts, a comma-separated list included (v15
+  `frappe/core/doctype/user/user.py` `validate_email_type`). A refusal prints the address
+  as typed, as upstream does. A name over 140 characters is 417 in upstream's "Value too
+  big" shape, where upstream's database would refuse it
+- **Known, not changed:** two concurrent renames into the same new name can end in a
+  500 (the taken check runs before the lock; upstream locks the new name `FOR UPDATE`);
+  this predates the User rename. Django admin sessions of the old name are not cleared,
+  as upstream clears both names' sessions: such a session finds no user, or fails
+  Django's session hash against a re-created account's different password
 - **Why:** a token names its account by name only; a random start keeps a token valid
   for the one account it was issued to
 - **Recorded by:** ACCOUNTS, 21 Nov 2026
