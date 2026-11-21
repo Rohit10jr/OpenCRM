@@ -103,7 +103,20 @@ def test_an_outsider_cannot_rename_an_industry(make_user, administrator, api_as)
     assert CRMIndustry.objects.filter(pk="Robotics").exists()
 
 
-@pytest.mark.parametrize("resource", ["genders", "countries", "languages", "view-settings", "global-settings"])
+@pytest.mark.parametrize(
+    "resource",
+    [
+        "genders",
+        "countries",
+        "languages",
+        "view-settings",
+        "global-settings",
+        "sales-hierarchies",
+        # Upstream allows these two; they wait for ACCOUNTS §10 (PE-24).
+        "users",
+        "invitations",
+    ],
+)
 def test_no_rename_where_upstream_allows_none(boss, api_as, resource):
     response = rename(api_as(boss), resource, "anything", "other")
     assert response.status_code in (404, 405)
