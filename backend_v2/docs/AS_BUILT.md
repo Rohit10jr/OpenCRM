@@ -62,8 +62,10 @@ are recorded in SimpleJWT's blacklist tables; logout blacklists a supplied refre
 without revoking other sessions.
 
 Every issued token carries the user's `token_version`. Authentication and refresh both
-refuse a stale version, while a missing claim counts as version zero for tokens issued
-before this mechanism existed. `accounts.authentication.bump_token_version()` uses an
+refuse a stale version; a missing claim counts as version zero, which no account holds:
+every account starts at a random version (`new_token_version()`, at most 2**62, a
+`PositiveBigIntegerField`; PE-32), and `accounts/0006` gave every existing row a fresh one
+once. `accounts.authentication.bump_token_version()` uses an
 `F()` update and reloads the user. `User.save()` calls it on every save while the user is
 disabled, preventing old tokens from becoming valid again after re-enabling. The only
 other trigger, `update_password` with `logout_all_sessions`, is ACCOUNTS'; a password

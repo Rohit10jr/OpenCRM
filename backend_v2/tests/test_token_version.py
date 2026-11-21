@@ -41,6 +41,9 @@ def test_a_single_logout_does_not_sign_out_another_session(alice):
 
 
 def test_a_token_without_the_claim_works_while_the_version_is_zero(alice):
+    # PE-32: no account starts at 0 any more; set it, to keep the missing-claim rule pinned.
+    type(alice).objects.filter(pk=alice.pk).update(token_version=0)
+    alice.refresh_from_db()
     refresh = RefreshToken.for_user(alice)
     assert "token_version" not in refresh.access_token
     assert _whoami(str(refresh.access_token)).status_code == 200
@@ -54,11 +57,13 @@ def test_a_token_without_the_claim_counts_as_version_zero(alice):
 
 
 def test_issued_tokens_carry_the_users_version(alice):
+    """PE-32: the version starts at a random value, so the test counts from it."""
+    before = alice.token_version
     bump_token_version(alice)
     bump_token_version(alice)
     tokens = _login(alice)
-    assert RefreshToken(tokens["refresh"])["token_version"] == 2
-    assert AccessToken(tokens["access"])["token_version"] == 2
+    assert RefreshToken(tokens["refresh"])["token_version"] == before + 2
+    assert AccessToken(tokens["access"])["token_version"] == before + 2
     assert _whoami(tokens["access"]).status_code == 200
 
 
@@ -89,8 +94,9 @@ def test_the_check_costs_no_extra_query(alice, django_assert_num_queries):
 
 
 def test_bump_token_version_refreshes_the_user_instance(alice):
+    before = alice.token_version  # PE-32: a random start
     bump_token_version(alice)
-    assert alice.token_version == 1
+    assert alice.token_version == before + 1
 
 
 def test_a_rotated_refresh_token_is_outstanding(alice):
@@ -117,9 +123,10 @@ def test_the_version_cannot_be_filtered_on(alice, auth_api):
 
 def test_the_version_cannot_be_written(alice, auth_api):
     """Writing it back to an old value would revive revoked tokens."""
+    before = alice.token_version  # PE-32: a random start
     auth_api.patch(f"/api/v1/users/{alice.pk}/", {"token_version": 5}, format="json")
     alice.refresh_from_db()
-    assert alice.token_version == 0
+    assert alice.token_version == before
 
 
 # --- ACCOUNTS milestone 2: ported from backend/tests/test_token_version.py:64-140 ---------

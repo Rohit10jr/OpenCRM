@@ -711,6 +711,24 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   autonames)
 - **Recorded by:** A-48 group 3, 21 Nov 2026
 
+### PE-32. A User rename, and a token valid for one account
+
+- **Status:** approved by the owner (20-21 Nov 2026; `temp` A-51, A-53 to A-55, A-61
+  items 2-3; `specs/ACCOUNTS.md` §10). The random token version is built with this
+  text; the rename is to be built (ACCOUNTS §10), and until then User has no rename route
+- **Where:** every token issued by `/api/v1/auth/` and checked by authentication and
+  refresh; `POST /api/v1/users/<name>/rename/` once built
+- **Old backend:** a new account starts at token version 0, so an account created under
+  a name used before starts where the earlier one started; the old backend never renames
+  a User
+- **backend_v2:** every account starts at a random token version (at most 2**62), and
+  migration `accounts/0006` gave every existing account a fresh one once, which signed
+  everyone out once. A token issued to one account matches a later account of the same
+  name only by chance (about one in 2**62)
+- **Why:** a token names its account by name only; a random start keeps a token valid
+  for the one account it was issued to
+- **Recorded by:** ACCOUNTS, 21 Nov 2026
+
 ---
 
 ## Candidates — not exceptions yet

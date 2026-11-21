@@ -1,11 +1,20 @@
 """JWT authentication with per-user token revocation."""
 
+import secrets
+
 from django.db.models import F
 from django.utils.translation import gettext_lazy as _
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken
 
 TOKEN_VERSION_CLAIM = "token_version"
+
+
+def new_token_version() -> int:
+    """PE-32 (ACCOUNTS §10.5): every account starts at a random version, so a token is
+    valid for one account even when a later account takes the same name. At most
+    2**62, so a bump never overflows the bigint column."""
+    return secrets.randbelow(2**62) + 1
 
 
 def token_version_of(token) -> int:
