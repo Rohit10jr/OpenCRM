@@ -139,6 +139,39 @@ def test_pe30_the_update_answer_carries_no_secret(api_as, manager, account):
     assert "password" not in response.json()["message"]
 
 
+@pytest.mark.parametrize("field,label", [("password", "Password"), ("api_secret", "API Secret")])
+def test_pe30_a_secret_over_140_characters_is_refused_without_its_value(
+    api_as, manager, account, field, label
+):
+    """Upstream's Password is varchar 140 ("Value too big"); the refusal never echoes it."""
+    secret = "s" * 140 + "TAIL"
+    response = api_as(manager).patch(f"{ACCOUNTS}{account.name}/", {field: secret}, format="json")
+    assert response.status_code == 417
+    assert response.json()["message"] == (
+        f"Email Account Support: '<strong>{label}</strong>' will get truncated, "
+        "as max characters allowed is 140"
+    )
+    assert "TAIL" not in response.content.decode()
+    account.refresh_from_db()
+    assert account.get_password("password") == "secret-1"
+
+
+def test_pe30_a_140_character_secret_is_stored(api_as, manager, account):
+    secret = "k" * 140
+    response = api_as(manager).patch(f"{ACCOUNTS}{account.name}/", {"api_secret": secret}, format="json")
+    assert response.status_code == 200, response.content[:300]
+    account.refresh_from_db()
+    assert account.get_password("api_secret") == secret
+
+
+@pytest.mark.parametrize("sent", [" pass word ", "   "])
+def test_pe30_a_password_is_stored_as_sent(api_as, manager, account, sent):
+    """Not trimmed, as upstream; a password of spaces is a password."""
+    api_as(manager).patch(f"{ACCOUNTS}{account.name}/", {"password": sent}, format="json")
+    account.refresh_from_db()
+    assert account.get_password("password") == sent
+
+
 def test_pe30_a_non_admin_still_cannot_set_it(api_as, alice, account):
     response = api_as(alice).patch(f"{ACCOUNTS}{account.name}/", {"password": "x"}, format="json")
     assert response.status_code == 403

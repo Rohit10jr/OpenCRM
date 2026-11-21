@@ -678,8 +678,17 @@ sent kanban columns again, as the old backend and upstream. The number is not re
 - **Old backend:** a `password` or `api_secret` in a create or an update through the
   resource is discarded (`backend/frappe_core/serializers.py:250-257`)
 - **backend_v2:** a non-empty `password` or `api_secret` sent on create or PATCH is
-  stored, encrypted at rest; null or "" leaves the stored value as it is. Neither is
-  ever in a response, and both stay refused in `fields`, `filters` and `value/`
+  stored as sent (not trimmed), encrypted at rest; one longer than 140 characters is 417
+  "Email Account <name>: '<strong>Password</strong>' will get truncated, as max
+  characters allowed is 140" (or API Secret), upstream's "Value too big" without the
+  value it echoes. Neither is ever in a response, and both stay refused in `fields`,
+  `filters` and `value/`
+- **Differs from upstream too, on an empty value:** null or "" leaves the stored value
+  as it is. Upstream deletes the stored password on "" or null and ignores its `*****`
+  placeholder (v15 `frappe/model/base_document.py:1129-1150`). backend_v2 never returns
+  the placeholder, so the account screen sends `password: null` with every save; clearing
+  on null would wipe the password at each save. Two effects: a password cannot be cleared
+  through the resource, and a literal `*****` is stored as the password
 - **Why:** upstream stores it, and the account screen sends `password` with every save
   (`frontend/src/components/Settings/EmailEdit.vue:104-118`)
 - **Recorded by:** A-48 group 3, 21 Nov 2026

@@ -118,28 +118,46 @@ class EmailAccountSerializer(DocumentSerializer):
     (encrypted by the model); null or "" leaves the stored value. Both stay sensitive:
     write-only here, never in a response, a filter or `fields`."""
 
-    #: The credentials the resource takes in but never shows.
-    WRITE_ONLY_SECRETS = ("password", "api_secret")
+    #: The credentials the resource takes in but never shows, with upstream's labels.
+    WRITE_ONLY_SECRETS = {"password": "Password", "api_secret": "API Secret"}
+    #: Upstream's Password fieldtype is varchar 140.
+    SECRET_MAX_LENGTH = 140
 
     def get_fields(self):
         fields = super().get_fields()
         for name in self.WRITE_ONLY_SECRETS:
+            # Stored as sent: upstream does not trim a Password.
             fields[name] = serializers.CharField(
-                write_only=True, required=False, allow_blank=True, allow_null=True
+                write_only=True,
+                required=False,
+                allow_blank=True,
+                allow_null=True,
+                trim_whitespace=False,
             )
         return fields
 
-    def _keep_stored_when_empty(self, validated_data):
-        for name in self.WRITE_ONLY_SECRETS:
-            if name in validated_data and not validated_data[name]:
-                validated_data.pop(name)
+    def _secrets_checked(self, validated_data, name):
+        for fieldname, label in self.WRITE_ONLY_SECRETS.items():
+            if fieldname not in validated_data:
+                continue
+            value = validated_data[fieldname]
+            if not value:
+                validated_data.pop(fieldname)
+            elif len(value) > self.SECRET_MAX_LENGTH:
+                # Upstream's "Value too big", without the value it echoes.
+                raise ValidationError(
+                    f"Email Account {name}: '<strong>{label}</strong>' will get "
+                    f"truncated, as max characters allowed is {self.SECRET_MAX_LENGTH}",
+                    title="Value too big",
+                )
         return validated_data
 
     def create(self, validated_data):
-        return super().create(self._keep_stored_when_empty(validated_data))
+        name = validated_data.get("email_account_name") or ""
+        return super().create(self._secrets_checked(validated_data, name))
 
     def update(self, instance, validated_data):
-        return super().update(instance, self._keep_stored_when_empty(validated_data))
+        return super().update(instance, self._secrets_checked(validated_data, instance.pk))
 
     class Meta:
         model = EmailAccount
