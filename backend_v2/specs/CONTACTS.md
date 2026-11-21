@@ -349,16 +349,18 @@ Upstream does each of these; `backend/` does not, and neither does `backend_v2`:
   (`frappe_platform/migrations/0014_seed_salutations_and_genders.py`, through
   `reference_data.py:34-60`): a save is refused without them (FINDINGS 66). Two writers
   share the lists in `contacts/reference_rows.py`: the migration, on the historical
-  model, and a `seed_dev_data` step through the normal save, so a deleted row comes back
-  as the old `seed_defaults` brings it back (`crm_app/setup.py:563-564`;
-  `test_salutation_gender.py:35-47`). A restored row is not recorded, so
-  `clear_dev_data` never removes it: these rows are promised to every database, and the
-  old backend has no clear. The migration stamps the rows' `owner` and `modified_by` as
+  model, and `contacts/restore.py` for the `restore_defaults` command
+  (`specs/CONFIGURATION.md` §10.3), so a deleted row comes back as the old
+  `seed_defaults` brings it back (`crm_app/setup.py:563-564`;
+  `test_salutation_gender.py:35-47`). `clear_dev_data` never removes them. The
+  `seed_dev_data` step milestone 1 built is retired (`specs/CONFIGURATION.md` §10.8). The migration stamps the
+  rows' `owner` and `modified_by` as
   Administrator, as v2's Currency rows; the old migration saves with no session
   (`frappe_platform/migrations/0014_seed_salutations_and_genders.py:19-23`), flagged to
   the owner. Parity otherwise, not the parked S20 question.
-- **The 51 industries** are a `seed_dev_data` step (S20; DECISIONS 44 stays parked),
-  as CONFIGURATION's milestone 6 steps are.
+- **The 51 industries** are written by data migration `contacts/0004_industries` and put
+  back by `restore_defaults` (`specs/CONFIGURATION.md` §10; the owner's S20 change of
+  20 Nov 2026). The `seed_dev_data` step milestone 1 built is retired (`specs/CONFIGURATION.md` §10.8).
 
 ## 5. Acceptance
 
@@ -387,7 +389,7 @@ Upstream does each of these; `backend/` does not, and neither does `backend_v2`:
 | E | Upstream's deal sync, phone validation, `set_user` | decided by the supervisor, flagged for the owner: follow `backend/` (§4) |
 | F | Deleting an address an organization names | decided by the supervisor, flagged for the owner: reproduced (§4) |
 | G | Rename for Address, CRM Industry, Salutation, Gender | decided by the supervisor, flagged for the owner: not opted in (**PE-24**, proposed) |
-| H | Seeding | decided by the supervisor, flagged for the owner: Salutation and Gender by data migration and a seed step; industries a `seed_dev_data` step |
+| H | Seeding | Salutation, Gender and the industries by data migration, put back by `restore_defaults` (owner's S20 change, 20 Nov 2026; `specs/CONFIGURATION.md` §10) |
 | I | Deal contacts on contact delete | decided by the supervisor, flagged for the owner: SALES' (§9) |
 | J | Users with no CRM role | decided by the supervisor, flagged for the owner: the old openness, stated (§4; DECISIONS 58) |
 | K | "Remove contact" and deleting linked documents in `core` | decided by the supervisor, flagged for the owner: **PE-25**, **PE-26** (proposed), milestone 0 (DECISIONS 59) |

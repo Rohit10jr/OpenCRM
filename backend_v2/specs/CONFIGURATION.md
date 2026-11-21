@@ -229,8 +229,8 @@ Spec-review addendum: `temp` A-30 (DECISIONS 31-35).
   existing row alone. `load_or_create(user)` takes the caller as actor and adds the
   standard items **only when it creates the row** (`backend/`'s `if created`,
   `metadata.py:369-376`), never on a row that exists. `add_standard_dropdown_items(settings,
-  *, user, force=False)` is ported whole, force branch included; the operator command
-  that calls it with `force` (`seed_defaults --force`, `setup.py:508-515`) is milestone 6's.
+  *, user, force=False)` was ported whole, force branch included; §10.3 deletes the force
+  branch (the old backend's `setup.py:508-515`, not upstream's; not carried).
 - **The outbound HTTP helper** (decision 5): `backend/crm_app/integrations/http.py` ported
   whole as `core/http.py`. The exchange-rate call uses `timeout=5, attempts=1`
   (`exchange_rate.py:123-126`), so the retry and redact code is tested by patching the
@@ -562,18 +562,10 @@ Spec-review addendum: `temp` A-37 (DECISIONS 44-47).
 - **Allowlists:** every column of the three resources readable, filterable and sortable,
   listed explicitly, as `backend/`. The resource does not check `dt` against existing
   doctypes, as `backend/` (the default rows name doctypes not built yet).
-- **The default rows** (DECISIONS 44, parked for the owner): REBUILD_PLAN S20 ports the
-  old `seed_defaults` as part (1) of `seed_dev_data`, behind `DEV_DATA_ALLOWED`. Until the
-  owner decides how that sits with the migrations milestones 2 and 3 already use:
-  explicit functions in `configuration`, `write_default_layouts` (the 14 layouts, with
-  `force` deleting and re-creating them, `setup.py:448-465`), `write_quick_filters` (the
-  six rows, `:259-266`) and `sync_standard_form_scripts` (the product scripts re-synced
-  when drifted by updating `script` only, `:518-532`; the forecasting script written only
-  when missing, `:535-547`), each leaving an existing row alone, called as steps of
-  `seed_dev_data`, as Administrator, recorded in `DevDataRecord` like the users step. No
-  data migration and no separate operator command yet; the rows milestones 2 and 3 write
-  by migration stay as they are. Tests call the functions directly; the `.http` suite
-  gets the rows from `seed_dev_data`.
+- **The default rows:** written by data migration, and put back by the
+  `restore_defaults` command (§10, which replaces the `seed_dev_data` steps milestone 6
+  built). As built in milestone 6, `write_default_layouts`, `write_quick_filters` and
+  `sync_standard_form_scripts` were `seed_dev_data` steps; §10.8 retires them.
 - **Gating:** in-unit twins on FCRM Settings and CRM Dropdown Item (Grid Row);
   `get_quick_filters` on CRM Fields Layout falls back to `dt` and `type` with a blank
   Select option. The CRM Lead, CRM Deal and CRM Task cases wait for SALES and ACTIVITIES.
@@ -871,7 +863,7 @@ Settings. Paths in this section are `backend/frappe_core/api/doc.py` unless name
 | 1 | Route names and methods | decided (A-27): §1 and `PORT_MAP.md`, checked at the spec review |
 | 11 | The actor for the guest boot call | decided: the row comes from the data migration; `Administrator` if a create is ever needed |
 | 12 | `UserSettings` | decided: a plain model, unrouted; a `core.withheld` entry only if the guard asks |
-| 13 | Migration or seed for reference rows and the two settings rows | decided: a data migration (§4.2), not dev data. REBUILD_PLAN S20 puts the old `seed_defaults` in `seed_dev_data`; that conflict is **parked for the owner** (DECISIONS 44), with milestone 6's default rows built as `seed_dev_data` steps meanwhile (§4.6) |
+| 13 | Migration or seed for reference rows and the two settings rows | decided: a data migration (§4.2), not dev data. The owner changed S20 on 20 Nov 2026: every default row is written by data migration and put back by `restore_defaults` (§10) |
 | 8 | Who edits `accounts` for §8 | decided: this unit, in milestone 4, one commit per file's concern |
 | 15 | Guard exceptions for `access_key`, `api_key` | decided: written, reviewed entries at the milestone that builds each (3, 4) |
 | 5 | The outbound HTTP helper before INTEGRATIONS | decided (A-30, DECISIONS 31): `backend/crm_app/integrations/http.py` ported whole as `core/http.py` (§4.3) |
@@ -944,3 +936,277 @@ Moved here by ACCOUNTS' spec rewrite (`temp` A-21 D-D; flagged for the owner).
 | **6. Layouts, scripts, quick filters** | CRM Fields Layout and its three calls, CRM Form Script and the internal `get_form_script`, CRM Global Settings, the two quick-filter calls, the default rows as `seed_dev_data` steps; PE-12c, PE-17, PE-18 | yes (A-37); content cases on Lead, Deal and Task wait |
 | 7. Saved views | CRM View Settings, the eight calls, `get_views` | rules yes; default columns need a list definition |
 | 8. List engine | `get_data` as the list-view mixin, the base `ListView` and `list_view_class`, `UserListView`, the badge-count provider; PE-12e, PE-22, PE-23. After milestone 7, whose views it reads | on `tests_support` and `User` only; the real gate is SALES and ACTIVITIES |
+
+## 10. Default rows by migration, and the restore command (addendum, 21 Nov 2026)
+
+Owner's change to REBUILD_PLAN S20 (`temp` A-48 group 4); spec-checked and reviewed
+(`temp` A-57, A-58), approved (`temp` A-59). It replaces §4.6 "The default rows", §4.3's
+operator command, and decision 13's parked part, and CONTACTS' seeding of industries,
+salutations and genders (`specs/CONTACTS.md` §4 "Reference rows", decision H). No route
+serves the restore (§10.4).
+
+### 10.1 What moves
+
+| Rows | Today | After |
+|---|---|---|
+| the 14 default field layouts | `seed_dev_data` step `fields_layouts` (`configuration/dev_data.py:50`) | data migration `configuration/0011_default_rows` |
+| the 6 quick filters | step `quick_filters` (`:80`) | same migration |
+| the 3 standard form scripts (product details for CRM Lead and CRM Deal; forecasting) | step `form_scripts` (`:119`) | same migration |
+| the 51 industries | step `industries` (`contacts/dev_data.py`) | data migration `contacts/0004_industries` |
+| salutations, genders | migration `contacts/0002`; the step `reference_rows` re-adds missing ones | migration unchanged; the step is retired (restore covers it, §10.3) |
+| countries, currencies, languages; the System Settings and FCRM Settings rows; the six dropdown items | migrations `configuration/0002`, `0004`, `0006` | unchanged |
+
+`core.dev_data.STEPS` then holds the `users` step only. Later units (statuses, lead
+sources, lost reasons) write theirs by migration from the start and add a restore writer
+(§10.3). The manager dashboard belongs to DASHBOARD, which builds its migration and its
+force rule (§10.3) when it exists.
+
+### 10.2 How a migration writes them
+
+**Shared data, frozen code.** A migration imports only data constants:
+- `configuration/data/default_rows.json` (the layouts, the quick filters, the
+  product-details script body, the forecasting script);
+- `contacts/reference_rows.py` (`INDUSTRIES`).
+
+The precedent for reading a data file is `configuration/migrations/0004_reference_rows.py`
+(`DATA / "country_info.json"`); `contacts/0002` imports `reference_rows`. The writer code
+is inside each migration, never imported, so a later change to live code cannot break an
+old migration on a fresh install. The live writers (`row.save(user=…)`) need
+`BaseDocument.save` (`core/models.py:181-206`), which a historical model lacks.
+
+**Columns each migration sets**, through `_default_manager.create` on historical models
+(`apps.get_model`), as `contacts/migrations/0002_salutations_and_genders.py:17-31` does.
+Common to all: `owner_id="Administrator"`, `modified_by_id="Administrator"`,
+`creation = modified = now + offset µs` (one offset per row, in file order), `idx=0`,
+`docstatus=0`; `_assign`, `_liked_by`, `_comments` and `_user_tags` keep their model
+defaults (`[]`, `[]`, `[]`, `""`).
+
+| Kind | `name` | Other columns | Skipped when |
+|---|---|---|---|
+| CRM Fields Layout (14) | `f"{dt}-{type}"` (its `Format` rule, `configuration/models.py:632`) | `dt`, `type`, `layout` from each `layouts[]` entry, the layout as the stored JSON text exactly as in the file | a row with that name exists |
+| CRM Global Settings, quick filters (6) | `secrets.token_hex(5)`, as `configuration/0006` names dropdown items (`Hash()`, `models.py:682`) | `dt` = the key of `quick_filters`; `type="Quick Filters"` (`models.py:685`); `json` = the list, in file order | a row with that `(dt, type)` exists |
+| CRM Form Script, product details (2) | `f"Product Details Script for {dt}"` (`Prompt()`; `dev_data.py:43-44`) | `dt` = `"CRM Lead"` / `"CRM Deal"`; `view="Form"`; `enabled=True`; `is_standard=True` (the model defaults are False, `models.py:660-661`); `script = "class " + dt.replace(" ", "") + " {" + product_details_script_body`, the composition of `dev_data.py:38-40` copied into the migration | a row with that name exists |
+| CRM Form Script, forecasting (1) | `"Forecasting Script"` | `dt="CRM Deal"`; `view="Form"`; `enabled=True`; `is_standard=True`; `script` = `forecasting_script` from the file | a row with that name exists |
+| CRM Industry (51) | the value | `industry` = the value | a row with that name exists |
+
+It never updates a row. Dependencies:
+- `configuration/0011_default_rows` → `configuration/0010_crmviewsettings` and
+  `accounts/0002_seed_roles_and_users`;
+- `contacts/0004_industries` → `contacts/0003_dynamic_link_address` and
+  `accounts/0002_seed_roles_and_users`.
+
+Reverse: `RunPython.noop`, as the existing data migrations.
+
+**A changed default reaches an existing install by a new migration** that updates only
+the rows still equal to the old value:
+- **the old value is a literal frozen in that migration**, because the shared file
+  already holds the new one;
+- **the comparison is exact:**
+  - a layout's `layout` text, byte for byte (whitespace counts);
+  - a quick filter's `json` list, element by element, in order;
+  - a script's `script` text, byte for byte;
+  - for each, only the column that changed is compared and written;
+- a row an administrator changed differs from the old value, and is left alone;
+- on a fresh install the migration finds the new value already written by 0011 and does
+  nothing.
+
+There is no `post_migrate` re-sync. Upstream re-runs `add_default_scripts` on every
+migrate (`crm/hooks.py:302-307`); v2 ships a migration when the standard script changes.
+
+**`DevDataRecord` tidy-up:** `core/0004_retire_default_row_steps`, which depends on
+`core/0003_dev_data_record`, deletes the records with `step` in `fields_layouts`,
+`quick_filters`, `form_scripts`, `industries`. It is tidy-up, not safety:
+`clear_dev_data` reads only the steps in `core.dev_data.STEPS`. Reverse: noop.
+
+### 10.3 The restore command
+
+`manage.py restore_defaults [--force]`, in `core/management/commands/`, not gated by
+`DEV_DATA_ALLOWED`. It is upstream's `FCRMSettings.restore_defaults(force)` →
+`after_install(force)` (`crm/fcrm/doctype/fcrm_settings/fcrm_settings.py:46-48`,
+`crm/install.py:17-35`). It runs as Administrator, in one transaction.
+
+**Where the writers live (live models, `save(user=…)`):**
+- `configuration/restore.py`: layouts, quick filters, form scripts, countries,
+  currencies, languages, the System Settings row, and the FCRM Settings row with its
+  dropdown items;
+- `contacts/restore.py`: salutations, genders, industries;
+- `core/defaults.py`: `RESTORERS`, the ordered list the command runs, as
+  `core/dev_data.py` lists `STEPS`.
+
+The country, currency and language logic exists only inside
+`configuration/migrations/0004_reference_rows.py`; it is copied into
+`configuration/restore.py` for live models, and the migration keeps its own copy. The
+same goes for the two settings rows (`0002`, `0006`).
+
+**Deleted:**
+- `configuration/dev_data.py` and `contacts/dev_data.py` whole — the step functions,
+  the recording calls (`configuration/dev_data.py:65,89,115`, `contacts/dev_data.py:34`),
+  the force branch's `recorded` logic (`:54,67`) and every `clear_*` function. Their
+  constants and helpers (`DATA_FILE`, `default_rows()`, `product_details_script`,
+  `product_script_name`) move to `configuration/restore.py`;
+- the four retired lines of `core/dev_data.py` `STEPS`;
+- `seed_dev_data --force`: with only the users step, which ignores it
+  (`accounts/dev_data.py`), it does nothing. Dropped; `restore_defaults --force` is the
+  forced path.
+
+**Plain:** each writer adds what is missing, by its key, and changes nothing that exists:
+- layouts, form scripts and industries by name;
+- quick filters by `(dt, type)`;
+- salutations, genders, countries, currencies and languages by name;
+- the System Settings and FCRM Settings rows when missing;
+- the dropdown items only when the FCRM Settings row has none (`install.py:530-542`).
+
+Quick filters keep the key `(dt, type)`, not upstream's `dt` alone (`install.py:521`).
+CRM Global Settings has a `type` column here, and quick filters are one type of several
+(`CRMGlobalSettings.first_row(dt, type)`).
+
+The one exception (owner, 21 Nov 2026): plain restore re-syncs the two standard
+product-details scripts the app ships when their text drifted, and nothing else.
+Upstream overwrites them (`crm_products.py:95-98`), and S20 names this exception.
+
+Salutations, genders, countries, currencies and languages are the port's own: upstream's
+`after_install` writes none of them; the old backend's seed does
+(`backend/crm_app/setup.py:557-561`).
+
+**`--force`**, in upstream's way:
+- **the 14 default layouts are deleted and inserted again** (`install.py:226-263`). The
+  row's history goes with it, and the new row is owned by Administrator, the command's
+  actor;
+- the manager dashboard is DASHBOARD's: upstream saves it in place under force
+  (`crm_dashboard.py:28-32`; name, owner and creation survive). DASHBOARD adds that
+  writer.
+
+Nothing else is forced. Upstream's `add_standard_dropdown_items` has no force; the forced
+branch is the old backend's (`backend/crm_app/setup.py:508-515`) and is not carried. It
+is deleted with the retired steps (§10.8 step 2): the `force` parameter and its branch in
+`configuration/models.py:394`, and its test (`tests/test_dropdown_items.py:134`). The
+one other caller, `load_or_create` (`models.py:293`), never passes `force`.
+
+**Never touched:** any row that is not a default (a layout, script or filter an
+administrator created under another name or key), and any business record.
+
+**Output and exit code**, as the old `seed_defaults`
+(`backend/crm_app/management/commands/seed_defaults.py:35-37`):
+- one line `key: count` per writer, in `RESTORERS` order, where count is the rows added
+  plus the rows rewritten. Keys: `fields_layouts`, `quick_filters`, `form_scripts`,
+  `countries`, `currencies`, `languages`, `system_settings`, `fcrm_settings`,
+  `dropdown_items`, `salutations`, `genders`, `industries`;
+- then `N row(s) written`;
+- exit code 0. Any error rolls the transaction back and exits non-zero, as a
+  `CommandError`.
+
+### 10.4 A settings route: not served
+
+Not served; the command is the way, as in the old backend (owner, 21 Nov 2026; S20,
+`REBUILD_PLAN.md:68`, says the same). The facts:
+- upstream serves `restore_defaults` through `run_doc_method`, which asks only read on
+  FCRM Settings (`frappe/handler.py:339`). Every CRM role has read
+  (`fcrm_settings.json`);
+- the button is in the Desk form only (`crm/fcrm/doctype/fcrm_settings/fcrm_settings.js:16-46`);
+  no file under `frontend/src` calls it (the field is listed in the old backend's
+  `backend/crm_app/data/doctype_meta.json:3159`);
+- the old backend has no HTTP route, only the `seed_defaults` command.
+
+
+### 10.5 Differences to record
+
+- **On upgrade, a default an administrator deleted comes back once.** The migration
+  cannot tell such a database from one the seed never filled. Upstream re-creates only
+  the scripts on migrate.
+
+### 10.6 Tests
+
+**Rule for transactional tests.** A transactional test flushes the database, and with it
+every migration-written row. `conftest.py:17-39` re-creates only Administrator and
+Guest. A transactional test that needs a default row re-creates it through a fixture.
+The five transactional tests today — `core/tests/test_tree.py:231,262`,
+`tests/test_hierarchy_concurrency.py:45,74`, `tests/test_walk_auth_flow.py:12` — read no
+default row (no layout, quick filter, script, industry or reference row in them or in
+`scripts/walk_auth_flow.py`), so they need no fixture. They pass after a flush only
+because pytest-django runs transactional tests last.
+
+**Rewritten whole:**
+- `tests/test_configuration_dev_data.py` becomes `tests/test_configuration_defaults.py`:
+  - the data-file tests (`:19`, `:29`) stay as they are;
+  - every step test (`:34-160`) is replaced by the restore tests below.
+- `tests/test_contacts_dev_data.py` becomes `tests/test_contacts_defaults.py`, with
+  each test replaced:
+
+| Today | Replaced by |
+|---|---|
+| `:18` the migration wrote the lists, the step adds none | restore adds 0 salutations, genders, industries on a migrated database |
+| `:22` a deleted salutation is put back by the step | restore puts a deleted salutation back |
+| `:28` 51 industries written once | the migration wrote the 51 (`set == INDUSTRIES`); restore after deleting one adds 1, a second run 0 |
+| `:35-45` clear removes seeded industries, keeps a reference row | `clear_dev_data` leaves every industry, salutation and gender, an administrator's `Handmade` industry included |
+| `:48-51` `STEPS[4:]` | `STEPS` keys are `["users"]` |
+| `:54-67` `seed_dev_data` puts a deleted salutation back | `restore_defaults` puts it back; `seed_dev_data` does not; `clear_dev_data` keeps it |
+
+**Changed, one by one:**
+
+| Test | Today | After |
+|---|---|---|
+| `tests/test_configuration_dev_data.py:36-38` | `STEPS[:4]` are users and the three CONFIGURATION steps | (in the new file) `STEPS` keys are `["users"]` |
+| `:40-47` layouts written once and recorded | — | the migration wrote 14, named `{dt}-{type}`; restore adds 0; after deleting one adds 1 and records nothing |
+| `:49-55` an existing layout is left alone, off the record | — | plain restore leaves an edited default layout edited |
+| `:57-67` force rewrites a layout, keeps the record | — | `--force` rewrites an edited default layout, owned by Administrator; an administrator's own layout under another name survives |
+| `:70-77` quick filters skip a doctype with a row | — | restore skips a `(dt, "Quick Filters")` that has a row; deleting one default brings back that one |
+| `:79-99` form scripts written once | — | the migration wrote the 3 with `enabled`, `is_standard`, `view="Form"` and the composed text; restore adds 0 |
+| `:101-107` quick filter rows match the data file | — | the migration's 6 rows match the file, `type="Quick Filters"` |
+| `:109-123` a second seed keeps one record per row | — | dropped: nothing is recorded |
+| `:125-140` a row deleted and seeded again is still cleared | — | dropped: `clear_dev_data` never removes a default; one test asserts that for all four kinds |
+| `:142-154` a drifted product script gets its text back | — | plain restore re-syncs it; the forecasting script's drift is kept |
+| `:156-160` clear removes only the scripts the seed created (creates `Forecasting Script`) | — | dropped with the clear functions |
+| `tests/test_layout_resources.py:143-147` POSTs `CRM Lead-Quick Entry` | now a default: 409 | POSTs a pair with no default (`dt="CRM Task", type="Quick Entry"`), same assertions with the name `CRM Task-Quick Entry` |
+| `:151`, `:169` create `CRM Lead-Side Panel` | now a default | `dt="CRM Task"`, `type="Side Panel"`; same assertions |
+| `:165` no layout exists | the 14 exist | `CRMFieldsLayout.objects.count() == 14` (nothing was added) |
+| `:187`, `:200` `get_form_script("CRM Lead") is None` | the standard script exists | `make_script(..., dt="CRM Task")` and `get_form_script("CRM Task")`; CRM Task has no standard script; the assertions are kept |
+| `:206` `CRMGlobalSettings.objects.get()` | six rows | `CRMGlobalSettings.objects.get(dt="CRM Lead", type="Quick Filters", json=["status"])` — the POSTed row; the defaults' CRM Lead row has another list |
+| `tests/test_fields_layout_calls.py:260` | no layout exists | `count() == 14` |
+| `tests/test_quick_filters.py:94` | `count() == 1` | `count() == 7`: the six defaults and the one row for CRM Fields Layout |
+| `test_quick_filters.py:153` | none exists | `count() == 6` |
+| `tests/test_dev_data_commands.py:83-85` | `77 row(s) created` | `3 row(s) created`, the users step alone; the comment goes |
+| `:162-164` | `77 row(s) removed` | `3 row(s) removed` |
+
+**New:**
+- **The migrations write what §10.2 says.** In a plain `db` test: delete the rows, call
+  each migration's function with `loader.project_state(...).apps` at that migration,
+  and assert every column of §10.2's table on the rows it wrote. This fails if the
+  function needs `save(user=…)` or a live helper. No reverse-then-forward test: with a
+  noop reverse, the forward pass skips every row and proves nothing.
+- **The `DevDataRecord` tidy-up.** Records for the four steps and one for `users`; call
+  `core/0004`'s function; only the `users` record is left.
+- **An upgrade from a database the old seed filled.** Rows plus their `DevDataRecord`
+  rows, as the old steps wrote them; run the three functions; the rows are unchanged,
+  the four steps' records are gone, and `clear_dev_data` leaves every row.
+- **Restore plain:**
+  - a deleted default comes back, for each kind;
+  - an edited default stays edited (the two standard product scripts excepted);
+  - an administrator's own row is untouched;
+  - a second run writes 0;
+  - a missing FCRM Settings row comes back with its six items;
+  - the output lines and the total match §10.3.
+- **Restore `--force`:**
+  - an edited default layout is rewritten, owned by Administrator;
+  - an edited quick filter is untouched;
+  - an administrator's own layout under another name survives.
+- **The command runs with `DEV_DATA_ALLOWED` unset.**
+- **A failing writer** (forced) rolls everything back and exits non-zero.
+- The dashboard under force: DASHBOARD's.
+
+### 10.7 Notes to record
+
+- A force restore while a user saves the same default layout can fail for that user,
+  because the row is deleted under them. Recorded; no remedy.
+- `clear_dev_data` fails, and rolls back, if a seeded user edited a default row
+  (`owner` / `modified_by` are PROTECT). That is older than this change and likelier
+  after it. Carried to the owner's dev-data discussion by the supervisor.
+
+### 10.8 Order of building
+
+1. **The migrations, with their tests:** `configuration/0011_default_rows`,
+   `contacts/0004_industries`, `core/0004_retire_default_row_steps`.
+2. **Retire the dev-data steps and fix the tests they break:** the steps and
+   `dev_data.py` modules are deleted, `seed_dev_data --force` is dropped, the forced
+   dropdown branch and its test are deleted, and the §10.6 rewrites and changes are made.
+3. **The restore command:** `configuration/restore.py`, `contacts/restore.py`,
+   `core/defaults.py`, the command, and their tests.
