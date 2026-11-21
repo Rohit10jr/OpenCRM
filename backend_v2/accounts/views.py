@@ -6,6 +6,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from accounts import directory, front_door, invitations, services, user_roles
+from accounts import rename as user_rename
 from accounts.list_views import UserListView
 from accounts.roles import ADMINISTRATOR, GUEST, ROLE_SYSTEM_MANAGER
 from accounts.serializers import (
@@ -15,7 +16,7 @@ from accounts.serializers import (
 )
 from core.access import Access
 from core.inputs import build_payload
-from core.mixins import LinkSearchMixin
+from core.mixins import LinkSearchMixin, RenameMixin
 from core.renderers import Envelope
 from core.security import rate_limit, resolve_ip
 from core.views import BaseAPIView, DocumentViewSet
@@ -28,8 +29,21 @@ def _is_user_admin(user) -> bool:
     return user.name == ADMINISTRATOR or user.has_role(ROLE_SYSTEM_MANAGER)
 
 
-class UserViewSet(LinkSearchMixin, DocumentViewSet):
-    """`User`, ruled as `backend/crm_app/permissions/platform_docs.py:90-136` rules it."""
+class UserViewSet(RenameMixin, LinkSearchMixin, DocumentViewSet):
+    """`User`, ruled as `backend/crm_app/permissions/platform_docs.py:90-136` rules it.
+    Renamed by System Manager or Administrator only, as upstream (ACCOUNTS §10, PE-32)."""
+
+    def before_rename(self, instance, old_name, new_name):
+        return user_rename.normalised_new_name(old_name, new_name)
+
+    def name_taken(self, new_name, old_name):
+        return user_rename.name_taken(new_name, old_name)
+
+    def rename_rule(self, user, instance):
+        return user_rename.may_rename(user)
+
+    def on_renamed(self, old_name, new_name):
+        user_rename.on_user_renamed(old_name, new_name)
 
     access = Access.ruled()
     list_view_class = UserListView
@@ -272,7 +286,7 @@ def _is_invitation_manager(user) -> bool:
     return user.name == ADMINISTRATOR or bool(user.get_roles() & INVITATION_MANAGER_ROLES)
 
 
-class CRMInvitationViewSet(DocumentViewSet):
+class CRMInvitationViewSet(RenameMixin, DocumentViewSet):
     """System Manager and Sales Manager list, read and delete; everyone else a deny-all
     list (old `platform_docs.py:394-407`). Stricter than upstream, whose Sales User read is
     what made a pending key redeemable by the wrong person (upstream bug #21). Only System

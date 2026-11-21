@@ -32,6 +32,20 @@ def bump_token_version(user) -> None:
     user.refresh_from_db(fields=["token_version"])
 
 
+def revoke_all_tokens(user) -> None:
+    """Blacklist every outstanding refresh token of ``user`` (shared by
+    `logout_all_sessions` and the User rename, ACCOUNTS §10.4). It does not bump the
+    version; each caller decides that."""
+    from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    for token in OutstandingToken.objects.filter(user=user):
+        try:
+            RefreshToken(token.token).blacklist()
+        except Exception:  # noqa: BLE001 - already blacklisted or unparseable
+            continue
+
+
 class VersionedJWTAuthentication(JWTAuthentication):
     def get_user(self, validated_token):
         user = super().get_user(validated_token)

@@ -12,11 +12,9 @@ import logging
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
-from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts import password_reset
-from accounts.authentication import bump_token_version
+from accounts.authentication import bump_token_version, revoke_all_tokens
 from accounts.models import User
 from accounts.services import issue_tokens
 from core import mail
@@ -113,11 +111,7 @@ def _blacklist_outstanding_tokens(account) -> None:
     """`logout_all_sessions`: bump the version (reaches access tokens already issued),
     then blacklist every outstanding refresh token."""
     bump_token_version(account)
-    for token in OutstandingToken.objects.filter(user=account):
-        try:
-            RefreshToken(token.token).blacklist()
-        except Exception:  # noqa: BLE001 - already blacklisted or unparseable
-            continue
+    revoke_all_tokens(account)
 
 
 def update_password(inputs: dict, user, client_ip: str | None) -> dict:

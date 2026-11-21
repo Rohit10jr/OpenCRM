@@ -97,8 +97,14 @@ the delete-time dynamic-link check, the DocType search and the delete cascade fi
 `BaseDocument`, forces an insert on create, so a name differing only by case is a
 duplicate (409, the raw body: `User` has no naming strategy), never an update.
 `UserViewSet` (`/api/v1/users/`) carries the old static rules, emits `user_emails: []`
-until CONFIGURATION, ignores a `name` sent on update (PE-7, proposed), and opts in to
-search only — never export, rename, bulk update or bulk delete. Its directory and role
+until CONFIGURATION, ignores a `name` sent on update (PE-7), and opts in to search and
+rename only — never export, bulk update or bulk delete. Rename (PE-32, ACCOUNTS §10,
+`accounts/rename.py`) is System Manager's or Administrator's; it normalises the new
+name, refuses a built-in and anything but one plain address, checks the name case-
+insensitively, and inside its transaction sets `email`, clears the reset key, draws a
+fresh token version, blacklists the refresh tokens and rewrites `_assign` / `_liked_by`;
+the lockout key of the old name goes on commit. CRM Invitation opts in to rename with its
+write rule. Its directory and role
 actions (`directory/`, `info/`, `add-existing/`, `<name>/update-role/`,
 `<name>/remove-crm-roles/`) read `User` directly, as the old endpoints did; the two
 per-user role actions never load the target through `get_object()`.
