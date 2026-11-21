@@ -164,6 +164,16 @@ def test_pe30_a_140_character_secret_is_stored(api_as, manager, account):
     assert account.get_password("api_secret") == secret
 
 
+@pytest.mark.parametrize("field", ["password", "api_secret"])
+def test_pe30_140_four_byte_characters_fit_the_column(api_as, manager, account, field):
+    """The 140 limit counts characters; the column holds the ciphertext of 560 bytes."""
+    secret = "\U0001F600" * 140
+    response = api_as(manager).patch(f"{ACCOUNTS}{account.name}/", {field: secret}, format="json")
+    assert response.status_code == 200, response.content[:300]
+    account.refresh_from_db()
+    assert account.get_password(field) == secret
+
+
 @pytest.mark.parametrize("sent", [" pass word ", "   "])
 def test_pe30_a_password_is_stored_as_sent(api_as, manager, account, sent):
     """Not trimmed, as upstream; a password of spaces is a password."""
