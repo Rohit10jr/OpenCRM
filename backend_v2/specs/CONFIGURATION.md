@@ -945,11 +945,15 @@ operator command, and decision 13's parked part, and CONTACTS' seeding of indust
 salutations and genders (`specs/CONTACTS.md` §4 "Reference rows", decision H). No route
 serves the restore (§10.4).
 
+**Built:** steps 1 and 2 (§10.8) on `rebuild/owner-review-4-defaults` (22 Nov 2026).
+The migration is `configuration/0012_default_rows`, not 0011 as first written: 0011
+is the Email Account secret width (temp A-75). Step 3 is to be built.
+
 ### 10.1 What moves
 
 | Rows | Today | After |
 |---|---|---|
-| the 14 default field layouts | `seed_dev_data` step `fields_layouts` (`configuration/dev_data.py:50`) | data migration `configuration/0011_default_rows` |
+| the 14 default field layouts | `seed_dev_data` step `fields_layouts` (`configuration/dev_data.py:50`) | data migration `configuration/0012_default_rows` |
 | the 6 quick filters | step `quick_filters` (`:80`) | same migration |
 | the 3 standard form scripts (product details for CRM Lead and CRM Deal; forecasting) | step `form_scripts` (`:119`) | same migration |
 | the 51 industries | step `industries` (`contacts/dev_data.py`) | data migration `contacts/0004_industries` |
@@ -990,7 +994,7 @@ defaults (`[]`, `[]`, `[]`, `""`).
 | CRM Industry (51) | the value | `industry` = the value | a row with that name exists |
 
 It never updates a row. Dependencies:
-- `configuration/0011_default_rows` → `configuration/0010_crmviewsettings` and
+- `configuration/0012_default_rows` → `configuration/0010_crmviewsettings` and
   `accounts/0002_seed_roles_and_users`;
 - `contacts/0004_industries` → `contacts/0003_dynamic_link_address` and
   `accounts/0002_seed_roles_and_users`.
@@ -1156,7 +1160,7 @@ because pytest-django runs transactional tests last.
 | `:125-140` a row deleted and seeded again is still cleared | — | dropped: `clear_dev_data` never removes a default; one test asserts that for all four kinds |
 | `:142-154` a drifted product script gets its text back | — | plain restore re-syncs it; the forecasting script's drift is kept |
 | `:156-160` clear removes only the scripts the seed created (creates `Forecasting Script`) | — | dropped with the clear functions |
-| `tests/test_layout_resources.py:143-147` POSTs `CRM Lead-Quick Entry` | now a default: 409 | POSTs a pair with no default (`dt="CRM Task", type="Quick Entry"`), same assertions with the name `CRM Task-Quick Entry` |
+| `tests/test_layout_resources.py:143-147` POSTs `CRM Lead-Quick Entry` | now a default: 409 | POSTs a pair with no default (`dt="CRM Task", type="Side Panel"`; `CRM Task-Quick Entry` is itself one of the 14 defaults), same assertions with the name `CRM Task-Side Panel` |
 | `:151`, `:169` create `CRM Lead-Side Panel` | now a default | `dt="CRM Task"`, `type="Side Panel"`; same assertions |
 | `:165` no layout exists | the 14 exist | `CRMFieldsLayout.objects.count() == 14` (nothing was added) |
 | `:187`, `:200` `get_form_script("CRM Lead") is None` | the standard script exists | `make_script(..., dt="CRM Task")` and `get_form_script("CRM Task")`; CRM Task has no standard script; the assertions are kept |
@@ -1203,7 +1207,7 @@ because pytest-django runs transactional tests last.
 
 ### 10.8 Order of building
 
-1. **The migrations, with their tests:** `configuration/0011_default_rows`,
+1. **The migrations, with their tests:** `configuration/0012_default_rows`,
    `contacts/0004_industries`, `core/0004_retire_default_row_steps`.
 2. **Retire the dev-data steps and fix the tests they break:** the steps and
    `dev_data.py` modules are deleted, `seed_dev_data --force` is dropped, the forced

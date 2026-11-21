@@ -206,10 +206,10 @@ serves `meta/quick-filters/` and `meta/quick-filters/update/`. All five check th
 through `model_or_404`: a child table answers the layout and its save, nothing else
 (PE-15), and fields the caller may not read are left out (PE-16).
 `configuration/form_scripts.py` has `get_form_script`, an internal helper for
-`get_data`, not a route. The default layouts, quick filters and product form scripts
-are `seed_dev_data` steps in `configuration/dev_data.py`, from
-`configuration/data/default_rows.json` (DECISIONS 44, migration or seed, is parked for
-the owner). The `.http` generator also makes a layout call about an unbuilt doctype
+`get_data`, not a route. The 14 default layouts, 6 quick filters and 3 standard form
+scripts are written by the data migration `configuration/0012_default_rows`, from
+`configuration/data/default_rows.json` (CONFIGURATION §10; the owner, 20 Nov 2026);
+`configuration/restore.py` holds the file's shared constants. The `.http` generator also makes a layout call about an unbuilt doctype
 wait, and `WAITS_WITH` names the blocks that read rows an earlier waiting block writes.
 
 Its seventh milestone (§4.7) adds saved views. `view-settings/` is CRM View Settings
@@ -250,8 +250,8 @@ CONTACTS (`specs/CONTACTS.md`) starts with two changes to the shared actions in 
 reference data in the `contacts` app: `salutations/` and `genders/` (everyone reads,
 System Manager or Administrator writes; the rows written by a data migration) and
 `industries/` (a CRM role, PE-29), each with `search/`. The lists are in
-`contacts/reference_rows.py`; `contacts/dev_data.py` adds two `seed_dev_data` steps,
-one putting back a deleted salutation or gender and one writing the 51 industries.
+`contacts/reference_rows.py`; the salutations and genders come from `contacts/0002`
+and the 51 industries from `contacts/0004_industries` (CONFIGURATION §10).
 Its second milestone adds `addresses/` (a CRM role reads, writes and creates, PE-29;
 System Manager or Administrator deletes) with its Dynamic Link rows (`links`, a polymorphic
 child declared on the model). An address is named `<title>-<type>` plus the collision
@@ -369,9 +369,10 @@ routed model, or for an unrouted model with an explicit `ROW_RULES` provider.
 ada, grace, and alan from four environment passwords; every seed restores enabled
 state, the exact groups, and the password. The seed records each row it creates in
 `core.models.DevDataRecord` (`core/dev_records.py`), and clear deletes only recorded rows,
-then forgets them: an account that existed before the seed is never deleted.
-CONFIGURATION appends three steps after the users: `fields_layouts`, `quick_filters`
-and `form_scripts` (§4.6 above). Both commands are atomic and report counts without printing a
+then forgets them: an account that existed before the seed is never deleted. The users
+step is the only one: default rows are written by their apps' data migrations, never by
+the seed, so `clear_dev_data` never removes one (CONFIGURATION §10; `core/0004` forgot
+the retired steps' records). Both commands are atomic and report counts without printing a
 password. `--demo` is accepted but deliberately adds nothing until later units append
 their own explicit steps.
 Both commands refuse to run unless `DEV_DATA_ALLOWED` is true. The base settings read it
@@ -392,9 +393,20 @@ type-preserving value paths documented in `scripts/parity_ignore.json` to differ
 These recipes describe the completed FOUNDATION conventions every later unit follows.
 The code remains authoritative when a recipe goes stale.
 
+### Adding a default row
+
+A row every database needs (a status, a source, a factory layout) is written by the
+app's data migration: historical models, `create` with every column, the writing code
+frozen in the migration, data read only from a shared data file or constant, an existing
+row skipped and never updated. A changed default reaches an existing install by a new
+migration that updates only the rows still equal to the old value, frozen as a literal
+there. Add a restore writer for `restore_defaults` (CONFIGURATION §10.3). Never a
+`seed_dev_data` step.
+
 ### Adding development data
 
-Put an app's seed and clear functions in that app (the account example is
+Demo records and test users only (default rows are migrations, above). Put an app's seed
+and clear functions in that app (the account example is
 `accounts/dev_data.py`). Each accepts `(user, force)` and returns the number of rows it
 created or removed. Existing rows are normally kept; use `force` only for a row whose
 old restore-defaults behaviour rewrites it. Document-model saves receive the supplied
