@@ -650,9 +650,11 @@ sent kanban columns again, as the old backend and upstream. The number is not re
 
 ### PE-29. Contact, CRM Organization, CRM Industry and Address need a CRM role
 
-- **Status:** approved by the owner (20 Nov 2026; `temp` A-48 2d, A-61 item 4); built
-  with this entry for CRM Industry and Address; Contact and CRM Organization to be built
-  with their milestones, and until then they are not served
+- **Status:** approved by the owner (20 Nov 2026; `temp` A-48 2d, A-61 item 4; CRM
+  Territory added by A-74); built for CRM Industry, Address and Contact (CONTACTS
+  milestone 3: a CRM role reads, writes and creates; delete is the owner's, a System
+  Manager's or Administrator's, with a CRM role); CRM Organization and CRM Territory to be
+  built with their milestones, and until then they are not served
 - **Where:** `/api/v1/industries/...` and `/api/v1/addresses/...`: list, create, read,
   PATCH, delete, `value/`, `search/` and every other route that reads the list or the
   object rule (old `/api/resource/CRM Industry`, `/api/resource/Address`)
@@ -791,6 +793,24 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   names, an Address a Contact or an Organization names (the disable sentence)
 - **Why:** upstream's `check_if_doc_is_linked` (v15 `frappe/model/delete_doc.py:141-153,
   276-339`)
+- **Recorded by:** CONTACTS, 22 Nov 2026
+
+### PE-35. Contact's `user` is filled from the User with the contact's email
+
+- **Status:** approved by the owner (20 Nov 2026, `temp` A-48 6.2; the match A-65, A-67;
+  `specs/CONTACTS.md` §11.2); built with this entry for the contact's save and its row
+  signal; `create_new` and `set_as_primary` follow with milestone 4
+- **Where:** `POST` / `PATCH /api/v1/contacts/...`, and every write of a contact's
+  email rows
+- **Old backend:** leaves `user` as sent
+- **backend_v2:** when `user` is empty and the primary email is set, `user` becomes the
+  User whose `email` equals it, ignoring case; of two, the most recently modified. An
+  explicit `user` is kept; no match leaves it empty; existing contacts get it on their
+  next save (no backfill)
+- **Why:** upstream's `Contact.set_user` (v15 `frappe/contacts/doctype/contact/contact.py:
+  71,131-133`), whose `get_value` orders by `modified` descending
+  (`frappe/database/database.py:623`, `frappe/database/query.py:329-338`) and whose `=`
+  ignores case on its default MariaDB collation
 - **Recorded by:** CONTACTS, 22 Nov 2026
 
 ---

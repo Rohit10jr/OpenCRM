@@ -262,6 +262,21 @@ flag on the other addresses linked to the same document. Search reads the old
 names cannot be deleted, and the refusal names the row's place ("at Row: <idx>"), as
 for every child-table row.
 
+Its third milestone adds `contacts/` (PE-29: a CRM role reads, writes and creates; delete
+is the owner's, a System Manager's or Administrator's, with a CRM role) with Contact Email
+and Contact Phone inline (`email_ids`, `phone_nos`, the serializer's `CHILD_TABLES`). A
+contact is named by its full name (`company_name` when there is none) plus the collision
+number; its save recomputes `full_name` and the mirror columns `email_id`, `mobile_no`,
+`phone` from the primary rows (only the email rule promotes a lone row), and fills `user`
+from the User with that email (PE-35). Row signals re-derive them, with `update()`, when
+one row is saved or deleted outside a document write, and stand down while the contact
+itself is deleted. `Contact.address` is PROTECT (owner, A-74): every delete door refuses
+an Address, Salutation or Gender a contact names (`core.delete.check_static_links_batch`,
+PE-34, before the dynamic links). An address created with no links takes the links of the
+Contact whose email is its owner's. Contact's field metadata appends its two Table rows
+(`TABLE_FIELD_LABELS`, read through the routed ViewSet's `CHILD_TABLES`), so its
+`getdoctype` bundle is Contact, Contact Email, Contact Phone.
+
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
 disabled, and there are no bulk actions.

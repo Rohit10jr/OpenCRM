@@ -87,7 +87,7 @@ plus the standard fields: `name`, `owner`, `modified_by`, `creation`, `modified`
 
 | Doctype | Columns, in the old order, with the old labels | Access |
 |---|---|---|
-| Contact (model metadata, `frappe_platform/models.py:349-407`) | `first_name` First Name, `middle_name` Middle Name, `last_name` Last Name (each Char 140, blank ""); `full_name` Full Name (Char 420); `salutation` Salutation, `company_name` Company Name, `designation` Designation, `gender` Gender (Char 140); `image` Image (Char 500); `status` Status (Char 20; Passive, Open, Replied; default Passive); `address` Address (FK, SET_NULL, null, `related_name="+"`); `user` User Id (FK, SET_NULL, null, `related_name="+"`); `email_id` Email Address, `mobile_no` Mobile No, `phone` Phone (Char 140). `TEXT_LINK_FIELDS = {"salutation": ("contacts.Salutation", "Salutation"), "gender": ("contacts.Gender", "Gender")}`; `ATTACH_FIELDS` `image`; `EMAIL_FIELDS` `email_id`; `TABLE_FIELD_LABELS` (§7a) | `Access.ruled()` |
+| Contact (model metadata, `frappe_platform/models.py:349-407`) | `first_name` First Name, `middle_name` Middle Name, `last_name` Last Name (each Char 140, blank ""); `full_name` Full Name (Char 420); `salutation` Salutation, `company_name` Company Name, `designation` Designation, `gender` Gender (Char 140); `image` Image (Char 500); `status` Status (Char 20; Passive, Open, Replied; default Passive); `address` Address (FK, PROTECT since A-74, null, `related_name="+"`); `user` User Id (FK, SET_NULL, null, `related_name="+"`); `email_id` Email Address, `mobile_no` Mobile No, `phone` Phone (Char 140). `TEXT_LINK_FIELDS = {"salutation": ("contacts.Salutation", "Salutation"), "gender": ("contacts.Gender", "Gender")}`; `ATTACH_FIELDS` `image`; `EMAIL_FIELDS` `email_id`; `TABLE_FIELD_LABELS` (§7a) | `Access.ruled()` |
 | Contact Email (child) | `email_id` Email ID (Char 140, required), `is_primary` Is Primary; `NAME_STRATEGY = Hash(10)`; `EMAIL_FIELDS` `email_id` | through Contact |
 | Contact Phone (child) | `phone` Number (Char 140, required), `is_primary_phone` Is Primary Phone, `is_primary_mobile_no` Is Primary Mobile; `NAME_STRATEGY = Hash(10)` | through Contact |
 | Address (model metadata, `models.py:1914-1932`) | `address_title` Address Title (Char 140, blank ""); `address_type` Address Type (Char 20, required; the twelve `ADDRESS_TYPES`); `address_line1` Address Line 1 (Char 240, required); `address_line2` Address Line 2 (Char 240); `city` City/Town (Char 140, required); `county` County, `state` State/Province (Char 140); `country` Country (FK to `configuration.Country`, PROTECT, required); `pincode` Postal Code, `email_id` Email Address, `phone` Phone, `fax` Fax (Char 140); `is_primary_address` Preferred Billing Address, `is_shipping_address` Preferred Shipping Address, `disabled` Disabled (booleans); `links` (Dynamic Link rows). `EMAIL_FIELDS` `email_id`; `PREFERRED_FLAGS` | `Access.ruled()` |
@@ -301,8 +301,9 @@ dropping the row signal breaks one of them.
 ### Delete
 
 - **Contact:** its Contact Email and Contact Phone rows cascade, the row signal stood
-  down (`models.py:533-535,559-561`). An Address deleted under a contact leaves
-  `Contact.address` empty (SET_NULL). The deal side (`CRMContacts` CASCADE,
+  down (`models.py:533-535,559-561`). An Address a contact names cannot be deleted:
+  `Contact.address` is PROTECT (owner, A-74; PE-34; the old backend's SET_NULL is not
+  carried). The deal side (`CRMContacts` CASCADE,
   `CRMDeal.contact` SET_NULL) is SALES' (§9).
 - **The Dynamic Link refusal** (`frappe_core/delete_doc.py:143-161`): a record that a
   Dynamic Link row names, such as a Contact or a CRM Organization in an Address's
@@ -317,8 +318,8 @@ dropping the row signal breaks one of them.
 - **Address, and every record a text Link names:** refused while a text Link field
   names it, as upstream (§11.3; the owner, A-48 6.3, replacing decision F): an address
   an organization's `address` names answers 417 "You can disable this Address instead of
-  deleting it.". Whether a Contact's `address` refuses it too is open with the owner
-  (§11.3, marked); until then `Contact.address` is SET_NULL, as above.
+  deleting it.", and so does an address a Contact's `address` names (owner, A-74;
+  `Contact.address` is PROTECT, PE-34).
 
 ### CRM Organization (milestone 5)
 
@@ -398,7 +399,7 @@ A-48 6.2; §11.2), so it is no longer on this list.
 | G | Rename for Address, CRM Industry, Salutation, Gender | **answered by the owner** (A-48 3c, **PE-24**): as upstream's `allow_rename`: Address, CRM Industry, Salutation yes; Gender no |
 | H | Seeding | Salutation, Gender and the industries by data migration, put back by `restore_defaults` (owner's S20 change, 20 Nov 2026; `specs/CONFIGURATION.md` §10) |
 | I | Deal contacts on contact delete | decided by the supervisor, flagged for the owner: SALES' (§9) |
-| J | Users with no CRM role | **answered by the owner** (A-48 2d, A-61 item 4): **PE-29** for Contact, CRM Organization, CRM Industry and Address; Salutation and Gender keep their rule; CRM Territory open with the owner (§11.1, marked) |
+| J | Users with no CRM role | **answered by the owner** (A-48 2d, A-61 item 4): **PE-29** for Contact, CRM Organization, CRM Industry and Address; Salutation and Gender keep their rule; CRM Territory too (owner, A-74) |
 | K | "Remove contact" and deleting linked documents in `core` | decided by the supervisor, flagged for the owner: **PE-25**, **PE-26** (proposed), milestone 0 (DECISIONS 59) |
 | L | Dynamic Link's `link_title` | decided (DECISIONS 65, correcting 60): the linked document's name, as `backend/` stores it |
 
@@ -508,9 +509,9 @@ path and §11.3's `core` text-link check; milestone 4 takes §11.4 and §11.2's 
 ## 11. Addendum: the owner's review of 20 Nov 2026 (A-48 section 6)
 
 **Status:** spec-checked (`temp` A-65) and approved (`temp` A-67, 21 Nov 2026). Two
-lines are **MARKED**, open with the owner: §11.1 "Who may do what" (CRM Territory under
-PE-29) and §11.3's Contact `address` sentence. The passages of §1-§10 this changes are
-corrected in the same commit.
+lines were marked for the owner and are answered (A-74, 22 Nov 2026): CRM Territory
+is under PE-29, and an Address a Contact names is refused. The passages of §1-§10 this
+changes are corrected in the same commit.
 
 ### 11.1 CRM Territory moves into CONTACTS (A-48 6.1; owner 20 Nov 2026, DECISIONS 56 (a))
 
@@ -546,7 +547,7 @@ corrected in the same commit.
 
   Every column is readable, filterable and sortable, as in the old generic resource. T
   adds no other shared actions.
-- **Who may do what — MARKED, open with the owner (A-65 Q1).**
+- **Who may do what — answered by the owner (A-74): PE-29's rule.**
   - `backend/` registers no rule: every signed-in user reads, writes, creates and deletes.
   - Upstream's role table (`crm_territory.json:94-131`) grants System Manager, Sales
     Manager and Sales User read, write, create and delete, with no `if_owner` row and no
@@ -555,7 +556,7 @@ corrected in the same commit.
   - The precedent: SALES' Lead Status, Deal Status, Lost Reason, Lead Source and
     Communication Status have the same CRM-only tables.
 
-  Until the answer comes, T is built with the rule left as one switch in `contacts/views.py`.
+  T builds PE-29's rule, with the PE-29 test matrix as for CRM Industry.
 - **Delete:** a territory with children is refused by the PROTECT parent FK, with 417
   `LinkExistsError`. Upstream answers the same through `check_if_doc_is_linked`; there is
   no `NestedSet.on_trash`. `.http` `05` 6.4 accepts 417|409, and v2 answers 417.
@@ -662,12 +663,13 @@ Built with Organization (milestone 5) for the Address case. The `core` check and
 Currency case come with the first milestone that builds it; recommended: milestone 3, as
 its own commit pair, since Salutation and Gender gain their first user there.
 
-- **Contact's `address` — MARKED, open with the owner (A-65 finding 6).** Upstream's
+- **Contact's `address` — answered by the owner (A-74): refused, as upstream.** Upstream's
   `Contact.address` is a Link to Address (v15 `contact.json:190-193`), so upstream also
   refuses deleting an address a contact names. CONTACTS §4 keeps SET_NULL ("leaves
   `Contact.address` empty", as `backend/`). Recommended: follow upstream, with
-  `Contact.address` refused like the Organization's. Until the answer comes, the §4
-  Delete line stays as it is, and milestone 3 builds `Contact.address` as SET_NULL.
+  `Contact.address` refused like the Organization's. Built in milestone 3:
+  `Contact.address` is PROTECT, refused through PE-34's static check with the
+  "disable instead" sentence.
 - **Tests:**
   - an address an organization names is refused at each door (record route, bulk delete,
     linked-documents delete), with the message verbatim;
@@ -715,7 +717,8 @@ gets an empty list and 403 on everything.
 ### 11.6 Answered (A-65)
 
 - **Q2:** case-insensitive (§11.2).
-- **Q1** and **finding 6** are open with the owner. They are marked above.
+- **Q1** (Territory under PE-29) and **finding 6** (an Address a Contact names):
+  answered yes by the owner (A-74).
 
 ### 11.7 Milestones after this addendum
 

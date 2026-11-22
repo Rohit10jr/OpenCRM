@@ -11,8 +11,10 @@ from accounts.roles import (
 from contacts.models import Address
 from contacts.serializers import (
     ADDRESS_FIELDS,
+    CONTACT_FIELDS,
     DOCUMENT_FIELDS,
     AddressSerializer,
+    ContactSerializer,
     CRMIndustrySerializer,
     GenderSerializer,
     SalutationSerializer,
@@ -156,6 +158,36 @@ class AddressViewSet(RenameMixin, LinkSearchMixin, DocumentViewSet):
                 filters = [*filters, ["disabled", "!=", 1]]
             return filters
         return super().search_filters(filters, flags, user)
+
+
+class ContactViewSet(LinkSearchMixin, DocumentViewSet):
+    """Contact (specs/CONTACTS.md §4, §11.5): a CRM role reads, writes and creates
+    (PE-29); delete is the owner's, a System Manager's or Administrator's, and only with
+    a CRM role (old `platform_docs.py:437-455`, `contact.json`'s role table). Every column
+    readable, filterable and sortable; search matches `name`. The shared actions come at
+    milestone 6a, the contact calls at milestone 4."""
+
+    access = Access.ruled()
+    serializer_class = ContactSerializer
+    readable_fields = ContactSerializer.Meta.fields
+    filterable_fields = (*DOCUMENT_FIELDS, *CONTACT_FIELDS)
+    sortable_fields = (*DOCUMENT_FIELDS, *CONTACT_FIELDS)
+    searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        return _crm_list_rule(user)
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        if not _has_crm_role(user):
+            return False
+        if ptype != "delete":
+            return True
+        if _is_system_admin(user):
+            return True
+        owner = getattr(document, "owner_id", None)
+        return bool(owner) and str(owner) == str(user.name)
 
 
 class CRMIndustryViewSet(RenameMixin, LinkSearchMixin, DocumentViewSet):

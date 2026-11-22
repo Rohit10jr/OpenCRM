@@ -160,13 +160,11 @@ def _dynamic_link_targets(model) -> dict[str, str]:
 def _derive_from_model(doctype: str) -> list[dict]:
     """Best effort for a doctype with no file entry (old `field_meta.py:124-196`).
 
-    Not yet ported: the old fallback also added Table rows for the child tables a model
-    names in `TABLE_FIELD_LABELS` (old `field_meta.py:181-195`). The old Contact declares
-    it for `email_ids` and `phone_nos`, so its bundle is Contact, Contact Email, Contact
-    Phone (old `tests/test_form_load.py:300-306`). No backend_v2 model declares it yet;
-    CONTACTS adds the attribute, under the old name, and its reading here (CONTACTS' spec,
-    "Carried from CONFIGURATION"). User has no such declaration, so no Table row for
-    `user_emails`."""
+    After the concrete fields, one Table row per entry of the model's
+    `TABLE_FIELD_LABELS`, in its order (old `field_meta.py:181-195`; CONTACTS §7a): the
+    child doctype is read from the routed ViewSet's `serializer_class.CHILD_TABLES`, so
+    Contact's bundle is Contact, Contact Email, Contact Phone. User declares no labels,
+    so it gets no Table row for `user_emails`."""
     model = model_for_doctype(doctype)
     if model is None:
         return []
@@ -199,7 +197,34 @@ def _derive_from_model(doctype: str) -> list[dict]:
         elif fieldtype == "Select" and getattr(field, "choices", None):
             entry["options"] = "\n".join(str(c[0]) for c in field.choices)
         fields.append(entry)
+    fields.extend(_table_rows(model))
     return fields
+
+
+def _table_rows(model) -> list[dict]:
+    labels = getattr(model, "TABLE_FIELD_LABELS", None) or {}
+    if not labels:
+        return []
+    from core.children import child_table_specs
+    from core.doctypes import doctype_of
+    from core.resources import routed_rule_map
+
+    viewset = routed_rule_map().get(model)
+    serializer = getattr(viewset, "serializer_class", None)
+    specs = child_table_specs(model, getattr(serializer, "CHILD_TABLES", {}) or {})
+    rows = []
+    for fieldname, label in labels.items():
+        spec = specs.get(fieldname)
+        if spec:
+            rows.append(
+                {
+                    "fieldname": fieldname,
+                    "fieldtype": "Table",
+                    "label": label,
+                    "options": doctype_of(spec["model"]),
+                }
+            )
+    return rows
 
 
 def clear_cache() -> None:
