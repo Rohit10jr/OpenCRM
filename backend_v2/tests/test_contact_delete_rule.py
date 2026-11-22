@@ -70,7 +70,32 @@ def test_a_system_manager_deletes_anyones(api_as, alice, administrator):
     assert not Contact.objects.filter(pk=hers.pk).exists()
 
 
+def test_a_real_system_manager_deletes_another_users_contact(api_as, alice, make_user):
+    """A-79 finding 6: the has_role branch, not the Administrator fixture."""
+    boss = make_user("boss@example.com", roles=["System Manager"])
+    hers = contact_by(alice, "Alices")
+    assert api_as(boss).delete(url(hers)).status_code == 200
+    assert not Contact.objects.filter(pk=hers.pk).exists()
+
+
+@pytest.mark.parametrize("role", ["Sales User", "Sales Manager", "System Manager"])
+def test_each_crm_role_reaches_contacts(api_as, make_user, administrator, role):
+    contact = contact_by(administrator, "Reached")
+    client = api_as(make_user("crm@example.com", roles=[role]))
+    assert [r["name"] for r in client.get(CONTACTS).json()["message"]] == [contact.pk]
+    assert client.get(url(contact)).status_code == 200
+
+
 # --- PE-29: a caller with no CRM role ------------------------------------------------------
+
+
+def test_an_outsider_reads_no_value(api_as, outsider, administrator):
+    contact = contact_by(administrator, "Admins")
+    response = api_as(outsider).get(
+        f"{CONTACTS}value/", {"fieldname": "first_name", "filters": f'{{"name": "{contact.pk}"}}'}
+    )
+    assert response.status_code == 200
+    assert response.json()["message"] == {}
 
 
 def test_an_outsider_lists_and_finds_no_contact(api_as, outsider, administrator):
@@ -135,3 +160,16 @@ def test_a_salutation_a_contact_names_cannot_be_deleted(api_as, administrator):
         f"Cannot delete or cancel because Salutation Dr is linked with Contact {contact.pk}"
     )
     assert Salutation.objects.filter(pk="Dr").exists()
+
+
+def test_a_gender_a_contact_names_cannot_be_deleted(api_as, administrator):
+    """A-79 finding 7."""
+    from contacts.models import Gender
+
+    contact = contact_by(administrator, "Gendered", gender="Female")
+    response = api_as(administrator).delete("/api/v1/genders/Female/")
+    assert response.status_code == 417
+    assert response.json()["message"] == (
+        f"Cannot delete or cancel because Gender Female is linked with Contact {contact.pk}"
+    )
+    assert Gender.objects.filter(pk="Female").exists()

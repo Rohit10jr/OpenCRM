@@ -4,8 +4,8 @@ Ported (REBUILD_PLAN S14) from ``backend/tests/test_salutation_gender.py:35-63``
 database has upstream's lists, a sales user gets both dropdowns, everyone reads and only
 an admin adds one. The old `frappe.desk.search.search_link` is each resource's own
 `search/`, and the old resource POST's 201 `data` is 200 `message`. `:43-47` (a deleted
-row put back) is in `test_restore_defaults.py`; `:66-160` need Contact (milestone 3)
-and CRM Lead (SALES). New: CRM Industry open to every CRM user (PE-29).
+row put back) is in `test_restore_defaults.py`; `:66-160`: the Contact parts are at
+the end of this file (milestone 3), the CRM Lead and Deal ones wait for SALES. New: CRM Industry open to every CRM user (PE-29).
 """
 
 import pytest
@@ -101,3 +101,61 @@ def test_crm_industry_is_open_to_every_crm_user(auth_api, api):
     assert auth_api.delete("/api/v1/industries/Robotics/").status_code == 200
     assert not CRMIndustry.objects.filter(pk="Robotics").exists()
     assert api.get("/api/v1/industries/").status_code == 401
+
+
+# --- the Contact parts, ported at CONTACTS milestone 3 (old `:69-73`, `:93-125`, `:143-160`) ---
+# `frappe.client.insert` of a Contact is `POST /api/v1/contacts/`; the Lead and Deal cases
+# (`:76-87`, `:128-140`) wait for SALES.
+
+CONTACT_TARGETS = {"salutation": "Salutation", "gender": "Gender"}
+
+
+def test_the_contacts_two_fields_are_links_in_its_metadata():
+    from configuration import field_meta
+
+    fields = {f["fieldname"]: f for f in field_meta.get_fields("Contact")}
+    for fieldname, target in CONTACT_TARGETS.items():
+        assert (fields[fieldname]["fieldtype"], fields[fieldname]["options"]) == ("Link", target)
+
+
+def _insert(client, **doc):
+    return client.post("/api/v1/contacts/", doc, format="json")
+
+
+def test_a_picked_value_is_stored_on_the_contact(auth_api):
+    from contacts.models import Contact
+
+    response = _insert(auth_api, first_name="ZZ Ravi", salutation="Mr", gender="Male")
+    assert response.status_code == 200, response.content[:300]
+    contact = Contact.objects.get(pk=response.json()["message"]["name"])
+    assert (contact.salutation, contact.gender) == ("Mr", "Male")
+
+
+def test_a_salutation_that_does_not_exist_is_refused_as_upstream_refuses_it(auth_api):
+    from contacts.models import Contact
+
+    response = _insert(auth_api, first_name="ZZ Nobody", salutation="Sir")
+    assert response.status_code == 417
+    body = response.json()
+    assert body["exc_type"] == "LinkValidationError"
+    assert "Could not find Salutation: Sir" in body["message"]
+    assert not Contact.objects.filter(first_name="ZZ Nobody").exists()
+
+
+def test_both_bad_links_are_named_in_one_message(auth_api):
+    response = _insert(auth_api, first_name="ZZ Two", salutation="Sir", gender="Robot")
+    assert response.status_code == 417
+    assert "Could not find Salutation: Sir, Gender: Robot" in response.json()["message"]
+
+
+def test_a_case_only_difference_is_stored_in_the_lists_spelling(auth_api):
+    from contacts.models import Contact
+
+    response = _insert(auth_api, first_name="ZZ Case", salutation="mr", gender="MALE")
+    assert response.status_code == 200, response.content[:300]
+    contact = Contact.objects.get(pk=response.json()["message"]["name"])
+    assert (contact.salutation, contact.gender) == ("Mr", "Male")
+
+
+def test_an_empty_value_is_not_a_link_to_check(auth_api):
+    assert _insert(auth_api, first_name="ZZ Plain").status_code == 200

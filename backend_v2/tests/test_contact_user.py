@@ -74,6 +74,22 @@ def test_of_two_users_with_the_email_the_most_recently_modified_wins(administrat
     assert contact.user_id == newer.pk
 
 
+def test_the_contacts_own_save_fills_it_through_the_resource(administrator, make_user, api_as):
+    """A-79 finding 8: a POST with its rows. The resource writes the rows inside the
+    replace (the row signal stands down) and then saves the contact, so only
+    `Contact.save()` can fill `user` here."""
+    ada = make_user("ada@example.com", email="ada@example.com")
+    response = api_as(administrator).post(
+        "/api/v1/contacts/",
+        {"first_name": "Ada", "email_ids": [{"email_id": "Ada@Example.com"}]},
+        format="json",
+    )
+    assert response.status_code == 200, response.content[:300]
+    body = response.json()["message"]
+    assert body["email_id"] == "Ada@Example.com"
+    assert body["user"] == ada.pk
+
+
 def test_the_row_signal_fills_it_without_a_contact_save(administrator, make_user):
     """§11.2: wherever `email_id` is worked out; the row signal writes with update()."""
     ada = make_user("ada@example.com", email="ada@example.com")
