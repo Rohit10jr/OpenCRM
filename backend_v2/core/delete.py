@@ -163,8 +163,11 @@ def _static_link_fields(target_model):
     for model in apps.get_models():
         if doctype_of(model) in IGNORE_LINKS_ON_DELETE:
             continue
+        # Fields that deliberately keep a deleted target's name (AS_BUILT §2) never
+        # refuse its delete (A-79 finding 1).
+        dangling = set(getattr(model, "ALLOW_DANGLING_LINK_FIELDS", ()) or ())
         for fieldname, (label, _label_text) in (getattr(model, "TEXT_LINK_FIELDS", None) or {}).items():
-            if apps.get_model(label) is target_model:
+            if fieldname not in dangling and apps.get_model(label) is target_model:
                 yield model, fieldname
         for field in model._meta.concrete_fields:
             remote = getattr(field, "remote_field", None)
@@ -191,7 +194,12 @@ def check_static_links_batch(instances) -> None:
     target_doctype = doctype_of(target_model)
     names = [str(instance.pk) for instance in instances]
     for model, column in _static_link_fields(target_model):
-        row = model._default_manager.filter(**{f"{column}__in": names}).order_by("pk").first()
+        rows = model._default_manager.filter(**{f"{column}__in": names})
+        if model is target_model:
+            # Upstream skips a document linking to itself (v15 delete_doc.py:329); in a
+            # batch, links among the batch's own records do not refuse it (A-79 finding 4).
+            rows = rows.exclude(pk__in=names)
+        row = rows.order_by("pk").first()
         if row is None:
             continue
         fields = {field.name for field in target_model._meta.get_fields()}
@@ -200,18 +208,24 @@ def check_static_links_batch(instances) -> None:
                 _("You can disable this {0} instead of deleting it.").format(target_doctype)
             )
         if is_child_table(model):
-            parent = getattr(row, "parent", "") or ""
+            from core.exceptions import _child_parent_name
+
             reference_doctype = str(getattr(row, "parenttype", "") or doctype_of(model))
-            reference_name = str(getattr(parent, "pk", parent) or row.pk)
+            reference_name = _child_parent_name(row) or str(row.pk)
         else:
             reference_doctype, reference_name = doctype_of(model), str(row.pk)
+        if reference_doctype == reference_name:
+            # Upstream names a Single once: its doctype is dropped when it equals the
+            # name (v15 delete_doc.py:447-449).
+            reference_doctype = ""
+        # No row position: upstream's check_if_doc_is_linked passes none (v15
+        # delete_doc.py:349-352); only the dynamic check does (A-79 finding 2).
         raise LinkExistsError(
             link_exists_message(
                 target_doctype,
                 str(getattr(row, column)),
                 reference_doctype,
                 reference_name,
-                _row_position(model, row),
             )
         )
 

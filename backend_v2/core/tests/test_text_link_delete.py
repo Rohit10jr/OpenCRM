@@ -6,7 +6,7 @@ the dynamic links (specs/CONTACTS.md §11.3; owner, temp A-48 6.3, A-74; upstrea
 import pytest
 
 from configuration.models import Currency, SystemSettings
-from tests_support.models import DynamicReference, TextLinkDocument, Widget
+from tests_support.models import DynamicReference, TextLinkDocument, Widget, WidgetRow
 
 pytestmark = pytest.mark.django_db
 WIDGETS = "/api/v1/test-widgets/"
@@ -58,12 +58,54 @@ def test_the_static_link_is_answered_before_the_dynamic_one(auth_api, alice):
 
 def test_bulk_delete_is_refused_too(auth_api, alice):
     widget(alice, "W-1")
-    TextLinkDocument(audit_widget_name="W-1").save(user=alice)
+    TextLinkDocument(widget_name="W-1").save(user=alice)
     response = auth_api.post(
         f"{WIDGETS}bulk-delete/", {"items": ["W-1"]}, format="json"
     )
     assert response.status_code == 417
     assert Widget.objects.filter(pk="W-1").exists()
+
+
+def test_a_field_allowed_to_dangle_does_not_refuse(auth_api, alice):
+    """A-79 finding 1: ALLOW_DANGLING_LINK_FIELDS keep a deleted target's name on
+    purpose (AS_BUILT §2), so they never block its delete."""
+    target = widget(alice, "W-1")
+    TextLinkDocument(audit_widget_name="W-1").save(user=alice)
+    assert auth_api.delete(f"{WIDGETS}{target.pk}/").status_code == 200
+
+
+def test_a_child_row_names_its_parent_and_no_row_position(auth_api, alice):
+    """A-79 finding 2: upstream's static check passes no row (v15 delete_doc.py:349-352),
+    and the parent is the row's parent document, not the row's own name."""
+    target = widget(alice, "W-A")
+    holder = widget(alice, "W-B")
+    WidgetRow(parent=holder, related_widget=target).save(user=alice)
+
+    response = auth_api.delete(f"{WIDGETS}{target.pk}/")
+
+    assert response.status_code == 417
+    assert response.json()["message"] == (
+        "Cannot delete or cancel because Foundation Widget W-A is linked with "
+        "Foundation Widget W-B"
+    )
+
+
+def test_the_linked_documents_delete_skips_a_text_linked_item(auth_api, alice):
+    """A-79 finding 5: the third door. W-B is a linked document of W-A (its row points at
+    W-A); a text Link names W-B, so the unlink's delete skips it, and W-B stays."""
+    target = widget(alice, "W-A")
+    holder = widget(alice, "W-B")
+    WidgetRow(parent=holder, related_widget=target).save(user=alice)
+    TextLinkDocument(widget_name="W-B").save(user=alice)
+
+    response = auth_api.post(
+        f"{WIDGETS}{target.pk}/linked-documents/",
+        {"items": [{"doctype": holder.DOCTYPE, "docname": holder.pk}], "delete": True},
+        format="json",
+    )
+
+    assert response.json() == {"message": "success"}
+    assert Widget.objects.filter(pk="W-B").exists()
 
 
 def test_a_currency_in_use_gets_the_disable_sentence(administrator, api_as):
