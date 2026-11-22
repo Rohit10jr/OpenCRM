@@ -788,9 +788,14 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   `modified_by` still naming the record refuses the delete with 417 `LinkExistsError`:
   "You can disable this {doctype} instead of deleting it." when the record has
   `enabled` or `disabled`, else "Cannot delete or cancel because {doctype} {name} is
-  linked with {doctype} {name}". Newly refused: a Currency System Settings or FCRM
-  Settings names (the disable sentence); with CONTACTS, a Salutation or Gender a Contact
-  names, an Address a Contact or an Organization names (the disable sentence)
+  linked with {doctype} {name}", upstream's text: no row position (only the dynamic
+  check names one), a child row named by its parent document, a Single named once.
+  Fields a model allows to dangle (`ALLOW_DANGLING_LINK_FIELDS`) never refuse, and a
+  record's links to itself, or within one bulk delete, do not either. Newly refused:
+  a Currency System Settings or FCRM Settings names (the disable sentence); since
+  CONTACTS milestone 3, a Salutation or Gender a Contact names (the second message) and
+  an Address a Contact names (the disable sentence); with milestone 5, an Address an
+  Organization names (the disable sentence)
 - **Why:** upstream's `check_if_doc_is_linked` (v15 `frappe/model/delete_doc.py:141-153,
   276-339`)
 - **Recorded by:** CONTACTS, 22 Nov 2026
