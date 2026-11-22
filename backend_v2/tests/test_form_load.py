@@ -244,3 +244,18 @@ def test_pe16_the_remaining_fields_keep_their_idx(auth_api, api_as, make_user):
     narrowed = {f["fieldname"]: f["idx"] for f in load(auth_api, "FCRM Settings").json()["docs"][0]["fields"]}
     assert all(full[name] == idx for name, idx in narrowed.items())
     assert set(full) - set(narrowed) == {"access_key"}
+
+
+def test_a_platform_doctype_answers_with_model_derived_fields(auth_api):
+    """Ported from ``backend/tests/test_form_load.py:300-313`` with CONTACTS milestone 3
+    (specs/CONTACTS.md §7a): Contact ships no DocType JSON, so its fields come from the
+    model, and its two Table rows bring Contact Email and Contact Phone into the bundle."""
+    body = load(auth_api, "Contact").json()
+
+    assert [doc["name"] for doc in body["docs"]] == ["Contact", "Contact Email", "Contact Phone"]
+    fields = body["docs"][0]["fields"]
+    assert fields, "a routed platform doctype must still answer with its fields"
+    assert {f["fieldname"] for f in fields} >= {"first_name", "email_id"}
+    assert all("fieldtype" in f and "idx" in f for f in fields)
+    assert body["docs"][0]["istable"] == 0
+    assert body["docs"][0]["sort_field"] == "modified"
