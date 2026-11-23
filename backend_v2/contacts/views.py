@@ -237,8 +237,8 @@ class ContactViewSet(LinkSearchMixin, DocumentViewSet):
             child_rows.delete_row(type(self), request.user, self._url_name(), table, row)
             return Response(Envelope(None, "message"))
         contact = child_rows.edit_row(
-            type(self), request.user, self._url_name(), table, row, build_payload(request)
-        )
+            type(self), request.user, self._url_name(), table, row, request.data
+        )  # the body only, as the document PATCH: a query parameter is not a value
         data = self.get_serializer(contact).data
         return Response(Envelope(data, "message"))
 

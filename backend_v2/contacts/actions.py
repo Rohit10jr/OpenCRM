@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from django.db import transaction
+from django.db.models import Max
 
 from contacts.models import Contact, ContactEmail, ContactPhone
 from core.exceptions import PermissionError, ValidationError, throw
@@ -30,27 +31,30 @@ def _required(value, message: str):
     return value
 
 
+def _next_idx(rows) -> int:
+    """Upstream's `append` numbers a new row `len(table) + 1`; the highest `idx` plus one
+    is the same while the table has no gaps, and stays unique after a delete (PE-36)."""
+    return (rows.aggregate(top=Max("idx"))["top"] or 0) + 1
+
+
 def create_new(rules, user, contact: str, field, value) -> bool:
-    """`contact.py:63-80`: the first email or number is primary, later ones are not; rows
-    keep `idx` 0. The row's save fires the row signal, which re-derives the mirror
-    columns and `user` (§11.2, PE-35) with `update()`."""
+    """`contact.py:63-80`: the first email or number is primary, later ones are not; the
+    row gets the next `idx` (PE-36). The row's save fires the row signal, which
+    re-derives the mirror columns and `user` (§11.2, PE-35) with `update()`; both run in
+    one transaction."""
     instance = _require_contact(rules, user, contact, "write")
     field = _required(field, "Field is required")
     value = _required(value, "Value is required")
     if field == "email":
-        ContactEmail(
-            parent_contact=instance,
-            email_id=value,
-            is_primary=not instance.email_ids.exists(),
-        ).save(user=user)
+        model, rows, values = ContactEmail, instance.email_ids, {"email_id": value}
+        values["is_primary"] = not rows.exists()
     elif field in ("mobile_no", "phone"):
-        ContactPhone(
-            parent_contact=instance,
-            phone=value,
-            is_primary_mobile_no=not instance.phone_nos.exists(),
-        ).save(user=user)
+        model, rows, values = ContactPhone, instance.phone_nos, {"phone": value}
+        values["is_primary_mobile_no"] = not rows.exists()
     else:
         throw("Invalid field")
+    with transaction.atomic():
+        model(parent_contact=instance, idx=_next_idx(rows), **values).save(user=user)
     return True
 
 
