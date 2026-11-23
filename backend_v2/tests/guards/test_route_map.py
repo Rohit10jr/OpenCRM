@@ -57,8 +57,11 @@ def parse_built_routes(text):
                             f"Malformed built New route at line {index + 1}: "
                             f"{values['New route']}"
                         )
+                    # Placeholder names carry no meaning here: the served side writes
+                    # every URL parameter as <name> (_normalise_pattern), so a
+                    # documented <row> is compared as <name> too.
                     routes.update(
-                        (method, path.rstrip("."))
+                        (method, PLACEHOLDER.sub("<name>", path.rstrip(".")))
                         for method, path in matches
                         if "<resource>" not in path and "<settings>" not in path
                     )

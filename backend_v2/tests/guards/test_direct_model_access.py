@@ -70,6 +70,14 @@ DIRECT_MANAGER_READS = {
         "same 403, then apply the Contact object rule to the loaded row (old "
         "contact.py:26-41, FINDINGS 12); the list rule would turn a refusal into a 404."
     ),
+    ("contacts/child_rows.py", "_row_and_contact", "model._default_manager"): (
+        "The row routes look the row up first, by its name and its contact, so a missing "
+        "row or one of another contact is 404 before any rule (old client.py:409-411,424)."
+    ),
+    ("contacts/child_rows.py", "_row_and_contact", "Contact._default_manager"): (
+        "The row's contact, loaded only once the row is found, so the Contact write rule "
+        "can be applied to it (403 on edit, 404 on delete, old client.py:213-223,551-572)."
+    ),
     ("contacts/actions.py", "set_as_primary", "Contact._default_manager"): (
         "Writes the derived mirror columns and user of the contact the object rule just "
         "allowed, with update() so `modified` is not bumped (FINDINGS 67, PE-35)."

@@ -289,7 +289,14 @@ Its fourth milestone adds the contact calls (`contacts/actions.py`):
 transaction, FINDINGS 67) and `search-emails/` (lists `[full_name, email_id, name]`,
 through the Contact list rule). A missing or refused contact is 403 "Not permitted" before
 the field is read, never the base 404; a missing argument is 417 (PE-12f). Both writes
-re-derive `user` with the mirror columns (PE-35).
+re-derive `user` with the mirror columns (PE-35). The row routes
+(`contacts/child_rows.py`), `PATCH`/`DELETE <name>/email-ids/<row>/` and
+`.../phone-nos/<row>/`, look the row up first: a missing row, one of another contact or
+table, or a missing contact is 404 "<DocType> <row> not found"; a refused edit is 403
+"Not permitted to write Contact", a refused delete 404 "DocType <DocType> not found".
+`PATCH` writes only the row's non-relation columns, never the four caches, saves the
+contact again and answers its document; standard fields alone are 417 "Cannot edit
+standard fields"; `DELETE` answers null.
 
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are

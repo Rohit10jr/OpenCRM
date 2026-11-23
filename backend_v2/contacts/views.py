@@ -23,6 +23,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from contacts import actions as contact_actions
+from contacts import child_rows
 from core.access import Access
 from core.inputs import build_payload
 from core.mixins import LinkSearchMixin, RenameMixin
@@ -221,6 +222,25 @@ class ContactViewSet(LinkSearchMixin, DocumentViewSet):
         inputs = build_payload(request)
         result = contact_actions.search_emails(self.get_queryset(), request.user, inputs.get("txt"))
         return Response(Envelope(result, "message"))
+
+    # The row routes (§4, DECISIONS 60): the row in the URL, the values in the body.
+    @action(detail=True, methods=("patch", "delete"), url_path=r"email-ids/(?P<row>[^/]+)")
+    def email_row(self, request, row=None, **kwargs):
+        return self._row_route(request, "email_ids", row)
+
+    @action(detail=True, methods=("patch", "delete"), url_path=r"phone-nos/(?P<row>[^/]+)")
+    def phone_row(self, request, row=None, **kwargs):
+        return self._row_route(request, "phone_nos", row)
+
+    def _row_route(self, request, table, row):
+        if request.method == "DELETE":
+            child_rows.delete_row(type(self), request.user, self._url_name(), table, row)
+            return Response(Envelope(None, "message"))
+        contact = child_rows.edit_row(
+            type(self), request.user, self._url_name(), table, row, build_payload(request)
+        )
+        data = self.get_serializer(contact).data
+        return Response(Envelope(data, "message"))
 
     def _url_name(self):
         return self.kwargs[self.lookup_url_kwarg or self.lookup_field]
