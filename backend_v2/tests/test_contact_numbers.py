@@ -84,3 +84,60 @@ def test_the_primary_phone_is_a_separate_flag(auth_api, contact):
     contact.refresh_from_db()
     assert (contact.phone, contact.mobile_no) == (SECOND, FIRST)
     assert primaries(contact, "is_primary_phone") == [SECOND]
+
+
+# --- editing and removing (ported `:100-150`) ------------------------------------------------
+# `frappe.client.set_value` / `delete` on the child doctype are `PATCH` / `DELETE
+# /api/v1/contacts/<name>/phone-nos/<row>/` and `.../email-ids/<row>/`; the value is in the
+# body as `{"<fieldname>": <value>}`.
+
+
+def row_url(contact, table, row):
+    return f"{CONTACTS}{quote(contact.pk)}/{table}/{row.pk}/"
+
+
+def test_a_number_is_edited_through_its_contact(auth_api, contact):
+    row = ContactPhone.objects.get(parent_contact=contact, phone=FIRST)
+    response = auth_api.patch(row_url(contact, "phone-nos", row), {"phone": "+91 90000 00000"}, format="json")
+    assert response.status_code == 200, response.content[:300]
+    assert response.json()["message"]["name"] == contact.pk
+    contact.refresh_from_db()
+    assert contact.mobile_no == "+91 90000 00000", "it was the primary, so the contact follows"
+
+
+def test_an_email_edit_is_still_validated(auth_api, contact):
+    row = ContactEmail.objects.get(parent_contact=contact, email_id="second@example.com")
+    response = auth_api.patch(row_url(contact, "email-ids", row), {"email_id": "not-an-email"}, format="json")
+    assert response.status_code == 417
+    row.refresh_from_db()
+    assert row.email_id == "second@example.com"
+
+
+def test_only_standard_fields_is_refused(auth_api, contact):
+    row = ContactPhone.objects.get(parent_contact=contact, phone=FIRST)
+    response = auth_api.patch(row_url(contact, "phone-nos", row), {"idx": 9}, format="json")
+    assert response.status_code == 417
+    assert "Cannot edit standard fields" in response.json()["message"]
+
+
+def test_a_number_is_removed_through_its_contact(auth_api, contact):
+    row = ContactPhone.objects.get(parent_contact=contact, phone=FIRST)
+    response = auth_api.delete(row_url(contact, "phone-nos", row))
+    assert response.status_code == 200, response.content[:300]
+    assert response.json() == {"message": None}
+    assert not ContactPhone.objects.filter(pk=row.pk).exists()
+    contact.refresh_from_db()
+    assert contact.mobile_no == "", "the primary went, and a number is not promoted on its own"
+
+
+def test_removing_the_primary_email_promotes_the_one_that_is_left(auth_api, contact):
+    row = ContactEmail.objects.get(parent_contact=contact, email_id="first@example.com")
+    assert auth_api.delete(row_url(contact, "email-ids", row)).status_code == 200
+    contact.refresh_from_db()
+    assert contact.email_id == "second@example.com"
+
+
+def test_other_child_tables_are_still_not_reachable(auth_api, contact):
+    """Only the two tables have a row route: a Dynamic Link row is not one."""
+    response = auth_api.patch(f"{CONTACTS}{quote(contact.pk)}/links/x/", {"link_name": "y"}, format="json")
+    assert response.status_code == 404
