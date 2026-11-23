@@ -801,15 +801,11 @@ Content-Type: application/json
 {"doctype": "CRM Deal", "with_parent": 1, "cached_timestamp": null}
 
 ### 9.5 a platform doctype has no DocType JSON, so its fields come from the model -> 200
-# @waiting CONTACTS
 # @expect $.docs count 1
 # @expect $.docs[0].name == Contact
 # @expect $.docs[0].fields[0].fieldname exists
-POST {{host}}/api/method/frappe.desk.form.load.getdoctype
+GET {{host}}/api/v1/meta/doctype/?doctype=Contact&with_parent=1&cached_timestamp=null
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{"doctype": "Contact", "with_parent": 1, "cached_timestamp": null}
 
 ### 9.6 an unknown doctype -> 404 DoesNotExistError
 # @expect $.exc_type == DoesNotExistError
