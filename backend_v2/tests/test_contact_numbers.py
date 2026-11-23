@@ -141,3 +141,4 @@ def test_other_child_tables_are_still_not_reachable(auth_api, contact):
     """Only the two tables have a row route: a Dynamic Link row is not one."""
     response = auth_api.patch(f"{CONTACTS}{quote(contact.pk)}/links/x/", {"link_name": "y"}, format="json")
     assert response.status_code == 404
+    assert auth_api.delete(f"{CONTACTS}{quote(contact.pk)}/links/x/").status_code == 404

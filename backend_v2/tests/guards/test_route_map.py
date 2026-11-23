@@ -127,6 +127,22 @@ def test_every_production_api_pattern_is_recorded_as_built():
     )
 
 
+def test_a_documented_placeholder_is_compared_by_position_not_by_name():
+    """`<row>` is read as `<name>`, as every served parameter is; a wrong literal segment
+    still differs from the served route."""
+    table = """\
+| Dotted path | New route | Status |
+|---|---|---|
+| `a` | `PATCH /api/v1/contacts/<name>/email-ids/<row>/` | built |
+| `b` | `DELETE /api/v1/contacts/<name>/email-id/<row>/` | built |
+"""
+    served = _normalise_pattern(r"^api/v1/contacts/(?P<pk>[^/]+)/email-ids/(?P<row>[^/]+)/?$")
+    routes = parse_built_routes(table)
+    assert ("PATCH", "/" + served) in routes
+    assert ("DELETE", "/" + served) not in routes
+    assert ("DELETE", "/api/v1/contacts/<name>/email-id/<name>/") in routes
+
+
 def test_malformed_route_table_rows_fail_loudly():
     malformed = """\
 | Dotted path | New route | Status |

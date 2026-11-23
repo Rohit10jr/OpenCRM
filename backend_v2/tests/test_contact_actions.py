@@ -47,6 +47,14 @@ def test_the_contact_is_checked_before_the_field(auth_api, action):
 
 
 @pytest.mark.parametrize("action", ["create-new-email-or-phone", "set-as-primary"])
+def test_the_contact_is_checked_before_a_missing_argument(auth_api, action):
+    """403 before PE-12f's 417."""
+    response = act(auth_api, "ZZ Nobody", action)
+    assert response.status_code == 403
+    assert response.json()["message"] == "Not permitted"
+
+
+@pytest.mark.parametrize("action", ["create-new-email-or-phone", "set-as-primary"])
 def test_an_outsider_is_not_permitted(api_as, outsider, contact, action):
     """PE-29: a caller with no CRM role gets the same 403."""
     response = act(api_as(outsider), contact.pk, action, field="email", value="x@y.test")
@@ -84,15 +92,28 @@ def test_pe12f_search_emails_needs_txt(auth_api):
 # --- create_new and set_as_primary ----------------------------------------------------------
 
 
-def test_create_new_makes_the_first_row_primary_and_keeps_idx_0(auth_api, contact):
+def test_create_new_makes_the_first_row_primary_and_numbers_the_rows(auth_api, contact):
+    """PE-36: the next `idx`, as upstream's `append` (the old backend left 0)."""
     assert act(auth_api, contact.pk, "create-new-email-or-phone", field="email", value="a@zz.test").json() == {
         "message": True
     }
     act(auth_api, contact.pk, "create-new-email-or-phone", field="email", value="b@zz.test")
     rows = list(ContactEmail.objects.filter(parent_contact=contact).order_by("email_id"))
-    assert [(r.email_id, r.is_primary, r.idx) for r in rows] == [("a@zz.test", True, 0), ("b@zz.test", False, 0)]
+    assert [(r.email_id, r.is_primary, r.idx) for r in rows] == [("a@zz.test", True, 1), ("b@zz.test", False, 2)]
     contact.refresh_from_db()
     assert contact.email_id == "a@zz.test"
+
+
+def test_the_document_reads_the_rows_in_the_order_they_were_added(auth_api, contact):
+    """PE-36: child rows are read by `idx` alone, so the numbering is the order; after a
+    delete the next row still goes last."""
+    for value in ("c@zz.test", "a@zz.test", "b@zz.test"):
+        act(auth_api, contact.pk, "create-new-email-or-phone", field="email", value=value)
+    middle = ContactEmail.objects.get(parent_contact=contact, email_id="a@zz.test")
+    assert auth_api.delete(f"{CONTACTS}{quote(contact.pk)}/email-ids/{middle.pk}/").status_code == 200
+    act(auth_api, contact.pk, "create-new-email-or-phone", field="email", value="d@zz.test")
+    rows = auth_api.get(f"{CONTACTS}{quote(contact.pk)}/").json()["message"]["email_ids"]
+    assert [(r["email_id"], r["idx"]) for r in rows] == [("c@zz.test", 1), ("b@zz.test", 3), ("d@zz.test", 4)]
 
 
 @pytest.mark.parametrize("field", ["mobile_no", "phone"])
@@ -167,9 +188,32 @@ def test_search_emails_answers_lists_ordered_by_email(auth_api, alice):
     assert response.json()["message"] == [["Amy", "amy@zz.test", "Amy"], ["Zed", "zed@zz.test", "Zed"]]
 
 
-def test_search_emails_matches_on_name_email_or_full_name(auth_api, alice):
-    _emails(alice)
-    assert [row[0] for row in auth_api.get(f"{CONTACTS}search-emails/", {"txt": "zed"}).json()["message"]] == ["Zed"]
+def _search(client, txt):
+    return client.get(f"{CONTACTS}search-emails/", {"txt": txt}).json()["message"]
+
+
+def test_search_emails_matches_each_field_on_its_own(auth_api, alice):
+    """The three `like`s are OR'd: each field alone is enough."""
+    made = {}
+    for first_name, email in (("Quill", "one@zz.test"), ("Plain", "mailonly@zz.test"), ("Ivy", "three@zz.test")):
+        made[first_name] = c = Contact.objects.create_for_user(user=alice, first_name=first_name)
+        ContactEmail.objects.create_for_user(user=alice, parent_contact=c, email_id=email, is_primary=True)
+    # Pull name and full_name apart, so each search can hit one field only.
+    Contact.objects.filter(pk=made["Quill"].pk).update(full_name="Aaa")
+    Contact.objects.filter(pk=made["Ivy"].pk).update(full_name="Fullname Only")
+
+    assert [row[2] for row in _search(auth_api, "mailonly")] == [made["Plain"].pk], "email_id alone"
+    assert [row[0] for row in _search(auth_api, "Fullname")] == ["Fullname Only"], "full_name alone"
+    assert [row[2] for row in _search(auth_api, "Quill")] == [made["Quill"].pk], "name alone"
+
+
+def test_search_emails_answers_at_most_20(auth_api, alice):
+    for n in range(22):
+        c = Contact.objects.create_for_user(user=alice, first_name=f"Bulk{n:02d}")
+        ContactEmail.objects.create_for_user(user=alice, parent_contact=c, email_id=f"b{n:02d}@zz.test", is_primary=True)
+    rows = _search(auth_api, "")
+    assert len(rows) == 20
+    assert rows[0][1] == "b00@zz.test" and rows[-1][1] == "b19@zz.test"
 
 
 def test_search_emails_gives_an_outsider_nothing(api_as, outsider, alice):

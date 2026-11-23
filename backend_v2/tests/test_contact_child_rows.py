@@ -61,6 +61,20 @@ def test_a_missing_contact_is_404(auth_api, contact):
     row = email_row(contact)
     response = auth_api.patch(f"{CONTACTS}Nobody/email-ids/{row.pk}/", {"email_id": "x@zz.test"}, format="json")
     assert response.status_code == 404
+    assert response.json()["message"] == f"Contact Email {row.pk} not found", "the row route, not the detail route"
+
+
+def test_query_parameters_are_not_values(auth_api, contact):
+    """The body only, as the document PATCH: `?email_id=` is not written, and a
+    cache-buster does not turn standard fields alone into a write."""
+    row = email_row(contact)
+    standard = auth_api.patch(url(contact, "email-ids", row.pk) + "?_=1", {"idx": 9}, format="json")
+    assert standard.status_code == 417
+    assert "Cannot edit standard fields" in standard.json()["message"]
+    query = auth_api.patch(url(contact, "email-ids", row.pk) + "?email_id=q@zz.test", {}, format="json")
+    assert query.status_code == 200
+    row.refresh_from_db()
+    assert row.email_id == "a@zz.test"
 
 
 def test_a_refused_edit_is_403_and_a_refused_delete_404(api_as, make_user, contact):
