@@ -551,6 +551,21 @@ sent kanban columns again, as the old backend and upstream. The number is not re
 - **Why:** replaces a crash with an error
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
+### PE-12f. The contact calls' missing arguments answer as errors
+
+- **Status:** approved — PE-12's kind, it only replaces a crash (`specs/CONTACTS.md` §4
+  "Validation"; `temp` A-41, A-42); built with this entry (CONTACTS milestone 4)
+- **Where:** `POST /api/v1/contacts/<name>/create-new-email-or-phone/`,
+  `POST /api/v1/contacts/<name>/set-as-primary/`, `GET /api/v1/contacts/search-emails/`
+  (old `crm.api.contact.create_new`, `set_as_primary`, `search_emails`)
+- **Old backend:** a missing `field`, `value` or `txt` raises on the missing argument
+  (`backend/crm_app/api/contact.py`)
+- **backend_v2:** 417 "Field is required", "Value is required" or "Search text is
+  required", after the contact check (a missing or refused contact is still 403 first);
+  an empty `txt` still lists every contact with an email
+- **Why:** replaces a crash with an error
+- **Recorded by:** CONTACTS, 23 Nov 2026
+
 ### PE-24. Rename is served where upstream allows a rename
 
 - **Status:** approved by the owner (20 Nov 2026), rewriting the supervisor's first
@@ -803,8 +818,8 @@ sent kanban columns again, as the old backend and upstream. The number is not re
 ### PE-35. Contact's `user` is filled from the User with the contact's email
 
 - **Status:** approved by the owner (20 Nov 2026, `temp` A-48 6.2; the match A-65, A-67;
-  `specs/CONTACTS.md` §11.2); built with this entry for the contact's save and its row
-  signal; `create_new` and `set_as_primary` follow with milestone 4
+  `specs/CONTACTS.md` §11.2); built for the contact's save and its row signal
+  (milestone 3) and for `create_new` and `set_as_primary` (milestone 4)
 - **Where:** `POST` / `PATCH /api/v1/contacts/...`, and every write of a contact's
   email rows
 - **Old backend:** leaves `user` as sent

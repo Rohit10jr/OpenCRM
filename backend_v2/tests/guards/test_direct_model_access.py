@@ -65,6 +65,15 @@ DIRECT_MANAGER_READS = {
         "logout_all_sessions after the reset key or old password proved who it is, and "
         "the User rename after the System Manager rule (ACCOUNTS §10.4)."
     ),
+    ("contacts/actions.py", "_require_contact", "Contact._default_manager"): (
+        "The contact calls must tell a missing contact from a refused one only by the "
+        "same 403, then apply the Contact object rule to the loaded row (old "
+        "contact.py:26-41, FINDINGS 12); the list rule would turn a refusal into a 404."
+    ),
+    ("contacts/actions.py", "set_as_primary", "Contact._default_manager"): (
+        "Writes the derived mirror columns and user of the contact the object rule just "
+        "allowed, with update() so `modified` is not bumped (FINDINGS 67, PE-35)."
+    ),
     ("accounts/rename.py", "name_taken", "User._default_manager"): (
         "The rename's taken check must see every account, the built-ins and those the "
         "User list rule hides, case-insensitively (ACCOUNTS §10.2 row 6)."

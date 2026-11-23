@@ -283,6 +283,14 @@ that fails in between leaves it raised for that thread, as in the old backend
 (`TABLE_FIELD_LABELS`, read through the routed ViewSet's `CHILD_TABLES`), so its
 `getdoctype` bundle is Contact, Contact Email, Contact Phone.
 
+Its fourth milestone adds the contact calls (`contacts/actions.py`):
+`<name>/create-new-email-or-phone/` (the first email or number becomes primary, rows keep
+`idx` 0), `<name>/set-as-primary/` (two set-based flag updates and one derive in a
+transaction, FINDINGS 67) and `search-emails/` (lists `[full_name, email_id, name]`,
+through the Contact list rule). A missing or refused contact is 403 "Not permitted" before
+the field is read, never the base 404; a missing argument is 417 (PE-12f). Both writes
+re-derive `user` with the mirror columns (PE-35).
+
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
 disabled, and there are no bulk actions.

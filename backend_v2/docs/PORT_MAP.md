@@ -272,9 +272,9 @@ the owner, 20 Nov 2026).
 
 | Dotted path | Verbs | Access | Old source | New route | New app | Status |
 |---|---|---|---|---|---|---|
-| `crm.api.contact.create_new` | GET/POST | auth | `crm_app/api/contact.py:create_new` | `POST /api/v1/contacts/<name>/create-new-email-or-phone/` (`contact` in the URL; `field`, `value` in the body) | contacts | — |
-| `crm.api.contact.search_emails` | GET/POST | auth | `crm_app/api/contact.py:search_emails` | `GET /api/v1/contacts/search-emails/` (`txt` kept as input) | contacts | — |
-| `crm.api.contact.set_as_primary` | GET/POST | auth | `crm_app/api/contact.py:set_as_primary` | `POST /api/v1/contacts/<name>/set-as-primary/` (`contact` in the URL; `field`, `value` in the body) | contacts | — |
+| `crm.api.contact.create_new` | GET/POST | auth | `crm_app/api/contact.py:create_new` | `POST /api/v1/contacts/<name>/create-new-email-or-phone/` (`contact` in the URL; `field`, `value` in the body) | contacts | built |
+| `crm.api.contact.search_emails` | GET/POST | auth | `crm_app/api/contact.py:search_emails` | `GET /api/v1/contacts/search-emails/` (`txt` kept as input) | contacts | built |
+| `crm.api.contact.set_as_primary` | GET/POST | auth | `crm_app/api/contact.py:set_as_primary` | `POST /api/v1/contacts/<name>/set-as-primary/` (`contact` in the URL; `field`, `value` in the body) | contacts | built |
 | `crm.api.session.get_organizations` | GET/POST | auth | `crm_app/api/session.py:get_organizations` | `GET /api/v1/organizations/directory/` | contacts | — |
 
 ## NOTIFICATIONS
