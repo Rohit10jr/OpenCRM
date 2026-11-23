@@ -104,6 +104,19 @@ def test_create_new_makes_the_first_row_primary_and_numbers_the_rows(auth_api, c
     assert contact.email_id == "a@zz.test"
 
 
+def test_create_new_locks_the_contact_before_it_reads_the_next_idx(auth_api, contact):
+    """A-81: two concurrent calls must not take one idx; the contact row is locked first."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    with CaptureQueriesContext(connection) as queries:
+        act(auth_api, contact.pk, "create-new-email-or-phone", field="email", value="a@zz.test")
+    sql = [q["sql"] for q in queries.captured_queries]
+    lock = next(i for i, s in enumerate(sql) if "FOR UPDATE" in s and '"contacts_contact"' in s)
+    top = next(i for i, s in enumerate(sql) if "MAX(" in s)
+    assert lock < top
+
+
 def test_the_document_reads_the_rows_in_the_order_they_were_added(auth_api, contact):
     """PE-36: child rows are read by `idx` alone, so the numbering is the order; after a
     delete the next row still goes last."""
