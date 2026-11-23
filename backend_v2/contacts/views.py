@@ -8,7 +8,8 @@ from accounts.roles import (
     ROLE_SALES_USER,
     ROLE_SYSTEM_MANAGER,
 )
-from contacts.models import Address
+from configuration.export_fields import export_field_info_for
+from contacts.models import Address, Contact
 from contacts.serializers import (
     ADDRESS_FIELDS,
     CONTACT_FIELDS,
@@ -26,7 +27,14 @@ from contacts import actions as contact_actions
 from contacts import child_rows
 from core.access import Access
 from core.inputs import build_payload
-from core.mixins import LinkSearchMixin, RenameMixin
+from core.mixins import (
+    BulkDeleteMixin,
+    BulkUpdateMixin,
+    LinkedDocumentsMixin,
+    LinkSearchMixin,
+    ListExportMixin,
+    RenameMixin,
+)
 from core.renderers import Envelope
 from core.views import DocumentViewSet
 
@@ -167,13 +175,24 @@ class AddressViewSet(RenameMixin, LinkSearchMixin, DocumentViewSet):
         return super().search_filters(filters, flags, user)
 
 
-class ContactViewSet(LinkSearchMixin, DocumentViewSet):
-    """Contact (specs/CONTACTS.md §4, §11.5): a CRM role reads, writes and creates
+class ContactViewSet(
+    BulkDeleteMixin,
+    BulkUpdateMixin,
+    LinkedDocumentsMixin,
+    LinkSearchMixin,
+    ListExportMixin,
+    RenameMixin,
+    DocumentViewSet,
+):
+    """Contact (specs/CONTACTS.md §4, §8, §11.5): a CRM role reads, writes and creates
     (PE-29); delete is the owner's, a System Manager's or Administrator's, and only with
     a CRM role (old `platform_docs.py:437-455`, `contact.json`'s role table). Every column
-    readable, filterable and sortable; search matches `name`. The shared actions come at
-    milestone 6a, the contact calls at milestone 4."""
+    readable, filterable and sortable; search matches `name`. The shared actions
+    (milestone 6a) take the same rules; the bulk delete clears each linked document's
+    `contact` and `contacts` (PE-25), as the old `remove_contact=(doctype == "Contact")`."""
 
+    bulk_delete_remove_contact = True
+    export_field_info = staticmethod(export_field_info_for(Contact))
     access = Access.ruled()
     serializer_class = ContactSerializer
     readable_fields = ContactSerializer.Meta.fields

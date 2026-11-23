@@ -298,6 +298,13 @@ table, or a missing contact is 404 "<DocType> <row> not found"; a refused edit i
 contact again and answers its document; standard fields alone are 417 "Cannot edit
 standard fields"; `DELETE` answers null.
 
+Its milestone 6a opts Contact in to the shared actions (§8): rename (PE-24; the email and
+phone rows follow their foreign key, Dynamic Link rows `DYNAMIC_LINK_FIELDS`), bulk delete
+with `bulk_delete_remove_contact = True` (PE-25), linked documents (PE-26, PE-34), bulk
+update and export (`export_field_info_for(Contact)`, the first production provider). Each
+takes Contact's own rules: write for rename, bulk update and unlink, the per-item delete
+rule for bulk delete, the list rule for export (PE-29).
+
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
 disabled, and there are no bulk actions.
@@ -748,8 +755,8 @@ reference cleanup, and deletes all targets with one queryset.
 clears a linked document's own `contact` field (when it can be empty) and its
 `contacts` table, the one its resource's serializer declares or the model's polymorphic
 table of that name, never a reverse relation (PE-25); it defaults off. The unlink
-action's `remove_contact` and `delete` use the same two helpers, in one transaction. No production
-resource opts in yet; the test Widget resource does.
+action's `remove_contact` and `delete` use the same two helpers, in one transaction. Contact
+opts in (CONTACTS milestone 6a), as does the test Widget resource.
 
 `ListExportMixin` writes `GET` and `POST <resource>/export/`, merges query and body
 inputs, reads through the resource queryset and field allowlists, and returns the raw
