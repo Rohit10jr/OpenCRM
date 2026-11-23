@@ -78,6 +78,10 @@ DIRECT_MANAGER_READS = {
         "The row's contact, loaded only once the row is found, so the Contact write rule "
         "can be applied to it (403 on edit, 404 on delete, old client.py:213-223,551-572)."
     ),
+    ("contacts/actions.py", "create_new", "Contact._default_manager"): (
+        "Locks the contact the object rule just allowed (select_for_update), so two "
+        "concurrent calls cannot both take the same next idx (PE-36, A-81)."
+    ),
     ("contacts/actions.py", "set_as_primary", "Contact._default_manager"): (
         "Writes the derived mirror columns and user of the contact the object rule just "
         "allowed, with update() so `modified` is not bumped (FINDINGS 67, PE-35)."

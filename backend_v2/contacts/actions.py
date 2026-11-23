@@ -54,6 +54,8 @@ def create_new(rules, user, contact: str, field, value) -> bool:
     else:
         throw("Invalid field")
     with transaction.atomic():
+        # Two calls on one contact would read the same highest idx: lock the contact.
+        Contact._default_manager.select_for_update().filter(pk=instance.pk).first()
         model(parent_contact=instance, idx=_next_idx(rows), **values).save(user=user)
     return True
 
