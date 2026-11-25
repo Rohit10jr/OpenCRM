@@ -580,12 +580,12 @@ Content-Type: application/json
 # @expect $.message.permissions.read == true
 # @expect $.message.permissions.write == true
 # @expect $.message.permissions.delete == true
-GET {{host}}/api/v1/contacts/None/permissions/?docname=ZZ%20Jane%20Roe-1
+GET {{host}}/api/v1/contacts/ZZ Jane Roe-1/permissions/?docname=ZZ%20Jane%20Roe-1
 Authorization: Bearer {{token}}
 
 ### 7.5 ...and for a document that does not exist, an empty map rather than an error
 # @expect $.message.permissions count 0
-GET {{host}}/api/v1/organizations/None/permissions/?docname=ZZ%20Nobody
+GET {{host}}/api/v1/organizations/ZZ Nobody/permissions/?docname=ZZ%20Nobody
 Authorization: Bearer {{token}}
 
 ### 7.6 organizations filter by industry -> 1

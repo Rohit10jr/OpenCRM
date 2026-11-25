@@ -326,7 +326,8 @@ def _rewrite_generic(
         _annotate(block, f"# @waiting {resource.unit or entry.unit}")
         return True
 
-    name = payload.get("name")
+    # get_doc_permissions names its record `docname`, not `name` (A-85 finding 2).
+    name = payload.get("name") or payload.get("docname")
     method = {
         "frappe.client.get": "GET",
         "frappe.client.get_list": "GET",
