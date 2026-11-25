@@ -327,17 +327,23 @@ Organization names is refused on delete (PE-34). Its `save()` sets the exchange 
 after the Link check unless `update_fields` is passed (FINDINGS 63), and assigns the
 name before either, as upstream's `insert`, so a missing name is refused before any
 provider is asked. A Currency an Organization names is refused on delete too (PE-34).
-Known limit: an organization named exactly `directory`, `value` or `search` is not
-reached by its record route, which the collection action of that name answers first
-(S25 (8), as on every resource).
+Known limit: an organization named exactly `directory`, `value`, `search`, `export`,
+`bulk-delete` or `bulk-update` is not reached by its record route, which the collection
+action of that name answers first (S25 (8), as on every resource).
 
 Its milestone 6b opts CRM Organization in to the shared actions (§8), as 6a did Contact
 but without `bulk_delete_remove_contact`: rename (PE-24; PE-31 sets `organization_name`;
 an Address's Dynamic Link rows follow), bulk delete, linked documents, bulk update and
 export (`export_field_info_for(CRMOrganization)`), each under PE-29's rule. As for a
 Contact, a bulk delete of an organization an Address's links name is refused: the
-clearing leaves links held by child rows (upstream bug 63, as the old backend). The list
-views follow at 7.
+clearing blanks only the linked document's `reference_*` and direct Link fields, so the
+Address's Dynamic Link row stays and the dynamic check refuses (old `doc.py:691-715`,
+upstream `crm/api/doc.py:721-749`, v15 `delete_doc.py:141-153`); upstream refuses that
+item too but deletes the rest of the batch. A Contact's `company_name` is not repointed
+on a rename, as upstream (a Data field, no `after_rename`), so the organization page's
+Contacts tab is empty after a rename (U-6). An exported `annual_revenue` cell is the
+six-place decimal, as the old backend writes it; upstream's is a float. The list views
+follow at 7.
 
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
