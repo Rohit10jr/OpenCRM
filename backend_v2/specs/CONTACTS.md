@@ -1,8 +1,7 @@
 # CONTACTS — contacts, their emails and phones, addresses, organizations
 
 **Status: rewritten from the spec check and the spec review** (`temp` A-41, A-42,
-DECISIONS 56-60; 18-19 Nov 2026). Milestones 0-5, 6a, 6b and T built (25 Nov 2026); 7
-next (`temp` A-80). `specs/README.md` carries the status. Paths are from the repository root; old paths
+DECISIONS 56-60; 18-19 Nov 2026). Every milestone built: 0-7, 6a, 6b and T (26 Nov 2026) (`temp` A-80). `specs/README.md` carries the status. Paths are from the repository root; old paths
 are `backend/` unless named.
 
 ## 1. Scope
