@@ -823,7 +823,8 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   a Currency System Settings or FCRM Settings names (the disable sentence); since
   CONTACTS milestone 3, a Salutation or Gender a Contact names (the second message) and
   an Address a Contact names (the disable sentence); since milestone 5, an Address an
-  Organization names (the disable sentence)
+  Organization names and a Currency an Organization names (both the disable sentence;
+  the Organization's `address` and `currency` text Links, A-85)
 - **Why:** upstream's `check_if_doc_is_linked` (v15 `frappe/model/delete_doc.py:141-153,
   276-339`)
 - **Recorded by:** CONTACTS, 22 Nov 2026

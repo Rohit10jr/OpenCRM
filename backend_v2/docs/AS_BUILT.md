@@ -324,8 +324,12 @@ permitted to access CRM resources."; every column of every organization the list
 shows, ordered by name, no limit). `industry` and `territory` are PROTECT foreign keys;
 `currency` and `address` are text Links, checked on save, and an Address an
 Organization names is refused on delete (PE-34). Its `save()` sets the exchange rate
-after the Link check unless `update_fields` is passed (FINDINGS 63). The shared actions
-follow at 6b, the list views at 7.
+after the Link check unless `update_fields` is passed (FINDINGS 63), and assigns the
+name before either, as upstream's `insert`, so a missing name is refused before any
+provider is asked. A Currency an Organization names is refused on delete too (PE-34).
+Known limit: an organization named exactly `directory`, `value` or `search` is not
+reached by its record route, which the collection action of that name answers first
+(S25 (8), as on every resource). The shared actions follow at 6b, the list views at 7.
 
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are

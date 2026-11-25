@@ -160,7 +160,7 @@ rule (owner, 21 Nov 2026).
 | Contact Email, Contact Phone | through the contact | the contact's read | the contact's write | through `create_new` or the contact's rows | the contact's write; a refused delete is 404 |
 | Address | a CRM role (PE-29; old: everyone, `:424-426`) | a CRM role | a CRM role | a CRM role | System Manager or Administrator (`:429-434`) |
 | CRM Industry | a CRM role (PE-29; old: everyone signed in, no rule registered) | a CRM role | a CRM role | a CRM role | a CRM role, subject to PROTECT and Dynamic Link rows |
-| CRM Organization | everyone signed in (no rule registered; PE-29 when built) | everyone | everyone | everyone | everyone, subject to PROTECT and Dynamic Link rows |
+| CRM Organization | a CRM role (PE-29; old: everyone signed in, no rule registered) | a CRM role | a CRM role | a CRM role | a CRM role, subject to PROTECT and Dynamic Link rows |
 | Salutation, Gender | everyone (`:472-475`) | everyone | System Manager or Administrator (`:478-484`) | the same | the same |
 | Dynamic Link | no route; through its parent | | | | removed with its parent |
 
