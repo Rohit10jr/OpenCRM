@@ -88,6 +88,7 @@ def test_bulk_delete_refuses_the_batch_when_one_row_is_not_hers(api_as, alice, a
 
     response = client.post(f"{CONTACTS}bulk-delete/", {"items": json.dumps([mine.pk, theirs.pk])}, format="json")
     assert response.status_code == 403, response.content[:300]
+    assert response.json()["message"] == f"No permission to delete Contact {theirs.pk}"
     assert Contact.objects.filter(pk__in=[mine.pk, theirs.pk]).count() == 2, "nothing went"
 
     response = client.post(f"{CONTACTS}bulk-delete/", {"items": json.dumps([mine.pk])}, format="json")

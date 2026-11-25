@@ -6,6 +6,10 @@ From `docs/http/05_contacts_organizations.http` 5.3-5.4, 5.6-5.7 (rename). New: 
 action's refusal to a caller with no CRM role, and the bulk delete of a contact an
 Address links (old `crm_app/api/doc.py:691-715`: with `remove_contact` only the
 document's `contact` and `contacts` are cleared, so the Dynamic Link refuses the batch).
+Upstream refuses that contact for the same reason, but answers 200 "success" with a
+"Failed to delete" message and deletes the rest of the batch (v15
+`frappe/desk/reportview.py:631-666`); v2 keeps the old backend's one-transaction batch
+(FINDINGS 76, `temp` A-82).
 """
 
 import json
@@ -24,6 +28,11 @@ CONTACTS = "/api/v1/contacts/"
 @pytest.fixture
 def outsider(api_as, make_user):
     return api_as(make_user("outsider@example.com"))
+
+
+@pytest.fixture
+def system_manager(make_user):
+    return make_user("sysman@example.com", roles=["System Manager"])
 
 
 @pytest.fixture
@@ -96,7 +105,7 @@ def test_an_outsider_may_not_rename(outsider, jane):
 # --- bulk delete (PE-25) --------------------------------------------------------------------
 
 
-def test_contact_bulk_delete_clears_contact_links():
+def test_contact_bulk_delete_opts_in_to_remove_contact():
     """The old `remove_contact=(doctype == "Contact")` (`doc.py:703`). No routed doctype has
     a `contact` field or `contacts` table until SALES; the clearing itself is tested on
     `tests_support` (`core/tests/test_linked_contact_and_delete.py`)."""
@@ -105,7 +114,8 @@ def test_contact_bulk_delete_clears_contact_links():
 
 def test_bulk_delete_of_a_contact_an_address_links_is_refused(auth_api, jane, address):
     """`remove_contact` leaves the Address's Dynamic Link, so the dynamic check refuses the
-    batch and nothing is deleted (old `doc.py:691-715`)."""
+    batch and nothing is deleted (old `doc.py:691-715`; upstream refuses this item too,
+    `delete_doc.py:141-153`, but answers 200 and deletes the rest)."""
     response = auth_api.post(f"{CONTACTS}bulk-delete/", {"items": json.dumps([jane.pk])}, format="json")
     assert response.status_code == 417
     assert response.json()["exc_type"] == "LinkExistsError"
@@ -120,7 +130,32 @@ def test_an_outsider_may_not_bulk_delete(outsider, alice):
     mine = Contact.objects.create_for_user(user=alice, first_name="ZZ Mine")
     response = outsider.post(f"{CONTACTS}bulk-delete/", {"items": json.dumps([mine.pk])}, format="json")
     assert response.status_code == 403
+    assert response.json()["message"] == f"No permission to delete Contact {mine.pk}"
     assert Contact.objects.filter(pk=mine.pk).exists()
+
+
+def bulk_delete_linked(client, contact):
+    return client.post(
+        f"{CONTACTS}bulk-delete/", {"items": json.dumps([contact.pk]), "delete_linked": True}, format="json"
+    )
+
+
+def test_delete_linked_skips_an_address_a_rep_may_not_delete(auth_api, jane, address):
+    """PE-26 on the bulk door: Address delete is System Manager's, so it is skipped, its
+    link stays and the batch is refused; nothing goes."""
+    response = bulk_delete_linked(auth_api, jane)
+    assert response.status_code == 417
+    assert response.json()["exc_type"] == "LinkExistsError"
+    assert Address.objects.filter(pk=address.pk).exists()
+    assert Contact.objects.filter(pk=jane.pk).exists()
+
+
+def test_delete_linked_by_a_system_manager_deletes_the_address_then_the_contact(api_as, system_manager, jane, address):
+    response = bulk_delete_linked(api_as(system_manager), jane)
+    assert response.json() == {"message": "success"}, response.content[:300]
+    assert not Address.objects.filter(pk=address.pk).exists()
+    assert not DynamicLink.objects.filter(pk="zz-link").exists()
+    assert not Contact.objects.filter(pk=jane.pk).exists()
 
 
 # --- linked documents (PE-26) ---------------------------------------------------------------
@@ -150,6 +185,37 @@ def test_an_address_the_caller_may_not_delete_is_skipped(auth_api, jane, address
     )
     assert response.json() == {"message": "success"}
     assert Address.objects.filter(pk=address.pk).exists()
+
+
+def unlink_delete(client, contact, address):
+    return client.post(
+        at(contact, "linked-documents/"),
+        {"items": [{"doctype": "Address", "docname": address.pk}], "delete": True},
+        format="json",
+    )
+
+
+def test_a_system_manager_unlink_with_delete_removes_the_address(api_as, system_manager, jane, address):
+    """The positive control for the skip above."""
+    assert unlink_delete(api_as(system_manager), jane, address).json() == {"message": "success"}
+    assert not Address.objects.filter(pk=address.pk).exists()
+
+
+def test_an_address_the_contact_names_is_skipped(api_as, system_manager, jane, address):
+    """PE-34: the contact's own `address` names it, so the linked delete skips it."""
+    Contact.objects.filter(pk=jane.pk).update(address=address)
+    assert unlink_delete(api_as(system_manager), jane, address).json() == {"message": "success"}
+    assert Address.objects.filter(pk=address.pk).exists()
+
+
+def test_an_outsiders_unlink_changes_nothing(outsider, jane, address):
+    """The POST never loads the contact; each item needs its own write rule, which an
+    outsider lacks (upstream's `remove_linked_doc_reference` takes no source either)."""
+    response = outsider.post(
+        at(jane, "linked-documents/"), {"items": [{"doctype": "Address", "docname": address.pk}]}, format="json"
+    )
+    assert response.json() == {"message": "success"}
+    assert DynamicLink.objects.get(pk="zz-link").link_name == jane.pk
 
 
 # --- bulk update and export (PE-29) ---------------------------------------------------------
