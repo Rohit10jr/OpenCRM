@@ -16,8 +16,8 @@ from urllib.parse import quote
 
 import pytest
 
-from configuration.models import Country
-from contacts.models import Address, CRMIndustry, CRMOrganization
+from configuration.models import Country, Currency
+from contacts.models import Address, Contact, CRMIndustry, CRMOrganization, DynamicLink
 from core.models import Version
 
 pytestmark = pytest.mark.django_db
@@ -170,6 +170,42 @@ def test_an_address_an_organization_names_cannot_be_deleted(api_as, administrato
     assert api_as(administrator).delete(f"/api/v1/addresses/{quote(address.pk)}/").status_code == 200
 
 
+def test_the_contacts_linked_delete_skips_an_address_an_organization_names(api_as, make_user, administrator, acme):
+    """A-85 finding 3: the other door that exists today. The unlink clears the Address's
+    link to the contact, then its delete is refused and skipped."""
+    address = Address(
+        address_title="Shared", address_type="Office", address_line1="3 Lane",
+        city="Pune", country=Country.objects.get(pk="India"),
+    )
+    address.save(user=administrator)
+    contact = Contact(first_name="ZZ Linked")
+    contact.save(user=administrator)
+    DynamicLink(
+        parent=address.pk, parenttype="Address", parentfield="links",
+        link_doctype="Contact", link_name=contact.pk, idx=1,
+    ).save(user=administrator)
+    CRMOrganization.objects.filter(pk=acme.pk).update(address=address.pk)
+
+    sysman = api_as(make_user("sysman@example.com", roles=["System Manager"]))
+    response = sysman.post(
+        f"/api/v1/contacts/{quote(contact.pk)}/linked-documents/",
+        {"items": [{"doctype": "Address", "docname": address.pk}], "delete": True},
+        format="json",
+    )
+    assert response.json() == {"message": "success"}
+    assert Address.objects.filter(pk=address.pk).exists()
+
+
+def test_a_currency_an_organization_names_cannot_be_deleted(api_as, make_user, administrator):
+    """A-85 finding 1: the Organization's `currency` text Link, newly refused (PE-34)."""
+    organization(administrator, organization_name="ZZ Euro Org", currency="EUR")
+    sysman = api_as(make_user("sysman@example.com", roles=["System Manager"]))
+    response = sysman.delete("/api/v1/currencies/EUR/")
+    assert response.status_code == 417
+    assert response.json()["message"] == "You can disable this Currency instead of deleting it."
+    assert Currency.objects.filter(pk="EUR").exists()
+
+
 # --- directory/ (get_organizations) ---------------------------------------------------------
 
 
@@ -242,6 +278,18 @@ def test_each_crm_role_reaches_organizations(make_user, api_as, acme, role):
     assert [r["name"] for r in client.get(ORGS).json()["message"]] == ["Acme"]
     assert client.get(org_url(acme.pk)).status_code == 200
     assert [r["name"] for r in client.get(f"{ORGS}directory/").json()["message"]] == ["Acme"]
+
+
+def test_administrator_reaches_organizations(administrator, api_as, acme):
+    client = api_as(administrator)
+    assert client.get(org_url(acme.pk)).status_code == 200
+    assert [r["name"] for r in client.get(f"{ORGS}directory/").json()["message"]] == ["Acme"]
+
+
+def test_a_sales_user_deletes_an_organization(auth_api, acme):
+    """PE-29: a CRM role for every action, delete included (as CRM Industry)."""
+    assert auth_api.delete(org_url(acme.pk)).status_code == 200
+    assert not CRMOrganization.objects.filter(pk="Acme").exists()
 
 
 def test_search_matches_the_name(auth_api, acme):

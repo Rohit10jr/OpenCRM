@@ -156,6 +156,39 @@ def test_a_provider_failure_refuses_the_save(http, alice):
     assert not CRMOrganization.objects.filter(pk="ZZ Offline").exists()
 
 
+def test_a_provider_failure_answers_its_sentence_at_the_route(http, auth_api):
+    """The message is user-facing copy (hard rule 14). Every provider down: the default
+    falls back to fawazahmed, which fails too, so the answer is the generic sentence
+    (`exchange_rate.py` `_raise_exchange_rate_error`, `_generic_failure`)."""
+    response = auth_api.post(
+        "/api/v1/organizations/", {"organization_name": "ZZ Offline", "currency": "EUR"}, format="json"
+    )
+    assert response.status_code == 417
+    assert response.json()["message"] == (
+        "Failed to fetch exchange rate from EUR to USD on latest. Please check your internet "
+        "connection or try again later."
+    )
+    assert not CRMOrganization.objects.filter(pk="ZZ Offline").exists()
+
+
+def test_with_the_api_off_a_foreign_currency_stores_one_and_asks_nobody(monkeypatch, settings, alice):
+    """The test settings' default (`ENABLE_EXCHANGE_RATE_API` off)."""
+    settings.ENABLE_EXCHANGE_RATE_API = False
+    fake = FakeHTTP()
+    monkeypatch.setattr(exchange_rate, "_get", fake)
+    assert organization(alice, organization_name="ZZ Off", currency="EUR").exchange_rate == 1
+    assert fake.calls == []
+
+
+def test_a_missing_name_is_refused_before_any_provider_is_asked(http, auth_api):
+    """A-85 finding 4: the name is set first, as upstream's `insert` does
+    (v15 `document.py:304`)."""
+    response = auth_api.post("/api/v1/organizations/", {"organization_name": "", "currency": "EUR"}, format="json")
+    assert response.status_code == 417
+    assert response.json()["message"] == "Organization Name is required"
+    assert http.calls == []
+
+
 def test_an_address_that_names_nothing_is_refused(alice):
     with pytest.raises(LinkValidationError, match="Could not find Address: Nowhere-Office"):
         organization(alice, organization_name="ZZ Lost", address="Nowhere-Office")
