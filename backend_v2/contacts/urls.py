@@ -2,6 +2,7 @@ from contacts.views import (
     AddressViewSet,
     ContactViewSet,
     CRMIndustryViewSet,
+    CRMTerritoryViewSet,
     GenderViewSet,
     SalutationViewSet,
 )
@@ -13,4 +14,5 @@ router.register("addresses", AddressViewSet, basename="address")
 router.register("salutations", SalutationViewSet, basename="salutation")
 router.register("genders", GenderViewSet, basename="gender")
 router.register("industries", CRMIndustryViewSet, basename="industry")
+router.register("territories", CRMTerritoryViewSet, basename="territory")
 urlpatterns = router.urls

@@ -251,13 +251,14 @@ today. CONFIGURATION still owns the field labels and fieldtypes used by export h
 
 ## CONTACTS
 
-### Doctypes (9)
+### Doctypes (10)
 
 | DocType | Kind | Naming | Old protection | Declared fields | Old model | New route | New app | Status |
 |---|---|---|---|---|---|---|---|---|
 | Address | main | controller (`<title>-<type>` + number) | ruled: list rule, object rule |  | `frappe_platform.Address` | `GET /api/v1/addresses/`, `POST /api/v1/addresses/`, `GET /api/v1/addresses/value/`, `GET /api/v1/addresses/search/`, `POST /api/v1/addresses/search/`, `GET /api/v1/addresses/<name>/`, `PATCH /api/v1/addresses/<name>/`, `DELETE /api/v1/addresses/<name>/`, `GET /api/v1/addresses/<name>/permissions/`, `POST /api/v1/addresses/<name>/rename/` | contacts | built |
 | CRM Industry | main | `FieldValue('industry')` | reviewed-open — reference data - industry vocabulary, shown on organisation forms |  | `crm_app.CRMIndustry` | `GET /api/v1/industries/`, `POST /api/v1/industries/`, `GET /api/v1/industries/value/`, `GET /api/v1/industries/search/`, `POST /api/v1/industries/search/`, `GET /api/v1/industries/<name>/`, `PATCH /api/v1/industries/<name>/`, `DELETE /api/v1/industries/<name>/`, `GET /api/v1/industries/<name>/permissions/`, `POST /api/v1/industries/<name>/rename/` | contacts | built |
 | CRM Organization | main | `FieldValue('organization_name')` | reviewed-open — upstream's role table gives every CRM role read, write, create and delete, and upstream adds no row-level hook (hooks.py). Holds shared customer organisations. |  | `crm_app.CRMOrganization` | `GET /api/v1/organizations/`, `POST /api/v1/organizations/`, `GET /api/v1/organizations/value/`, `GET /api/v1/organizations/search/`, `POST /api/v1/organizations/search/`, `GET /api/v1/organizations/<name>/`, `PATCH /api/v1/organizations/<name>/`, `DELETE /api/v1/organizations/<name>/`, `GET /api/v1/organizations/<name>/permissions/`; the shared actions of `CONTACTS.md` §8 when built | contacts | — |
+| CRM Territory | main | `FieldValue('territory_name')` | reviewed-open — reference data - territory tree, shown on lead and deal forms |  | `crm_app.CRMTerritory` | `GET /api/v1/territories/`, `POST /api/v1/territories/`, `GET /api/v1/territories/value/`, `GET /api/v1/territories/search/`, `POST /api/v1/territories/search/`, `GET /api/v1/territories/<name>/`, `PATCH /api/v1/territories/<name>/`, `DELETE /api/v1/territories/<name>/`, `GET /api/v1/territories/<name>/permissions/`, `POST /api/v1/territories/<name>/rename/` | contacts (moved from SALES, owner, 20 Nov 2026: CRM Organization points at it) | built |
 | Contact | main | controller (full name + `append_number_if_name_exists`) | ruled: list rule, object rule |  | `frappe_platform.Contact` | `GET /api/v1/contacts/`, `POST /api/v1/contacts/`, `GET /api/v1/contacts/value/`, `GET /api/v1/contacts/search/`, `POST /api/v1/contacts/search/`, `GET /api/v1/contacts/<name>/`, `PATCH /api/v1/contacts/<name>/`, `DELETE /api/v1/contacts/<name>/`, `GET /api/v1/contacts/<name>/permissions/`, `POST /api/v1/contacts/<name>/rename/`, `POST /api/v1/contacts/bulk-delete/`, `POST /api/v1/contacts/bulk-update/`, `GET /api/v1/contacts/<name>/linked-documents/`, `POST /api/v1/contacts/<name>/linked-documents/`, `GET /api/v1/contacts/export/`, `POST /api/v1/contacts/export/` (the shared actions, `CONTACTS.md` §8) | contacts | built |
 | Gender | main | `FieldValue('gender')` | ruled: list rule, object rule |  | `frappe_platform.Gender` | `GET /api/v1/genders/`, `POST /api/v1/genders/`, `GET /api/v1/genders/value/`, `GET /api/v1/genders/search/`, `POST /api/v1/genders/search/`, `GET /api/v1/genders/<name>/`, `PATCH /api/v1/genders/<name>/`, `DELETE /api/v1/genders/<name>/`, `GET /api/v1/genders/<name>/permissions/` | contacts | built |
 | Salutation | main | `FieldValue('salutation')` | ruled: list rule, object rule |  | `frappe_platform.Salutation` | `GET /api/v1/salutations/`, `POST /api/v1/salutations/`, `GET /api/v1/salutations/value/`, `GET /api/v1/salutations/search/`, `POST /api/v1/salutations/search/`, `GET /api/v1/salutations/<name>/`, `PATCH /api/v1/salutations/<name>/`, `DELETE /api/v1/salutations/<name>/`, `GET /api/v1/salutations/<name>/permissions/`, `POST /api/v1/salutations/<name>/rename/` | contacts | built |
@@ -323,7 +324,7 @@ routes are ACTIVITIES'.
 
 ## SALES
 
-### Doctypes (12)
+### Doctypes (11)
 
 | DocType | Kind | Naming | Old protection | Declared fields | Old model | New app | Status |
 |---|---|---|---|---|---|---|---|
@@ -335,7 +336,6 @@ routes are ACTIVITIES'.
 | CRM Lead Status | main | `FieldValue('lead_status')` | reviewed-open — reference data - status vocabulary, rendered in every list view |  | `crm_app.CRMLeadStatus` | sales | — |
 | CRM Lost Reason | main | `FieldValue('lost_reason')` | reviewed-open — reference data - reasons offered when a deal is marked lost |  | `crm_app.CRMLostReason` | sales | — |
 | CRM Product | main | `FieldValue('product_code')` | reviewed-open — upstream's role table gives every CRM role read, write, create and delete, and upstream adds no row-level hook (hooks.py). Holds the shared product and price catalogue. |  | `crm_app.CRMProduct` | sales | — |
-| CRM Territory | main | `FieldValue('territory_name')` | reviewed-open — reference data - territory tree, shown on lead and deal forms |  | `crm_app.CRMTerritory` | contacts (moved from SALES, owner, 20 Nov 2026: CRM Organization points at it) | — |
 | CRM Contacts | child | `Hash(10)` | n/a |  | `crm_app.CRMContacts` | sales | — |
 | CRM Products | child | `Hash(10)` | n/a |  | `crm_app.CRMProducts` | sales | — |
 | CRM Status Change Log | child | `Hash(10)` | n/a |  | `crm_app.CRMStatusChangeLog` | sales | — |

@@ -2,7 +2,7 @@
 
 from core.serializers import DocumentSerializer
 
-from .models import Address, Contact, CRMIndustry, Gender, Salutation
+from .models import Address, Contact, CRMIndustry, CRMTerritory, Gender, Salutation
 
 DOCUMENT_FIELDS = (
     "name",
@@ -35,6 +35,24 @@ class CRMIndustrySerializer(DocumentSerializer):
     class Meta:
         model = CRMIndustry
         fields = (*DOCUMENT_FIELDS, "industry")
+
+
+#: The old columns' order (`crm_app/models/taxonomy.py:113-152`).
+TERRITORY_FIELDS = (
+    "territory_name",
+    "territory_manager",
+    "lft",
+    "rgt",
+    "is_group",
+    "old_parent",
+    "parent_crm_territory",
+)
+
+
+class CRMTerritorySerializer(DocumentSerializer):
+    class Meta:
+        model = CRMTerritory
+        fields = (*DOCUMENT_FIELDS, *TERRITORY_FIELDS)
 
 
 ADDRESS_FIELDS = (

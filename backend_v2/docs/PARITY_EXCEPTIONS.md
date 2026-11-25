@@ -670,8 +670,9 @@ sent kanban columns again, as the old backend and upstream. The number is not re
 - **Status:** approved by the owner (20 Nov 2026; `temp` A-48 2d, A-61 item 4; CRM
   Territory added by A-74); built for CRM Industry, Address and Contact (CONTACTS
   milestone 3: a CRM role reads, writes and creates; delete is the owner's, a System
-  Manager's or Administrator's, with a CRM role); CRM Organization and CRM Territory to be
-  built with their milestones, and until then they are not served
+  Manager's or Administrator's, with a CRM role) and CRM Territory (CONTACTS milestone T:
+  a CRM role for every action, as CRM Industry); CRM Organization to be built with its
+  milestone, and until then it is not served
 - **Where:** `/api/v1/industries/...` and `/api/v1/addresses/...`: list, create, read,
   PATCH, delete, `value/`, `search/` and every other route that reads the list or the
   object rule (old `/api/resource/CRM Industry`, `/api/resource/Address`)
@@ -855,6 +856,25 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   stable; the highest plus one is the same while the table has no gaps, and stays unique
   after a row is deleted
 - **Recorded by:** CONTACTS, 23 Nov 2026
+
+### PE-37. CRM Territory keeps nested-set bounds and answers the tree operators
+
+- **Status:** approved by the owner (20 Nov 2026, DECISIONS 56 (a); the line named in
+  `specs/CONTACTS.md` §11.1, spec-checked A-65, approved A-67); built with this entry
+  (CONTACTS milestone T)
+- **Where:** `/api/v1/territories/...` (every write keeps `lft`/`rgt`), and every list
+  filter with `descendants of`, `ancestors of` or their variants on a territory
+- **Old backend:** the same: it keeps the bounds and serves the operators
+  (`backend/crm_app/permissions/tree.py:128-185`; FINDINGS 14)
+- **backend_v2:** as the old backend: `TreeDocument` rebuilds the bounds after every
+  ordinary write, a rename and a delete, and `core/filters.py` serves the five tree
+  operators
+- **Why:** this differs from upstream, not from `backend/`, and is recorded so the
+  difference stays visible: upstream's CRM Territory is a plain `Document`
+  (`crm/fcrm/doctype/crm_territory/crm_territory.py`; the framework gives `NestedSet`
+  only to custom doctypes, v15 `frappe/model/base_document.py:76-85`), so it never writes
+  `lft`/`rgt` and its `descendants of` on a territory matches nothing
+- **Recorded by:** CONTACTS, 25 Nov 2026
 
 ---
 
