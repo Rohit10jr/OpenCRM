@@ -329,7 +329,15 @@ name before either, as upstream's `insert`, so a missing name is refused before 
 provider is asked. A Currency an Organization names is refused on delete too (PE-34).
 Known limit: an organization named exactly `directory`, `value` or `search` is not
 reached by its record route, which the collection action of that name answers first
-(S25 (8), as on every resource). The shared actions follow at 6b, the list views at 7.
+(S25 (8), as on every resource).
+
+Its milestone 6b opts CRM Organization in to the shared actions (§8), as 6a did Contact
+but without `bulk_delete_remove_contact`: rename (PE-24; PE-31 sets `organization_name`;
+an Address's Dynamic Link rows follow), bulk delete, linked documents, bulk update and
+export (`export_field_info_for(CRMOrganization)`), each under PE-29's rule. As for a
+Contact, a bulk delete of an organization an Address's links name is refused: the
+clearing leaves links held by child rows (upstream bug 63, as the old backend). The list
+views follow at 7.
 
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
