@@ -2,7 +2,7 @@
 
 from core.serializers import DocumentSerializer
 
-from .models import Address, Contact, CRMIndustry, CRMTerritory, Gender, Salutation
+from .models import Address, Contact, CRMIndustry, CRMOrganization, CRMTerritory, Gender, Salutation
 
 DOCUMENT_FIELDS = (
     "name",
@@ -53,6 +53,27 @@ class CRMTerritorySerializer(DocumentSerializer):
     class Meta:
         model = CRMTerritory
         fields = (*DOCUMENT_FIELDS, *TERRITORY_FIELDS)
+
+
+#: The old columns' order (`crm_app/models/core_sales.py:107-131`).
+ORGANIZATION_FIELDS = (
+    "organization_name",
+    "website",
+    "organization_logo",
+    "no_of_employees",
+    "annual_revenue",
+    "industry",
+    "territory",
+    "currency",
+    "address",
+    "exchange_rate",
+)
+
+
+class CRMOrganizationSerializer(DocumentSerializer):
+    class Meta:
+        model = CRMOrganization
+        fields = (*DOCUMENT_FIELDS, *ORGANIZATION_FIELDS)
 
 
 ADDRESS_FIELDS = (

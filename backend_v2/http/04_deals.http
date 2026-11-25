@@ -100,15 +100,15 @@ DELETE {{host}}/api/v1/contacts/ZZ%20Modal%20Person/
 Authorization: Bearer {{token}}
 
 ### 0.12 cleanup org -> 200|404
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{host}}/api/resource/CRM%20Organization/ZZ%20Deal%20Org
+DELETE {{host}}/api/v1/organizations/ZZ%20Deal%20Org/
 Authorization: Bearer {{token}}
 
 ### 0.12b cleanup org ZZ Modal Org (made by create_deal in 5.17) -> 200|404
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{host}}/api/resource/CRM%20Organization/ZZ%20Modal%20Org
+DELETE {{host}}/api/v1/organizations/ZZ%20Modal%20Org/
 Authorization: Bearer {{token}}
 
 ### 0.13 cleanup status ZZ Hot -> 200|404
@@ -137,9 +137,9 @@ Authorization: Bearer {{token}}
 
 # ---- fixtures ----------------------------------------------------------------------------
 
-### 1.1 organization -> 201
-# @waiting CONTACTS
-POST {{host}}/api/resource/CRM%20Organization
+### 1.1 organization -> 200
+# @resource-envelope {"data"}/201 -> {"message"}/200
+POST {{host}}/api/v1/organizations/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -740,13 +740,13 @@ DELETE {{host}}/api/v1/contacts/ZZ%20Modal%20Person/
 Authorization: Bearer {{token}}
 
 ### 7.9 delete org -> 200
-# @waiting CONTACTS
-DELETE {{host}}/api/resource/CRM%20Organization/ZZ%20Deal%20Org
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/organizations/ZZ%20Deal%20Org/
 Authorization: Bearer {{token}}
 
 ### 7.9b delete org ZZ Modal Org -> 200
-# @waiting CONTACTS
-DELETE {{host}}/api/resource/CRM%20Organization/ZZ%20Modal%20Org
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/organizations/ZZ%20Modal%20Org/
 Authorization: Bearer {{token}}
 
 ### 7.10 delete status ZZ Hot -> 200

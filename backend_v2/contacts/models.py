@@ -91,6 +91,66 @@ class CRMTerritory(TreeDocument):
         ordering = ["name"]
 
 
+EMPLOYEE_COUNT_CHOICES = [(c, c) for c in ("1-10", "11-50", "51-200", "201-500", "501-1000", "1000+")]
+
+
+class CRMOrganization(BaseDocument):
+    """An organization (specs/CONTACTS.md §4 "CRM Organization"; old
+    `crm_app/models/core_sales.py:58-160`). Named by `organization_name`, verbatim."""
+
+    DOCTYPE = "CRM Organization"
+    NAME_STRATEGY = FieldValue("organization_name", label="Organization Name")
+    ATTACH_FIELDS = ("organization_logo",)
+    TEXT_LINK_FIELDS = {
+        "currency": ("configuration.Currency", "Currency"),
+        "address": ("contacts.Address", "Address"),
+    }
+
+    organization_name = models.CharField(max_length=140, blank=True, default="")
+    website = models.CharField(max_length=280, blank=True, default="")
+    organization_logo = models.CharField(max_length=500, blank=True, default="")
+    no_of_employees = models.CharField(max_length=20, choices=EMPLOYEE_COUNT_CHOICES, blank=True, default="")
+    annual_revenue = models.DecimalField(max_digits=18, decimal_places=6, null=True, blank=True)
+    industry = models.ForeignKey(CRMIndustry, on_delete=models.PROTECT, null=True, blank=True, related_name="+")
+    territory = models.ForeignKey(CRMTerritory, on_delete=models.PROTECT, null=True, blank=True, related_name="+")
+    currency = models.CharField(max_length=140, blank=True, default="")
+    address = models.CharField(max_length=140, blank=True, default="")
+    exchange_rate = models.FloatField(null=True, blank=True)
+
+    class Meta(BaseDocument.Meta):
+        ordering = ["-modified"]
+
+    def save(self, *args, user, **kwargs):
+        """`crm_organization.py:31-32`: the Link check first, then the exchange rate,
+        unless this is a partial save (upstream's `db.set_value` runs no validate)."""
+        self._validate_text_links()
+        if not kwargs.get("update_fields"):
+            self.update_exchange_rate(user)
+        return super().save(*args, user=user, **kwargs)
+
+    def update_exchange_rate(self, user) -> None:
+        """`crm_organization.py:34-41` (FINDINGS 63): when the currency changed (a new
+        record counts as changed) or no rate is held, 1 in the FCRM Settings currency
+        (USD when none) or with no currency, else today's rate for the pair; a provider
+        failure refuses the save with its message."""
+        if not (self._currency_changed() or not self.exchange_rate):
+            return
+        from configuration.exchange_rate import get_exchange_rate
+        from configuration.models import FCRMSettings
+
+        system_currency = FCRMSettings._default_manager.values_list("currency", flat=True).first() or "USD"
+        rate = 1
+        if self.currency and self.currency != system_currency:
+            rate = get_exchange_rate(self.currency, system_currency, user=user)
+        self.exchange_rate = rate
+
+    def _currency_changed(self) -> bool:
+        if self._state.adding or not self.pk:
+            return True
+        previous = type(self)._default_manager.filter(pk=self.pk).values_list("currency", flat=True).first()
+        return previous != self.currency
+
+
 class DynamicLink(BaseDocument):
     """Frappe's "this document points at that one" child table (old
     `frappe_platform/models.py:1560-1598`): polymorphic on both ends, so it carries

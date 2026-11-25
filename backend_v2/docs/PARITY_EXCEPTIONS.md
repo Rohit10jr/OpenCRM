@@ -673,13 +673,14 @@ sent kanban columns again, as the old backend and upstream. The number is not re
 - **Status:** approved by the owner (20 Nov 2026; `temp` A-48 2d, A-61 item 4; CRM
   Territory added by A-74); built for CRM Industry, Address and Contact (CONTACTS
   milestone 3: a CRM role reads, writes and creates; delete is the owner's, a System
-  Manager's or Administrator's, with a CRM role) and CRM Territory (CONTACTS milestone T:
-  a CRM role for every action, as CRM Industry); CRM Organization to be built with its
-  milestone, and until then it is not served
-- **Where:** `/api/v1/industries/...`, `/api/v1/territories/...`, `/api/v1/addresses/...`
-  and `/api/v1/contacts/...`: list, create, read, PATCH, delete, `value/`, `search/` and
-  every other route that reads the list or the object rule (old `/api/resource/CRM
-  Industry`, `/api/resource/CRM Territory`, `/api/resource/Address`,
+  Manager's or Administrator's, with a CRM role), CRM Territory (CONTACTS milestone T)
+  and CRM Organization (milestone 5, with `organizations/directory/`, the old
+  `get_organizations`): a CRM role for every action, as CRM Industry
+- **Where:** `/api/v1/industries/...`, `/api/v1/territories/...`,
+  `/api/v1/organizations/...`, `/api/v1/addresses/...` and `/api/v1/contacts/...`: list,
+  create, read, PATCH, delete, `value/`, `search/` and every other route that reads the
+  list or the object rule (old `/api/resource/CRM Industry`, `/api/resource/CRM
+  Territory`, `/api/resource/CRM Organization`, `/api/resource/Address`,
   `/api/resource/Contact`)
 - **Old backend:** every signed-in user lists, reads, creates and changes them; CRM
   Industry and CRM Territory register no rule, Address deletes only for System Manager or Administrator
@@ -821,7 +822,7 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   (`ProtectedError`, 417; CRM Territory's parent and child, A-84). Newly refused:
   a Currency System Settings or FCRM Settings names (the disable sentence); since
   CONTACTS milestone 3, a Salutation or Gender a Contact names (the second message) and
-  an Address a Contact names (the disable sentence); with milestone 5, an Address an
+  an Address a Contact names (the disable sentence); since milestone 5, an Address an
   Organization names (the disable sentence)
 - **Why:** upstream's `check_if_doc_is_linked` (v15 `frappe/model/delete_doc.py:141-153,
   276-339`)

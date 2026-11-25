@@ -86,15 +86,15 @@ DELETE {{host}}/api/v1/contacts/ZZ%20No%20Mail/
 Authorization: Bearer {{token}}
 
 ### 0.10 cleanup organizations -> 200|404
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{org}}/ZZ%20Contact%20Org
+DELETE {{host}}/api/v1/organizations/ZZ%20Contact%20Org/
 Authorization: Bearer {{token}}
 
 ### 0.11 -> 200|404
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{org}}/ZZ%20Renamed%20Org
+DELETE {{host}}/api/v1/organizations/ZZ%20Renamed%20Org/
 Authorization: Bearer {{token}}
 
 ### 0.12 cleanup territories, leaves first -> 200|404
@@ -156,11 +156,11 @@ Content-Type: application/json
 
 {"territory_name": "ZZ Berlin", "parent_crm_territory": "ZZ Europe"}
 
-### 1.5 organization in that leaf -> 201
-# @waiting CONTACTS
-# @expect $.data.industry == ZZ Industry
-# @expect $.data.territory == ZZ Berlin
-POST {{org}}
+### 1.5 organization in that leaf -> 200
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.industry == ZZ Industry
+# @expect $.message.territory == ZZ Berlin
+POST {{host}}/api/v1/organizations/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -538,10 +538,10 @@ GET {{host}}/api/v1/territories/ZZ%20World/
 Authorization: Bearer {{token}}
 
 ### 6.3 `descendants of` finds the organization two levels down -> 200, one row
-# @waiting CONTACTS
-# @expect $.data count 1
-# @expect $.data[0].name == ZZ Renamed Org
-GET {{org}}?fields=["name"]&filters=[["territory","descendants of","ZZ World"]]
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message count 1
+# @expect $.message[0].name == ZZ Renamed Org
+GET {{host}}/api/v1/organizations/?fields=["name"]&filters=[["territory","descendants of","ZZ World"]]
 Authorization: Bearer {{token}}
 
 ### 6.4 a territory with children cannot be deleted -> 417|409 (417 LinkExistsError upstream; 409 is finding 3, counted once)
@@ -552,32 +552,29 @@ Authorization: Bearer {{token}}
 # ---- organizations: the session endpoint, autocomplete, permissions map --------------------
 
 ### 7.1 get_organizations -> every organization, every column, sorted by name
-# @waiting CONTACTS
 # @expect $.message[0].organization_name exists
 # @expect $.message[0].website exists
-POST {{host}}/api/method/crm.api.session.get_organizations
+GET {{host}}/api/v1/organizations/directory/
 Authorization: Bearer {{token}}
 
 ### 7.2 search_link, the Link autocomplete -> [{value, description}] matching the text
-# @waiting CONTACTS
 # (filtered by industry as well, so the result is the same whether or not 5.1 renamed it)
 # @expect $.message count 1
 # @expect $.message[0].value contains Org
 # @expect $.message[0].description exists
-POST {{host}}/api/method/frappe.desk.search.search_link
+POST {{host}}/api/v1/organizations/search/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"doctype": "CRM Organization", "txt": "ZZ", "filters": {"industry": "ZZ Industry"}}
+{"txt": "ZZ", "filters": {"industry": "ZZ Industry"}}
 
 ### 7.3 search_link with filters narrows further -> 0
-# @waiting CONTACTS
 # @expect $.message count 0
-POST {{host}}/api/method/frappe.desk.search.search_link
+POST {{host}}/api/v1/organizations/search/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"doctype": "CRM Organization", "txt": "ZZ Ren", "filters": {"industry": "No Such Industry"}}
+{"txt": "ZZ Ren", "filters": {"industry": "No Such Industry"}}
 
 ### 7.4 get_doc_permissions -> the map the frontend greys buttons with
 # @expect $.message.permissions.read == true
@@ -587,18 +584,14 @@ GET {{host}}/api/v1/contacts/None/permissions/?docname=ZZ%20Jane%20Roe-1
 Authorization: Bearer {{token}}
 
 ### 7.5 ...and for a document that does not exist, an empty map rather than an error
-# @waiting CONTACTS
 # @expect $.message.permissions count 0
-POST {{host}}/api/method/frappe.client.get_doc_permissions
+GET {{host}}/api/v1/organizations/None/permissions/?docname=ZZ%20Nobody
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{"doctype": "CRM Organization", "docname": "ZZ Nobody"}
 
 ### 7.6 organizations filter by industry -> 1
-# @waiting CONTACTS
-# @expect $.data count 1
-GET {{org}}?fields=["name"]&filters=[["industry","=","ZZ Industry"]]
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message count 1
+GET {{host}}/api/v1/organizations/?fields=["name"]&filters=[["industry","=","ZZ Industry"]]
 Authorization: Bearer {{token}}
 
 # ---- teardown --------------------------------------------------------------------------------
@@ -639,13 +632,13 @@ DELETE {{host}}/api/v1/contacts/ZZ%20No%20Mail/
 Authorization: Bearer {{token}}
 
 ### 8.7 delete organizations -> 200|404 (one of the two names exists, depending on 5.1)
-# @waiting CONTACTS
-DELETE {{org}}/ZZ%20Renamed%20Org
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/organizations/ZZ%20Renamed%20Org/
 Authorization: Bearer {{token}}
 
 ### 8.8 -> 200|404
-# @waiting CONTACTS
-DELETE {{org}}/ZZ%20Contact%20Org
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/organizations/ZZ%20Contact%20Org/
 Authorization: Bearer {{token}}
 
 ### 8.9 delete territories, leaves first -> 200

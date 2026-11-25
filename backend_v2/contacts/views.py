@@ -8,6 +8,7 @@ from accounts.roles import (
     ROLE_SALES_USER,
     ROLE_SYSTEM_MANAGER,
 )
+from accounts.directory import session_role_flags
 from configuration.export_fields import export_field_info_for
 from contacts.models import Address, Contact
 from contacts.serializers import (
@@ -17,6 +18,7 @@ from contacts.serializers import (
     AddressSerializer,
     ContactSerializer,
     CRMIndustrySerializer,
+    CRMOrganizationSerializer,
     CRMTerritorySerializer,
     GenderSerializer,
     SalutationSerializer,
@@ -28,6 +30,7 @@ from contacts import actions as contact_actions
 from contacts import child_rows
 from core.access import Access
 from core.inputs import build_payload
+from core.query import fetch_rows
 from core.mixins import (
     BulkDeleteMixin,
     BulkUpdateMixin,
@@ -306,3 +309,40 @@ class CRMTerritoryViewSet(RenameMixin, LinkSearchMixin, DocumentViewSet):
     @staticmethod
     def has_object_rule(user, document, ptype):
         return _has_crm_role(user)
+
+
+class CRMOrganizationViewSet(LinkSearchMixin, DocumentViewSet):
+    """CRM Organization (specs/CONTACTS.md §4): PE-29's rule, as CRM Industry's (a CRM role
+    for every action). Every column readable, filterable and sortable; search matches
+    `name` (§8). The shared actions come at milestone 6b, the list views at 7."""
+
+    access = Access.ruled()
+    serializer_class = CRMOrganizationSerializer
+    readable_fields = CRMOrganizationSerializer.Meta.fields
+    filterable_fields = CRMOrganizationSerializer.Meta.fields
+    sortable_fields = CRMOrganizationSerializer.Meta.fields
+    searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        return _crm_list_rule(user)
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        return _has_crm_role(user)
+
+    @action(detail=False, methods=("get",), url_path="directory")
+    def directory(self, request):
+        """`crm.api.session.get_organizations` (old `session.py:158-170`): a CRM role,
+        else 403 "You are not permitted to access CRM resources."; every column of every
+        organization the list rule shows, ordered by name, no limit, in the list shape."""
+        session_role_flags(request.user)
+        rows = fetch_rows(
+            self.get_queryset(),
+            user=request.user,
+            fields=["*"],
+            order_by="name asc",
+            limit_page_length=0,
+            selectable=self.readable_fields,
+        )
+        return Response(Envelope(rows, "message"))

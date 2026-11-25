@@ -316,6 +316,17 @@ skips links within the batch, and are then refused by the PROTECT foreign key it
 (`ProtectedError`); Territory serves no bulk delete, so no route reaches that case
 (A-79 finding 4; `tests/test_territory_tree.py` pins it).
 
+Its milestone 5 adds CRM Organization (`contacts.CRMOrganization`, migration
+`contacts/0007`) at `organizations/`: list, create, read, PATCH, delete, `value/`,
+`search/` (by `name`), `permissions/`, under PE-29's rule as CRM Industry, and
+`organizations/directory/` (old `get_organizations`: a CRM role, else 403 "You are not
+permitted to access CRM resources."; every column of every organization the list rule
+shows, ordered by name, no limit). `industry` and `territory` are PROTECT foreign keys;
+`currency` and `address` are text Links, checked on save, and an Address an
+Organization names is refused on delete (PE-34). Its `save()` sets the exchange rate
+after the Link check unless `update_fields` is passed (FINDINGS 63). The shared actions
+follow at 6b, the list views at 7.
+
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
 disabled, and there are no bulk actions.
