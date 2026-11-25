@@ -121,8 +121,12 @@ class CRMOrganization(BaseDocument):
         ordering = ["-modified"]
 
     def save(self, *args, user, **kwargs):
-        """`crm_organization.py:31-32`: the Link check first, then the exchange rate,
-        unless this is a partial save (upstream's `db.set_value` runs no validate)."""
+        """`crm_organization.py:31-32`: the name first, as upstream's `insert` sets it
+        before `validate` (v15 `document.py:304`), so a missing name is refused before any
+        provider is asked (A-85); then the Link check; then the exchange rate, unless this
+        is a partial save (upstream's `db.set_value` runs no validate)."""
+        if self._state.adding:
+            self._assign_name()
         self._validate_text_links()
         if not kwargs.get("update_fields"):
             self.update_exchange_rate(user)
