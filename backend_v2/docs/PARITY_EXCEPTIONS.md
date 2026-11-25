@@ -682,7 +682,9 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   with none of these gets an empty list, 403 "No permission for <doctype> <name>" on a
   record, and 403 "Not permitted to create <doctype>" on create. Address delete stays
   System Manager's or Administrator's. Salutation and Gender keep their rule (everyone
-  reads, System Manager writes)
+  reads, System Manager writes). Rename keeps upstream's order: a missing record or a
+  taken name is 417 before the write rule's refusal, for every ruled resource (v15
+  `frappe/model/rename_doc.py:365-372`; decided, `temp` A-82 item 6)
 - **Why:** upstream's role tables grant these doctypes to the CRM roles. Upstream also
   lets a user with none keep the contacts they created, and its Address gives the `All`
   role read, write and create on the addresses they own (v15

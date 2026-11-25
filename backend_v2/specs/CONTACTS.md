@@ -1,8 +1,8 @@
 # CONTACTS — contacts, their emails and phones, addresses, organizations
 
 **Status: rewritten from the spec check and the spec review** (`temp` A-41, A-42,
-DECISIONS 56-60; 18-19 Nov 2026). Milestone 0 and 1 may be briefed; milestone 2 onward
-after the supervisor checks this rewrite. Paths are from the repository root; old paths
+DECISIONS 56-60; 18-19 Nov 2026). Milestones 0-4 and 6a built (23 Nov 2026); Territory,
+then CRM Organization (5, 6b, 7) next (`temp` A-80). `specs/README.md` carries the status. Paths are from the repository root; old paths
 are `backend/` unless named.
 
 ## 1. Scope
