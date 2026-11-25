@@ -80,14 +80,29 @@ def test_a_territory_is_created_with_its_parent(auth_api, tree):
 
 def test_renaming_a_group_moves_its_children_and_rebuilds_the_bounds(auth_api, tree):
     """§11.1 "Rename": PE-31 sets `territory_name`; the child's parent follows the FK
-    repoint; the queryset delete of the old row fires the rebuild."""
-    response = auth_api.post(url("ZZ Europe", "rename/"), {"new_name": "ZZ EU"}, format="json")
+    repoint; the queryset delete of the old row fires the rebuild. The new name sorts
+    before Asia, so the copied bounds would be wrong without it (A-84 finding 1)."""
+    response = auth_api.post(url("ZZ Europe", "rename/"), {"new_name": "ZZ Africa"}, format="json")
     assert response.status_code == 200, response.content[:300]
-    assert response.json() == {"message": "ZZ EU"}
-    renamed = CRMTerritory.objects.get(pk="ZZ EU")
-    assert renamed.territory_name == "ZZ EU"
-    assert CRMTerritory.objects.get(pk="ZZ Berlin").parent_crm_territory_id == "ZZ EU"
-    assert [_bounds(n) for n in ("ZZ World", "ZZ Asia", "ZZ EU", "ZZ Berlin")] == [(1, 8), (2, 3), (4, 7), (5, 6)]
+    assert response.json() == {"message": "ZZ Africa"}
+    renamed = CRMTerritory.objects.get(pk="ZZ Africa")
+    assert renamed.territory_name == "ZZ Africa"
+    assert CRMTerritory.objects.get(pk="ZZ Berlin").parent_crm_territory_id == "ZZ Africa"
+    assert [_bounds(n) for n in ("ZZ World", "ZZ Africa", "ZZ Berlin", "ZZ Asia")] == [
+        (1, 8),
+        (2, 5),
+        (3, 4),
+        (6, 7),
+    ]
+
+
+def test_a_sales_user_reparents_through_the_api(api_as, alice, tree):
+    response = api_as(alice).patch(url("ZZ Berlin"), {"parent_crm_territory": "ZZ Asia"}, format="json")
+    assert response.status_code == 200, response.content[:300]
+    assert response.json()["message"]["parent_crm_territory"] == "ZZ Asia"
+    assert _bounds("ZZ Asia") == (2, 5)
+    assert _bounds("ZZ Berlin") == (3, 4)
+    assert _bounds("ZZ Europe") == (6, 7)
 
 
 def test_a_territory_with_children_cannot_be_deleted(auth_api, tree):
@@ -155,6 +170,22 @@ def test_an_outsider_finds_no_territory_by_search_or_value(outsider, tree, api_a
     value = client.get(f"{TERRITORIES}value/", {"fieldname": "territory_name", "filters": '{"name": "ZZ Berlin"}'})
     assert value.status_code == 200
     assert value.json()["message"] == {}
+
+
+def test_an_outsider_cannot_rename_a_territory(outsider, tree, api_as):
+    """PE-29's rule is the write rule rename asks (as `test_rename_allowed.py:98-103`)."""
+    response = api_as(outsider).post(url("ZZ Berlin", "rename/"), {"new_name": "ZZ Bonn"}, format="json")
+    assert response.status_code == 417
+    assert response.json()["message"] == "You need write permission on CRM Territory ZZ Berlin to rename"
+    assert CRMTerritory.objects.filter(pk="ZZ Berlin").exists()
+    assert not CRMTerritory.objects.filter(pk="ZZ Bonn").exists()
+
+
+def test_an_outsider_is_allowed_nothing_on_a_territory(outsider, tree, api_as):
+    response = api_as(outsider).get(url("ZZ Berlin", "permissions/"))
+    assert response.status_code == 200
+    permissions = response.json()["message"]["permissions"]
+    assert permissions and not any(permissions.values())
 
 
 @pytest.mark.parametrize("role", ["Sales User", "Sales Manager", "System Manager"])
