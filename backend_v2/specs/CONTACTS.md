@@ -538,7 +538,7 @@ changes are corrected in the same commit.
   (`tree.py:128-185`; FINDINGS 14 rests on the same reading). v2 keeps `backend/`'s
   behaviour: `core.models.TreeDocument` rebuilds on every ordinary write under an
   advisory lock, and `core/filters.py:229-233` serves the five tree operators. Nothing new
-  in `core`. **New PE line** (number at build): "CRM Territory keeps nested-set bounds and
+  in `core`. **New PE line** (PE-37): "CRM Territory keeps nested-set bounds and
   answers `descendants of` / `ancestors of`, as the old backend; upstream's territory has
   no bounds, so those operators match nothing there."
 - **Resource:** `/api/v1/territories/`, with:

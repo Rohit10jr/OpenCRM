@@ -285,6 +285,7 @@ class CRMIndustryViewSet(RenameMixin, LinkSearchMixin, DocumentViewSet):
     def has_object_rule(user, document, ptype):
         return _has_crm_role(user)
 
+
 class CRMTerritoryViewSet(RenameMixin, LinkSearchMixin, DocumentViewSet):
     """The territory tree (specs/CONTACTS.md §11.1): PE-29's rule, as CRM Industry's (a CRM
     role for every action; `backend/` registers no rule, owner A-74). Every column
