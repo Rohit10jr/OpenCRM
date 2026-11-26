@@ -328,7 +328,8 @@ class CRMOrganizationViewSet(
     """CRM Organization (specs/CONTACTS.md §4, §8): PE-29's rule, as CRM Industry's (a CRM
     role for every action). Every column readable, filterable and sortable; search matches
     `name` (§8). The shared actions (milestone 6b) take the same rule; rename sets
-    `organization_name` (PE-24, PE-31). The list views come at 7."""
+    `organization_name` (PE-24, PE-31). Its list view (milestone 7) is
+    `OrganizationListView`."""
 
     export_field_info = staticmethod(export_field_info_for(CRMOrganization))
     list_view_class = OrganizationListView

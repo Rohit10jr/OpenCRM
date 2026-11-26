@@ -1,7 +1,16 @@
 """The Contacts and Organizations list definitions (specs/CONTACTS.md §10 row 7;
-CONFIGURATION §4.8). The old `default_list_data`, verbatim, widths and all:
-Contact's from `backend/frappe_platform/models.py:412-432` (upstream
-`crm/overrides/contact.py`), CRM Organization's from `crm_app/models/core_sales.py:141-160`.
+CONFIGURATION §4.8).
+
+Contact's is the old `default_list_data` verbatim (`backend/frappe_platform/models.py:
+412-432`), which is upstream's (`crm/overrides/contact.py:7-49`).
+
+CRM Organization's is the old one (`crm_app/models/core_sales.py:141-160`) with
+`currency` in the rows, between `industry` and `annual_revenue`, as upstream has it
+(`crm/fcrm/doctype/crm_organization/crm_organization.py:79-88`): the list formats the
+revenue in the organization's own currency, which the old rows left out (PE-38). Two
+differences from upstream stay, as decided (`specs/CONTACTS.md` §4, the old widths):
+the Organization column is `11rem` where upstream's is `16rem`, and the Industry column
+has no `options`.
 """
 
 from configuration.list_views import ListView
@@ -32,6 +41,7 @@ class OrganizationListView(ListView):
         "organization_logo",
         "website",
         "industry",
+        "currency",
         "annual_revenue",
         "modified",
     )
