@@ -516,7 +516,7 @@ Authorization: Bearer {{token}}
 # ---- the list engine, lead specifics ---------------------------------------------------------
 
 ### 6.1 get_data for the six ZZ leads -> data, columns, rows, and the lead's default columns
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message.data count 6
 # @expect $.message.columns[0].key == lead_name
 # @expect $.message.rows contains _assign
@@ -537,7 +537,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead"}
 
 ### 6.3 kanban view groups by status: one column per CRM Lead Status -> 200
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message.data exists
 # @expect $.message.kanban_columns exists
 POST {{host}}/api/method/crm.api.doc.get_data

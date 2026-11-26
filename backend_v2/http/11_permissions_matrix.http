@@ -288,7 +288,7 @@ GET {{lead}}?fields=["name"]&filters=[{{scope}},["lead_owner","=","{{sales2}}"]]
 Authorization: Bearer {{stoken}}
 
 ### 2.9 get_data agrees with the resource route: total_count 1
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message.total_count == 1
 # @expect $.message.data count 1
 POST {{host}}/api/method/crm.api.doc.get_data
@@ -298,7 +298,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "filters": {"first_name": ["like", "ZZ Matrix%"]}, "page_length": 20, "view": {"view_type": "list"}}
 
 ### 2.10 the @me token resolves to the caller, never to a supplied name
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message.data count 1
 # @expect $.message.data[0].lead_owner == ada@example.com
 POST {{host}}/api/method/crm.api.doc.get_data

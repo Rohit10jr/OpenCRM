@@ -228,7 +228,7 @@ Content-Type: application/json
 @task2 = {{task2_req.response.body.$.data.name}}
 
 ### 2.8 the task list screen: upstream's default columns are title, status, priority, ... (crm_task.py:57)
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 # @expect $.message.columns[0].key == title
 # @expect $.message.rows contains assigned_to
 POST {{host}}/api/method/crm.api.doc.get_data
@@ -277,7 +277,7 @@ Content-Type: application/json
 {"content": "untitled"}
 
 ### 3.4 the notes page: upstream declares rows only (fcrm_note.py:24), the page is a card grid
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 # @expect $.message.rows contains content
 # @expect $.message.rows contains reference_docname
 POST {{host}}/api/method/crm.api.doc.get_data
@@ -433,7 +433,7 @@ Content-Type: application/json
 {"call_sid": "ZZ-NOPE", "note": {"title": "x"}}
 
 ### 4.9 the call-log list: upstream's columns (crm_call_log.py:57), not Name / Last Modified
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 # and each row is parsed by parse_call_log (crm_call_log.py:150): _duration, _caller, _receiver
 # @expect $.message.columns[0].key == caller
 # @expect $.message.data[0].activity_type exists

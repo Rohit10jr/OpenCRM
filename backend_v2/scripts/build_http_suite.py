@@ -272,6 +272,36 @@ def _document_entry(routes: RouteMap, doctype: str | None, fallback: RouteEntry)
     return fallback
 
 
+def _rewrite_list_view(
+    block: HttpBlock,
+    method: str,
+    resolved_url: str,
+    entry: RouteEntry,
+    routes: RouteMap,
+) -> None:
+    """`crm.api.doc.get_data` answers on the named doctype's own `list-view/` route (S24),
+    as `search_link` does on its `search/`; until that resource is built, it waits (A-87)."""
+    payload = _payload(block, resolved_url)
+    doctype = payload.get("doctype")
+    resource = routes.doctypes.get(doctype) if isinstance(doctype, str) else None
+    views = [
+        (verb, path)
+        for verb, path in (resource.routes if resource and resource.built else [])
+        if path.rstrip("/").endswith("/list-view")
+    ]
+    if not views:
+        _annotate(block, f"# @waiting {(resource or entry).unit}")
+        return
+    allowed = {verb for verb, _ in views}
+    if method not in allowed:
+        _negative(block, method, views[0][1])
+        return
+    route = next(path for verb, path in views if verb == method)
+    body = dict(payload)
+    body.pop("doctype", None)
+    _replace_request(block, method, "{{host}}" + route, body)
+
+
 def _rewrite_search_link(
     block: HttpBlock,
     method: str,
@@ -774,6 +804,8 @@ def rewrite_http(text: str, route_map: RouteMap, filename: str = "fixture.http")
                 )
             if path == "frappe.desk.search.search_link":
                 _rewrite_search_link(block, method, resolved_url, entry, route_map)
+            elif path == "crm.api.doc.get_data":
+                _rewrite_list_view(block, method, resolved_url, entry, route_map)
             elif path in GENERIC_CALLS:
                 if (
                     filename == "13_bulk_and_misc.http"
