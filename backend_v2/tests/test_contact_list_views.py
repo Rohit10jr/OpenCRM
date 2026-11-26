@@ -31,13 +31,14 @@ def list_view(client, resource, **inputs):
 
 
 def test_contact_default_list_data_matches_the_override():
-    """`test_platform_models.py:226-244`: verbatim from `crm/overrides/contact.py`."""
-    assert [c["key"] for c in ContactListView.default_columns()] == [
-        "full_name",
-        "email_id",
-        "mobile_no",
-        "company_name",
-        "modified",
+    """`test_platform_models.py:226-244`: verbatim from `crm/overrides/contact.py`; the
+    labels and widths pinned too (A-87 finding 6)."""
+    assert ContactListView.default_columns() == [
+        {"label": "Name", "type": "Data", "key": "full_name", "width": "17rem"},
+        {"label": "Email", "type": "Data", "key": "email_id", "width": "12rem"},
+        {"label": "Phone", "type": "Data", "key": "mobile_no", "width": "12rem"},
+        {"label": "Organization", "type": "Data", "key": "company_name", "width": "12rem"},
+        {"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
     ]
     assert ContactListView.default_rows() == [
         "name",
@@ -50,8 +51,9 @@ def test_contact_default_list_data_matches_the_override():
     ]
 
 
-def test_organization_default_list_data_is_the_old_one():
-    """Old `core_sales.py:141-160`, widths and all."""
+def test_organization_default_list_data_is_the_old_one_with_upstreams_currency():
+    """Old `core_sales.py:141-160`, widths and all, with upstream's `currency` in the rows
+    (`crm_organization.py:79-88`; PE-38)."""
     assert OrganizationListView.default_columns() == [
         {"label": "Organization", "type": "Data", "key": "organization_name", "width": "11rem"},
         {"label": "Website", "type": "Data", "key": "website", "width": "14rem"},
@@ -65,9 +67,20 @@ def test_organization_default_list_data_is_the_old_one():
         "organization_logo",
         "website",
         "industry",
+        "currency",
         "annual_revenue",
         "modified",
     ]
+
+
+def test_an_organizations_list_row_carries_its_currency(auth_api, administrator):
+    """PE-38: the list formats `annual_revenue` with the row's own `currency`
+    (`Organizations.vue:114-116`)."""
+    CRMOrganization(organization_name="ZZ Euro Org", currency="EUR", annual_revenue="1000000").save(
+        user=administrator
+    )
+    row = list_view(auth_api, "organizations")["data"][0]
+    assert (row["currency"], row["annual_revenue"]) == ("EUR", 1000000.0)
 
 
 def test_the_saved_views_find_each_definition():

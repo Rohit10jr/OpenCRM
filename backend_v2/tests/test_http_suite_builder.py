@@ -113,6 +113,38 @@ Content-Type: application/json
     assert "None" not in result
 
 
+def test_get_data_goes_to_the_doctypes_own_list_view_or_waits():
+    """A-87 finding 3: as `search_link` goes to a resource's `search/`."""
+    route_map = parse_route_map(
+        ROUTE_MAP_TEXT.replace(
+            "| `future.method` |",
+            "| `crm.api.doc.get_data` | GET/POST | auth | `doc.py:get_data` | "
+            "`GET /api/v1/<resource>/list-view/`, `POST /api/v1/<resource>/list-view/` | configuration | — |\n"
+            "| `future.method` |",
+        ).replace(
+            "`DELETE /api/v1/widgets/<name>/` |",
+            "`DELETE /api/v1/widgets/<name>/`, `POST /api/v1/widgets/list-view/` |",
+        )
+    )
+    source = """\
+@host = http://localhost:8000
+### served -> 200
+POST {{host}}/api/method/crm.api.doc.get_data
+Content-Type: application/json
+
+{"doctype": "CRM Widget", "filters": {}}
+### not yet -> waits
+POST {{host}}/api/method/crm.api.doc.get_data
+Content-Type: application/json
+
+{"doctype": "CRM Future", "filters": {}}
+"""
+    result = rewrite_http(source, route_map)
+    assert "POST {{host}}/api/v1/widgets/list-view/" in result
+    assert '{"filters": {}}' in result
+    assert "# @waiting SALES" in result
+
+
 def test_resource_create_uses_method_envelope_and_status():
     source = """\
 @host = http://localhost:8000
