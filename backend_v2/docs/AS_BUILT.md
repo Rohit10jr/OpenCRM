@@ -348,7 +348,10 @@ six-place decimal, as the old backend writes it; upstream's is a float.
 Its milestone 7 opts Contact and CRM Organization in to the list engine
 (`ListViewMixin`, `contacts/list_views.py`): `contacts/list-view/` and
 `organizations/list-view/` with `ContactListView` and `OrganizationListView`, the old
-`default_list_data` verbatim, widths and all. They are the first production resources to
+`default_list_data` with its widths; Organization's rows also carry upstream's
+`currency` (PE-38). The `.http` builder sends `get_data` to the named doctype's own
+`list-view/` route, as `search_link` to its `search/`, and makes it wait for that
+doctype's unit until the route is built. They are the first production resources to
 opt in; `get_data`'s route-map row stays unbuilt until SALES and ACTIVITIES opt theirs in.
 
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are

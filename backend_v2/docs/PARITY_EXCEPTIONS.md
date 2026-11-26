@@ -895,6 +895,23 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   `lft`/`rgt` and its `descendants of` on a territory matches nothing
 - **Recorded by:** CONTACTS, 25 Nov 2026
 
+### PE-38. The Organizations list carries each row's `currency`
+
+- **Status:** approved — decided by the supervisor on the owner's behalf (`temp` A-87
+  item 1, 26 Nov 2026); built with this entry (CONTACTS milestone 7)
+- **Where:** `GET` and `POST /api/v1/organizations/list-view/` (old `crm.api.doc.get_data`
+  for CRM Organization): the default rows
+- **Old backend:** the default rows leave out `currency` (`backend/crm_app/models/
+  core_sales.py:141-160`), so the list formats every `annual_revenue` in the default
+  currency: an organization in EUR with 1,000,000 lists as "$1,000,000.00"
+- **backend_v2:** `currency` sits between `industry` and `annual_revenue`, as upstream's
+  `default_list_data` has it, so the list formats the revenue in the row's own currency
+  (`frontend/src/pages/Organizations.vue:114-116`, `stores/meta.js:57-72` read
+  `doc[df.options]`)
+- **Why:** upstream's rows (`crm/fcrm/doctype/crm_organization/crm_organization.py:79-88`,
+  there since `5955c0685`, June 2024, before the port's base); the old backend dropped it
+- **Recorded by:** CONTACTS, 26 Nov 2026
+
 ---
 
 ## Candidates — not exceptions yet
