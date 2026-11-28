@@ -130,7 +130,7 @@ the alias `refresh_token`, all in the body. The old paths also answered a second
 ### Doctypes (2)
 
 `User`'s row is under FOUNDATION; ACCOUNTS builds it. User Email moved to CONFIGURATION
-with Email Account (`temp` A-21 D-D).
+with Email Account (`temp` A-21 D-D; agreed by the owner, 20 Nov 2026).
 
 | DocType | Kind | Naming | Old protection | Declared fields | Old model | New route | New app | Status |
 |---|---|---|---|---|---|---|---|---|
@@ -177,7 +177,7 @@ alone, an old `POST` body moves into the query string: a reshaped input
 | Language | main | `FieldValue('language_code')` | ruled: list rule, object rule |  | `frappe_platform.Language` | `GET /api/v1/languages/`, `POST /api/v1/languages/`, `GET /api/v1/languages/value/`, `GET /api/v1/languages/search/`, `POST /api/v1/languages/search/`, `GET /api/v1/languages/<name>/`, `PATCH /api/v1/languages/<name>/`, `DELETE /api/v1/languages/<name>/`, `GET /api/v1/languages/<name>/permissions/` | configuration | built |
 | System Settings | single | default | ruled: list rule, object rule |  | `frappe_platform.SystemSettings` | `GET /api/v1/system-settings/`, `PATCH /api/v1/system-settings/`, `GET /api/v1/system-settings/value/` (singleton, S25 (3)) | configuration | built |
 | CRM Dropdown Item | child | `Hash(10)` | n/a |  | `crm_app.CRMDropdownItem` | not served: rows of FCRM Settings (`dropdown_items`) | configuration | built |
-| User Email | child | `Hash(10)` | n/a; `user_emails` on `User` is System Manager only (`PRIVILEGED_WRITE_FIELDS`) |  | `frappe_platform.UserEmail` | not served: rows of User (`user_emails`) | configuration (moved from ACCOUNTS, `temp` A-21 D-D) | built |
+| User Email | child | `Hash(10)` | n/a; `user_emails` on `User` is System Manager only (`PRIVILEGED_WRITE_FIELDS`) |  | `frappe_platform.UserEmail` | not served: rows of User (`user_emails`) | configuration (moved from ACCOUNTS, `temp` A-21 D-D; agreed by the owner, 20 Nov 2026) | built |
 
 ### Method paths (32)
 
@@ -267,12 +267,12 @@ today. CONFIGURATION still owns the field labels and fieldtypes used by export h
 
 ### Method paths (4)
 
-`crm.api.contact.get_linked_deals` moved to SALES (`temp` A-41, DECISIONS 57; flagged for
-the owner).
+`crm.api.contact.get_linked_deals` moved to SALES (`temp` A-41, DECISIONS 57; agreed by
+the owner, 20 Nov 2026).
 
 | Dotted path | Verbs | Access | Old source | New route | New app | Status |
 |---|---|---|---|---|---|---|
-| `crm.api.contact.create_new` | GET/POST | auth | `crm_app/api/contact.py:create_new` | `POST /api/v1/contacts/<name>/create-new/` (`contact` in the URL; `field`, `value` in the body) | contacts | — |
+| `crm.api.contact.create_new` | GET/POST | auth | `crm_app/api/contact.py:create_new` | `POST /api/v1/contacts/<name>/create-new-email-or-phone/` (`contact` in the URL; `field`, `value` in the body) | contacts | — |
 | `crm.api.contact.search_emails` | GET/POST | auth | `crm_app/api/contact.py:search_emails` | `GET /api/v1/contacts/search-emails/` (`txt` kept as input) | contacts | — |
 | `crm.api.contact.set_as_primary` | GET/POST | auth | `crm_app/api/contact.py:set_as_primary` | `POST /api/v1/contacts/<name>/set-as-primary/` (`contact` in the URL; `field`, `value` in the body) | contacts | — |
 | `crm.api.session.get_organizations` | GET/POST | auth | `crm_app/api/session.py:get_organizations` | `GET /api/v1/organizations/directory/` | contacts | — |
@@ -335,7 +335,7 @@ routes are ACTIVITIES'.
 | CRM Lead Status | main | `FieldValue('lead_status')` | reviewed-open — reference data - status vocabulary, rendered in every list view |  | `crm_app.CRMLeadStatus` | sales | — |
 | CRM Lost Reason | main | `FieldValue('lost_reason')` | reviewed-open — reference data - reasons offered when a deal is marked lost |  | `crm_app.CRMLostReason` | sales | — |
 | CRM Product | main | `FieldValue('product_code')` | reviewed-open — upstream's role table gives every CRM role read, write, create and delete, and upstream adds no row-level hook (hooks.py). Holds the shared product and price catalogue. |  | `crm_app.CRMProduct` | sales | — |
-| CRM Territory | main | `FieldValue('territory_name')` | reviewed-open — reference data - territory tree, shown on lead and deal forms |  | `crm_app.CRMTerritory` | sales | — |
+| CRM Territory | main | `FieldValue('territory_name')` | reviewed-open — reference data - territory tree, shown on lead and deal forms |  | `crm_app.CRMTerritory` | contacts (moved from SALES, owner, 20 Nov 2026: CRM Organization points at it) | — |
 | CRM Contacts | child | `Hash(10)` | n/a |  | `crm_app.CRMContacts` | sales | — |
 | CRM Products | child | `Hash(10)` | n/a |  | `crm_app.CRMProducts` | sales | — |
 | CRM Status Change Log | child | `Hash(10)` | n/a |  | `crm_app.CRMStatusChangeLog` | sales | — |
@@ -344,7 +344,7 @@ routes are ACTIVITIES'.
 
 | Dotted path | Verbs | Access | Old source | New app | Status |
 |---|---|---|---|---|---|
-| `crm.api.contact.get_linked_deals` | GET/POST | auth | `crm_app/api/contact.py:get_linked_deals` (moved from CONTACTS, `temp` A-41; flagged for the owner) | sales | — |
+| `crm.api.contact.get_linked_deals` | GET/POST | auth | `crm_app/api/contact.py:get_linked_deals` (moved from CONTACTS, `temp` A-41; agreed by the owner, 20 Nov 2026) | sales | — |
 | `crm.api.onboarding.get_first_deal` | GET/POST | auth | `crm_app/api/onboarding.py:get_first_deal` | sales | — |
 | `crm.api.onboarding.get_first_lead` | GET/POST | auth | `crm_app/api/onboarding.py:get_first_lead` | sales | — |
 | `crm.fcrm.doctype.crm_deal.api.get_deal_contacts` | GET/POST | auth | `crm_app/api/deal.py:get_deal_contacts` | sales | — |
