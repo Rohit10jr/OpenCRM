@@ -107,28 +107,28 @@ DELETE {{views}}/{{old_std.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.12 leftover quick-filter override for CRM Task -> 200
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
 # @name old_qf
-GET {{host}}/api/resource/CRM%20Global%20Settings?fields=["name"]&filters=[["dt","=","CRM Task"],["type","=","Quick Filters"]]
+GET {{host}}/api/v1/global-settings/?fields=["name"]&filters=[["dt","=","CRM Task"],["type","=","Quick Filters"]]
 Authorization: Bearer {{token}}
 
 ### 0.13 -> 200|404
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{host}}/api/resource/CRM%20Global%20Settings/{{old_qf.response.body.$.data[0].name}}
+DELETE {{host}}/api/v1/global-settings/{{old_qf.response.body.$.message[0].name}}/
 Authorization: Bearer {{token}}
 
 ### 0.14 leftover Quick Entry layout for CRM Task -> 200|404
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{host}}/api/resource/CRM%20Fields%20Layout/CRM%20Task-Quick%20Entry
+DELETE {{host}}/api/v1/fields-layouts/CRM%20Task-Quick%20Entry/
 Authorization: Bearer {{token}}
 
 ### 0.15 leftover form script -> 200|404
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{host}}/api/resource/CRM%20Form%20Script/ZZ%20Lead%20Script
+DELETE {{host}}/api/v1/form-scripts/ZZ%20Lead%20Script/
 Authorization: Bearer {{token}}
 
 # ---- the field lists behind the list screen's menus -----------------------------------------
@@ -199,7 +199,7 @@ Authorization: Bearer {{token}}
 # ---- quick filters ------------------------------------------------------------------------------
 
 ### 2.1 get_quick_filters for a lead -> the in_standard_filter fields, minus `converted`
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message contains "fieldname": "status"
 # @expect $.message contains "fieldname": "email"
 # @expect $.message excludes "fieldname": "converted"
@@ -210,7 +210,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "cached": true}
 
 ### 2.2 for a task: title, priority, assigned_to, status, due_date; a Select gets a blank first option
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 # @expect $.message count 5
 # @expect $.message[0].fieldname == title
 # @expect $.message[1].fieldname == priority
@@ -224,7 +224,7 @@ Content-Type: application/json
 {"doctype": "CRM Task"}
 
 ### 2.3 update_quick_filters writes a CRM Global Settings row -> 200
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 POST {{host}}/api/method/crm.api.doc.update_quick_filters
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -232,7 +232,7 @@ Content-Type: application/json
 {"doctype": "CRM Task", "quick_filters": ["status", "title"], "old_filters": ["title", "priority", "assigned_to", "status", "due_date"]}
 
 ### 2.4 -> get_quick_filters now follows the row, in the order given
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 # @expect $.message count 2
 # @expect $.message[0].fieldname == status
 # @expect $.message[1].fieldname == title
@@ -243,11 +243,12 @@ Content-Type: application/json
 {"doctype": "CRM Task"}
 
 ### 2.5 the row it wrote, one per (dt, type) -> 200
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @name qf
-# @expect $.data count 1
-# @expect $.data[0].type == Quick Filters
-GET {{host}}/api/resource/CRM%20Global%20Settings?fields=["name","type","json"]&filters=[["dt","=","CRM Task"],["type","=","Quick Filters"]]
+# @expect $.message count 1
+# @expect $.message[0].type == Quick Filters
+GET {{host}}/api/v1/global-settings/?fields=["name","type","json"]&filters=[["dt","=","CRM Task"],["type","=","Quick Filters"]]
 Authorization: Bearer {{token}}
 
 # ---- saved views ----------------------------------------------------------------------------------
@@ -623,7 +624,7 @@ Content-Type: application/json
 # ---- form layouts and the side panel ---------------------------------------------------------------
 
 ### 6.1 get_fields_layout with nothing saved -> the default layout from the JSON's breaks, fields expanded
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 # @expect $.message[0].sections exists
 # @expect $.message[0].sections[0].columns[0].fields[0].fieldname exists
 # @expect $.message[0].sections[0].columns[0].fields[0].fieldtype exists
@@ -634,7 +635,7 @@ Content-Type: application/json
 {"doctype": "CRM Task", "type": "Quick Entry"}
 
 ### 6.2 the side panel for a lead (a saved row exists) -> sections with expanded fields
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message[0].name exists
 # @expect $.message[0].columns[0].fields[0].fieldname exists
 POST {{host}}/api/method/{{fl}}.get_sidepanel_sections
@@ -644,7 +645,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead"}
 
 ### 6.3 no side panel configured for a task -> empty list
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 # @expect $.message count 0
 POST {{host}}/api/method/{{fl}}.get_sidepanel_sections
 Authorization: Bearer {{token}}
@@ -653,7 +654,7 @@ Content-Type: application/json
 {"doctype": "CRM Task"}
 
 ### 6.4 a Sales User may not save a layout -> 403, crm_fields_layout.py:197 verbatim
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 # @expect $.exc_type == PermissionError
 # @expect $.message == Not permitted to modify fields layout
 POST {{host}}/api/method/{{fl}}.save_fields_layout
@@ -663,7 +664,7 @@ Content-Type: application/json
 {"doctype": "CRM Task", "type": "Quick Entry", "layout": "[{\"name\": \"tab_1\", \"sections\": [{\"name\": \"s1\", \"columns\": [{\"name\": \"c1\", \"fields\": [\"title\", \"priority\"]}]}]}]"}
 
 ### 6.5 a Sales Manager may -> 200, the layout string is echoed
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 # @expect $.message contains title
 POST {{host}}/api/method/{{fl}}.save_fields_layout
 Authorization: Bearer {{mtoken}}
@@ -672,7 +673,7 @@ Content-Type: application/json
 {"doctype": "CRM Task", "type": "Quick Entry", "layout": "[{\"name\": \"tab_1\", \"sections\": [{\"name\": \"s1\", \"columns\": [{\"name\": \"c1\", \"fields\": [\"title\", \"priority\", \"no_such_field\"]}]}]}]"}
 
 ### 6.6 -> the saved layout is served, fields expanded, unknown fieldnames dropped
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 # @expect $.message count 1
 # @expect $.message[0].sections[0].columns[0].fields count 2
 # @expect $.message[0].sections[0].columns[0].fields[0].fieldname == title
@@ -684,39 +685,40 @@ Content-Type: application/json
 {"doctype": "CRM Task", "type": "Quick Entry"}
 
 ### 6.7 the row it wrote is named by the format strategy: "{dt}-{type}"
-# @waiting CONFIGURATION
-# @expect $.data.name == CRM Task-Quick Entry
-# @expect $.data.dt == CRM Task
-GET {{host}}/api/resource/CRM%20Fields%20Layout/CRM%20Task-Quick%20Entry
+# @waiting ACTIVITIES
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.name == CRM Task-Quick Entry
+# @expect $.message.dt == CRM Task
+GET {{host}}/api/v1/fields-layouts/CRM%20Task-Quick%20Entry/
 Authorization: Bearer {{token}}
 
 # ---- form scripts --------------------------------------------------------------------------------------
 
 ### 7.1 a Sales User may not create a form script (it runs in every colleague's browser) -> 403
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == PermissionError
-POST {{host}}/api/resource/CRM%20Form%20Script
+POST {{host}}/api/v1/form-scripts/
 Authorization: Bearer {{stoken}}
 Content-Type: application/json
 
 {"name": "ZZ Lead Script", "dt": "CRM Lead", "view": "Form", "enabled": 1, "script": "console.log('zz')"}
 
-### 7.2 Administrator may; the name is supplied by the client (autoname=prompt) -> 201
-# @waiting CONFIGURATION
-# @expect $.data.name == ZZ Lead Script
-POST {{host}}/api/resource/CRM%20Form%20Script
+### 7.2 Administrator may; the name is supplied by the client (autoname=prompt) -> 200
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.name == ZZ Lead Script
+POST {{host}}/api/v1/form-scripts/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"name": "ZZ Lead Script", "dt": "CRM Lead", "view": "Form", "enabled": 1, "script": "console.log('zz')"}
 
 ### 7.3 a prompt doctype without a name -> 417
-# @waiting CONFIGURATION
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # The serializer requires `name` for a prompt doctype, so this is refused before naming
 # runs: "name: This field is required." rather than upstream's "No Name Specified for CRM
 # Form Script". A 4xx either way; only the wording differs (finding 4's family).
 # @expect $.exc_type == ValidationError
-POST {{host}}/api/resource/CRM%20Form%20Script
+POST {{host}}/api/v1/form-scripts/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -733,8 +735,8 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "filters": {}, "page_length": 1, "view": {"view_type": "list"}}
 
 ### 7.5 a disabled script is not served -> 200
-# @waiting CONFIGURATION
-PUT {{host}}/api/resource/CRM%20Form%20Script/ZZ%20Lead%20Script
+# @resource-envelope {"data"}/201 -> {"message"}/200
+PATCH {{host}}/api/v1/form-scripts/ZZ%20Lead%20Script/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -934,18 +936,20 @@ DELETE {{views}}/{{kstd}}
 Authorization: Bearer {{token}}
 
 ### 8.5 delete the quick-filter override -> 200
-# @waiting CONFIGURATION
-DELETE {{host}}/api/resource/CRM%20Global%20Settings/{{qf.response.body.$.data[0].name}}
+# @waiting ACTIVITIES
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/global-settings/{{qf.response.body.$.message[0].name}}/
 Authorization: Bearer {{token}}
 
 ### 8.6 delete the task layout -> 200
-# @waiting CONFIGURATION
-DELETE {{host}}/api/resource/CRM%20Fields%20Layout/CRM%20Task-Quick%20Entry
+# @waiting ACTIVITIES
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/fields-layouts/CRM%20Task-Quick%20Entry/
 Authorization: Bearer {{token}}
 
 ### 8.7 delete the form script -> 200
-# @waiting CONFIGURATION
-DELETE {{host}}/api/resource/CRM%20Form%20Script/ZZ%20Lead%20Script
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/form-scripts/ZZ%20Lead%20Script/
 Authorization: Bearer {{token}}
 
 ### 8.8 nothing left behind -> 200, empty

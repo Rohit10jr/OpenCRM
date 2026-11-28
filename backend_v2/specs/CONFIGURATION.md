@@ -1,6 +1,6 @@
 # CONFIGURATION — CRM settings, email accounts, saved views, layouts and the list engine
 
-**Status: Ready for milestones 1-5 (addenda: milestone 3 A-30, milestone 4 A-33, milestone 5 A-35) — rewritten 18 Nov 2026** from the spec check
+**Status: Ready for milestones 1-6 (addenda: milestone 3 A-30, milestone 4 A-33, milestone 5 A-35, milestone 6 A-37) — rewritten 18 Nov 2026** from the spec check
 (`tasks\CONFIGURATION_00_spec_check_verdict.md`, `temp` A-27); spec review A-28. **Approval is staged** (A-27, DECISIONS 30, flagged for the owner): the facts and
 the route map below cover the whole unit, but the spec review approves **milestones 1
 and 2 only**; each later milestone needs the decisions marked "open" in §6 settled and a
@@ -176,7 +176,7 @@ unit's own doctypes, and their real gate is SALES and ACTIVITIES (§9).
   newlines; a Language's `enabled` is the file's column; existing rows are left alone; the
   owner is Administrator, so the migration depends on `accounts`' built-in users.
   Whether the default layouts, quick filters, form scripts and dropdown rows are a
-  migration or a seed is **open — before milestones 3 and 6**.
+  migration or a seed: milestone 3's dropdown rows by migration (A-30); milestone 6's by `seed_dev_data` steps, the question parked for the owner (DECISIONS 44, section 4.6).
 
 ### 4.3 FCRM Settings and exchange rate (milestone 3)
 
@@ -496,16 +496,92 @@ Caching: the process-lifetime memo of the metadata file only.
 
 ### 4.6 Layouts, form scripts, quick filters (milestone 6)
 
-- `save_fields_layout` checks roles only (`fields_layout.py:256`); the resource rule also
-  passes the literal Administrator (`metadata_docs.py:132`).
-- `get_form_script` answers a bare string for one script, a list for several, `None` for
-  none (`form_script.py:17-34`); the frontend also lists them through the resource
-  (`data/script.js:38-42`).
-- Quick filters are a JSON list on the CRM Global Settings row for `(dt, "Quick
-  Filters")`; without a row the fallback is the `STANDARD_FILTER_FIELDS` table
-  (`crm_app/api/doc.py:126-137`, ten doctypes of five units); `converted` is dropped for
-  CRM Lead; a Select gets a blank first option. `update_quick_filters` has no role check,
-  as CRM Global Settings is reviewed-open.
+Spec-review addendum: `temp` A-37 (DECISIONS 44-47).
+
+- **Who may do what:**
+
+  | Doctype or call | Read | Create, write, delete |
+  |---|---|---|
+  | CRM Fields Layout (resource) | everyone | Administrator or the manager pair (`metadata_docs.py:126-132`) |
+  | CRM Form Script (resource) | everyone | System Manager or Administrator (**PE-17**) |
+  | CRM Global Settings (resource) | everyone | everyone: `Access.open(reason=…)`, as upstream's role table (`test_route_surface.py:77-80`) |
+  | `get_fields_layout`, `get_sidepanel_sections`, `get_quick_filters`, `update_quick_filters` | any signed-in caller | — |
+  | `save_fields_layout` | — | System Manager or Sales Manager, else 403 "Not permitted to modify fields layout" (`fields_layout.py:256`); roles only, as `backend/` (the resource also passes the literal Administrator) |
+
+  `update_quick_filters` has no role check, as `backend/` and upstream (the UI offers it to
+  managers only, `ViewControls.vue:229`).
+- **Doctype validation (PE-14, PE-15, PE-16 extended):** all five calls take the model
+  through `model_or_404`: `get_fields_layout` and `save_fields_layout` with
+  `child_allowed=True` (the grid row editor sends `{doctype: <child>, type: "Grid Row"}`:
+  `GridRowModal.vue:70-78`, `GridRowFieldsModal.vue:68-82,114-121`);
+  `get_sidepanel_sections`, `get_quick_filters`, `update_quick_filters` with
+  `child_allowed=False`. An unknown, unbuilt or withheld doctype is 404 "DocType X not
+  found" (in `backend/` the three layout calls validate nothing; an unknown doctype gets
+  an empty first tab, `fields_layout.py:120-135`). Fields the caller may not read are
+  left out of every answer, the Required Fields section and the default layout included.
+- **Field lists hold fieldnames (PE-18):** `save_fields_layout` and the resource's create
+  and PATCH refuse a layout whose `fields` lists hold anything but strings (417);
+  `get_fields_layout` and `get_sidepanel_sections` leave such an entry out on read. A
+  `layout` that is not valid JSON is 417 on save (PE-12c; `backend/` stores it).
+- **`get_fields_layout`** (`fields_layout.py:111-186`): a list of tabs; a sections-only
+  layout is wrapped as `first_tab`; never an empty list. Without a row, the default
+  layout is the metadata file's rows in declaration order (`:60-109`): a tab opens unless
+  the first row is a Tab Break, then a new tab, section or column opens at each break,
+  with four-character random ids. The "Required Fields" type has no default fallback and
+  appends a section with keys `label`, `name`, `opened`, `hideLabel`, `columns`
+  (`:139-186`). Unknown fieldnames are dropped (upstream keeps them); `parent_doctype` is
+  accepted and ignored.
+- **`get_sidepanel_sections`** (`:189-235`): the sections, each field expanded by
+  `get_field_obj` (`:191-210`): the placeholder is "Select {label}..." for Link and Select
+  fields, "Add {label}..." otherwise; Select options become `{label, value}` with no blank
+  entry; a read-only field gets a tooltip. `[]` with no row.
+- **`save_fields_layout`** (`:240-260`): answers the stored string (a list input is
+  JSON-dumped); `type` is stored as given (parity).
+- **CRM Form Script:** the resource only, no save hooks; upstream's lock on standard
+  scripts (`crm_form_script.py:24-38`) and `set_only_once` on `view` are not ported, as
+  `backend/`. **`get_form_script` is not a route**: an internal helper in
+  `configuration`, built now, answering a bare string for one script, a list for several,
+  `None` for none (`form_script.py:17-34`); `get_data` uses it at milestone 8. The
+  resource's default order decides the order scripts run in (`script.js:114-123,156-171`):
+  match `backend/`'s.
+- **Quick filters** (`crm_app/api/doc.py:126-234`): a JSON list on the CRM Global Settings
+  row for `(dt, "Quick Filters")`. Several such rows can exist (Hash names, no unique
+  constraint); the first by name wins. Without a row, the fallback table only (the
+  per-model hook is milestone 8's), named apart from `field_helpers.STANDARD_FILTER_FIELDS`;
+  the table covers ten doctypes of six units. Entries are built from the model's
+  concrete fields and `verbose_name`, not from the metadata file: `{label, fieldname,
+  fieldtype, options}`; `converted` dropped for CRM Lead; a blank first option only when a
+  Select has none (`:190-192`); `cached` ignored. A `json` stored as a string is parsed
+  (`:171-172`), and one that does not parse to a list counts as no entries. A `json` entry that is not a string is
+  skipped on read (PE-12c; in `backend/` it fails the call for every later caller,
+  `:173-177`). Stored names are matched against model fields, never used in a query as
+  they are. `update_quick_filters` answers `None`; `old_filters` is ignored (Property
+  Setter is not ported, `:210-234`).
+- **Allowlists:** every column of the three resources readable, filterable and sortable,
+  listed explicitly, as `backend/`. The resource does not check `dt` against existing
+  doctypes, as `backend/` (the default rows name doctypes not built yet).
+- **The default rows** (DECISIONS 44, parked for the owner): REBUILD_PLAN S20 ports the
+  old `seed_defaults` as part (1) of `seed_dev_data`, behind `DEV_DATA_ALLOWED`. Until the
+  owner decides how that sits with the migrations milestones 2 and 3 already use:
+  explicit functions in `configuration`, `write_default_layouts` (the 14 layouts, with
+  `force` deleting and re-creating them, `setup.py:448-465`), `write_quick_filters` (the
+  six rows, `:259-266`) and `sync_standard_form_scripts` (the product scripts re-synced
+  when drifted by updating `script` only, `:518-532`; the forecasting script written only
+  when missing, `:535-547`), each leaving an existing row alone, called as steps of
+  `seed_dev_data`, as Administrator, recorded in `DevDataRecord` like the users step. No
+  data migration and no separate operator command yet; the rows milestones 2 and 3 write
+  by migration stay as they are. Tests call the functions directly; the `.http` suite
+  gets the rows from `seed_dev_data`.
+- **Gating:** in-unit twins on FCRM Settings and CRM Dropdown Item (Grid Row);
+  `get_quick_filters` on CRM Fields Layout falls back to `dt` and `type` with a blank
+  Select option. The CRM Lead, CRM Deal and CRM Task cases wait for SALES and ACTIVITIES.
+  Tests also: `test_phase3_endpoints.py:1054`, `:1106-1115`, `:160`, `:214-217`;
+  `test_crm_behaviour.py:270` (the five layout types); `test_permissions.py:778`;
+  `test_route_surface.py:77`; `test_phase4_metadata.py:880` rewritten for PE-17.
+  `test_phase4_metadata.py:317-339` is milestone 8's. `test_seed_defaults.py:131-147` is
+  ported against the data file; `:105`, `:176` and `:162` (the methods the seeded scripts
+  call are served) wait for SALES. `.http` `07` 2.5, 6.7, 8.5 and 8.6 read or delete
+  rows that 2.3 and 6.5 write on CRM Task, so they wait.
 
 ### 4.7 Saved views (milestone 7)
 
@@ -582,7 +658,7 @@ what `backend/` tracks, decided at milestone 7 (decision 14).
 | 1 | Route names and methods | decided (A-27): §1 and `PORT_MAP.md`, checked at the spec review |
 | 11 | The actor for the guest boot call | decided: the row comes from the data migration; `Administrator` if a create is ever needed |
 | 12 | `UserSettings` | decided: a plain model, unrouted; a `core.withheld` entry only if the guard asks |
-| 13 | Migration or seed for reference rows and the two settings rows | decided: a data migration (§4.2), not dev data |
+| 13 | Migration or seed for reference rows and the two settings rows | decided: a data migration (§4.2), not dev data. REBUILD_PLAN S20 puts the old `seed_defaults` in `seed_dev_data`; that conflict is **parked for the owner** (DECISIONS 44), with milestone 6's default rows built as `seed_dev_data` steps meanwhile (§4.6) |
 | 8 | Who edits `accounts` for §8 | decided: this unit, in milestone 4, one commit per file's concern |
 | 15 | Guard exceptions for `access_key`, `api_key` | decided: written, reviewed entries at the milestone that builds each (3, 4) |
 | 5 | The outbound HTTP helper before INTEGRATIONS | decided (A-30, DECISIONS 31): `backend/crm_app/integrations/http.py` ported whole as `core/http.py` (§4.3) |
@@ -651,6 +727,6 @@ Moved here by ACCOUNTS' spec rewrite (`temp` A-21 D-D; flagged for the owner).
 | **3. FCRM Settings** | FCRM Settings (16 fields), CRM Dropdown Item and its standard rows, `core/http.py`, `get_exchange_rate`, `ENABLE_EXCHANGE_RATE_API`; PE-10 to PE-12 | yes (A-30) |
 | **4. Email Account** | Email Account, User Email, `create_email_account` (`setup/`), validation in `core/mail.py`, `MAIL_ACCOUNT_PROVIDER`, `open_backend`'s saved-account branch, the signature fallback, rename, section 8 | yes (A-33); pytest only |
 | **5. Field metadata** | the metadata file, its generator and CI check; "doctype exists"; `getdoctype`; `user_settings`; the four field helpers; export's provider factory; PE-14 to PE-16 | yes (A-35), on this unit's own doctypes and `tests_support` |
-| 6. Layouts, scripts, quick filters | CRM Fields Layout and its three calls, CRM Form Script, CRM Global Settings, the quick-filter calls, default seeds, and the operator command that restores standard rows (`seed_defaults --force`, which calls `add_standard_dropdown_items(force=True)`) | partly; content cases name Lead or Task |
+| **6. Layouts, scripts, quick filters** | CRM Fields Layout and its three calls, CRM Form Script and the internal `get_form_script`, CRM Global Settings, the two quick-filter calls, the default rows as `seed_dev_data` steps; PE-12c, PE-17, PE-18 | yes (A-37); content cases on Lead, Deal and Task wait |
 | 7. Saved views | CRM View Settings, the eight calls, `get_views` | rules yes; default columns need a list definition |
 | 8. List engine | `get_data` as the list-view mixin, the list-definition convention, `User.default_list_data` | on `tests_support` and `User` only; the real gate is SALES and ACTIVITIES |
