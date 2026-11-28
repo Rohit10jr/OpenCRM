@@ -28,6 +28,13 @@ def only_for(roles, user) -> None:
         raise PermissionError("Not permitted")
 
 
+def _refuse_builtin(name) -> None:
+    """PE-28: Administrator and Guest are never the target of a role action; their
+    roles are fixed by the framework upstream, whatever their role rows say."""
+    if name in User.BUILTIN_NAMES:
+        raise PermissionError("Not permitted")
+
+
 def _set_roles(account, roles) -> None:
     for role in roles:
         group, _ = Group.objects.get_or_create(name=role)
@@ -79,6 +86,7 @@ def update_user_role(user, name, new_role) -> None:
         raise PermissionError("Only System Managers can modify other System Managers")
     if new_role == "Sales Manager" and not is_system_manager:
         raise PermissionError("Only System Managers can assign the Sales Manager role")
+    _refuse_builtin(name)
 
     if new_role == "System Manager":
         _set_roles(account, ["System Manager", "Sales Manager", "Sales User"])
@@ -120,6 +128,7 @@ def remove_crm_roles_from_user(user, name) -> str:
     caller_is_system_manager = "System Manager" in user.get_roles()
     if "System Manager" in roles and not caller_is_system_manager:
         raise PermissionError("Only System Managers can modify other System Managers")
+    _refuse_builtin(name)
 
     if "Sales User" in roles:
         _remove_roles(account, "Sales User")

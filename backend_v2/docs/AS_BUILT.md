@@ -111,9 +111,10 @@ one sentence on every branch; `auth/update-password/` sets a password by reset k
 revocation trigger besides a save while disabled; `auth/accept-invitation/` redeems by
 key. Reset keys (`accounts/password_reset.py`) are SHA-256 at rest and claimed by one
 conditional update. `CRMInvitation` (`/api/v1/invitations/`) is listed, read and deleted
-by the manager pair only, with `key` sensitive; its object rule refuses `create` and
-`write` for every caller (PE-8, proposed), so `invitations/invite-by-email/` is the only
-way one comes to exist, and the only place a key is minted. Its `save()` queues
+by the manager pair only, with `key` sensitive; System Manager or Administrator also
+create and change one through the resource (PE-8), with `email` and `role` set once.
+The key is minted by `accounts.invitations.new_invitation_key`, called by the resource
+create and by `invitations/invite-by-email/`, never by the model. Its `save()` queues
 `accounts.send_invitation_email` with `transaction.on_commit` on every insert — a test
 that wants the mail at once patches `accounts.models.transaction` (see
 `tests/test_invitations.py`), and one test proves the deferral. System mail goes through
@@ -153,8 +154,9 @@ settings. A settings record's `value/` refuses a field it does not list (PE-13).
 `.http` generator serves a singleton's document URLs at its root and marks a list-shaped
 read of one `# @retired PE-11`.
 
-Its fourth milestone (§4.4) adds Email Account at `email-accounts/` (everyone reads; the
-manager pair or Administrator writes, renames and deletes; `password` and `api_secret`
+Its fourth milestone (§4.4) adds Email Account at `email-accounts/` (System Manager or
+Administrator lists, reads, writes, renames and deletes; anyone else gets an empty list
+and 403, PE-27; `password` and `api_secret`
 encrypted and never served; eleven mail-server fields restricted) and
 `email-accounts/setup/` (`create_email_account`, credentials checked before the row
 exists). `core/mail.py` holds the server checks (`smtp_settings`, `check_smtp`,
@@ -238,11 +240,11 @@ CONTACTS (`specs/CONTACTS.md`) starts with two changes to the shared actions in 
 (milestone 0, PE-25, PE-26; §2's bulk delete paragraph). Its first milestone adds the
 reference data in the `contacts` app: `salutations/` and `genders/` (everyone reads,
 System Manager or Administrator writes; the rows written by a data migration) and
-`industries/` (open to every signed-in user), each with `search/`. The lists are in
+`industries/` (a CRM role, PE-29), each with `search/`. The lists are in
 `contacts/reference_rows.py`; `contacts/dev_data.py` adds two `seed_dev_data` steps,
 one putting back a deleted salutation or gender and one writing the 51 industries.
-Its second milestone adds `addresses/` (everyone reads, writes and creates; System
-Manager or Administrator deletes) with its Dynamic Link rows (`links`, a polymorphic
+Its second milestone adds `addresses/` (a CRM role reads, writes and creates, PE-29;
+System Manager or Administrator deletes) with its Dynamic Link rows (`links`, a polymorphic
 child declared on the model). An address is named `<title>-<type>` plus the collision
 number, and its save deduplicates its links, stores each linked document's name as its
 title (as `backend/`) and clears a preferred

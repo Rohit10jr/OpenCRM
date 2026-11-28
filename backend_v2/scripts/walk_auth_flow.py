@@ -3,8 +3,8 @@
 The equivalent of `backend/scripts/walk_auth_flow.py` for backend_v2: invite an address,
 read the link out of the outbox, redeem it, set a password, log in with it, then forgot
 password. It does not import the endpoint functions: it drives real HTTP through Django's
-test client and never touches a key it did not receive by mail. The invitation is made the
-only way one can be (PE-8): a System Manager's invite-by-email.
+test client and never touches a key it did not receive by mail. The invitation is made
+the screen's way: a System Manager's invite-by-email.
 
 Run:  backend_v2/.venv/Scripts/python.exe scripts/walk_auth_flow.py
 It builds and drops its own test database. `tests/test_walk_auth_flow.py` runs the same

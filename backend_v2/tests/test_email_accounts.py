@@ -32,7 +32,7 @@ def make(user, **fields):
 
 @pytest.fixture
 def manager(make_user):
-    return make_user("manager@example.com", roles=["Sales Manager"])
+    return make_user("manager@example.com", roles=["System Manager"])  # PE-27: the resource is System Manager's
 
 
 @pytest.fixture

@@ -272,9 +272,10 @@ Spec-review addendum: `temp` A-30 (DECISIONS 31-35).
 Spec-review addendum: `temp` A-33 (DECISIONS 36-39). Old model and link:
 `backend/frappe_platform/models.py:1390-1557`.
 
-- **Rules:** everyone reads an Email Account (the Profile picker lists them; upstream bug
-  #17); the manager pair or Administrator creates, writes and deletes
-  (`platform_docs.py:158-186`). Route `email-accounts/` (list, POST, `<name>/` GET, PATCH,
+- **Rules:** System Manager or Administrator lists, reads, creates, writes, renames and
+  deletes an Email Account, and calls `setup/`; anyone else gets an empty list and 403
+  (PE-27, owner, 20 Nov 2026). The old backend lets everyone read and the manager pair
+  write (`platform_docs.py:158-186`). Route `email-accounts/` (list, POST, `<name>/` GET, PATCH,
   DELETE, rename) and `email-accounts/setup/` (`create_email_account`, an
   `@action(detail=False)`; GET is 405 under PE-1). Naming
   `FieldValue("email_account_name")`; default sort `-modified` (the account lookup and
@@ -875,7 +876,7 @@ Settings. Paths in this section are `backend/frappe_core/api/doc.py` unless name
 | 8 | Who edits `accounts` for §8 | decided: this unit, in milestone 4, one commit per file's concern |
 | 15 | Guard exceptions for `access_key`, `api_key` | decided: written, reviewed entries at the milestone that builds each (3, 4) |
 | 5 | The outbound HTTP helper before INTEGRATIONS | decided (A-30, DECISIONS 31): `backend/crm_app/integrations/http.py` ported whole as `core/http.py` (§4.3) |
-| 4 | `POST /api/v1/email-accounts/` served? A PATCH re-validates? | decided (A-33, DECISIONS 36): parity, served for the manager pair, no re-validation, a sent password ignored (section 4.4); the discarded password and the stale naming field after a rename are parked for the owner (DECISIONS 37, 38) |
+| 4 | `POST /api/v1/email-accounts/` served? A PATCH re-validates? | decided (A-33, DECISIONS 36): parity, served (for System Manager or Administrator since PE-27), no re-validation, a sent password ignored (section 4.4); the discarded password and the stale naming field after a rename are parked for the owner (DECISIONS 37, 38) |
 | 7 | Where mail validation lives; how `core/mail.py` reaches an Email Account | decided (A-33, DECISIONS 39): the validators in `core/mail.py`; saved accounts through `MAIL_ACCOUNT_PROVIDER = "configuration.mail"`, with a system check (section 4.4) |
 | 2, 9 | What "doctype exists" means; what a child table and a withheld doctype answer, per call; copying or regenerating `doctype_meta.json` and where its generator lives | decided (A-35, DECISIONS 41, 42): the file copied and its generator and staleness test ported, wired into CI; a doctype exists when declared and served or a served child; withheld 404 everywhere (PE-14); a child answers `getdoctype` and the layout calls only (PE-15) (section 4.5) |
 | 10 | Sensitive column names in field metadata | decided (A-35, DECISIONS 43): every metadata answer leaves out the fields the caller may not read, sensitive and restricted (PE-16) |

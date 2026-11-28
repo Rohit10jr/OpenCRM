@@ -32,6 +32,11 @@ IMPLIED_ROLES = {
 }
 
 
+def new_invitation_key() -> str:
+    """The one key generator for both ways an invitation is made."""
+    return secrets.token_hex(20)
+
+
 def split_emails(value: str) -> list[str]:
     return [e.strip() for e in _EMAIL_SPLIT.split(value or "") if e.strip()]
 
@@ -66,8 +71,13 @@ def invite_by_email(user, emails: str, role: str):
     # From a set, as the old code: the order is not stable (the body diff compares a set).
     to_invite = list(set(email_list) - set(existing_members) - set(existing_invites))
     for email in to_invite:
+        # PE-8: `invited_by` as upstream's before_insert sets it on every insert.
         CRMInvitation(
-            email=email, role=role, status="Pending", key=secrets.token_hex(20)
+            email=email,
+            role=role,
+            status="Pending",
+            key=new_invitation_key(),
+            invited_by=user,
         ).save(user=user)
 
     return {

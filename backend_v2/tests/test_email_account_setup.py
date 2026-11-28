@@ -118,9 +118,18 @@ def test_a_sales_user_is_refused_before_anything_else(auth_api, no_server):
     assert response.json()["message"] == "Not permitted"
 
 
-def test_a_sales_manager_may_set_one_up(api_as, make_user, no_server):
-    manager = make_user("mgr@example.com", roles=["Sales Manager"])
-    response = api_as(manager).post(PATH, account(), format="json")
+def test_pe27_a_sales_manager_is_refused_and_a_system_manager_sets_one_up(
+    api_as, make_user, no_server
+):
+    """PE-27 (owner, 20 Nov 2026): System Manager or Administrator only. The old test
+    (`backend/tests/test_email_account_setup.py`) let a Sales Manager set one up."""
+    sales_manager = make_user("mgr@example.com", roles=["Sales Manager"])
+    response = api_as(sales_manager).post(PATH, account(), format="json")
+    assert response.status_code == 403
+    assert response.json()["message"] == "Not permitted"
+
+    system_manager = make_user("sys@example.com", roles=["System Manager"])
+    response = api_as(system_manager).post(PATH, account(), format="json")
     assert response.json() == {"message": "ZZ Sales"}
 
 

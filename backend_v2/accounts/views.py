@@ -273,9 +273,10 @@ def _is_invitation_manager(user) -> bool:
 
 
 class CRMInvitationViewSet(DocumentViewSet):
-    """System Manager and Sales Manager for every operation; everyone else a deny-all list
-    (old `platform_docs.py:394-407`). Stricter than upstream, whose Sales User read is what
-    made a pending key redeemable by the wrong person (upstream bug #21)."""
+    """System Manager and Sales Manager list, read and delete; everyone else a deny-all
+    list (old `platform_docs.py:394-407`). Stricter than upstream, whose Sales User read is
+    what made a pending key redeemable by the wrong person (upstream bug #21). Only System
+    Manager or Administrator create and change one through the resource (PE-8)."""
 
     access = Access.ruled()
     serializer_class = CRMInvitationSerializer
@@ -290,11 +291,10 @@ class CRMInvitationViewSet(DocumentViewSet):
 
     @staticmethod
     def has_object_rule(user, document, ptype):
-        # PE-8 (proposed): invitations are created by invite_by_email alone and never
-        # changed through the resource, for every caller; list, read and delete stay
-        # with the manager pair.
+        # PE-8: a Sales Manager invites through invite_by_email, which holds the role
+        # checks; the resource's create and change are System Manager's or Administrator's.
         if ptype in ("create", "write"):
-            return False
+            return user.name == ADMINISTRATOR or user.has_role("System Manager")
         return _is_invitation_manager(user)
 
     @action(detail=False, methods=("post",), url_path="invite-by-email")

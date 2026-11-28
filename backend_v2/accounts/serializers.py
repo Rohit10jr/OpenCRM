@@ -1,7 +1,12 @@
 """Serializers for the accounts resources."""
 
+from rest_framework import serializers
+
+from core.exceptions import PermissionError, ValidationError
+from core.models import validate_email_address
 from core.serializers import DocumentSerializer
 
+from .invitations import INVITABLE_ROLES, new_invitation_key
 from .models import CRMInvitation, CRMSalesHierarchy, User
 
 DOCUMENT_FIELDS = (
@@ -93,7 +98,44 @@ class UserSerializer(DocumentSerializer):
 
 
 class CRMInvitationSerializer(DocumentSerializer):
-    """`key` is sensitive on the model and never on the wire, even for a manager."""
+    """`key` is sensitive on the model and never on the wire, even for a manager.
+
+    PE-8: through the resource, `email` and `role` are written on create and then set once
+    (upstream's `set_only_once`, `frappe/model/document.py:697-721`); `key`, `status` and
+    `invited_by` are set by the server on create, as upstream's `before_insert`
+    (`crm_invitation.py`)."""
+
+    #: (fieldname, label) for upstream's "Value cannot be changed for <label>".
+    SET_ONCE_FIELDS = (("email", "Email"), ("role", "Role"))
+
+    def get_fields(self):
+        fields = super().get_fields()
+        if "role" in fields and not fields["role"].read_only:
+            # Upstream's validate_can_invite runs before its Select check, so any text
+            # reaches create's 403; a change is the set-once refusal.
+            fields["role"] = serializers.CharField(
+                required=False, allow_blank=True, allow_null=True
+            )
+        return fields
+
+    def create(self, validated_data):
+        # Upstream's order: before_insert checks the address, then validate the role
+        # (crm_invitation.py, before_insert and validate_can_invite).
+        validate_email_address(validated_data.get("email") or "")
+        if validated_data.get("role") not in INVITABLE_ROLES:
+            raise PermissionError("Cannot invite for this role")
+        validated_data["key"] = new_invitation_key()
+        validated_data["status"] = "Pending"
+        validated_data["invited_by"] = self.user
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        for fieldname, label in self.SET_ONCE_FIELDS:
+            if fieldname in validated_data and validated_data[fieldname] != getattr(
+                instance, fieldname
+            ):
+                raise ValidationError(f"Value cannot be changed for <strong>{label}</strong>")
+        return super().update(instance, validated_data)
 
     class Meta:
         model = CRMInvitation

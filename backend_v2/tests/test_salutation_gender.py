@@ -5,7 +5,7 @@ database has upstream's lists, a sales user gets both dropdowns, everyone reads 
 an admin adds one. The old `frappe.desk.search.search_link` is each resource's own
 `search/`, and the old resource POST's 201 `data` is 200 `message`. `:43-47` (a deleted
 row put back) is in `test_contacts_dev_data.py`; `:66-160` need Contact (milestone 3)
-and CRM Lead (SALES). New: CRM Industry open to every signed-in user.
+and CRM Lead (SALES). New: CRM Industry open to every CRM user (PE-29).
 """
 
 import pytest
@@ -90,7 +90,9 @@ def test_an_industry_with_no_name_is_417(auth_api):
     assert response.json()["message"] == "Industry is required"
 
 
-def test_crm_industry_is_open_to_every_signed_in_user(auth_api, api):
+def test_crm_industry_is_open_to_every_crm_user(auth_api, api):
+    """PE-29: a CRM role is needed (`auth_api` is a Sales User); tests/test_crm_role_rule.py
+    has the caller with none."""
     response = auth_api.post("/api/v1/industries/", {"industry": "Robotics"}, format="json")
     assert response.status_code == 200
     assert response.json()["message"]["name"] == "Robotics"

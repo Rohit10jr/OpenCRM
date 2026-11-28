@@ -189,18 +189,30 @@ comparison skips that block.
 ### PE-8. CRM Invitation is created and changed through the resource by System Manager or Administrator
 
 - **Status:** approved by the owner (20 Nov 2026), rewriting the supervisor's first
-  decision (`temp` A-24, DECISIONS 27, 18 Nov 2026); to be built (`temp` A-48 2b). Until
-  then the resource refuses create and change for everyone
+  decision (`temp` A-24, DECISIONS 27, 18 Nov 2026; set-once `temp` A-50); built with
+  this text (`temp` A-48 2b)
 - **Where:** `POST /api/v1/invitations/` and `PATCH /api/v1/invitations/<name>/` (old
   `/api/resource/CRM Invitation`). No `.http` block found
 - **Old backend:** the manager pair may create and change an invitation through the
-  resource (`backend/crm_app/permissions/platform_docs.py:403-407`)
+  resource, every field writable, and a row created there has no key
+  (`backend/crm_app/permissions/platform_docs.py:403-407`)
 - **backend_v2:** System Manager or Administrator create and change an invitation
-  through the resource; `email` and `role` are writable, `key`, `status` and
-  `invited_by` are set by the server. A Sales Manager lists, reads and deletes
-  invitations and invites through `invite_by_email`
+  through the resource. A create checks, in upstream's order, the address (417 "<email>
+  is not a valid Email Address") and then the role (403 "Cannot invite for this role"
+  unless it is Sales User, Sales Manager or System Manager). Upstream's role-profile check
+  on an existing user (`validate_existing_user`) is not carried: there is no role
+  profile here. `email` and `role` are written on create and then set once: a change
+  answers 417 "Value cannot be changed for <strong>Email</strong>" (or Role), upstream's
+  text; the same value sent back is accepted. On create the server sets `key` (the same
+  generator `invite_by_email` uses), `status` "Pending" and `invited_by` (the caller), and
+  the invitation mail goes out; `status`, `invited_by`, `email_sent_at` and `accepted_at`
+  are never written through the resource. A Sales Manager lists, reads and deletes
+  invitations and invites through `invite_by_email`, which also sets `invited_by` to the
+  caller (the old backend leaves it empty there)
 - **Why:** `invite_by_email` holds the role checks; the resource is for an
-  administrator's scripts
+  administrator's scripts. Upstream sets `key`, `invited_by` and `status` in
+  `before_insert` (`crm/fcrm/doctype/crm_invitation/crm_invitation.py`) and refuses a
+  changed set-once field (`frappe/model/document.py:697-721`)
 - **Recorded by:** ACCOUNTS, 18 Nov 2026
 
 ### PE-9. The User document's `assignmentruleuser_set` is always empty
@@ -598,6 +610,71 @@ comparison skips that block.
   skipped, like every other refusal in those loops, and its link is still cleared
 - **Why:** the linked delete asks what the record route asks
 - **Recorded by:** CONTACTS, 19 Nov 2026
+
+### PE-27. Email Account is System Manager's and Administrator's
+
+- **Status:** approved by the owner (20 Nov 2026; `temp` A-48 2a); built with this entry
+- **Where:** `/api/v1/email-accounts/...` (list, create, read, PATCH, delete, rename)
+  and `POST /api/v1/email-accounts/setup/` (old `/api/resource/Email Account`,
+  `crm.api.settings.create_email_account`)
+- **Old backend:** every signed-in user lists and reads an Email Account; the manager
+  pair creates, changes and deletes one, and calls `create_email_account`
+  (`backend/crm_app/permissions/platform_docs.py:49-53,158-186`,
+  `backend/crm_app/api/settings.py`)
+- **backend_v2:** System Manager or Administrator list, read, create, change, rename and
+  delete an Email Account and call `setup/`; any other caller gets an empty list, 403
+  "No permission for Email Account <name>" on a record, and 403 "Not permitted" on
+  `setup/`. A User's `user_emails` rows stay System Manager's to write. As upstream, the
+  Profile "send from" picker (`UserEmailSettings.vue:138-144`) is therefore empty for
+  every caller who is not System Manager or Administrator: the old backend's open read
+  was its fix for that, recorded as upstream bug 17 (`UPSTREAM_BUGS.md`), and this entry
+  takes it back
+- **Why:** upstream's role table (`frappe/email/doctype/email_account/email_account.json`,
+  v15): System Manager reads, writes, creates and deletes; Inbox User, a role this
+  product does not have, reads
+- **Recorded by:** A-48 group 2, 20 Nov 2026
+
+### PE-28. The role actions do not take Administrator or Guest as their target
+
+- **Status:** approved by the owner (20 Nov 2026; `temp` A-48 2c); built with this entry
+- **Where:** `POST /api/v1/users/<name>/update-role/`, `POST /api/v1/users/add-existing/`
+  and `POST /api/v1/users/<name>/remove-crm-roles/` (old `crm.api.user.update_user_role`,
+  `add_existing_users`, `remove_crm_roles_from_user`)
+- **Old backend:** applies no check on the target's name; the role rows of Administrator
+  or Guest change like any other user's (`backend/crm_app/api/user.py:111-217`)
+- **backend_v2:** 403 "Not permitted" when the target is Administrator or Guest. The
+  check runs after every existing refusal and just before the roles change, so each
+  answer upstream gives (such as "Only System Managers can modify other System Managers"
+  for a Sales Manager acting on Administrator, who holds System Manager) is unchanged;
+  `add-existing` applies it to each name in turn, as every other refusal in that loop
+- **Why:** upstream's framework fixes those two accounts' roles whatever their role rows
+  say: v15 `frappe/permissions.py:497-507` answers Guest with the Guest role and
+  Administrator with every role, and `frappe/core/doctype/user/user.py:626-628` strips
+  Guest's rows to Guest on save
+- **Recorded by:** A-48 group 2, 21 Nov 2026
+
+### PE-29. Contact, CRM Organization, CRM Industry and Address need a CRM role
+
+- **Status:** approved by the owner (20 Nov 2026; `temp` A-48 2d, A-61 item 4); built
+  with this entry for CRM Industry and Address; Contact and CRM Organization to be built
+  with their milestones, and until then they are not served
+- **Where:** `/api/v1/industries/...` and `/api/v1/addresses/...`: list, create, read,
+  PATCH, delete, `value/`, `search/` and every other route that reads the list or the
+  object rule (old `/api/resource/CRM Industry`, `/api/resource/Address`)
+- **Old backend:** every signed-in user lists, reads, creates and changes them; CRM
+  Industry registers no rule, Address deletes only for System Manager or Administrator
+  (`backend/crm_app/permissions/platform_docs.py:424-434`; DECISIONS 58)
+- **backend_v2:** Sales User, Sales Manager, System Manager or Administrator; a caller
+  with none of these gets an empty list, 403 "No permission for <doctype> <name>" on a
+  record, and 403 "Not permitted to create <doctype>" on create. Address delete stays
+  System Manager's or Administrator's. Salutation and Gender keep their rule (everyone
+  reads, System Manager writes)
+- **Why:** upstream's role tables grant these doctypes to the CRM roles. Upstream also
+  lets a user with none keep the contacts they created, and its Address gives the `All`
+  role read, write and create on the addresses they own (v15
+  `frappe/contacts/doctype/address/address.json`); `backend_v2` grants nothing to a
+  user with no CRM role
+- **Recorded by:** A-48 group 2, 21 Nov 2026
 
 ---
 

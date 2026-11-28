@@ -90,7 +90,7 @@ plus the standard fields: `name`, `owner`, `modified_by`, `creation`, `modified`
 | Address (model metadata, `models.py:1914-1932`) | `address_title` Address Title (Char 140, blank ""); `address_type` Address Type (Char 20, required; the twelve `ADDRESS_TYPES`); `address_line1` Address Line 1 (Char 240, required); `address_line2` Address Line 2 (Char 240); `city` City/Town (Char 140, required); `county` County, `state` State/Province (Char 140); `country` Country (FK to `configuration.Country`, PROTECT, required); `pincode` Postal Code, `email_id` Email Address, `phone` Phone, `fax` Fax (Char 140); `is_primary_address` Preferred Billing Address, `is_shipping_address` Preferred Shipping Address, `disabled` Disabled (booleans); `links` (Dynamic Link rows). `EMAIL_FIELDS` `email_id`; `PREFERRED_FLAGS` | `Access.ruled()` |
 | Dynamic Link (child, polymorphic) | `parenttype`, `parentfield`, `parent` (Char 140, indexed); `link_doctype`, `link_name` (Char 140, required, indexed); `link_title` (Char 280); indexes on both pairs; `NAME_STRATEGY = Hash(10)`; `DYNAMIC_LINK_FIELDS = (("link_doctype", "link_name"),)` in v2's pair form (`AS_BUILT.md:693,710-712`), without which neither the delete check nor the linked-documents scan sees the rows | through its parent |
 | CRM Organization (`doctype_meta.json`) | `organization_name`, `website`, `organization_logo`, `no_of_employees` (choices), `annual_revenue` (Decimal(18,6): a string in a document, a number in a list), `industry` (FK, PROTECT), `territory` (FK, PROTECT; §6 A), `currency` (text Link), `address` (text Link), `exchange_rate` (float) (`core_sales.py:108-127`) | `Access.open(reason=…)`, PORT_MAP's reason |
-| CRM Industry (`doctype_meta.json`) | `industry` | `Access.open(reason=…)`, PORT_MAP's reason |
+| CRM Industry (`doctype_meta.json`) | `industry` | `Access.ruled()`, a CRM role (PE-29) |
 | Salutation, Gender | `salutation` / `gender` (Char 140, unique) | `Access.ruled()` |
 
 - **Computed but not read-only, as `backend/`:** `full_name`, `email_id`, `mobile_no` and
@@ -142,17 +142,21 @@ child-row routes, PE-24, PE-12f, each §4 item no old test covers.
 
 ### Who may do what (DECISIONS 58, flagged)
 
-No CRM-role gate on these resources, as `backend/`; only `get_organizations` needs a CRM
-role. Stated here so nobody adds one silently. This is DECISIONS 58, not an upstream
-match: `specs/SECURITY_MODEL.md:350` covers only CRM Organization, and upstream's role
-tables (and `crm_industry.json`) grant the three CRM roles only.
+`backend/` puts no CRM-role gate on these resources (DECISIONS 58); only
+`get_organizations` needs a CRM role there. **PE-29** (owner, 20 Nov 2026) adds one, as
+upstream's role tables (and `crm_industry.json`) grant the three CRM roles only: CRM
+Industry and Address answer only to Sales User, Sales Manager, System Manager or
+Administrator, and a caller with none gets an empty list and 403. Contact and CRM
+Organization take the same rule when they are built. Salutation and Gender keep their
+rule (owner, 21 Nov 2026).
 
 | Doctype | List | Read | Write | Create | Delete |
 |---|---|---|---|---|---|
-| Contact | everyone (`platform_docs.py:437-440`) | everyone | everyone | everyone | the creator (`owner`), System Manager or Administrator (`:443-455`) |
+| Contact | everyone (`platform_docs.py:437-440`; PE-29 when built) | everyone | everyone | everyone | the creator (`owner`), System Manager or Administrator (`:443-455`) |
 | Contact Email, Contact Phone | through the contact | the contact's read | the contact's write | through `create_new` or the contact's rows | the contact's write; a refused delete is 404 |
-| Address | everyone (`:424-426`) | everyone | everyone | everyone | System Manager or Administrator (`:429-434`) |
-| CRM Organization, CRM Industry | everyone signed in (no rule registered) | everyone | everyone | everyone | everyone, subject to PROTECT and Dynamic Link rows |
+| Address | a CRM role (PE-29; old: everyone, `:424-426`) | a CRM role | a CRM role | a CRM role | System Manager or Administrator (`:429-434`) |
+| CRM Industry | a CRM role (PE-29; old: everyone signed in, no rule registered) | a CRM role | a CRM role | a CRM role | a CRM role, subject to PROTECT and Dynamic Link rows |
+| CRM Organization | everyone signed in (no rule registered; PE-29 when built) | everyone | everyone | everyone | everyone, subject to PROTECT and Dynamic Link rows |
 | Salutation, Gender | everyone (`:472-475`) | everyone | System Manager or Administrator (`:478-484`) | the same | the same |
 | Dynamic Link | no route; through its parent | | | | removed with its parent |
 

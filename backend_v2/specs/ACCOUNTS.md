@@ -210,6 +210,8 @@ refuses it too (`frappe/model/document.py:850-859`). Tested.
   Manager), **deletes the user's hierarchy node with no reports guard**, and answers
   "User {user} has been removed from CRM roles.". `add_existing_users` accepts `users` as
   a JSON string or a single name; `role` defaults to "Sales User" (`user.py:111`).
+  A target of Administrator or Guest answers 403 "Not permitted" (PE-28), after every
+  other refusal and just before the roles change.
 - **No object rule on the two per-user actions** (A-22): the old code checks only the
   manager pair (`user.py:139,192`), so a Sales Manager changes another user's role
   (`09` 3.2), which `User`'s write rule would refuse. `update-role` and
@@ -278,10 +280,12 @@ v2's `core.security.rate_limit` hands a callable key only the merged inputs
 
 - System Manager and Sales Manager list, read and delete; everyone else gets a deny-all
   list (`platform_docs.py:394-407`). `key` is never on the wire.
-- **PE-8 (proposed; A-24):** CRM Invitation cannot be created or changed through its
-  resource, for any caller; invitations are created by `invite_by_email` alone. The
-  routes stay served and always refuse (403).
-- The key is minted **only** in `invite_by_email` (`misc.py:115-117`); `accept_invitation`
+- **PE-8 (approved by the owner, 20 Nov 2026; A-48 2b, A-50, A-64):** System Manager or
+  Administrator create and change an invitation through the resource; the create checks
+  the address and the role as upstream, and `email` and `role` are set once. The entry
+  has the detail.
+- The key is minted by `new_invitation_key`, for the resource create and
+  `invite_by_email` alike (`misc.py:115-117` minted it in the old method); `accept_invitation`
   refuses an empty key (`auth_pages.py:340-344`). **The model must not generate a key.**
 - `invite_by_email` (`misc.py:75-123`): the manager pair first, 403 "Not permitted"
   (`:86`, `09` 4.1); then the role checks — "You are not allowed to invite
@@ -370,8 +374,8 @@ an empty schedule today.
 - The body diff over the same blocks, after the `opencrm` roles are reset (§7).
 - An equivalent of `walk_auth_flow.py` (invite → accept → set password → log in → reset),
   run as the old one is: Django's test client and `mail.outbox` on a test database
-  (`:26-33,194-199`). The invitation is made the only way one can be since PE-8, a System
-  Manager's `invitations/invite-by-email/`, and the key is read from the outbox
+  (`:26-33,194-199`). The invitation is made through a System Manager's
+  `invitations/invite-by-email/`, the screen's way, and the key is read from the outbox
   (`backend_v2/scripts/walk_auth_flow.py`, run by `tests/test_walk_auth_flow.py`).
 
 ## 6. Decided in the rewrite (checked at the spec review)
@@ -388,11 +392,10 @@ an empty schedule today.
    admin's.
 7. **Milestones:** three (§9).
 
-8. **CRM Invitation's shared actions:** none; and create and write are refused through
-   the resource for every caller (PE-8, A-24).
+8. **CRM Invitation's shared actions:** none; create and write through the resource are
+   System Manager's or Administrator's (PE-8, rewritten by the owner, 20 Nov 2026).
 
-Open for the owner: PE-7 (§4.1) and PE-8 (§4.6), recorded `proposed`. Neither parity
-version is built: D-B and A-24 are decisions to build the change and flag it.
+PE-7 (§4.1) and PE-8 (§4.6) are approved by the owner (20 Nov 2026).
 
 ## 7. Carried from FOUNDATION, and tooling
 
