@@ -139,7 +139,10 @@ old endpoint used list visibility, an object rule, both, or silent skipping:
 - The batch is one transaction. It scans linked documents in a bounded number of queries,
   clears the references it can write, deletes linked rows when `delete_linked` is set,
   silently keeps linked rows whose own delete is refused, and **refuses the whole batch
-  if a remaining reference the caller cannot see blocks a target**. Then the cleanup
+  if a reference that remains after the clearing blocks a target**: one the caller cannot
+  see or write, or one the clearing does not reach, such as an Address's Dynamic Link row
+  naming a Contact, which "remove contact" leaves (CONTACTS milestone 6a, `temp` A-82).
+  Upstream refuses that item too, but deletes the rest of the batch. Then the cleanup
   table (FOUNDATION's, extended by ACTIVITIES) and the targets go.
 
 **Linked documents and unlink** (`doc.py:461-634`):

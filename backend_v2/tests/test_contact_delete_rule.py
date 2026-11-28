@@ -3,11 +3,12 @@ PE-34; milestone 3).
 
 Ported (REBUILD_PLAN S14) from ``backend/tests/test_contact_delete_rule.py:38-75``: the
 resource route and `frappe.client.delete` are both `DELETE /api/v1/contacts/<name>/`;
-`:78-92` (bulk delete) waits for milestone 6a. New: PE-29's matrix for a caller with no
+`:78-92` (bulk delete, milestone 6a) is `POST /api/v1/contacts/bulk-delete/`. New: PE-29's matrix for a caller with no
 CRM role, and the deletes a Contact now refuses (an Address, a Salutation or a Gender it
 names; owner, A-74).
 """
 
+import json
 from urllib.parse import quote
 
 import pytest
@@ -76,6 +77,23 @@ def test_a_real_system_manager_deletes_another_users_contact(api_as, alice, make
     hers = contact_by(alice, "Alices")
     assert api_as(boss).delete(url(hers)).status_code == 200
     assert not Contact.objects.filter(pk=hers.pk).exists()
+
+
+def test_bulk_delete_refuses_the_batch_when_one_row_is_not_hers(api_as, alice, administrator):
+    """Ported from `test_contact_delete_rule.py:78-92`: the object rule per row refuses the
+    lot (C9); `frappe.desk.reportview.delete_items` is `POST /api/v1/contacts/bulk-delete/`."""
+    theirs = contact_by(administrator, "Admins")
+    mine = contact_by(alice, "Alices")
+    client = api_as(alice)
+
+    response = client.post(f"{CONTACTS}bulk-delete/", {"items": json.dumps([mine.pk, theirs.pk])}, format="json")
+    assert response.status_code == 403, response.content[:300]
+    assert response.json()["message"] == f"No permission to delete Contact {theirs.pk}"
+    assert Contact.objects.filter(pk__in=[mine.pk, theirs.pk]).count() == 2, "nothing went"
+
+    response = client.post(f"{CONTACTS}bulk-delete/", {"items": json.dumps([mine.pk])}, format="json")
+    assert response.status_code == 200, response.content[:300]
+    assert not Contact.objects.filter(pk=mine.pk).exists()
 
 
 @pytest.mark.parametrize("role", ["Sales User", "Sales Manager", "System Manager"])
