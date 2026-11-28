@@ -26,6 +26,7 @@ from configuration import (
     metadata,
     quick_filters,
     user_settings,
+    view_settings,
 )
 from configuration.models import SystemSettings
 from configuration.serializers import (
@@ -35,6 +36,7 @@ from configuration.serializers import (
     CRMFieldsLayoutSerializer,
     CRMFormScriptSerializer,
     CRMGlobalSettingsSerializer,
+    CRMViewSettingsSerializer,
     CurrencySerializer,
     EmailAccountSerializer,
     FCRMSettingsSerializer,
@@ -546,6 +548,102 @@ class CRMGlobalSettingsViewSet(DocumentViewSet):
     filterable_fields = CRMGlobalSettingsSerializer.Meta.fields
     sortable_fields = CRMGlobalSettingsSerializer.Meta.fields
     searchable_fields = ()
+
+
+class CRMViewSettingsViewSet(DocumentViewSet):
+    """Saved views (spec section 4.7). Read: own, ownerless and public views, every view
+    for Administrator and System Manager; create: everyone, the view belonging to the
+    caller; write and delete: the owner, Sales Manager on a public view, Administrator
+    and System Manager (configuration/view_settings.py). `user`, `public`, `is_standard`
+    and `is_default` are read-only here (PE-19). Every column readable, filterable and
+    sortable; no bulk delete."""
+
+    access = Access.ruled()
+    serializer_class = CRMViewSettingsSerializer
+    readable_fields = CRMViewSettingsSerializer.Meta.fields
+    filterable_fields = CRMViewSettingsSerializer.Meta.fields
+    sortable_fields = CRMViewSettingsSerializer.Meta.fields
+    searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        return view_settings.read_rule(user)
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        if ptype in ("read", "select"):
+            return view_settings.can_read(user, document)
+        if ptype == "create":
+            return True
+        return view_settings.can_write(user, document)
+
+    # The calls look the view up themselves: each answers a missing view its own way.
+
+    def _named(self):
+        return self.kwargs[self.lookup_url_kwarg or self.lookup_field]
+
+    @action(detail=False, methods=("post",), url_path="create-view")
+    def create_view(self, request):
+        """`crm_view_settings.create`: the new view, the caller's."""
+        view = build_payload(request).get("view")
+        return Response(Envelope(view_settings.create_view(view, user=request.user), "message"))
+
+    @action(detail=False, methods=("post",), url_path="update-view")
+    def update_view(self, request):
+        """`crm_view_settings.update`: the view with its `name` in the body."""
+        view = build_payload(request).get("view")
+        return Response(Envelope(view_settings.update_view(view, user=request.user), "message"))
+
+    @action(detail=False, methods=("post",), url_path="standard-view")
+    def standard_view(self, request):
+        """`crm_view_settings.create_or_update_standard_view`."""
+        view = build_payload(request).get("view")
+        answer = view_settings.create_or_update_standard_view(view, user=request.user)
+        return Response(Envelope(answer, "message"))
+
+    @action(detail=True, methods=("post",), url_path="delete-view")
+    def delete_view(self, request, *args, **kwargs):
+        """`crm_view_settings.delete`: `null`, also for a missing view."""
+        view_settings.delete_view(self._named(), user=request.user)
+        return Response(Envelope(None, "message"))
+
+    @action(detail=True, methods=("post",), url_path="pin")
+    def pin(self, request, *args, **kwargs):
+        """`crm_view_settings.pin`: `value` read as `bool(value)`, as `backend/`."""
+        value = build_payload(request).get("value")
+        view_settings.pin(self._named(), value, user=request.user)
+        return Response(Envelope(None, "message"))
+
+    @action(detail=True, methods=("post",), url_path="public")
+    def public(self, request, *args, **kwargs):
+        """`crm_view_settings.public`: Administrator or Sales Manager (PE-20)."""
+        value = build_payload(request).get("value")
+        view_settings.set_public(self._named(), value, user=request.user)
+        return Response(Envelope(None, "message"))
+
+    @action(detail=False, methods=("post",), url_path="set-as-default")
+    def set_as_default(self, request):
+        """`crm_view_settings.set_as_default`: `name` optional, in the body (PE-21)."""
+        inputs = build_payload(request)
+        view_settings.set_as_default(
+            inputs.get("name"), inputs.get("type"), inputs.get("doctype"), user=request.user
+        )
+        return Response(Envelope(None, "message"))
+
+    @action(detail=True, methods=("post",), url_path="kanban-columns")
+    def kanban_columns(self, request, *args, **kwargs):
+        """`crm_view_settings.fetch_and_update_kanban_columns`: a JSON string or `null`."""
+        answer = view_settings.fetch_and_update_kanban_columns(self._named(), user=request.user)
+        return Response(Envelope(answer, "message"))
+
+
+class SavedViewsView(BaseAPIView):
+    """`crm.api.views.get_views`, for any signed-in caller (configuration/view_settings.py).
+    GET, as the route map says; the `.http` generator rewrites the old POST."""
+
+    def get(self, request):
+        inputs = self.get_inputs(request)
+        return Response(view_settings.get_views(inputs.get("doctype"), user=request.user))
 
 
 class QuickFiltersView(BaseAPIView):

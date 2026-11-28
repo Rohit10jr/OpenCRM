@@ -8,6 +8,7 @@ from configuration.views import (
     CRMFieldsLayoutViewSet,
     CRMFormScriptViewSet,
     CRMGlobalSettingsViewSet,
+    CRMViewSettingsViewSet,
     CurrencyViewSet,
     DocTypeMetaView,
     EmailAccountViewSet,
@@ -19,6 +20,7 @@ from configuration.views import (
     LanguageViewSet,
     OnboardingStatusView,
     QuickFiltersView,
+    SavedViewsView,
     SiteInfoView,
     SortOptionsView,
     SystemSettingsViewSet,
@@ -61,6 +63,7 @@ urlpatterns = [
         UpdateQuickFiltersView.as_view(),
         name="meta-quick-filters-update",
     ),
+    re_path(r"^views/?$", SavedViewsView.as_view(), name="views"),
     re_path(
         r"^onboarding/status/?$",
         OnboardingStatusView.as_view(),
@@ -83,4 +86,5 @@ router.register("languages", LanguageViewSet, basename="language")
 router.register("fields-layouts", CRMFieldsLayoutViewSet, basename="fields-layout")
 router.register("form-scripts", CRMFormScriptViewSet, basename="form-script")
 router.register("global-settings", CRMGlobalSettingsViewSet, basename="global-setting")
+router.register("view-settings", CRMViewSettingsViewSet, basename="view-setting")
 urlpatterns += router.urls
