@@ -6,7 +6,7 @@ Ported (REBUILD_PLAN S14) from ``backend/tests/test_get_data.py:223-282`` and
 Widget's owner, a User), `:362` (a field with choices: Widget's `priority`), `:403` and
 `:422` (a manual card order, and that it is filtered by the caller's rules), and of
 ``test_kanban_counts.py``'s "`all_count` is ruled". New: the column field checked up
-front, PE-22's served target, PE-23, PE-12e, the definition's kanban defaults.
+front, PE-22's served target, PE-12e, the definition's kanban defaults.
 """
 
 import pytest
@@ -150,12 +150,16 @@ def test_pe22_a_link_target_no_resource_serves_gives_no_columns(auth_api, monkey
     assert call(auth_api, column_field="widget_owner")["kanban_columns"] == []
 
 
-def test_pe23_more_kanban_columns_than_a_page_holds_is_417(auth_api):
+def test_more_kanban_columns_than_a_page_holds_are_taken(auth_api):
+    """PE-23 withdrawn (owner, 20 Nov 2026): no cap on sent columns, as `backend/`."""
     from core.query import MAX_PAGE_LENGTH
 
     columns = [{"name": str(index)} for index in range(MAX_PAGE_LENGTH + 1)]
-    response = auth_api.post(URL, {"view": KANBAN, "column_field": "status", "kanban_columns": columns}, format="json")
-    assert response.status_code == 417
+    response = auth_api.post(
+        URL, {"view": KANBAN, "column_field": "status", "kanban_columns": columns}, format="json"
+    )
+    assert response.status_code == 200, response.content[:300]
+    assert len(response.json()["message"]["data"]) == MAX_PAGE_LENGTH + 1
 
 
 def test_pe12e_a_column_order_that_is_not_a_list_is_417(widgets, auth_api):

@@ -9,6 +9,7 @@ from django.db.models.fields.reverse_related import ForeignObjectRel
 from core import children
 from core.delete import _dynamic_link_declarations
 from core.doctypes import doctype_of
+from core.naming import FieldValue
 
 
 def _copy_under(original, new_name: str):
@@ -18,7 +19,22 @@ def _copy_under(original, new_name: str):
         for field in model._meta.concrete_fields
     }
     values[model._meta.pk.attname] = new_name
+    naming_field = _naming_field(model)
+    if naming_field is not None:
+        values[naming_field.attname] = new_name
     return model(**values)
+
+
+def _naming_field(model):
+    """PE-31: the plain field a `FieldValue` name is taken from, as upstream's
+    `update_autoname_field` sets it (`frappe/model/rename_doc.py:323-328`, `field:`
+    autonames only). A link naming field keeps its value, unlike upstream; decided when
+    CRM Telephony Agent (`field:user`) is specified."""
+    strategy = getattr(model, "NAME_STRATEGY", None)
+    if not isinstance(strategy, FieldValue):
+        return None
+    field = model._meta.get_field(strategy.fieldname)
+    return None if field.is_relation else field
 
 
 def _repoint_foreign_keys(model, old: str, new: str) -> None:
@@ -97,7 +113,11 @@ def rename_document(model, old: str, new: str) -> str:
         original = model._default_manager.select_for_update().get(pk=old)
         copy = _copy_under(original, new)
         parked = {}
+        naming_field = _naming_field(model)
         for field in _unique_columns(model):
+            if naming_field is not None and field.attname == naming_field.attname:
+                # PE-31 gave the copy the new name here, which no other row holds.
+                continue
             value = getattr(copy, field.attname)
             if value in (None, ""):
                 continue

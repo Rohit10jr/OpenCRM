@@ -156,12 +156,13 @@ GENERIC = "Failed to fetch exchange rate from {0} to {1} on {2}. Please check yo
 @pytest.mark.parametrize(
     ("from_currency", "to_currency", "date"),
     [
-        ("EU", "USD", None),
-        ("EURO", "USD", None),
+        ("E", "USD", None),
+        ("EUROPE", "USD", None),
         ("EUR", "US/", None),
+        ("U-SD", "EUR", None),
+        ("ÜSD", "EUR", None),
         ("EUR", "USD", "yesterday"),
         ("EUR", "USD", "2026-10-01/../x"),
-        ("E1R", "USD", None),
         ("EUR", "USD", "２０２６-１０-０１"),
         ("EUR", "USD", "2026-99-99"),
     ],
@@ -176,6 +177,13 @@ def test_pe10_an_unaccepted_shape_asks_nobody_and_is_not_cached(
     assert refused.value.message == GENERIC.format(from_currency, to_currency, date or "latest")
     assert http.calls == []
     assert cache.get(f"exchange_rate_{from_currency}_{to_currency}_{date}") is None
+
+
+@pytest.mark.parametrize("code", ["EU", "E1R", "USDT1"])
+def test_pe10_two_to_five_letters_or_digits_are_asked_for(http, alice, code):
+    """PE-10 (owner, 20 Nov 2026): 2 to 5 ASCII letters or digits reach the provider."""
+    http.answers = {f"https://api.frankfurter.app/latest?from={code}&to=USD": {"rates": {"USD": 2.5}}}
+    assert rate(code, "USD", user=alice) == 2.5
 
 
 def test_pe10_lowercase_codes_are_accepted_as_given(http, alice):

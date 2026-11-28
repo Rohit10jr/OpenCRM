@@ -166,8 +166,8 @@ exists). `core/mail.py` holds the server checks (`smtp_settings`, `check_smtp`,
 sends a saved account through its own SMTP settings, and `default_signature()` is the
 signature fallback `accounts` uses. An Email Account's `save()` links it to the user
 whose address it is, as a User Email row on that user's `user_emails`, which only System
-Manager writes through User. Parked for the owner, built as `backend/`: a password sent
-on update is ignored, and a rename keeps `email_account_name`.
+Manager writes through User. A non-empty password or API secret sent on create or
+update is stored (PE-30), and a rename sets `email_account_name` (PE-31).
 
 Its fifth milestone (§4.5) adds field metadata. `configuration/data/doctype_meta.json` is
 the old 39-doctype file, read by `configuration/field_meta.py` (with a model fallback on
@@ -227,7 +227,7 @@ group-by path (the caller's saved standard view, the definition's columns, rows,
 fields and `parse`, the `fields` block with the old types, PE-16 last), `is_default`
 from a named view under the read rule, group-by options, and the kanban branch (columns
 from a served Link target or a field's choices, the definition's kanban defaults, a
-manual card order, `all_count`, PE-23's cap). A resource names its definition as
+manual card order, `all_count`; any number of sent columns). A resource names its definition as
 `list_view_class`, a class in its app's `list_views.py` (FOUNDATION Q6): the base
 `ListView` is the old fallback, `accounts/list_views.py` holds `UserListView` (User has
 no list-view route), and `tests_support` defines Widget's. A card's four badge counts
@@ -593,10 +593,13 @@ No production resource opts in yet; `tests_support.WidgetViewSet` proves the mec
 `merge`; the URL supplies the old name and surplus body keys are ignored. The lookup
 starts from the model's default manager so list-invisible rows still reach the static
 object-write rule. Merge, missing, unchanged, taken, and write-denied refusals keep the
-old order, 417 status, and wording before `core.naming.validate_name` runs.
+old order, 417 status, and wording before `core.naming.validate_name` runs. A resource
+opts in where upstream's `allow_rename` is on (PE-24): today Email Account, Currency,
+CRM Fields Layout, CRM Form Script, Salutation, Address and CRM Industry.
 
 `core.rename.rename_document` locks the original and completes the rename in one
-transaction. It inserts a hook-free copy under the new primary key, temporarily parks
+transaction. It inserts a hook-free copy under the new primary key (with a plain
+`FieldValue` naming field set to the new name, PE-31), temporarily parks
 non-key unique values, repoints every reverse FK/O2O (including hidden through-table
 relations), declared polymorphic child parent, declared `DYNAMIC_LINK_FIELDS` pair, and
 (PE-5, approved) every model's declared `TEXT_LINK_FIELDS` column that targets the renamed

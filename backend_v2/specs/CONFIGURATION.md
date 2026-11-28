@@ -247,9 +247,10 @@ Spec-review addendum: `temp` A-30 (DECISIONS 31-35).
   in the test settings, and listed in `.env.example`; tests patch `_get`. No
   `frontend/src` file calls it; its callers are the deal and organization saves and
   `refresh_exchange_rates` (SALES).
-  - PE-10 (proposed): `get_exchange_rate` accepts `date` only as `latest` or an ISO date
-    (ASCII digits, a real date) and currencies only as three-letter codes (ASCII
-    letters, either case, used as given); the old backend passes them through.
+  - PE-10 (approved by the owner, 20 Nov 2026): `get_exchange_rate` accepts `date` only
+    as `latest` or an ISO date (ASCII digits, a real date) and a currency only as 2 to 5
+    ASCII letters or digits (either case, used as given); the old backend passes them
+    through.
   - PE-12: a missing `from_currency` or `to_currency` answers `1`, as an empty one does
     (`:56`); a transport error or malformed JSON from a paid provider falls through to
     the generic 417 (`:168-186`); a provider's answer counts only as a positive number.
@@ -294,15 +295,13 @@ Spec-review addendum: `temp` A-33 (DECISIONS 36-39). Old model and link:
   `Access.open`.
 - **Through the resource** (decision 4, parity): `POST email-accounts/` is served for the
   manager pair; a create or PATCH is saved **without** validation, service defaults or
-  the name check, as in `backend/`; a `password` or `api_secret` sent on update is
-  ignored with 200 (`frappe_core/serializers.py:253-257`). **Known difference from
-  upstream, parked for the owner (DECISIONS 37):** `EmailEdit.vue:104-118` sends
-  `password` with every save and upstream stores it; here, as in `backend/`, it is
-  discarded.
-- **Rename** keeps `email_account_name` at the old value, as `backend/`
-  (`frappe_core/rename.py:41-45`; `backend_v2/core/rename.py:14-20`). Upstream updates
-  the naming field (`frappe/model/rename_doc.py:319,323-328`). Parked for the owner
-  (DECISIONS 38); a test pins today's behaviour.
+  the name check, as in `backend/`. **PE-30** (owner, 20 Nov 2026, DECISIONS 37): a
+  non-empty `password` or `api_secret` sent on create or PATCH is stored, encrypted, as
+  upstream (`EmailEdit.vue:104-118` sends `password` with every save); null or "" leaves
+  the stored value. `backend/` discards both (`frappe_core/serializers.py:253-257`).
+- **Rename** sets `email_account_name` to the new name, as upstream
+  (`frappe/model/rename_doc.py:319,323-328`): **PE-31** (owner, 20 Nov 2026, DECISIONS
+  38). `backend/` keeps the old value (`frappe_core/rename.py:41-45`).
 - **`create_email_account`** (`backend/crm_app/api/settings.py`), checks in this order:
   1. the role check: manager pair or Administrator, else 403 "Not permitted" (`:96`;
      `crm_app/api/user.py:28-34`);
@@ -819,9 +818,9 @@ Settings. Paths in this section are `backend/frappe_core/api/doc.py` unless name
 - **Crashes become 417 (PE-12e):** a `columns` or `kanban_columns` entry that is not an
   object; a `rows` or `kanban_fields` entry that is not a string; a column's `order`
   that is not a list. A `custom_view_name` that is not an integer counts as no view.
-- **A cap (PE-23):** a sent `kanban_columns` list longer than `MAX_PAGE_LENGTH` is 417.
-  A column's `page_length` of 0 still means no limit, and `page_length=0` every row
-  (parity).
+- **No cap on sent columns** (PE-23 withdrawn by the owner, 20 Nov 2026): any number of
+  `kanban_columns` is taken, as `backend/`. A column's `page_length` of 0 still means no
+  limit, and `page_length=0` every row (parity).
 - **Gating.** Ported now onto `test-widgets/list-view/`: all of `test_get_data.py`
   (`:301` with a real view row; `:322`, `:345` with `hidden_fields`; `:284` with the
   second resource; `:442`, `:448` become 401 and the route's 404). Twins now:
@@ -876,7 +875,7 @@ Settings. Paths in this section are `backend/frappe_core/api/doc.py` unless name
 | 8 | Who edits `accounts` for §8 | decided: this unit, in milestone 4, one commit per file's concern |
 | 15 | Guard exceptions for `access_key`, `api_key` | decided: written, reviewed entries at the milestone that builds each (3, 4) |
 | 5 | The outbound HTTP helper before INTEGRATIONS | decided (A-30, DECISIONS 31): `backend/crm_app/integrations/http.py` ported whole as `core/http.py` (§4.3) |
-| 4 | `POST /api/v1/email-accounts/` served? A PATCH re-validates? | decided (A-33, DECISIONS 36): parity, served (for System Manager or Administrator since PE-27), no re-validation, a sent password ignored (section 4.4); the discarded password and the stale naming field after a rename are parked for the owner (DECISIONS 37, 38) |
+| 4 | `POST /api/v1/email-accounts/` served? A PATCH re-validates? | decided (A-33, DECISIONS 36): parity, served (for System Manager or Administrator since PE-27), no re-validation (section 4.4); the owner then decided the sent password is stored (PE-30, DECISIONS 37) and a rename updates the naming field (PE-31, DECISIONS 38) |
 | 7 | Where mail validation lives; how `core/mail.py` reaches an Email Account | decided (A-33, DECISIONS 39): the validators in `core/mail.py`; saved accounts through `MAIL_ACCOUNT_PROVIDER = "configuration.mail"`, with a system check (section 4.4) |
 | 2, 9 | What "doctype exists" means; what a child table and a withheld doctype answer, per call; copying or regenerating `doctype_meta.json` and where its generator lives | decided (A-35, DECISIONS 41, 42): the file copied and its generator and staleness test ported, wired into CI; a doctype exists when declared and served or a served child; withheld 404 everywhere (PE-14); a child answers `getdoctype` and the layout calls only (PE-15) (section 4.5) |
 | 10 | Sensitive column names in field metadata | decided (A-35, DECISIONS 43): every metadata answer leaves out the fields the caller may not read, sensitive and restricted (PE-16) |

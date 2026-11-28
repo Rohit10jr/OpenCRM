@@ -1,7 +1,7 @@
 """Email Account: new tests for what no old test covers (specs/CONFIGURATION.md 4.4).
 
-The resource's closed doors for a non-manager, the sensitive fields, parity on update
-(decision 4), rename (parked question, today's behaviour pinned), the link to the user's
+The resource's closed doors for a non-manager, the sensitive fields, the credentials a
+create or update stores (PE-30), rename (parked question, today's behaviour pinned), the link to the user's
 `user_emails`, and the saved-account provider core.mail reaches (decision 7). No test
 opens a real mail connection.
 """
@@ -90,27 +90,115 @@ def test_a_secret_is_refused_by_name_filter_and_value(api_as, administrator, acc
     assert value.json()["message"] == f"Field {field!r} is not readable"
 
 
-def test_a_password_sent_on_update_is_ignored(api_as, manager, account):
-    """Parity (decision 4; known difference from upstream, DECISIONS 37)."""
+def test_a_password_sent_on_update_is_stored(api_as, manager, account):
+    """PE-30 (owner, 20 Nov 2026), as upstream; was parity (decision 4, DECISIONS 37)."""
     response = api_as(manager).patch(
         f"{ACCOUNTS}{account.name}/", {"password": "new-secret", "smtp_port": 25}, format="json"
     )
     assert response.status_code == 200, response.content[:300]
     account.refresh_from_db()
-    assert account.get_password("password") == "secret-1"
+    assert account.get_password("password") == "new-secret"
     assert account.smtp_port == 25
+
+
+@pytest.mark.parametrize("empty", ["", None])
+@pytest.mark.parametrize("field", ["password", "api_secret"])
+def test_pe30_an_empty_secret_leaves_the_stored_one(api_as, manager, administrator, field, empty):
+    row = make(administrator, password="secret-1", api_secret="secret-1")
+    response = api_as(manager).patch(f"{ACCOUNTS}{row.name}/", {field: empty}, format="json")
+    assert response.status_code == 200, response.content[:300]
+    row.refresh_from_db()
+    assert row.get_password(field) == "secret-1"
+
+
+def test_pe30_an_api_secret_sent_on_update_is_stored(api_as, manager, account):
+    api_as(manager).patch(f"{ACCOUNTS}{account.name}/", {"api_secret": "k-2"}, format="json")
+    account.refresh_from_db()
+    assert account.get_password("api_secret") == "k-2"
+
+
+def test_pe30_a_password_sent_on_create_is_stored_and_never_answered(api_as, manager):
+    response = api_as(manager).post(
+        ACCOUNTS,
+        {"email_account_name": "Sales", "email_id": "sales@example.com", "password": "pw-create"},
+        format="json",
+    )
+    assert response.status_code == 200, response.content[:300]
+    assert "pw-create" not in response.content.decode()
+    assert "password" not in response.json()["message"]
+    stored = EmailAccount.objects.get(pk="Sales")
+    assert stored.get_password("password") == "pw-create"
+    assert "pw-create" not in EmailAccount.objects.filter(pk="Sales").values_list("password", flat=True)[0]
+
+
+def test_pe30_the_update_answer_carries_no_secret(api_as, manager, account):
+    response = api_as(manager).patch(
+        f"{ACCOUNTS}{account.name}/", {"password": "never-shown"}, format="json"
+    )
+    assert "never-shown" not in response.content.decode()
+    assert "password" not in response.json()["message"]
+
+
+@pytest.mark.parametrize("field,label", [("password", "Password"), ("api_secret", "API Secret")])
+def test_pe30_a_secret_over_140_characters_is_refused_without_its_value(
+    api_as, manager, account, field, label
+):
+    """Upstream's Password is varchar 140 ("Value too big"); the refusal never echoes it."""
+    secret = "s" * 140 + "TAIL"
+    response = api_as(manager).patch(f"{ACCOUNTS}{account.name}/", {field: secret}, format="json")
+    assert response.status_code == 417
+    assert response.json()["message"] == (
+        f"Email Account Support: '<strong>{label}</strong>' will get truncated, "
+        "as max characters allowed is 140"
+    )
+    assert "TAIL" not in response.content.decode()
+    account.refresh_from_db()
+    assert account.get_password("password") == "secret-1"
+
+
+def test_pe30_a_140_character_secret_is_stored(api_as, manager, account):
+    secret = "k" * 140
+    response = api_as(manager).patch(f"{ACCOUNTS}{account.name}/", {"api_secret": secret}, format="json")
+    assert response.status_code == 200, response.content[:300]
+    account.refresh_from_db()
+    assert account.get_password("api_secret") == secret
+
+
+@pytest.mark.parametrize("field", ["password", "api_secret"])
+def test_pe30_140_four_byte_characters_fit_the_column(api_as, manager, account, field):
+    """The 140 limit counts characters; the column holds the ciphertext of 560 bytes."""
+    secret = "\U0001F600" * 140
+    response = api_as(manager).patch(f"{ACCOUNTS}{account.name}/", {field: secret}, format="json")
+    assert response.status_code == 200, response.content[:300]
+    account.refresh_from_db()
+    assert account.get_password(field) == secret
+
+
+@pytest.mark.parametrize("sent", [" pass word ", "   "])
+def test_pe30_a_password_is_stored_as_sent(api_as, manager, account, sent):
+    """Not trimmed, as upstream; a password of spaces is a password."""
+    api_as(manager).patch(f"{ACCOUNTS}{account.name}/", {"password": sent}, format="json")
+    account.refresh_from_db()
+    assert account.get_password("password") == sent
+
+
+def test_pe30_a_non_admin_still_cannot_set_it(api_as, alice, account):
+    response = api_as(alice).patch(f"{ACCOUNTS}{account.name}/", {"password": "x"}, format="json")
+    assert response.status_code == 403
+    account.refresh_from_db()
+    assert account.get_password("password") == "secret-1"
 
 
 # --- rename (parked question, DECISIONS 38) ------------------------------------------------
 
 
-def test_a_rename_keeps_the_naming_field_at_the_old_value(api_as, manager, account):
-    """Today's behaviour, as backend/: only the key changes. Upstream also updates
-    `email_account_name`; this test pins parity until the owner decides."""
+def test_a_rename_sets_the_naming_field(api_as, manager, account):
+    """PE-31 (owner, 20 Nov 2026): as upstream, the naming field follows the new name;
+    `backend/` kept it at the old value (DECISIONS 38)."""
     response = api_as(manager).post(f"{ACCOUNTS}Support/rename/", {"new_name": "Help Desk"}, format="json")
     assert response.status_code == 200, response.content[:300]
     renamed = EmailAccount.objects.get(pk="Help Desk")
-    assert renamed.email_account_name == "Support"
+    assert renamed.email_account_name == "Help Desk"
 
 
 # --- the link to the user's user_emails ---------------------------------------------------

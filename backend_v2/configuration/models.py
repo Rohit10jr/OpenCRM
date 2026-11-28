@@ -477,12 +477,13 @@ class EmailAccount(BaseDocument):
     smtp_port = models.IntegerField(null=True, blank=True)
     email_server = models.CharField(max_length=140, blank=True, default="")
     # An encrypted secret longer than about 143 bytes does not fit 280 (parity).
-    password = EncryptedCharField(max_length=280, blank=True, default="")
+    # 851: Fernet + "enc$v1$" of 140 four-byte characters (PE-30).
+    password = EncryptedCharField(max_length=851, blank=True, default="")
     no_smtp_authentication = models.BooleanField(default=False)
     add_signature = models.BooleanField(default=False)
     signature = models.TextField(blank=True, default="")
     api_key = models.CharField(max_length=280, blank=True, default="")
-    api_secret = EncryptedCharField(max_length=280, blank=True, default="")
+    api_secret = EncryptedCharField(max_length=851, blank=True, default="")
     frappe_mail_site = models.CharField(max_length=280, blank=True, default="")
     append_to = models.CharField(max_length=140, blank=True, default="")
     domain = models.CharField(max_length=140, blank=True, default="")

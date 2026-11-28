@@ -235,8 +235,7 @@ comparison skips that block.
 
 - **Status:** approved by the owner (20 Nov 2026), widening the supervisor's first
   decision (`temp` A-30, DECISIONS 33, 18 Nov 2026); built in `c072147`, `9aa9a82`; the
-  currency rule below is to be built (`temp` A-48 3d). Until then a currency is exactly
-  three ASCII letters
+  currency rule below built with this text (`temp` A-48 3d)
 - **Where:** `GET /api/v1/exchange-rate/` (old `crm.api.exchange_rate.get_exchange_rate`)
 - `date` is `latest` or an ISO date (ASCII digits, a real calendar date); a currency is
   ASCII letters and digits, 2 to 5 characters. The old backend passes both through. A
@@ -522,19 +521,10 @@ comparison skips that block.
   withheld doctype or a settings record
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
-### PE-23. A list view takes at most `MAX_PAGE_LENGTH` kanban columns
+### PE-23. Removed
 
-- **Status:** proposed — decided by the supervisor on the owner's behalf and flagged for
-  the owner (`temp` A-40, 18 Nov 2026); built in `f743a80`
-- **Where:** `GET` and `POST /api/v1/<resource>/list-view/` with `kanban_columns`
-- **Old backend:** accepts any number of sent columns
-  (`backend/frappe_core/api/doc.py:484-526`)
-- **backend_v2:** a sent `kanban_columns` list longer than `MAX_PAGE_LENGTH` is 417 "At
-  most 500 kanban columns". A
-  column's `page_length` of 0 still means no limit, and `page_length=0` every row, as
-  before
-- **Why:** the same limit as a list page's length
-- **Recorded by:** CONFIGURATION, 18 Nov 2026
+Withdrawn by the owner (20 Nov 2026; `temp` A-48 3e): the list view takes any number of
+sent kanban columns again, as the old backend and upstream. The number is not reused.
 
 ### PE-12e. List-view crashes answer as errors
 
@@ -565,8 +555,10 @@ comparison skips that block.
 
 - **Status:** approved by the owner (20 Nov 2026), rewriting the supervisor's first
   decision (`temp` A-41, A-42, DECISIONS 58 and, for the child-row caches, 60; 19 Nov
-  2026; rewritten by `temp` A-48 3c); to be built, for the resources already built
-  first and for later units as they are built
+  2026; rewritten by `temp` A-48 3c; Currency added by `temp` A-63 item 1); built for
+  the resources already served: Email Account (before), Currency, CRM Fields Layout, CRM
+  Form Script, Salutation, Address and CRM Industry; later units as they are built. User
+  and CRM Invitation come with ACCOUNTS §10
 - **Where:** `POST /api/v1/<resource>/<name>/rename/` (old `frappe.client.rename_doc`);
   and the Contact Email and Contact Phone row routes,
   `PATCH /api/v1/contacts/<name>/email-ids/<row>/` and `.../phone-nos/<row>/` (old
@@ -575,8 +567,9 @@ comparison skips that block.
   (`backend/crm_app/api/client.py:462-495`); the row edit writes the underscore caches
   of the row (`:421-446`)
 - **backend_v2:** rename is served for the doctypes upstream marks `allow_rename`, and
-  needs the write rule. Not served: Gender, CRM Task, CRM View Settings, CRM Global
-  Settings, CRM Sales Hierarchy. A child-row write never writes the underscore caches
+  needs the write rule. Not served: Gender, Country, Language, CRM Task, CRM View
+  Settings, CRM Global Settings, CRM Sales Hierarchy. A rename sets a `FieldValue` naming
+  field (PE-31). A child-row write never writes the underscore caches
 - **Why:** upstream refuses a rename where `allow_rename` is off
   (`frappe/model/rename_doc.py:379-380`); the caches are written by their own calls
   (`API_CONTRACT.md:240`)
@@ -675,6 +668,48 @@ comparison skips that block.
   `frappe/contacts/doctype/address/address.json`); `backend_v2` grants nothing to a
   user with no CRM role
 - **Recorded by:** A-48 group 2, 21 Nov 2026
+
+### PE-30. A password sent to an Email Account is stored
+
+- **Status:** approved by the owner (20 Nov 2026; `temp` A-48 3a, A-63 item 2, DECISIONS
+  37); built with this entry
+- **Where:** `POST /api/v1/email-accounts/` and `PATCH /api/v1/email-accounts/<name>/`
+  (old `/api/resource/Email Account`)
+- **Old backend:** a `password` or `api_secret` in a create or an update through the
+  resource is discarded (`backend/frappe_core/serializers.py:250-257`)
+- **backend_v2:** a non-empty `password` or `api_secret` sent on create or PATCH is
+  stored as sent (not trimmed), encrypted at rest; one longer than 140 characters is 417
+  "Email Account <name>: '<strong>Password</strong>' will get truncated, as max
+  characters allowed is 140" (or API Secret), upstream's "Value too big" without the
+  value it echoes. Neither is ever in a response, and both stay refused in `fields`,
+  `filters` and `value/`
+- **Differs from upstream too, on an empty value:** null or "" leaves the stored value
+  as it is. Upstream deletes the stored password on "" or null and ignores its `*****`
+  placeholder (v15 `frappe/model/base_document.py:1129-1150`). backend_v2 never returns
+  the placeholder, so the account screen sends `password: null` with every save; clearing
+  on null would wipe the password at each save. Two effects: a password cannot be cleared
+  through the resource, and a literal `*****` is stored as the password
+- **Why:** upstream stores it, and the account screen sends `password` with every save
+  (`frontend/src/components/Settings/EmailEdit.vue:104-118`)
+- **Recorded by:** A-48 group 3, 21 Nov 2026
+
+### PE-31. Rename updates the field the name is taken from
+
+- **Status:** approved by the owner (20 Nov 2026; `temp` A-48 3b, DECISIONS 38); built
+  with this entry
+- **Where:** `POST /api/v1/<resource>/<name>/rename/` on every resource named by
+  `FieldValue` (old `frappe.client.rename_doc`); today Email Account
+  (`email_account_name`), and each resource 3c opts in
+- **Old backend:** the record takes the new name and the naming field keeps the old
+  value (`backend/frappe_core/rename.py:41-45`)
+- **backend_v2:** the naming field is set to the new name, in the same transaction
+- **Differs from upstream too, for a link naming field:** it keeps its value; upstream
+  writes the new name into any `field:` autoname field, a Link included. The one
+  upstream doctype it reaches is CRM Telephony Agent (`autoname: field:user`,
+  `allow_rename: 1`), not built yet: the rule is decided when INTEGRATIONS specifies it
+- **Why:** upstream updates it (`frappe/model/rename_doc.py:323-328`, for `field:`
+  autonames)
+- **Recorded by:** A-48 group 3, 21 Nov 2026
 
 ---
 

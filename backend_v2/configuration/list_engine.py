@@ -22,7 +22,6 @@ from core.filters import normalize_filters, resolve_me_tokens
 from core.inputs import parse_json_param
 from core.exceptions import FilterError
 from core.query import (
-    MAX_PAGE_LENGTH,
     coerce_page_length,
     concrete_field_names,
     count_rows,
@@ -279,8 +278,6 @@ def _records_in_order(viewset, queryset, fields, filters, page_length, order, us
 def kanban(viewset, model, definition, queryset, *, filters, order_by, rows, column_field,
            title_field, kanban_columns, kanban_fields, user):
     """The kanban branch: one entry per column, each with its cards and counts."""
-    if len(kanban_columns) > MAX_PAGE_LENGTH:
-        raise ValidationError(f"At most {MAX_PAGE_LENGTH} kanban columns")  # PE-23
     check_kanban_shapes(rows, kanban_columns, kanban_fields)
     check_fieldname(title_field, "Title field")
     if column_field:

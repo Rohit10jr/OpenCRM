@@ -270,7 +270,7 @@ def _reads_currency(user) -> bool:
     return _is_system_admin(user) or bool(user.get_roles() & CURRENCY_READERS)
 
 
-class CurrencyViewSet(LinkSearchMixin, DocumentViewSet):
+class CurrencyViewSet(RenameMixin, LinkSearchMixin, DocumentViewSet):
     """Read by System Manager, Administrator and the CRM and accounting roles above; a
     caller with none gets an empty list and 403 by name (old `platform_docs.py:504-529`).
     Every column readable, filterable and sortable."""
@@ -335,8 +335,8 @@ class ExchangeRateView(BaseAPIView):
 class EmailAccountViewSet(RenameMixin, DocumentViewSet):
     """System Manager or Administrator lists, reads, creates, writes, renames and deletes
     an Email Account; anyone else gets an empty list and 403 (PE-27). Saved through the
-    resource without validation, service defaults or the name check, and a `password` or
-    `api_secret` sent on update is ignored, as in `backend/` (decision 4). The sensitive
+    resource without validation, service defaults or the name check, as in `backend/`
+    (decision 4); a non-empty `password` or `api_secret` is stored (PE-30). The sensitive
     and restricted fields are applied by the model's declarations on every route."""
 
     access = Access.ruled()
@@ -459,7 +459,7 @@ def _is_admin_or_manager(user) -> bool:
     )
 
 
-class CRMFieldsLayoutViewSet(DocumentViewSet):
+class CRMFieldsLayoutViewSet(RenameMixin, DocumentViewSet):
     """Everyone reads a layout; Administrator or the manager pair creates, writes and
     deletes one (old `metadata_docs.py:126-132`). A layout's field lists hold fieldnames
     (PE-18). Every column readable, filterable and sortable."""
@@ -510,7 +510,7 @@ class CRMFieldsLayoutViewSet(DocumentViewSet):
         return Response(Envelope(stored, "message"))
 
 
-class CRMFormScriptViewSet(DocumentViewSet):
+class CRMFormScriptViewSet(RenameMixin, DocumentViewSet):
     """Everyone lists and reads a form script; System Manager or Administrator creates,
     changes and deletes one (PE-17). Every column readable, filterable and sortable."""
 
