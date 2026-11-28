@@ -557,8 +557,10 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   decision (`temp` A-41, A-42, DECISIONS 58 and, for the child-row caches, 60; 19 Nov
   2026; rewritten by `temp` A-48 3c; Currency added by `temp` A-63 item 1); built for
   the resources already served: Email Account (before), Currency, CRM Fields Layout, CRM
-  Form Script, Salutation, Address and CRM Industry; later units as they are built. User
-  and CRM Invitation come with ACCOUNTS §10
+  Form Script, Salutation, Address and CRM Industry, then User and CRM Invitation (ACCOUNTS
+  §10); later units as they are built. User's rename needs System Manager or
+  Administrator, not the write rule (PE-32); and "the caches are written by their own
+  calls" has one more writer, the User rename's `_assign` / `_liked_by` rewrite
 - **Where:** `POST /api/v1/<resource>/<name>/rename/` (old `frappe.client.rename_doc`);
   and the Contact Email and Contact Phone row routes,
   `PATCH /api/v1/contacts/<name>/email-ids/<row>/` and `.../phone-nos/<row>/` (old
@@ -710,6 +712,39 @@ sent kanban columns again, as the old backend and upstream. The number is not re
 - **Why:** upstream updates it (`frappe/model/rename_doc.py:323-328`, for `field:`
   autonames)
 - **Recorded by:** A-48 group 3, 21 Nov 2026
+
+### PE-32. A User rename, and a token valid for one account
+
+- **Status:** approved by the owner (20-21 Nov 2026; `temp` A-51, A-53 to A-55, A-61
+  items 2-3; `specs/ACCOUNTS.md` §10); built with this text
+- **Where:** every token issued by `/api/v1/auth/` and checked by authentication and
+  refresh; `POST /api/v1/users/<name>/rename/` (old `frappe.client.rename_doc` with
+  `doctype=User`)
+- **Old backend:** a new account starts at token version 0, so an account created under
+  a name used before starts where the earlier one started; the old backend never renames
+  a User
+- **backend_v2:** every account starts at a random token version (at most 2**62), and
+  migration `accounts/0006` gave every existing account a fresh one once, which signed
+  everyone out once. A token issued to one account matches a later account of the same
+  name only by chance (about one in 2**62). A User rename is System Manager's or
+  Administrator's (not the User write rule); it revokes the user's tokens (a fresh
+  random version, and every outstanding refresh token blacklisted), clears the reset key,
+  and rewrites the name in every `_assign` and `_liked_by` list; it leaves the user names
+  inside `UserSettings.data` and a saved view's `filters` as they are
+- **Differs from upstream too, on the new name:** it is stripped and lowercased, and it
+  must be exactly one plain address. Upstream strips it and accepts what
+  `validate_email_address` accepts, a comma-separated list included (v15
+  `frappe/core/doctype/user/user.py` `validate_email_type`). A refusal prints the address
+  as typed, as upstream does. A name over 140 characters is 417 in upstream's "Value too
+  big" shape, where upstream's database would refuse it
+- **Known, not changed:** two concurrent renames into the same new name can end in a
+  500 (the taken check runs before the lock; upstream locks the new name `FOR UPDATE`);
+  this predates the User rename. Django admin sessions of the old name are not cleared,
+  as upstream clears both names' sessions: such a session finds no user, or fails
+  Django's session hash against a re-created account's different password
+- **Why:** a token names its account by name only; a random start keeps a token valid
+  for the one account it was issued to
+- **Recorded by:** ACCOUNTS, 21 Nov 2026
 
 ---
 

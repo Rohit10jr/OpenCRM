@@ -73,13 +73,14 @@ def test_a_user_can_be_created_disabled():
 
 def test_admin_disables_a_user_and_revokes_their_tokens(admin_client, alice):
     before = _login(alice)
+    version = alice.token_version  # PE-32: a random start
 
     response = admin_client.post(_change_url(alice), {})
 
     assert response.status_code == 302, response.content[:300]
     alice.refresh_from_db()
     assert alice.enabled is False
-    assert alice.token_version == 1
+    assert alice.token_version == version + 1
     assert _whoami(before["access"]).status_code == 401
 
 

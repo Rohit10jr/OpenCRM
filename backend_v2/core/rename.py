@@ -105,8 +105,38 @@ def _blank_for(field):
     raise ValueError(field.name)
 
 
-def rename_document(model, old: str, new: str) -> str:
-    """Copy ``old`` under ``new``, repoint references, then remove ``old``."""
+#: The JSON name-list caches a user rename rewrites (ACCOUNTS §10.6, PE-32).
+JSON_NAME_LIST_FIELDS = ("_assign", "_liked_by")
+
+
+def repoint_json_name_lists(old: str, new: str) -> int:
+    """Rewrite ``old`` to ``new`` in every model's `_assign` and `_liked_by` lists.
+
+    An element equal to ``old`` exactly becomes ``new``; order and duplicates are kept,
+    a near-match is left. A plain ``update()``: `modified` is not bumped and no save hook
+    runs. Answers the number of rows changed."""
+    changed = 0
+    for other_model in apps.get_models():
+        names = {field.name for field in other_model._meta.concrete_fields}
+        for fieldname in JSON_NAME_LIST_FIELDS:
+            if fieldname not in names:
+                continue
+            rows = other_model._default_manager.filter(**{f"{fieldname}__contains": [old]})
+            for pk, values in rows.values_list("pk", fieldname):
+                if not isinstance(values, list):
+                    continue
+                rewritten = [new if value == old else value for value in values]
+                if rewritten != values:
+                    other_model._default_manager.filter(pk=pk).update(**{fieldname: rewritten})
+                    changed += 1
+    return changed
+
+
+def rename_document(model, old: str, new: str, *, on_renamed=None) -> str:
+    """Copy ``old`` under ``new``, repoint references, then remove ``old``.
+
+    ``on_renamed(old, new)`` runs inside the transaction after the repointing and before
+    the old row is deleted, so a failure there leaves everything as it was."""
 
     doctype = doctype_of(model)
     with transaction.atomic():
@@ -132,6 +162,8 @@ def rename_document(model, old: str, new: str) -> str:
         _repoint_child_parents(model, old, new)
         _repoint_dynamic_links(doctype, old, new)
         _repoint_text_links(model, old, new)
+        if on_renamed is not None:
+            on_renamed(old, new)
         model._default_manager.filter(pk=old).delete()
         if parked:
             model._default_manager.filter(pk=new).update(**parked)

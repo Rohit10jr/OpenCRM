@@ -60,9 +60,18 @@ DIRECT_MANAGER_READS = {
         "Forgot password runs before any request user exists; it finds the account by "
         "address and answers one sentence whatever it finds (old auth_pages.py:81)."
     ),
-    ("accounts/front_door.py", "_blacklist_outstanding_tokens", "OutstandingToken.objects"): (
-        "logout_all_sessions blacklists the authenticated account's own refresh tokens, "
-        "after the reset key or old password proved who it is."
+    ("accounts/authentication.py", "revoke_all_tokens", "OutstandingToken.objects"): (
+        "Blacklists one account's own refresh tokens; its callers authorized it first: "
+        "logout_all_sessions after the reset key or old password proved who it is, and "
+        "the User rename after the System Manager rule (ACCOUNTS §10.4)."
+    ),
+    ("accounts/rename.py", "name_taken", "User._default_manager"): (
+        "The rename's taken check must see every account, the built-ins and those the "
+        "User list rule hides, case-insensitively (ACCOUNTS §10.2 row 6)."
+    ),
+    ("accounts/rename.py", "on_user_renamed", "User._default_manager"): (
+        "Inside the authorized rename's transaction: one update of the renamed row "
+        "itself, then that row for the token revocation (ACCOUNTS §10.3-10.4)."
     ),
     ("accounts/password_reset.py", "issue_key", "User._default_manager"): (
         "A write-only update of one account's reset-key columns from a guest endpoint."
@@ -206,6 +215,14 @@ DIRECT_MANAGER_READS = {
     ("core/mixins/rename.py", "RenameMixin.rename", "self.document_model._default_manager"): (
         "Rename must distinguish a missing row from one excluded by its list rule, then "
         "apply the resource's object-write rule to the directly loaded document."
+    ),
+    ("core/mixins/rename.py", "RenameMixin.name_taken", "self.document_model._default_manager"): (
+        "The taken check (moved out of rename into its hook) must see every row, list "
+        "rule or not, as upstream's validate_rename does: a hidden row still holds the name."
+    ),
+    ("core/rename.py", "repoint_json_name_lists", "other_model._default_manager"): (
+        "A user rename rewrites the old name in every _assign/_liked_by list, schema-wide "
+        "and write-only, after the User resource has authorized the rename (ACCOUNTS §10.6)."
     ),
     ("core/rename.py", "_repoint_foreign_keys", "relation.related_model._default_manager"): (
         "Rename performs schema-wide write-only foreign-key updates after the target "

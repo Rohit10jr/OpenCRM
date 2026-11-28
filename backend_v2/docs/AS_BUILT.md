@@ -62,8 +62,10 @@ are recorded in SimpleJWT's blacklist tables; logout blacklists a supplied refre
 without revoking other sessions.
 
 Every issued token carries the user's `token_version`. Authentication and refresh both
-refuse a stale version, while a missing claim counts as version zero for tokens issued
-before this mechanism existed. `accounts.authentication.bump_token_version()` uses an
+refuse a stale version; a missing claim counts as version zero, which no account holds:
+every account starts at a random version (`new_token_version()`, at most 2**62, a
+`PositiveBigIntegerField`; PE-32), and `accounts/0006` gave every existing row a fresh one
+once. `accounts.authentication.bump_token_version()` uses an
 `F()` update and reloads the user. `User.save()` calls it on every save while the user is
 disabled, preventing old tokens from becoming valid again after re-enabling. The only
 other trigger, `update_password` with `logout_all_sessions`, is ACCOUNTS'; a password
@@ -95,8 +97,15 @@ the delete-time dynamic-link check, the DocType search and the delete cascade fi
 `BaseDocument`, forces an insert on create, so a name differing only by case is a
 duplicate (409, the raw body: `User` has no naming strategy), never an update.
 `UserViewSet` (`/api/v1/users/`) carries the old static rules, emits `user_emails: []`
-until CONFIGURATION, ignores a `name` sent on update (PE-7, proposed), and opts in to
-search only — never export, rename, bulk update or bulk delete. Its directory and role
+until CONFIGURATION, ignores a `name` sent on update (PE-7), and opts in to search and
+rename only — never export, bulk update or bulk delete. Rename (PE-32, ACCOUNTS §10,
+`accounts/rename.py`) is System Manager's or Administrator's; it normalises the new
+name, refuses a built-in and anything but one plain address, checks the name case-
+insensitively, and inside its transaction sets `email`, clears the reset key, draws a
+fresh token version, blacklists the refresh tokens and rewrites `_assign` / `_liked_by`;
+the old name's lockout counter is cleared on commit (through `LoginAttemptTracker`, keyed
+as login keys it). (CRM Invitation, too, opts in to rename, with its write rule.) The
+User resource's directory and role
 actions (`directory/`, `info/`, `add-existing/`, `<name>/update-role/`,
 `<name>/remove-crm-roles/`) read `User` directly, as the old endpoints did; the two
 per-user role actions never load the target through `get_object()`.
@@ -594,6 +603,13 @@ No production resource opts in yet; `tests_support.WidgetViewSet` proves the mec
 starts from the model's default manager so list-invisible rows still reach the static
 object-write rule. Merge, missing, unchanged, taken, and write-denied refusals keep the
 old order, 417 status, and wording before `core.naming.validate_name` runs. A resource
+that renames its own way overrides four hooks (ACCOUNTS §10): `before_rename(instance,
+old, new)` right after the record is found, answering the name every later check uses;
+`name_taken(new, old)`; `rename_rule(user, instance)` in place of the write rule; and
+`on_renamed(old, new)`, which `rename_document` calls inside its transaction after the
+repointing and before the old row's delete. `core.rename.repoint_json_name_lists(old,
+new)` rewrites exact matches in every `_assign` / `_liked_by` list with `update()`. A
+resource
 opts in where upstream's `allow_rename` is on (PE-24): today Email Account, Currency,
 CRM Fields Layout, CRM Form Script, Salutation, Address and CRM Industry.
 

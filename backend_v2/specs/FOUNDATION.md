@@ -105,7 +105,8 @@ or a plain reset revokes nothing in `backend/`; `specs/ACCOUNTS.md` §4.4).
 - **Login, logout, token refresh and the logged-in user**, as routes under
   `/api/v1/auth/`, with the exact responses, refusals and refresh-token rotation of the
   old paths (`frappe_core/api/auth.py`).
-- **`User.token_version`**, never on the wire: every token carries it, and refresh and
+- **`User.token_version`**, never on the wire (since ACCOUNTS §10.5, a random start per
+  account in a bigint column, PE-32): every token carries it, and refresh and
   authentication refuse a token whose version is stale
   (`frappe_core/authentication.py:VersionedJWTAuthentication`, applied in `get_user` so
   the WebSocket consumer gets it too; `tests/test_token_version.py`; KNOWN_ISSUES §6,

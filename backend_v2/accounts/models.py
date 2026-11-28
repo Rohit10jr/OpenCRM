@@ -8,6 +8,7 @@ from django.utils import timezone
 from core.models import BaseDocument, TreeDocument
 from core.naming import Hash
 
+from .authentication import new_token_version
 from .roles import ADMINISTRATOR, GUEST, ROLE_ADMINISTRATOR, ROLE_SYSTEM_MANAGER
 
 
@@ -74,7 +75,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         max_length=64, blank=True, default="", db_index=True
     )
     last_reset_password_key_generated_on = models.DateTimeField(null=True, blank=True)
-    token_version = models.PositiveIntegerField(default=0)
+    token_version = models.PositiveBigIntegerField(default=new_token_version)
     is_staff = models.BooleanField(default=False)
     creation = models.DateTimeField(default=timezone.now, editable=False)
     modified = models.DateTimeField(auto_now=True)

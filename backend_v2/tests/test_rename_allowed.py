@@ -112,9 +112,6 @@ def test_an_outsider_cannot_rename_an_industry(make_user, administrator, api_as)
         "view-settings",
         "global-settings",
         "sales-hierarchies",
-        # Upstream allows these two; they wait for ACCOUNTS §10 (PE-24).
-        "users",
-        "invitations",
     ],
 )
 def test_no_rename_where_upstream_allows_none(boss, api_as, resource):
