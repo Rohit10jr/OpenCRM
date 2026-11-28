@@ -291,7 +291,7 @@ GET {{host}}/api/v1/views/?doctype=CRM%20Lead
 Authorization: Bearer {{token}}
 
 ### 3.4 get_data with explicit columns is a custom view: is_default false, columns as given
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message.is_default == false
 # @expect $.message.columns count 1
 # @expect $.message.columns[0].key == lead_name
@@ -477,7 +477,7 @@ GET {{host}}/api/v1/view-settings/?fields=["name"]&filters=[["user","=","Adminis
 Authorization: Bearer {{token}}
 
 ### 4.6 get_data now loads the standard view (step 3 of get_data): is_default false, saved columns
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message.is_default == false
 # @expect $.message.columns contains lead_name
 POST {{host}}/api/method/crm.api.doc.get_data
@@ -523,7 +523,7 @@ Content-Type: application/json
 # ---- get_data in its three modes ------------------------------------------------------------------
 
 ### 5.1 kanban: one entry per status column, each with its cards -> 200
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message.view_type == kanban
 # @expect $.message.kanban_columns count 6
 # @expect $.message.data[0].column.name == New
@@ -537,7 +537,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "filters": {}, "column_field": "status", "title_field": "lead_name", "kanban_fields": ["name", "lead_name", "email"], "page_length": 5, "view": {"view_type": "kanban"}}
 
 ### 5.2 kanban with explicit columns: only those, in that order
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message.kanban_columns count 2
 # @expect $.message.data[0].column.name == Contacted
 # @expect $.message.data[1].column.name == New
@@ -548,7 +548,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "filters": {}, "column_field": "status", "kanban_columns": [{"name": "Contacted"}, {"name": "New"}], "kanban_fields": ["name"], "page_length": 5, "view": {"view_type": "kanban"}}
 
 ### 5.3 kanban on a Select column (task status) -> the Select's options become columns
-# @waiting CONFIGURATION
+# @waiting ACTIVITIES
 # @expect $.message.kanban_columns count 5
 # @expect $.message.data[0].column.name == Backlog
 POST {{host}}/api/method/crm.api.doc.get_data
@@ -558,7 +558,7 @@ Content-Type: application/json
 {"doctype": "CRM Task", "filters": {}, "column_field": "status", "kanban_fields": ["name", "title"], "page_length": 5, "view": {"view_type": "kanban"}}
 
 ### 5.4 group_by: the field descriptor comes back with its options resolved from the data
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message.view_type == group_by
 # @expect $.message.group_by_field.fieldname == status
 # @expect $.message.group_by_field.options exists
@@ -570,7 +570,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "filters": {}, "page_length": 50, "view": {"view_type": "group_by", "group_by_field": "status"}}
 
 ### 5.5 page_length and page_length_count are echoed; total_count ignores paging
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message.page_length == 2
 # @expect $.message.page_length_count == 2
 # @expect $.message.row_count == 2
@@ -581,7 +581,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "filters": {}, "page_length": 2, "page_length_count": 2, "view": {"view_type": "list"}}
 
 ### 5.6 a hidden field (CRM Lead.image, crm_lead.py get_hidden_fields) is dropped from columns
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message.columns excludes "key": "image"
 POST {{host}}/api/method/crm.api.doc.get_data
 Authorization: Bearer {{token}}
@@ -590,15 +590,14 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "filters": {}, "columns": [{"label": "Image", "type": "Data", "key": "image"}, {"label": "Name", "type": "Data", "key": "lead_name"}], "rows": ["name"], "page_length": 1, "view": {"view_type": "list"}}
 
 ### 5.7 the standard fields are always appended to rows
-# @waiting CONFIGURATION
 # @expect $.message.rows contains _assign
 # @expect $.message.rows contains _liked_by
 # @expect $.message.rows contains modified_by
-POST {{host}}/api/method/crm.api.doc.get_data
+POST {{host}}/api/v1/organizations/list-view/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"doctype": "CRM Organization", "filters": {}, "page_length": 1, "view": {"view_type": "list"}}
+{"filters": {}, "page_length": 1, "view": {"view_type": "list"}}
 
 ### 5.8 an unknown doctype -> 404 DoesNotExistError
 # @negative
@@ -710,7 +709,7 @@ Content-Type: application/json
 {"dt": "CRM Lead", "view": "Form", "enabled": 1, "script": "1"}
 
 ### 7.4 get_data hands the script to the browser as a bare string when there is one
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message.form_script == console.log('zz')
 # @expect $.message.list_script == null
 POST {{host}}/api/method/crm.api.doc.get_data
@@ -728,7 +727,7 @@ Content-Type: application/json
 {"enabled": 0}
 
 ### 7.6 -> form_script null
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message.form_script == null
 POST {{host}}/api/method/crm.api.doc.get_data
 Authorization: Bearer {{token}}

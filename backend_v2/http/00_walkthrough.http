@@ -222,7 +222,7 @@ GET {{host}}/api/resource/CRM%20Lead/{{lead_name}}
 Authorization: Bearer {{token}}
 
 ### 3.3 The list screen's real engine: get_data -> data + columns + rows + views in one payload
-# @waiting CONFIGURATION
+# @waiting SALES
 POST {{host}}/api/method/crm.api.doc.get_data
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -230,7 +230,7 @@ Content-Type: application/json
 {"doctype": "CRM Lead", "filters": {}, "order_by": "modified desc", "page_length": 5, "view": {"view_type": "list"}}
 
 ### 3.4 `@me` resolves to the caller -> only leads whose lead_owner is you
-# @waiting CONFIGURATION
+# @waiting SALES
 POST {{host}}/api/method/crm.api.doc.get_data
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -316,7 +316,7 @@ Content-Type: application/json
 @sales_token = {{sales_login.response.body.$.message.access}}
 
 ### 4.2 Her lead list -> only leads she owns or is assigned to (compare the count with 3.3)
-# @waiting CONFIGURATION
+# @waiting SALES
 POST {{host}}/api/method/crm.api.doc.get_data
 Authorization: Bearer {{sales_token}}
 Content-Type: application/json

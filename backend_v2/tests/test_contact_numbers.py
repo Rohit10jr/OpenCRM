@@ -2,8 +2,8 @@
 milestone 4).
 
 Ported (REBUILD_PLAN S14) from ``backend/tests/test_contact_numbers.py``: `:25-85` here;
-`:100-150` (edit and remove a row) with the row routes; `:88-94` (the list filter) waits
-for milestone 7. `frappe.client.insert` of a Contact is `POST /api/v1/contacts/`;
+`:100-150` (edit and remove a row) with the row routes; `:88-94` (the list filter) with
+milestone 7's list view. `frappe.client.insert` of a Contact is `POST /api/v1/contacts/`;
 `crm.api.contact.create_new` and `set_as_primary` are `POST /api/v1/contacts/<name>/
 create-new-email-or-phone/` and `.../set-as-primary/`, `field` and `value` in the body.
 """
@@ -75,6 +75,23 @@ def test_picking_another_email_makes_it_the_only_primary(auth_api, contact):
     assert contact.email_id == "second@example.com"
     flagged = ContactEmail.objects.filter(parent_contact=contact, is_primary=True)
     assert [row.email_id for row in flagged] == ["second@example.com"]
+
+
+def test_the_list_filters_on_the_number_that_is_now_primary(auth_api, contact):
+    """Ported `:88-94` (milestone 7): `get_data` is the contacts' `list-view/`."""
+    act(auth_api, contact.pk, "set-as-primary", field="mobile_no", value=SECOND)
+
+    def listed(pattern):
+        response = auth_api.post(
+            f"{CONTACTS}list-view/",
+            {"filters": {"mobile_no": ["like", pattern]}, "view": {"view_type": "list"}, "order_by": "modified desc"},
+            format="json",
+        )
+        assert response.status_code == 200, response.content[:300]
+        return [row["name"] for row in response.json()["message"]["data"]]
+
+    assert listed("%22222%") == [contact.pk]
+    assert listed("%11111%") == []
 
 
 def test_the_primary_phone_is_a_separate_flag(auth_api, contact):

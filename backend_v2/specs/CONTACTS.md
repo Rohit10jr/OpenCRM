@@ -1,9 +1,9 @@
 # CONTACTS — contacts, their emails and phones, addresses, organizations
 
 **Status: rewritten from the spec check and the spec review** (`temp` A-41, A-42,
-DECISIONS 56-60; 18-19 Nov 2026). Milestones 0-5, 6a, 6b and T built (25 Nov 2026); 7
-next (`temp` A-80). `specs/README.md` carries the status. Paths are from the repository root; old paths
-are `backend/` unless named.
+DECISIONS 56-60; 18-19 Nov 2026). Every milestone built: 0-5, 6a, 6b, 7 and T
+(26 Nov 2026; `temp` A-80). `specs/README.md` carries the status. Paths are from the
+repository root; old paths are `backend/` unless named.
 
 ## 1. Scope
 
@@ -133,7 +133,7 @@ with `data`.
 | `test_phase3_endpoints.py:154-203`, `:211-312` | the existence checks of `search_emails` (4) and `get_organizations` (5); `:480-491` is named "Not permitted" and asserts `["Invalid field"]` with no status: ported as it asserts | `get_linked_deals`: SALES |
 | `test_territory_tree.py` | `:42-57` (bounds, reparenting) at T, on a territory-only fixture; `:59-95` at 5 (§11.1) | — |
 | `test_envelope.py:165-185` (Organization and Industry PROTECT), `test_null_as_blank.py:22-67`, `test_name_lookup.py:61-93`, `test_crm_behaviour.py:252-259`, `test_route_surface_review.py:173-200`, `test_versions.py:173-182` (Organization untracked); the organization cases of `test_currency.py` and `test_exchange_rate.py` | 5 | — |
-| `test_list_definitions.py` (Contact, Organization), `test_phase4_metadata.py:283-287` | 7 | CONFIGURATION milestone 8 |
+| `test_platform_models.py:226-244` (Contact's definition; the old `test_list_definitions.py` has no Contact or Organization case, A-87), `test_phase4_metadata.py:283-287` | 7 | CONFIGURATION milestone 8 |
 | `test_rename.py` | — | all of it: SALES (the `linked` fixture makes a CRM Deal and its contacts row, `:12,34-41`); `:70-92` also ACTIVITIES, `:95-108` NOTIFICATIONS |
 | the Contact and Organization cases of `test_delete_dialog_links.py`, `test_unlink_linked_docs.py` | — | SALES |
 | `test_attach_on_save.py:44-47`, `test_phase5_async.py:292-304` | — | ACTIVITIES |
@@ -501,7 +501,7 @@ Written also as "Carried from CONTACTS" in `SALES.md` and `ACTIVITIES.md`.
 | **T. CRM Territory** | §11.1: the model, the rule, delete, rename, search; after 6a and group 3 (PE-24, PE-31) | `test_territory_tree.py:42-57`; `05` 0.12-0.14, 1.2-1.4, 6.1, 6.2, 6.4, 8.9-8.11 |
 | **5. CRM Organization** | the model, exchange rate, text Links, duplicate 409, `get_organizations`, §11.3's Address case; after T | §3's milestone 5 rows; `test_territory_tree.py:59-95`; `02` but 10.14; `05` 0.10-0.11, 1.5, 6.3, 7.1-7.3, 7.5-7.6, 8.7-8.8 |
 | **6b. Organization's shared actions** | as 6a, for CRM Organization; after 5 | the Organization half of the same blocks |
-| **7. List views** | `ContactListView`, `OrganizationListView` with the old `default_list_data`; after CONFIGURATION milestone 8 (Contact's half after 3, Organization's after 5) | the CONTACTS definitions in `test_list_definitions.py`; `07` 5.7; `test_contact_numbers.py:88-94` |
+| **7. List views** | `ContactListView`, `OrganizationListView` with the old `default_list_data`; after CONFIGURATION milestone 8 (Contact's half after 3, Organization's after 5) | `test_platform_models.py:226-244` and `test_phase4_metadata.py:283-287` (ported in `tests/test_contact_list_views.py`, with Organization's definition new); `07` 5.7; `test_contact_numbers.py:88-94` |
 
 The order is 3, 4, 6a, T, 5, 6b, 7 (A-48; §11.7). Milestone 3 also takes §11.2's save
 path and §11.3's `core` text-link check; milestone 4 takes §11.4 and §11.2's three

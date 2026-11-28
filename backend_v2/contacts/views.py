@@ -10,6 +10,8 @@ from accounts.roles import (
 )
 from accounts.directory import session_role_flags
 from configuration.export_fields import export_field_info_for
+from configuration.mixins import ListViewMixin
+from contacts.list_views import ContactListView, OrganizationListView
 from contacts.models import Address, Contact, CRMOrganization
 from contacts.serializers import (
     ADDRESS_FIELDS,
@@ -180,6 +182,7 @@ class AddressViewSet(RenameMixin, LinkSearchMixin, DocumentViewSet):
 
 
 class ContactViewSet(
+    ListViewMixin,
     BulkDeleteMixin,
     BulkUpdateMixin,
     LinkedDocumentsMixin,
@@ -197,6 +200,7 @@ class ContactViewSet(
 
     bulk_delete_remove_contact = True
     export_field_info = staticmethod(export_field_info_for(Contact))
+    list_view_class = ContactListView
     access = Access.ruled()
     serializer_class = ContactSerializer
     readable_fields = ContactSerializer.Meta.fields
@@ -312,6 +316,7 @@ class CRMTerritoryViewSet(RenameMixin, LinkSearchMixin, DocumentViewSet):
 
 
 class CRMOrganizationViewSet(
+    ListViewMixin,
     BulkDeleteMixin,
     BulkUpdateMixin,
     LinkedDocumentsMixin,
@@ -323,9 +328,11 @@ class CRMOrganizationViewSet(
     """CRM Organization (specs/CONTACTS.md §4, §8): PE-29's rule, as CRM Industry's (a CRM
     role for every action). Every column readable, filterable and sortable; search matches
     `name` (§8). The shared actions (milestone 6b) take the same rule; rename sets
-    `organization_name` (PE-24, PE-31). The list views come at 7."""
+    `organization_name` (PE-24, PE-31). Its list view (milestone 7) is
+    `OrganizationListView`."""
 
     export_field_info = staticmethod(export_field_info_for(CRMOrganization))
+    list_view_class = OrganizationListView
     access = Access.ruled()
     serializer_class = CRMOrganizationSerializer
     readable_fields = CRMOrganizationSerializer.Meta.fields

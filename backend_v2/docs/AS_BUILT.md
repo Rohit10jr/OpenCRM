@@ -239,11 +239,12 @@ from a served Link target or a field's choices, the definition's kanban defaults
 manual card order, `all_count`; any number of sent columns). A resource names its definition as
 `list_view_class`, a class in its app's `list_views.py` (FOUNDATION Q6): the base
 `ListView` is the old fallback, `accounts/list_views.py` holds `UserListView` (User has
-no list-view route), and `tests_support` defines Widget's. A card's four badge counts
+no list-view route), `contacts/list_views.py` Contact's and Organization's, and
+`tests_support` defines Widget's. A card's four badge counts
 come from the module `KANBAN_COUNTS_PROVIDER` names (`configuration/kanban_counts.py`,
-check `configuration.E001`), 0 each until ACTIVITIES names its own. Only `tests_support`
-opts in so far, so `get_data`'s route-map row stays unbuilt until SALES, ACTIVITIES and
-CONTACTS opt their resources in; `07` 5.8 runs as the generic 404.
+check `configuration.E001`), 0 each until ACTIVITIES names its own. `tests_support` and
+CONTACTS (milestone 7) opt in so far, so `get_data`'s route-map row stays unbuilt until
+SALES and ACTIVITIES opt their resources in; `07` 5.8 runs as the generic 404.
 
 CONTACTS (`specs/CONTACTS.md`) starts with two changes to the shared actions in `core`
 (milestone 0, PE-25, PE-26; §2's bulk delete paragraph). Its first milestone adds the
@@ -342,8 +343,16 @@ upstream `crm/api/doc.py:721-749`, v15 `delete_doc.py:141-153`); upstream refuse
 item too but deletes the rest of the batch. A Contact's `company_name` is not repointed
 on a rename, as upstream (a Data field, no `after_rename`), so the organization page's
 Contacts tab is empty after a rename (U-6). An exported `annual_revenue` cell is the
-six-place decimal, as the old backend writes it; upstream's is a float. The list views
-follow at 7.
+six-place decimal, as the old backend writes it; upstream's is a float.
+
+Its milestone 7 opts Contact and CRM Organization in to the list engine
+(`ListViewMixin`, `contacts/list_views.py`): `contacts/list-view/` and
+`organizations/list-view/` with `ContactListView` and `OrganizationListView`, the old
+`default_list_data` with its widths; Organization's rows also carry upstream's
+`currency` (PE-38). The `.http` builder sends `get_data` to the named doctype's own
+`list-view/` route, as `search_link` to its `search/`, and makes it wait for that
+doctype's unit until the route is built. They are the first production resources to
+opt in; `get_data`'s route-map row stays unbuilt until SALES and ACTIVITIES opt theirs in.
 
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are

@@ -665,7 +665,7 @@ GET {{deal}}/{{deal1}}?fields=["name","_assign"]&filters=[["name","=","{{deal1}}
 Authorization: Bearer {{token}}
 
 ### 6.2 get_data for the six ZZ deals -> the deal's default columns
-# @waiting CONFIGURATION
+# @waiting SALES
 # @expect $.message.data count 6
 # @expect $.message.columns[0].key == organization
 # @expect $.message.rows contains deal_owner
