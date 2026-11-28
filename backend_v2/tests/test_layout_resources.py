@@ -38,8 +38,8 @@ def sysman(make_user):
     return make_user("sysman@example.com", roles=["System Manager"])
 
 
-def make_script(administrator, name="ok", **fields):
-    script = CRMFormScript(name=name, dt="CRM Lead", view="Form", enabled=True, script="run()", **fields)
+def make_script(administrator, name="ok", dt="CRM Lead", **fields):
+    script = CRMFormScript(name=name, dt=dt, view="Form", enabled=True, script="run()", **fields)
     script.save(user=administrator)
     return script
 
@@ -141,15 +141,15 @@ def test_administrator_writes_a_form_script_without_its_groups(api_as, administr
 
 def test_a_sales_manager_writes_a_fields_layout(api_as, manager):
     response = api_as(manager).post(
-        LAYOUTS, {"dt": "CRM Lead", "type": "Quick Entry", "layout": "[]"}, format="json"
+        LAYOUTS, {"dt": "CRM Task", "type": "Side Panel", "layout": "[]"}, format="json"
     )
     assert response.status_code == 200, response.content[:300]
-    assert response.json()["message"]["name"] == "CRM Lead-Quick Entry"
+    assert response.json()["message"]["name"] == "CRM Task-Side Panel"
 
 
 def test_everyone_reads_a_fields_layout(auth_api, administrator):
-    CRMFieldsLayout(dt="CRM Lead", type="Side Panel", layout="[]").save(user=administrator)
-    assert auth_api.get(f"{LAYOUTS}CRM Lead-Side Panel/").status_code == 200
+    CRMFieldsLayout(dt="CRM Task", type="Data Fields", layout="[]").save(user=administrator)
+    assert auth_api.get(f"{LAYOUTS}CRM Task-Data Fields/").status_code == 200
 
 
 # --- PE-18 and PE-12c on the resource ----------------------------------------------------
@@ -158,17 +158,17 @@ def test_everyone_reads_a_fields_layout(auth_api, administrator):
 def test_pe18_a_layout_field_list_holds_fieldnames_only(api_as, manager):
     layout = [{"name": "s", "columns": [{"name": "c", "fields": ["status", {"fieldname": "x"}]}]}]
     response = api_as(manager).post(
-        LAYOUTS, {"dt": "CRM Lead", "type": "Quick Entry", "layout": json.dumps(layout)}, format="json"
+        LAYOUTS, {"dt": "CRM Task", "type": "Side Panel", "layout": json.dumps(layout)}, format="json"
     )
     assert response.status_code == 417
     assert response.json()["message"] == "A layout's field lists hold fieldnames only"
-    assert not CRMFieldsLayout.objects.exists()
+    assert CRMFieldsLayout.objects.count() == 14  # only the defaults
 
 
 def test_pe18_a_patch_is_checked_too(api_as, manager, administrator):
-    CRMFieldsLayout(dt="CRM Lead", type="Side Panel", layout="[]").save(user=administrator)
+    CRMFieldsLayout(dt="CRM Task", type="Side Panel", layout="[]").save(user=administrator)
     bad = json.dumps([{"columns": [{"fields": [1]}]}])
-    response = api_as(manager).patch(f"{LAYOUTS}CRM Lead-Side Panel/", {"layout": bad}, format="json")
+    response = api_as(manager).patch(f"{LAYOUTS}CRM Task-Side Panel/", {"layout": bad}, format="json")
     assert response.status_code == 417
 
 
@@ -184,23 +184,25 @@ def test_pe12c_a_layout_that_is_not_json_is_refused(api_as, manager):
 
 
 def test_get_form_script_shapes(administrator):
-    assert get_form_script("CRM Lead") is None
-    make_script(administrator, name="a")
-    assert get_form_script("CRM Lead") == "run()"
-    make_script(administrator, name="b", )
+    # CRM Task: the standard scripts are CRM Lead's and CRM Deal's (CONFIGURATION §10.6).
+    assert get_form_script("CRM Task") is None
+    make_script(administrator, name="a", dt="CRM Task")
+    assert get_form_script("CRM Task") == "run()"
+    make_script(administrator, name="b", dt="CRM Task")
     CRMFormScript.objects.filter(pk="b").update(script="second()")
-    assert get_form_script("CRM Lead") == ["run()", "second()"]
+    assert get_form_script("CRM Task") == ["run()", "second()"]
 
 
 def test_get_form_script_skips_disabled_and_other_views(administrator):
-    make_script(administrator, name="a")
+    make_script(administrator, name="a", dt="CRM Task")
     CRMFormScript.objects.filter(pk="a").update(enabled=False)
-    make_script(administrator, name="b")
+    make_script(administrator, name="b", dt="CRM Task")
     CRMFormScript.objects.filter(pk="b").update(view="List")
-    assert get_form_script("CRM Lead") is None
-    assert get_form_script("CRM Lead", "List") == "run()"
+    assert get_form_script("CRM Task") is None
+    assert get_form_script("CRM Task", "List") == "run()"
 
 
 def test_global_settings_rows_hold_a_json_list(auth_api):
     auth_api.post(GLOBAL, {"dt": "CRM Lead", "type": "Quick Filters", "json": ["status"]}, format="json")
-    assert CRMGlobalSettings.objects.get().json == ["status"]
+    # The defaults' CRM Lead row holds another list (CONFIGURATION §10.6).
+    assert CRMGlobalSettings.objects.get(dt="CRM Lead", type="Quick Filters", json=["status"])

@@ -3,10 +3,11 @@
 
 Salutations and genders: the framework's setup wizard writes them
 (`install_fixtures.py:20-49`), so a Link to either is valid from the start. A data
-migration writes them here, as `backend/` does (`frappe_platform/migrations/0014`), and
-a `seed_dev_data` step writes them again, which puts back a row someone deleted, as the
-old `seed_defaults` does (`backend/frappe_platform/reference_data.py:34-57`). The 51
-industries are a `seed_dev_data` step only (`backend/crm_app/setup.py:159`; S20).
+migration writes them here (`contacts/0002`), as `backend/` does
+(`frappe_platform/migrations/0014`). The 51 industries (`backend/crm_app/setup.py:159`)
+are written by `contacts/0004_industries`. `restore_defaults` (`contacts/restore.py`)
+puts back a row someone deleted, as the old `seed_defaults` does
+(`backend/frappe_platform/reference_data.py:34-57`; CONFIGURATION §10).
 """
 
 #: `install_fixtures.py:20-49`, in upstream's order.

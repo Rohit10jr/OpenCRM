@@ -91,7 +91,8 @@ def test_update_takes_json_strings_and_rewrites_the_one_row(auth_api):
             {"quick_filters": json.dumps(selected), "old_filters": "[]", "doctype": "CRM Fields Layout"},
             format="json",
         )
-    assert CRMGlobalSettings.objects.count() == 1
+    # The six defaults and the one row for CRM Fields Layout (CONFIGURATION §10.6).
+    assert CRMGlobalSettings.objects.count() == 7
     first = auth_api.get(GET, {"doctype": "CRM Fields Layout", "cached": 0}).json()["message"][0]
     assert first == {"label": "Name", "fieldname": "name", "fieldtype": "Data", "options": None}
 
@@ -150,4 +151,4 @@ def test_pe14_pe15_an_unknown_withheld_or_child_doctype_is_not_found(auth_api, d
     )
     assert response.status_code == 404
     assert response.json()["message"] == f"DocType {doctype} not found"
-    assert not CRMGlobalSettings.objects.exists()
+    assert CRMGlobalSettings.objects.count() == 6  # the defaults only (CONFIGURATION §10.6)

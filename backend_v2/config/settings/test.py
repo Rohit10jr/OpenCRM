@@ -7,7 +7,8 @@ INSTALLED_APPS = [*INSTALLED_APPS, "tests_support"]
 ROOT_URLCONF = "config.test_urls"
 
 DEBUG = False
-DEV_DATA_ALLOWED = True
+# DEV_DATA_ALLOWED is not set here (default off, temp A-48 group 5 item 7): the tests
+# that run seed_dev_data or clear_dev_data turn it on for themselves.
 # The old test key (backend/config/settings/test.py:70): Email Account stores its password
 # encrypted, and without a key every test that saves one would pass only where a
 # developer's environment happens to supply it. Never a real deployment's key.

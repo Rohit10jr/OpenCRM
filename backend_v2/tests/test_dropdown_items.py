@@ -122,22 +122,6 @@ def test_an_existing_row_is_never_refilled(administrator):
     assert settings.dropdown_items.count() == 0
 
 
-def test_force_restores_a_standard_row_and_keeps_a_custom_one(administrator):
-    """The force branch, ported whole; its operator command is milestone 6's."""
-    settings = FCRMSettings.objects.get(pk="FCRM Settings")
-    settings.dropdown_items.filter(name1="settings").update(type="Separator", label="")
-    settings.dropdown_items.filter(name1="about").delete()
-    CRMDropdownItem(
-        parent_settings=settings, idx=7, name1="docs", label="Docs", type="Route"
-    ).save(user=administrator)
-
-    assert add_standard_dropdown_items(settings, user=administrator, force=True) == 2
-    restored = settings.dropdown_items.get(name1="settings")
-    assert (restored.type, restored.label) == ("Route", "Settings")
-    assert settings.dropdown_items.filter(name1="about").exists()
-    assert settings.dropdown_items.filter(name1="docs").exists()
-
-
 def test_a_manager_empties_the_menu_and_it_stays_empty(api_as, make_user, administrator):
     """No save hook refills it (spec section 4.3): neither the read nor either loader
     puts the standard items back on a row that exists."""

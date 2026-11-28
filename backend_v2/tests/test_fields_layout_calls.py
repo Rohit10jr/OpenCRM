@@ -257,7 +257,7 @@ def test_pe12c_save_refuses_invalid_json(api_as, manager):
         SAVE, {"doctype": "FCRM Settings", "type": "Quick Entry", "layout": "[oops"}, format="json"
     )
     assert response.status_code == 417
-    assert not CRMFieldsLayout.objects.exists()
+    assert CRMFieldsLayout.objects.count() == 14  # the defaults only (CONFIGURATION §10.6)
 
 
 def test_save_refuses_an_unknown_doctype(api_as, manager):

@@ -12,16 +12,12 @@ from core.dev_data import STEPS
 
 class Command(BaseCommand):
     help = _(
-        "Write development reference rows. Rows that exist are kept, so it is safe "
-        "to run again."
+        "Write the development users (and demo records once their units exist). Rows "
+        "that exist are kept, so it is safe to run again. Default rows are written by "
+        "migrations; restore_defaults puts a missing one back."
     )
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            "--force",
-            action="store_true",
-            help=_("Rewrite restorable upstream defaults where later units allow it."),
-        )
         parser.add_argument(
             "--demo",
             action="store_true",
@@ -42,7 +38,7 @@ class Command(BaseCommand):
         with transaction.atomic():
             actor = User.objects.get(name=ADMINISTRATOR)
             counts = {
-                step.key: step.seed(actor, options["force"]) for step in STEPS
+                step.key: step.seed(actor, False) for step in STEPS
             }
             for step in STEPS:
                 self.stdout.write(
