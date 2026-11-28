@@ -109,7 +109,10 @@ comparison skips that block.
 - **Status:** approved — owner, 13 Nov 2026 (revised the same day: refuse the loop, as
   upstream does, instead of repairing the bounds afterwards)
 - **Where:** every `TreeDocument` (CRM Sales Hierarchy, CRM Territory): a create or
-  update that sets a node's parent to the node itself or to one of its descendants. The
+  update that sets a node's parent to the node itself or to one of its descendants. For
+  CRM Territory upstream does not refuse it: its territory is a plain `Document`, with no
+  `NestedSet` (PE-37), so it saves the loop; v2 refuses it there too, to keep the bounds
+  valid. The
   `descendants of` / `ancestors of` filters and the sales hierarchy's row rule read the
   bounds such a loop would corrupt. No `.http` block found
 - **Old backend:** accepts the save. The rebuild then walks from roots only, so nodes in
@@ -665,18 +668,21 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   Guest's rows to Guest on save
 - **Recorded by:** A-48 group 2, 21 Nov 2026
 
-### PE-29. Contact, CRM Organization, CRM Industry and Address need a CRM role
+### PE-29. Contact, CRM Organization, CRM Industry, CRM Territory and Address need a CRM role
 
 - **Status:** approved by the owner (20 Nov 2026; `temp` A-48 2d, A-61 item 4; CRM
   Territory added by A-74); built for CRM Industry, Address and Contact (CONTACTS
   milestone 3: a CRM role reads, writes and creates; delete is the owner's, a System
-  Manager's or Administrator's, with a CRM role); CRM Organization and CRM Territory to be
-  built with their milestones, and until then they are not served
-- **Where:** `/api/v1/industries/...` and `/api/v1/addresses/...`: list, create, read,
-  PATCH, delete, `value/`, `search/` and every other route that reads the list or the
-  object rule (old `/api/resource/CRM Industry`, `/api/resource/Address`)
+  Manager's or Administrator's, with a CRM role) and CRM Territory (CONTACTS milestone T:
+  a CRM role for every action, as CRM Industry); CRM Organization to be built with its
+  milestone, and until then it is not served
+- **Where:** `/api/v1/industries/...`, `/api/v1/territories/...`, `/api/v1/addresses/...`
+  and `/api/v1/contacts/...`: list, create, read, PATCH, delete, `value/`, `search/` and
+  every other route that reads the list or the object rule (old `/api/resource/CRM
+  Industry`, `/api/resource/CRM Territory`, `/api/resource/Address`,
+  `/api/resource/Contact`)
 - **Old backend:** every signed-in user lists, reads, creates and changes them; CRM
-  Industry registers no rule, Address deletes only for System Manager or Administrator
+  Industry and CRM Territory register no rule, Address deletes only for System Manager or Administrator
   (`backend/crm_app/permissions/platform_docs.py:424-434`; DECISIONS 58)
 - **backend_v2:** Sales User, Sales Manager, System Manager or Administrator; a caller
   with none of these gets an empty list, 403 "No permission for <doctype> <name>" on a
@@ -810,7 +816,9 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   linked with {doctype} {name}", upstream's text: no row position (only the dynamic
   check names one), a child row named by its parent document, a Single named once.
   Fields a model allows to dangle (`ALLOW_DANGLING_LINK_FIELDS`) never refuse, and a
-  record's links to itself, or within one bulk delete, do not either. Newly refused:
+  record's links to itself, or within one bulk delete, do not either; a PROTECT foreign
+  key inside one batch is still refused by the database itself, on the delete
+  (`ProtectedError`, 417; CRM Territory's parent and child, A-84). Newly refused:
   a Currency System Settings or FCRM Settings names (the disable sentence); since
   CONTACTS milestone 3, a Salutation or Gender a Contact names (the second message) and
   an Address a Contact names (the disable sentence); with milestone 5, an Address an
@@ -855,6 +863,33 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   stable; the highest plus one is the same while the table has no gaps, and stays unique
   after a row is deleted
 - **Recorded by:** CONTACTS, 23 Nov 2026
+
+### PE-37. CRM Territory keeps nested-set bounds and answers the tree operators
+
+- **Status:** approved by the owner (20 Nov 2026, `temp` A-48 section 6 item 1: the model
+  with the tree columns and the `descendants of` / `ancestors of` resolver; the move,
+  DECISIONS 56 (a); the line named in `specs/CONTACTS.md` §11.1, spec-checked A-65,
+  approved A-67); built with this entry (CONTACTS milestone T)
+- **Where:** `/api/v1/territories/...` (every write keeps `lft`/`rgt`), and every list
+  filter with `descendants of`, `ancestors of` or their variants on a territory
+- **Old backend:** the same: it keeps the bounds and serves the operators
+  (`backend/crm_app/permissions/tree.py:128-185`; FINDINGS 14)
+- **backend_v2:** as the old backend: `TreeDocument` rebuilds the bounds after every
+  ordinary write, a rename and a delete, and `core/filters.py` serves FOUNDATION's five
+  tree operators, which are `backend/`'s set, not upstream's (upstream's
+  `NestedSetHierarchy` has `not descendants of` and `not ancestors of`, excluding the node;
+  v2 has `not … (inclusive)`; v15 `frappe/database/utils.py:21-27`). Also as the old
+  backend, and unlike upstream: a parent loop is refused (PE-4); `old_parent` is SET_NULL,
+  so deleting a territory another names as `old_parent` clears it and answers 200, where
+  upstream's Link check would refuse (nothing upstream writes `old_parent`); and
+  `territory_name` is not unique, so a PATCH may duplicate one (upstream `unique: 1`,
+  `crm_territory.json:28`; the same as CRM Industry)
+- **Why:** this differs from upstream, not from `backend/`, and is recorded so the
+  difference stays visible: upstream's CRM Territory is a plain `Document`
+  (`crm/fcrm/doctype/crm_territory/crm_territory.py`; the framework gives `NestedSet`
+  only to custom doctypes, v15 `frappe/model/base_document.py:76-85`), so it never writes
+  `lft`/`rgt` and its `descendants of` on a territory matches nothing
+- **Recorded by:** CONTACTS, 25 Nov 2026
 
 ---
 

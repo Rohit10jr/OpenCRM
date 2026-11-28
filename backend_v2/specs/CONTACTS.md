@@ -1,8 +1,8 @@
 # CONTACTS — contacts, their emails and phones, addresses, organizations
 
 **Status: rewritten from the spec check and the spec review** (`temp` A-41, A-42,
-DECISIONS 56-60; 18-19 Nov 2026). Milestones 0-4 and 6a built (23 Nov 2026); Territory,
-then CRM Organization (5, 6b, 7) next (`temp` A-80). `specs/README.md` carries the status. Paths are from the repository root; old paths
+DECISIONS 56-60; 18-19 Nov 2026). Milestones 0-4, 6a and T built (25 Nov 2026); CRM
+Organization (5, 6b, 7) next (`temp` A-80). `specs/README.md` carries the status. Paths are from the repository root; old paths
 are `backend/` unless named.
 
 ## 1. Scope
@@ -538,7 +538,7 @@ changes are corrected in the same commit.
   (`tree.py:128-185`; FINDINGS 14 rests on the same reading). v2 keeps `backend/`'s
   behaviour: `core.models.TreeDocument` rebuilds on every ordinary write under an
   advisory lock, and `core/filters.py:229-233` serves the five tree operators. Nothing new
-  in `core`. **New PE line** (number at build): "CRM Territory keeps nested-set bounds and
+  in `core`. **New PE line** (PE-37): "CRM Territory keeps nested-set bounds and
   answers `descendants of` / `ancestors of`, as the old backend; upstream's territory has
   no bounds, so those operators match nothing there."
 - **Resource:** `/api/v1/territories/`, with:

@@ -98,21 +98,21 @@ DELETE {{org}}/ZZ%20Renamed%20Org
 Authorization: Bearer {{token}}
 
 ### 0.12 cleanup territories, leaves first -> 200|404
-# @waiting SALES
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{territory}}/ZZ%20Berlin
+DELETE {{host}}/api/v1/territories/ZZ%20Berlin/
 Authorization: Bearer {{token}}
 
 ### 0.13 -> 200|404
-# @waiting SALES
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{territory}}/ZZ%20Europe
+DELETE {{host}}/api/v1/territories/ZZ%20Europe/
 Authorization: Bearer {{token}}
 
 ### 0.14 -> 200|404
-# @waiting SALES
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{territory}}/ZZ%20World
+DELETE {{host}}/api/v1/territories/ZZ%20World/
 Authorization: Bearer {{token}}
 
 ### 0.15 cleanup industry -> 200|404
@@ -131,26 +131,26 @@ Content-Type: application/json
 
 {"industry": "ZZ Industry"}
 
-### 1.2 territory root (a group) -> 201
-# @waiting SALES
-POST {{territory}}
+### 1.2 territory root (a group) -> 200
+# @resource-envelope {"data"}/201 -> {"message"}/200
+POST {{host}}/api/v1/territories/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"territory_name": "ZZ World", "is_group": 1}
 
-### 1.3 territory child group -> 201
-# @waiting SALES
-# @expect $.data.parent_crm_territory == ZZ World
-POST {{territory}}
+### 1.3 territory child group -> 200
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.parent_crm_territory == ZZ World
+POST {{host}}/api/v1/territories/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"territory_name": "ZZ Europe", "is_group": 1, "parent_crm_territory": "ZZ World"}
 
-### 1.4 territory leaf -> 201
-# @waiting SALES
-POST {{territory}}
+### 1.4 territory leaf -> 200
+# @resource-envelope {"data"}/201 -> {"message"}/200
+POST {{host}}/api/v1/territories/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -523,18 +523,18 @@ Content-Type: application/json
 # ---- the territory tree --------------------------------------------------------------------
 
 ### 6.1 the leaf knows its parent -> 200
-# @waiting SALES
-# @expect $.data.parent_crm_territory == ZZ Europe
-# @expect $.data.is_group == false
-GET {{territory}}/ZZ%20Berlin
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.parent_crm_territory == ZZ Europe
+# @expect $.message.is_group == false
+GET {{host}}/api/v1/territories/ZZ%20Berlin/
 Authorization: Bearer {{token}}
 
 
 ### 6.2 a nested-set tree carries lft/rgt on every node (frappe/utils/nestedset.py) -> set
-# @waiting SALES
-# @expect $.data.lft != null
-# @expect $.data.rgt != null
-GET {{territory}}/ZZ%20World
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.lft != null
+# @expect $.message.rgt != null
+GET {{host}}/api/v1/territories/ZZ%20World/
 Authorization: Bearer {{token}}
 
 ### 6.3 `descendants of` finds the organization two levels down -> 200, one row
@@ -545,8 +545,8 @@ GET {{org}}?fields=["name"]&filters=[["territory","descendants of","ZZ World"]]
 Authorization: Bearer {{token}}
 
 ### 6.4 a territory with children cannot be deleted -> 417|409 (417 LinkExistsError upstream; 409 is finding 3, counted once)
-# @waiting SALES
-DELETE {{territory}}/ZZ%20World
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/territories/ZZ%20World/
 Authorization: Bearer {{token}}
 
 # ---- organizations: the session endpoint, autocomplete, permissions map --------------------
@@ -649,18 +649,18 @@ DELETE {{org}}/ZZ%20Contact%20Org
 Authorization: Bearer {{token}}
 
 ### 8.9 delete territories, leaves first -> 200
-# @waiting SALES
-DELETE {{territory}}/ZZ%20Berlin
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/territories/ZZ%20Berlin/
 Authorization: Bearer {{token}}
 
 ### 8.10 -> 200
-# @waiting SALES
-DELETE {{territory}}/ZZ%20Europe
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/territories/ZZ%20Europe/
 Authorization: Bearer {{token}}
 
 ### 8.11 -> 200
-# @waiting SALES
-DELETE {{territory}}/ZZ%20World
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/territories/ZZ%20World/
 Authorization: Bearer {{token}}
 
 ### 8.12 delete industry -> 200

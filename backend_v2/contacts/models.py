@@ -12,7 +12,7 @@ from django.db import models
 from django.db.models.signals import post_delete, post_save, pre_delete
 
 from core.exceptions import ValidationError
-from core.models import BaseDocument
+from core.models import BaseDocument, TreeDocument
 from core.naming import FieldValue, Hash, NameStrategy, append_number_if_name_exists
 
 
@@ -49,6 +49,45 @@ class CRMIndustry(BaseDocument):
     industry = models.CharField(max_length=140, blank=True, default="")
 
     class Meta(BaseDocument.Meta):
+        ordering = ["name"]
+
+
+class CRMTerritory(TreeDocument):
+    """A territory tree (specs/CONTACTS.md §11.1; old `crm_app/models/taxonomy.py:113-152`).
+    The nested-set bounds and the tree operators are the old backend's (PE-37): upstream's
+    territory is a plain Document. `TreeDocument` rebuilds them on every write."""
+
+    DOCTYPE = "CRM Territory"
+    NAME_STRATEGY = FieldValue("territory_name", label="Territory Name")
+    PARENT_FIELD = "parent_crm_territory"
+
+    territory_name = models.CharField(max_length=140)
+    territory_manager = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="managed_territories",
+    )
+    is_group = models.BooleanField(default=False)
+    old_parent = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="former_children",
+        db_column="old_parent",
+    )
+    parent_crm_territory = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="children",
+        db_column="parent_crm_territory",
+    )
+
+    class Meta(TreeDocument.Meta):
         ordering = ["name"]
 
 

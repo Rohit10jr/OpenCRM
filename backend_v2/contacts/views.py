@@ -17,6 +17,7 @@ from contacts.serializers import (
     AddressSerializer,
     ContactSerializer,
     CRMIndustrySerializer,
+    CRMTerritorySerializer,
     GenderSerializer,
     SalutationSerializer,
 )
@@ -274,6 +275,28 @@ class CRMIndustryViewSet(RenameMixin, LinkSearchMixin, DocumentViewSet):
     readable_fields = CRMIndustrySerializer.Meta.fields
     filterable_fields = CRMIndustrySerializer.Meta.fields
     sortable_fields = CRMIndustrySerializer.Meta.fields
+    searchable_fields = ()
+
+    @staticmethod
+    def list_rule(user):
+        return _crm_list_rule(user)
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        return _has_crm_role(user)
+
+
+class CRMTerritoryViewSet(RenameMixin, LinkSearchMixin, DocumentViewSet):
+    """The territory tree (specs/CONTACTS.md §11.1): PE-29's rule, as CRM Industry's (a CRM
+    role for every action; `backend/` registers no rule, owner A-74). Every column
+    readable, filterable and sortable; rename sets `territory_name` (PE-24, PE-31). A
+    territory with children is refused on delete by the PROTECT parent link (PE-34)."""
+
+    access = Access.ruled()
+    serializer_class = CRMTerritorySerializer
+    readable_fields = CRMTerritorySerializer.Meta.fields
+    filterable_fields = CRMTerritorySerializer.Meta.fields
+    sortable_fields = CRMTerritorySerializer.Meta.fields
     searchable_fields = ()
 
     @staticmethod

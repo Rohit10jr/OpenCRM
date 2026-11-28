@@ -305,6 +305,17 @@ update and export (`export_field_info_for(Contact)`, the first production provid
 takes Contact's own rules: write for rename, bulk update and unlink, the per-item delete
 rule for bulk delete, the list rule for export (PE-29).
 
+Its milestone T adds CRM Territory (`contacts.CRMTerritory(TreeDocument)`, migration
+`contacts/0006`) at `territories/`: list, create, read, PATCH, delete, `value/`,
+`search/`, `permissions/` and `rename/` (PE-31 sets `territory_name`), under PE-29's rule
+as CRM Industry. The bounds are rebuilt by `TreeDocument` on every write, including a
+rename (the old row's queryset delete) and a delete (PE-37). A territory with children is
+refused on delete by the PROTECT parent link through PE-34's static check (417
+`LinkExistsError`). A parent and its child deleted together pass the static check, which
+skips links within the batch, and are then refused by the PROTECT foreign key itself
+(`ProtectedError`); Territory serves no bulk delete, so no route reaches that case
+(A-79 finding 4; `tests/test_territory_tree.py` pins it).
+
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are
 disabled, and there are no bulk actions.
