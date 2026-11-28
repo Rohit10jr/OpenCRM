@@ -43,8 +43,20 @@ def test_invitation_accept_never_starts_at_zero(administrator, api_as):
     assert User.objects.get(pk="joiner@example.com").token_version > 0
 
 
+#: The seed reads the suite users' passwords from the environment; CI has no `.env`, so
+#: the test supplies its own (as `test_dev_data_commands.py` does).
+SEED_PASSWORDS = {
+    "ADMIN_PWD": "admin-test-pass",
+    "SALES_PWD": "sales-test-pass",
+    "MANAGER_PWD": "manager-test-pass",
+    "SALES2_PWD": "sales-two-test-pass",
+}
+
+
 @override_settings(DEV_DATA_ALLOWED=True)
-def test_the_seed_never_starts_at_zero():
+def test_the_seed_never_starts_at_zero(monkeypatch):
+    for variable, value in SEED_PASSWORDS.items():
+        monkeypatch.setenv(variable, value)
     call_command("seed_dev_data", stdout=io.StringIO())
     seeded = User.objects.exclude(pk__in=User.BUILTIN_NAMES)
     assert seeded.exists()
