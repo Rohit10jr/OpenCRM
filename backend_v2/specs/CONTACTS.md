@@ -1,8 +1,8 @@
 # CONTACTS — contacts, their emails and phones, addresses, organizations
 
 **Status: rewritten from the spec check and the spec review** (`temp` A-41, A-42,
-DECISIONS 56-60; 18-19 Nov 2026). Milestones 0-4, 6a and T built (25 Nov 2026); CRM
-Organization (5, 6b, 7) next (`temp` A-80). `specs/README.md` carries the status. Paths are from the repository root; old paths
+DECISIONS 56-60; 18-19 Nov 2026). Milestones 0-5, 6a and T built (25 Nov 2026); 6b and 7
+next (`temp` A-80). `specs/README.md` carries the status. Paths are from the repository root; old paths
 are `backend/` unless named.
 
 ## 1. Scope
@@ -160,7 +160,7 @@ rule (owner, 21 Nov 2026).
 | Contact Email, Contact Phone | through the contact | the contact's read | the contact's write | through `create_new` or the contact's rows | the contact's write; a refused delete is 404 |
 | Address | a CRM role (PE-29; old: everyone, `:424-426`) | a CRM role | a CRM role | a CRM role | System Manager or Administrator (`:429-434`) |
 | CRM Industry | a CRM role (PE-29; old: everyone signed in, no rule registered) | a CRM role | a CRM role | a CRM role | a CRM role, subject to PROTECT and Dynamic Link rows |
-| CRM Organization | everyone signed in (no rule registered; PE-29 when built) | everyone | everyone | everyone | everyone, subject to PROTECT and Dynamic Link rows |
+| CRM Organization | a CRM role (PE-29; old: everyone signed in, no rule registered) | a CRM role | a CRM role | a CRM role | a CRM role, subject to PROTECT and Dynamic Link rows |
 | Salutation, Gender | everyone (`:472-475`) | everyone | System Manager or Administrator (`:478-484`) | the same | the same |
 | Dynamic Link | no route; through its parent | | | | removed with its parent |
 

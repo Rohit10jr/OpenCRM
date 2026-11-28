@@ -89,6 +89,30 @@ Content-Type: application/json
     assert '"doctype"' not in result
 
 
+def test_get_doc_permissions_takes_its_record_from_docname():
+    """A-85 finding 2: the call names its record `docname`, so the URL carried "None"."""
+    route_map = parse_route_map(
+        ROUTE_MAP_TEXT.replace(
+            "| `future.method` |",
+            "| `frappe.client.get_doc_permissions` | GET/POST | auth | `client.py:x` | each resource's | core | built |\n| `future.method` |",
+        ).replace(
+            "`DELETE /api/v1/widgets/<name>/` |",
+            "`DELETE /api/v1/widgets/<name>/`, `GET /api/v1/widgets/<name>/permissions/` |",
+        )
+    )
+    source = """\
+@host = http://localhost:8000
+### permissions -> 200
+POST {{host}}/api/method/frappe.client.get_doc_permissions
+Content-Type: application/json
+
+{"doctype": "CRM Widget", "docname": "W-1"}
+"""
+    result = rewrite_http(source, route_map)
+    assert "GET {{host}}/api/v1/widgets/W-1/permissions/" in result
+    assert "None" not in result
+
+
 def test_resource_create_uses_method_envelope_and_status():
     source = """\
 @host = http://localhost:8000

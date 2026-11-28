@@ -91,107 +91,107 @@ Content-Type: application/json
 # =========================================================================================
 
 ### 2.0a Clean up a previous run -> 200|404
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
 # Every file removes its own leftovers FIRST, so a run that died halfway does not make
 # the next one fail on "duplicate". 404 here just means there was nothing to remove.
-DELETE {{host}}/api/resource/CRM%20Organization/Acme%20Test%20Co
+DELETE {{host}}/api/v1/organizations/Acme%20Test%20Co/
 Authorization: Bearer {{token}}
 
 ### 2.0b -> 200|404
-# @waiting CONTACTS
-DELETE {{host}}/api/resource/CRM%20Organization/R/GA
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/organizations/R/GA/
 Authorization: Bearer {{token}}
 
-### 2.1 Create -> 201, name == organization_name (field: naming, verbatim)
-# @waiting CONTACTS
-POST {{host}}/api/resource/CRM%20Organization
+### 2.1 Create -> 200, name == organization_name (field: naming, verbatim)
+# @resource-envelope {"data"}/201 -> {"message"}/200
+POST {{host}}/api/v1/organizations/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"organization_name": "Acme Test Co", "website": "https://acme.test", "no_of_employees": "11-50"}
 
 ### 2.2 Create the same name again -> 409, exc_type DuplicateEntryError
-# @waiting CONTACTS
-POST {{host}}/api/resource/CRM%20Organization
+# @resource-envelope {"data"}/201 -> {"message"}/200
+POST {{host}}/api/v1/organizations/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"organization_name": "Acme Test Co"}
 
 ### 2.3 Read one -> 200; note owner / modified_by / creation / modified came from BaseDocument
-# @waiting CONTACTS
-GET {{host}}/api/resource/CRM%20Organization/Acme%20Test%20Co
+# @resource-envelope {"data"}/201 -> {"message"}/200
+GET {{host}}/api/v1/organizations/Acme%20Test%20Co/
 Authorization: Bearer {{token}}
 
 ### 2.4 List, default 20 rows, newest first
-# @waiting CONTACTS
-GET {{host}}/api/resource/CRM%20Organization
+# @resource-envelope {"data"}/201 -> {"message"}/200
+GET {{host}}/api/v1/organizations/
 Authorization: Bearer {{token}}
 
 ### 2.5 List with a field selection and a filter -> 200, one row, three columns
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # The like-pattern is %acme% but a bare % is illegal in a URL, so it is written %25acme%25.
 # The server decodes it back before the filter runs.
-GET {{host}}/api/resource/CRM%20Organization?fields=["name","website","modified"]&filters=[["website","like","%25acme%25"]]
+GET {{host}}/api/v1/organizations/?fields=["name","website","modified"]&filters=[["website","like","%25acme%25"]]
 Authorization: Bearer {{token}}
 
 ### 2.6 `like` is case-insensitive on purpose (Postgres would not be) -> same row as 2.5
-# @waiting CONTACTS
-GET {{host}}/api/resource/CRM%20Organization?fields=["name"]&filters=[["website","like","%25ACME%25"]]
+# @resource-envelope {"data"}/201 -> {"message"}/200
+GET {{host}}/api/v1/organizations/?fields=["name"]&filters=[["website","like","%25ACME%25"]]
 Authorization: Bearer {{token}}
 
 ### 2.7 `in`, dict-form filters, ordering, paging -> 200, ONE row (Acme)
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # Two names match, but limit_page_length=1 asks for one row and "Acme" sorts before
 # "Globex". Change limit_start to 1 to get the second page, which is Globex.
-GET {{host}}/api/resource/CRM%20Organization?fields=["name"]&filters={"name":["in",["Acme Test Co","Globex"]]}&order_by=name asc&limit_page_length=2&limit_start=0
+GET {{host}}/api/v1/organizations/?fields=["name"]&filters={"name":["in",["Acme Test Co","Globex"]]}&order_by=name asc&limit_page_length=2&limit_start=0
 Authorization: Bearer {{token}}
 
 ### 2.8 Unknown field in fields= -> 417 (unknown names raise, they are not dropped)
-# @waiting CONTACTS
-GET {{host}}/api/resource/CRM%20Organization?fields=["name","no_such_field"]
+# @resource-envelope {"data"}/201 -> {"message"}/200
+GET {{host}}/api/v1/organizations/?fields=["name","no_such_field"]
 Authorization: Bearer {{token}}
 
 ### 2.9 Relation traversal is refused -> 417
-# @waiting CONTACTS
-GET {{host}}/api/resource/CRM%20Organization?fields=["owner__password"]
+# @resource-envelope {"data"}/201 -> {"message"}/200
+GET {{host}}/api/v1/organizations/?fields=["owner__password"]
 Authorization: Bearer {{token}}
 
 ### 2.10 Update -> 200; modified changes, creation does not
-# @waiting CONTACTS
-PUT {{host}}/api/resource/CRM%20Organization/Acme%20Test%20Co
+# @resource-envelope {"data"}/201 -> {"message"}/200
+PATCH {{host}}/api/v1/organizations/Acme%20Test%20Co/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"website": "https://acme.examples", "annual_revenue": 1250000}
 
 ### 2.11 A name with a slash is legal and addressable
-# @waiting CONTACTS
-POST {{host}}/api/resource/CRM%20Organization
+# @resource-envelope {"data"}/201 -> {"message"}/200
+POST {{host}}/api/v1/organizations/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"organization_name": "R/GA"}
 
 ### 2.12 ...and reachable at a path-style URL -> 200
-# @waiting CONTACTS
-GET {{host}}/api/resource/CRM%20Organization/R/GA
+# @resource-envelope {"data"}/201 -> {"message"}/200
+GET {{host}}/api/v1/organizations/R/GA/
 Authorization: Bearer {{token}}
 
 ### 2.13a Delete R/GA -> 200, {"data": null}
-# @waiting CONTACTS
-DELETE {{host}}/api/resource/CRM%20Organization/R/GA
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/organizations/R/GA/
 Authorization: Bearer {{token}}
 
 ### 2.13b Delete Acme Test Co -> 200, {"data": null}
-# @waiting CONTACTS
-DELETE {{host}}/api/resource/CRM%20Organization/Acme%20Test%20Co
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/organizations/Acme%20Test%20Co/
 Authorization: Bearer {{token}}
 
 ### 2.14 Read it back -> 404, exc_type DoesNotExistError
-# @waiting CONTACTS
-GET {{host}}/api/resource/CRM%20Organization/Acme%20Test%20Co
+# @resource-envelope {"data"}/201 -> {"message"}/200
+GET {{host}}/api/v1/organizations/Acme%20Test%20Co/
 Authorization: Bearer {{token}}
 
 ### 2.15 A doctype that is not routable answers exactly like one that does not exist -> 404
@@ -329,8 +329,8 @@ GET {{host}}/api/resource/CRM%20Deal/CRM-DEAL-2026-00101
 Authorization: Bearer {{sales_token}}
 
 ### 4.4 Organizations have no row rule -> she sees all of them
-# @waiting CONTACTS
-GET {{host}}/api/resource/CRM%20Organization?fields=["name"]
+# @resource-envelope {"data"}/201 -> {"message"}/200
+GET {{host}}/api/v1/organizations/?fields=["name"]
 Authorization: Bearer {{sales_token}}
 
 ### 4.5 A lead she creates without lead_owner vanishes for her -> 201, then 4.6 is empty

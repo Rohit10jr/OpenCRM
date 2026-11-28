@@ -2,19 +2,20 @@
 PE-34, PE-37; milestone T).
 
 Ported (REBUILD_PLAN S14) from ``backend/tests/test_territory_tree.py:42-57`` (the bounds
-and reparenting) on a territory-only fixture: the old ``tree`` fixture also creates
-organizations (``:31-33``), whose filters (``:59-95``) wait for milestone 5. New: the
+and reparenting) on a territory-only fixture, and ``:59-95`` (the tree operators over
+organizations, milestone 5) on the old fixture's organizations (``:31-33``). New: the
 rename rebuild, the delete of a territory with children, a parent and its child deleted
 together (A-79 finding 4), and PE-29's matrix as for CRM Industry
 (``tests/test_crm_role_rule.py``).
 """
 
+import json
 from urllib.parse import quote
 
 import pytest
 from django.db.models import ProtectedError
 
-from contacts.models import CRMTerritory
+from contacts.models import CRMOrganization, CRMTerritory
 from core.delete import check_static_links_batch
 
 pytestmark = pytest.mark.django_db
@@ -198,3 +199,45 @@ def test_each_crm_role_reaches_territories(make_user, tree, api_as, role):
 
 def test_administrator_reaches_territories(administrator, tree, api_as):
     assert api_as(administrator).get(url("ZZ Berlin")).status_code == 200
+
+
+# --- ported `:59-95`, on the old fixture (milestone 5) --------------------------------------
+
+ORGS = "/api/v1/organizations/"
+
+
+@pytest.fixture
+def orgs(administrator, tree):
+    world, europe, asia, berlin = tree
+    for name, territory in (("ZZ Berlin Org", berlin), ("ZZ Asia Org", asia), ("ZZ Nowhere Org", None)):
+        CRMOrganization(organization_name=name, territory=territory).save(user=administrator)
+    return tree
+
+
+def org_names(client, operator, node, **extra):
+    params = {"fields": '["name"]', "filters": json.dumps([["territory", operator, node]]), **extra}
+    response = client.get(ORGS, params)
+    assert response.status_code == 200, response.content[:300]
+    return [row["name"] for row in response.json()["message"]]
+
+
+def test_descendants_of_finds_organizations_below_a_group(auth_api, orgs):
+    assert org_names(auth_api, "descendants of", "ZZ World", order_by="name asc") == ["ZZ Asia Org", "ZZ Berlin Org"]
+
+
+def test_descendants_of_excludes_the_node_itself_unless_inclusive(auth_api, administrator, orgs):
+    CRMOrganization(organization_name="ZZ Europe Org", territory=orgs[1]).save(user=administrator)
+    assert org_names(auth_api, "descendants of", "ZZ Europe") == ["ZZ Berlin Org"]
+    assert org_names(auth_api, "descendants of (inclusive)", "ZZ Europe", order_by="name asc") == [
+        "ZZ Berlin Org",
+        "ZZ Europe Org",
+    ]
+
+
+def test_ancestors_of_walks_up(auth_api, administrator, orgs):
+    CRMOrganization(organization_name="ZZ Europe Org", territory=orgs[1]).save(user=administrator)
+    assert org_names(auth_api, "ancestors of", "ZZ Berlin", order_by="name asc") == ["ZZ Europe Org"]
+
+
+def test_a_missing_node_matches_nothing(auth_api, orgs):
+    assert org_names(auth_api, "descendants of", "ZZ Nowhere") == []
