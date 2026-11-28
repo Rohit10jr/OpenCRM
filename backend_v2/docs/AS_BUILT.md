@@ -643,11 +643,19 @@ value selects production, and any other value is refused before authorization.
 
 The perform half is one transaction. It reuses the linked-document batched scan and
 clear helpers, skips links whose resource or actual child-row parent denies object
-write, optionally deletes a cleared link only when its own dynamic-link check permits,
-then checks every target for remaining dynamic links. It batch-removes reference rows,
-stands down per-row reference cleanup, and deletes all targets with one queryset.
-`bulk_delete_remove_contact = True` selects the old Contact-specific clearing hook;
-it defaults off. No production resource opts in yet; the test Widget resource does.
+write, optionally deletes a cleared link only when the caller may delete it and nothing
+protects it, then checks every target for remaining dynamic links. "May delete" is
+`core.delete.may_delete`, the record route's own question: the item's resource is a
+routed document ViewSet that serves DELETE and its object rule does not refuse, so a
+settings record or a doctype ruled only through `ROW_RULES` is never deleted this way
+(PE-26). The item is reread first, and deleted in a savepoint, a protected item skipped. It batch-removes reference rows, stands down per-row
+reference cleanup, and deletes all targets with one queryset.
+`bulk_delete_remove_contact = True` selects the Contact-specific clearing hook, which
+clears a linked document's own `contact` field (when it can be empty) and its
+`contacts` table, the one its resource's serializer declares or the model's polymorphic
+table of that name, never a reverse relation (PE-25); it defaults off. The unlink
+action's `remove_contact` and `delete` use the same two helpers, in one transaction. No production
+resource opts in yet; the test Widget resource does.
 
 `ListExportMixin` writes `GET` and `POST <resource>/export/`, merges query and body
 inputs, reads through the resource queryset and field allowlists, and returns the raw

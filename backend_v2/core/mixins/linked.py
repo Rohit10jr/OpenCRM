@@ -5,15 +5,17 @@ from collections import defaultdict
 from django.apps import apps
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from django.db import models
-from django.db.models import Q
+from django.db import models, transaction
+from django.db.models import ProtectedError, Q
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from core.children import child_table_specs, read_children
 from core.delete import (
     IGNORE_LINKS_ON_DELETE,
     _dynamic_link_declarations,
-    check_dynamic_links,
+    delete_document,
+    may_delete,
 )
 from core.doctypes import doctype_of, is_child_table, model_for_doctype
 from core.exceptions import LinkExistsError
@@ -290,13 +292,35 @@ def _clear_link_fields(instance, target_model, target_name):
         type(instance)._default_manager.filter(pk=instance.pk).update(**updates)
 
 
-def _clear_contact(instance):
-    concrete = {field.name for field in type(instance)._meta.concrete_fields}
-    if "contact" in concrete:
+def _clear_contact(instance, urlconf=None):
+    """'Remove contact': the document's own `contact` field and its own `contacts` table,
+    the one its resource's serializer declares or the model's polymorphic table of that
+    name (PE-25). A reverse relation that happens to be called `contacts` is not the
+    document's table and is left alone; a `contact` column that cannot be empty is too."""
+    fields = {field.name: field for field in type(instance)._meta.concrete_fields}
+    if "contact" in fields and fields["contact"].null:
         type(instance)._default_manager.filter(pk=instance.pk).update(contact=None)
-    contacts = getattr(instance, "contacts", None)
-    if contacts is not None:
-        contacts.all().delete()
+    rules = rules_for(type(instance), urlconf)
+    declared = getattr(getattr(rules, "serializer_class", None), "CHILD_TABLES", None) or {}
+    spec = child_table_specs(type(instance), declared).get("contacts")
+    if spec is not None:
+        for row in read_children(instance, spec):
+            row.delete()
+
+
+def delete_if_permitted(rules, user, instance) -> None:
+    """Deleting a linked document asks what the record route asks (PE-26,
+    `core.delete.may_delete`), about the document as it now is, after its links were
+    cleared. One the caller may not delete, one a dynamic link still names, or one
+    another row protects is skipped; its links stay cleared."""
+    instance.refresh_from_db()
+    if not may_delete(rules, user, instance):
+        return
+    try:
+        with transaction.atomic():
+            delete_document(instance)
+    except (LinkExistsError, ProtectedError):
+        return
 
 
 class LinkedDocumentsMixin:
@@ -326,33 +350,31 @@ class LinkedDocumentsMixin:
         delete = bool(inputs.get("delete", False))
         target_name = self.kwargs[self.lookup_url_kwarg or self.lookup_field]
 
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            item_doctype = item.get("doctype")
-            item_name = item.get("docname")
-            if not item_doctype or not item_name:
-                continue
-            model = model_for_doctype(item_doctype)
-            rules = rules_for(model, urlconf) if model is not None else None
-            if model is None or rules is None:
-                continue
-            instance = model._default_manager.filter(pk=item_name).first()
-            if instance is None:
-                continue
-            if rules.has_object_rule(request.user, instance, "write") is False:
-                continue
-
-            if remove_contact:
-                _clear_contact(instance)
-            else:
-                _clear_reference(instance)
-                _clear_link_fields(instance, self.document_model, target_name)
-            if delete:
-                try:
-                    check_dynamic_links(instance)
-                except LinkExistsError:
+        # One transaction for the request, as upstream's: a failure leaves nothing half done.
+        with transaction.atomic():
+            for item in items:
+                if not isinstance(item, dict):
                     continue
-                instance.delete()
+                item_doctype = item.get("doctype")
+                item_name = item.get("docname")
+                if not item_doctype or not item_name:
+                    continue
+                model = model_for_doctype(item_doctype)
+                rules = rules_for(model, urlconf) if model is not None else None
+                if model is None or rules is None:
+                    continue
+                instance = model._default_manager.filter(pk=item_name).first()
+                if instance is None:
+                    continue
+                if rules.has_object_rule(request.user, instance, "write") is False:
+                    continue
+
+                if remove_contact:
+                    _clear_contact(instance, urlconf)
+                else:
+                    _clear_reference(instance)
+                    _clear_link_fields(instance, self.document_model, target_name)
+                if delete:
+                    delete_if_permitted(rules, request.user, instance)
 
         return Response(Envelope("success", "message"))

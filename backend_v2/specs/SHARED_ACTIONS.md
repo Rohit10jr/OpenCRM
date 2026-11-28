@@ -51,7 +51,7 @@ name as input.
 |---|---|---|
 | Bulk delete, linked documents, unlink | Lead, Deal, Contact, Organization, Task, Call Log (`frontend/src/components/ListBulkActions.vue:17-30,107-121`) | SALES, CONTACTS, ACTIVITIES |
 | Bulk update | Lead, Deal, Contact, Organization, Task; Call Log hides it (`CallLogsListView.vue:175-183`) | SALES, CONTACTS, ACTIVITIES |
-| Rename | Organization, SLA, Assignment Rule, Email Account, Email Template (`pages/Organization.vue:304-310`, `SlaPolicyView.vue:438-445`, `AssignmentRuleView.vue:735-743`, `EmailEdit.vue:191-196`, `EditEmailTemplate.vue:223-231`) | CONTACTS, SLA, ACTIVITIES, CONFIGURATION (Email Account, A-12) |
+| Rename | Contact, Organization, SLA, Assignment Rule, Email Account, Email Template (Contact: `docs/http/05_contacts_organizations.http` 5.3-5.7, `backend/tests/test_rename.py:58-92`; `pages/Organization.vue:304-310`, `SlaPolicyView.vue:438-445`, `AssignmentRuleView.vue:735-743`, `EmailEdit.vue:191-196`, `EditEmailTemplate.vue:223-231`) | CONTACTS, SLA, ACTIVITIES, CONFIGURATION (Email Account, A-12) |
 | Link search | every Link control's target | every unit, per resource |
 | Export | every list using `ViewControls.vue:569-588` | every unit with a list view |
 

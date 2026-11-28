@@ -1,13 +1,16 @@
 from core.routers import DocumentRouter, SingletonRouter
 from tests_support.views import (
     AutoIncrementDocumentViewSet,
+    ContactHolderViewSet,
     DynamicReferenceViewSet,
     FieldDocumentViewSet,
     PointingDocumentViewSet,
+    PolyContactHolderViewSet,
     PromptDocumentViewSet,
     SearchableDocumentViewSet,
     SecuredDocumentViewSet,
     SingletonDocumentViewSet,
+    StrayContactViewSet,
     WidgetViewSet,
 )
 
@@ -20,6 +23,11 @@ router.register(
     basename="test-searchable-document",
 )
 router.register("test-pointers", PointingDocumentViewSet, basename="test-pointer")
+router.register("test-contact-holders", ContactHolderViewSet, basename="test-contact-holder")
+router.register("test-stray-contacts", StrayContactViewSet, basename="test-stray-contact")
+router.register(
+    "test-poly-contact-holders", PolyContactHolderViewSet, basename="test-poly-contact-holder"
+)
 router.register(
     "test-dynamic-references",
     DynamicReferenceViewSet,

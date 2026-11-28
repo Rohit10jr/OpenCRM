@@ -20,6 +20,9 @@ from tests_support.export import placeholder_export_field_info
 from tests_support.list_views import WidgetListView
 from tests_support.serializers import (
     AutoIncrementDocumentSerializer,
+    ContactHolderSerializer,
+    PolyContactHolderSerializer,
+    StrayContactSerializer,
     DynamicReferenceSerializer,
     FieldDocumentSerializer,
     PointingDocumentSerializer,
@@ -101,6 +104,46 @@ class PointingDocumentViewSet(DocumentViewSet):
     @staticmethod
     def has_object_rule(user, document, ptype):
         return document.owner_id == user.pk
+
+
+class ContactHolderViewSet(DocumentViewSet):
+    """Everyone reads a holder. A frozen one may not be written; a locked one may be
+    deleted by Administrator only, and an unlocked one by anyone (the rule answers
+    `None`, which allows) (PE-26)."""
+
+    access = Access.ruled()
+    serializer_class = ContactHolderSerializer
+    readable_fields = ContactHolderSerializer.Meta.fields
+    filterable_fields = ("name", "widget", "contact", "locked")
+    sortable_fields = ("name", "modified")
+
+    @staticmethod
+    def list_rule(user):
+        return None
+
+    @staticmethod
+    def has_object_rule(user, document, ptype):
+        if ptype == "delete":
+            return user.name == "Administrator" if document.locked else None
+        if ptype == "write":
+            return not document.frozen
+        return True
+
+
+class PolyContactHolderViewSet(DocumentViewSet):
+    access = Access.open(reason="A fixture with a polymorphic contacts table.")
+    serializer_class = PolyContactHolderSerializer
+    readable_fields = PolyContactHolderSerializer.Meta.fields
+    filterable_fields = ("name", "widget")
+    sortable_fields = ("name", "modified")
+
+
+class StrayContactViewSet(DocumentViewSet):
+    access = Access.open(reason="A fixture row with no confidential fields.")
+    serializer_class = StrayContactSerializer
+    readable_fields = StrayContactSerializer.Meta.fields
+    filterable_fields = ("name", "pointer")
+    sortable_fields = ("name", "modified")
 
 
 class DynamicReferenceViewSet(DocumentViewSet):

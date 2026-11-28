@@ -140,3 +140,24 @@ def check_dynamic_links_batch(instances) -> None:
                     reference_name,
                 )
             )
+
+
+def may_delete(rules, user, document) -> bool:
+    """Whether the record route would let `user` delete `document`: its resource is a
+    routed document ViewSet that serves DELETE, and the object rule does not refuse. A
+    doctype ruled only through `ROW_RULES` has no record route, so it is never deleted
+    this way. The record route and the shared actions' linked delete both ask this
+    (PE-26), so they cannot drift."""
+    from core.views import DocumentViewSet
+
+    if not (isinstance(rules, type) and issubclass(rules, DocumentViewSet)):
+        return False
+    if "delete" not in (getattr(rules, "http_method_names", ()) or ()):
+        return False
+    return rules.has_object_rule(user, document, "delete") is not False
+
+
+def delete_document(document) -> None:
+    """The delete itself, after the rules: refused by a dynamic link still naming it."""
+    check_dynamic_links(document)
+    document.delete()
