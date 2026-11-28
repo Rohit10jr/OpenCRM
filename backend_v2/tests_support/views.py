@@ -4,6 +4,7 @@ from django.db.models import Q
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from configuration.mixins import ListViewMixin
 from core.access import Access
 from core.mixins import (
     BulkDeleteMixin,
@@ -16,6 +17,7 @@ from core.mixins import (
 from core.renderers import Envelope
 from core.views import DocumentViewSet, SingletonViewSet
 from tests_support.export import placeholder_export_field_info
+from tests_support.list_views import WidgetListView
 from tests_support.serializers import (
     AutoIncrementDocumentSerializer,
     DynamicReferenceSerializer,
@@ -30,6 +32,7 @@ from tests_support.serializers import (
 
 
 class WidgetViewSet(
+    ListViewMixin,
     BulkDeleteMixin,
     BulkUpdateMixin,
     LinkedDocumentsMixin,
@@ -39,6 +42,7 @@ class WidgetViewSet(
     DocumentViewSet,
 ):
     export_field_info = staticmethod(placeholder_export_field_info)
+    list_view_class = WidgetListView
     access = Access.ruled()
     serializer_class = WidgetSerializer
     readable_fields = WidgetSerializer.Meta.fields
@@ -49,6 +53,7 @@ class WidgetViewSet(
         "amount",
         "quantity",
         "notes",
+        "priority",
         "widget_owner",
         "_assign",
     )
@@ -71,7 +76,7 @@ class WidgetViewSet(
         return None
 
 
-class SearchableDocumentViewSet(LinkSearchMixin, DocumentViewSet):
+class SearchableDocumentViewSet(ListViewMixin, LinkSearchMixin, DocumentViewSet):
     access = Access.open(
         reason="A disabled-row search fixture with no confidential or protected data."
     )
@@ -161,7 +166,7 @@ class PromptDocumentViewSet(DocumentViewSet):
     sortable_fields = ("name", "label", "modified")
 
 
-class AutoIncrementDocumentViewSet(DocumentViewSet):
+class AutoIncrementDocumentViewSet(ListViewMixin, DocumentViewSet):
     access = Access.open(
         reason="An integer-naming fixture with no confidential rows or protected fields."
     )

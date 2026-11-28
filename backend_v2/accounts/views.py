@@ -6,6 +6,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from accounts import directory, front_door, invitations, services, user_roles
+from accounts.list_views import UserListView
 from accounts.roles import ADMINISTRATOR, GUEST, ROLE_SYSTEM_MANAGER
 from accounts.serializers import (
     CRMInvitationSerializer,
@@ -31,6 +32,7 @@ class UserViewSet(LinkSearchMixin, DocumentViewSet):
     """`User`, ruled as `backend/crm_app/permissions/platform_docs.py:90-136` rules it."""
 
     access = Access.ruled()
+    list_view_class = UserListView
     serializer_class = UserSerializer
     readable_fields = UserSerializer.Meta.fields
     filterable_fields = UserSerializer.Meta.fields

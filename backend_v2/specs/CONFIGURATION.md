@@ -76,8 +76,8 @@ unit's own doctypes, and their real gate is SALES and ACTIVITIES (§9).
 - **Field metadata, layouts, views, the engine:** `frappe_core/api/doc.py`,
   `crm_app/api/doc.py`, `api/views.py`, `api/view_settings.py`, `api/fields_layout.py`,
   `api/form_load.py`, `api/user_settings.py`, `api/form_script.py`,
-  `frappe_core/metadata.py`, `frappe_core/field_meta.py`, `frappe_core/registry.py:85-137`
-  (the six per-model list hooks), `crm_app/metadata_hooks.py`,
+  `frappe_core/metadata.py`, `frappe_core/field_meta.py`, `frappe_core/registry.py:94-137`
+  (the per-model list hooks), `crm_app/metadata_hooks.py`,
   `crm_app/data/doctype_meta.json`, `backend/scripts/generate_field_meta.py`
 - **Mail carrier:** `crm_app/communication.py:350-442`, `:589`
 - **Rules:** `crm_app/permissions/metadata_docs.py`, `permissions/platform_docs.py`
@@ -98,8 +98,8 @@ unit's own doctypes, and their real gate is SALES and ACTIVITIES (§9).
 | `test_bulk_edit_fields.py`, `test_form_load.py` | API | milestone 5 | name CRM Task, Deal, Contacts, Call Log as data |
 | `test_phase4_metadata.py` | mixed, 63 tests | the metadata cases `:37-186` (5), layouts `:446-536`, `:832-890` (6), views `:213-236`, `:551-699`, `:778-817` (7), the rest (8) | most name CRM Lead: SALES |
 | `test_phase3_endpoints.py:1078-1106` | API | quick filters — milestone 6 | name CRM Lead and Task |
-| `test_get_data.py` | internal (`tests_support`) | milestone 8, rewritten | none |
-| `test_kanban_counts.py`, `test_kanban_defaults.py`, `test_list_definitions.py` | internal | the engine half — milestone 8 | the definitions: SALES, ACTIVITIES |
+| `test_get_data.py` | internal (`tests_support`) | milestone 8, ported onto `test-widgets/list-view/` (§4.8) | none |
+| `test_kanban_counts.py`, `test_kanban_defaults.py`, `test_list_definitions.py` | internal | milestone 8: two count properties and a `parse` twin (§4.8) | the count values: ACTIVITIES; the definitions: SALES, ACTIVITIES, CONTACTS |
 | `test_seed_defaults.py` | internal | this unit's seeds, per milestone | Lead/Deal statuses, industries, sources |
 | `test_mail_config_account.py:262` | API | **not here**: posts `email.make` on a lead — ACTIVITIES (a unit test of the lookup steps stays here) | SALES, ACTIVITIES |
 
@@ -548,8 +548,8 @@ Spec-review addendum: `temp` A-37 (DECISIONS 44-47).
   match `backend/`'s.
 - **Quick filters** (`crm_app/api/doc.py:126-234`): a JSON list on the CRM Global Settings
   row for `(dt, "Quick Filters")`. Several such rows can exist (Hash names, no unique
-  constraint); the first by name wins. Without a row, the fallback table only (the
-  per-model hook is milestone 8's), named apart from `field_helpers.STANDARD_FILTER_FIELDS`;
+  constraint); the first by name wins. Without a row, the fallback table only (no model
+  defines the old per-model hook, so it is not ported; §4.8), named apart from `field_helpers.STANDARD_FILTER_FIELDS`;
   the table covers ten doctypes of six units. Entries are built from the model's
   concrete fields and `verbose_name`, not from the metadata file: `{label, fieldname,
   fieldtype, options}`; `converted` dropped for CRM Lead; a blank first option only when a
@@ -685,20 +685,153 @@ this section "the read rule" and "the write rule" are the resource's.
 
 ### 4.8 The list engine (milestone 8)
 
-- `get_data`'s response shape, every key present even when empty.
-- It reads through the resource's own queryset and field rules (root `CLAUDE.md` rule
-  11). In `backend/` it resolves any registered doctype (`frappe_core/api/doc.py:229`);
-  `backend_v2` serves it per resource (§6, the last row).
-- `all_count` and `count` go through the caller's rules (`doc.py:506-515`); the four badge
-  counts are deliberately **not** permission-filtered (`:564-598`) and are safe only
-  because the rows they count for were filtered first.
-- A kanban column list for a Link field is built through the **target's list rule**
-  (`doc.py:432-448`, `view_settings.py:86-98`; `core.resources.rules_for(model)` in
-  `backend_v2`): for `User`, Administrator and Guest are left out for everyone but
-  Administrator.
-- A list definition supplies six things (`registry.py:85-137`): `default_list_data`,
-  `default_kanban_settings`, `get_non_filterable_fields`, `parse_list_data`,
-  `get_hidden_fields`, `get_standard_filter_fields`. `User.default_list_data` is here (§8).
+Spec-review addendum: `temp` A-40 (DECISIONS 53-55). Milestone 7 is built first: the
+`views` key, the saved standard view and `load_default_columns` all read CRM View
+Settings. Paths in this section are `backend/frappe_core/api/doc.py` unless named.
+
+- **The route.** `get_data` is `GET` and `POST /api/v1/<resource>/list-view/`, a mixin a
+  resource opts in to (`PORT_MAP.md:191`, S24); `doctype` leaves the input. It is served
+  only where a resource opts in: a child table, a withheld doctype and a settings record
+  have no list-view route, and the URL answers the generic 404 (**PE-22**; the old
+  backend answers `get_data` for any registered doctype, `:229`). A guard checks that no
+  child or singleton ViewSet opts in or names a definition (a withheld doctype has no
+  ViewSet). On a resource that opts in, a record named `list-view` cannot be reached by
+  its document route (S25 (8)). It reads through the resource's own queryset and field
+  rules (root `CLAUDE.md` rule 11).
+- **The list-view convention** (FOUNDATION Q6, `specs/FOUNDATION.md:349`): a class in
+  each app's `list_views.py`, named by the ViewSet's `list_view_class`.
+  `configuration/list_views.py` holds the base `ListView`: `columns`, `rows`,
+  `kanban_settings`, `hidden_fields` and `parse(data)`, the old hooks
+  `default_list_data`, `default_kanban_settings`, `get_hidden_fields` and
+  `parse_list_data` (`frappe_core/registry.py:94-137`, `:145-155`; only CRM Lead has
+  hidden fields). The base answers the fallback: the Name and Last Modified columns and
+  rows `["name"]` (`:38-44`, `registry.py:94-114`). `list_definition_for(dt)` takes
+  `served_model(dt)`, refuses a child, then reads `routed_rule_map()[model]
+  .list_view_class` (`core/resources.py:57-61`), else the base; an unknown, child or
+  withheld doctype gets nothing (PE-14, PE-15). `get_non_filterable_fields` stays a
+  model staticmethod, as milestone 5 built it. `get_standard_filter_fields` is defined
+  by no model and is not ported. Definitions now: `tests_support` (Widget, and a second
+  resource without one) and `UserListView` (old `frappe_platform/models.py:309-318`;
+  the definition only, with no `list-view/` route on User, since no screen lists
+  users). No CONFIGURATION doctype has one. Lead and Deal come with SALES; Task, Note
+  and Call Log with ACTIVITIES; Contact and Organization with CONTACTS.
+- **`get_data`, in order** (`:211-372`):
+  1. **Inputs** (`:211-240`): `filters` through `_as_filters` (`:70-88`: a dict or a
+     list of conditions; anything else is 417 "Unsupported filters value of type X");
+     `rows`, `columns`, `kanban_fields` and `kanban_columns` through `_as_list`
+     (`:58-62`: a single value becomes a one-item list); `view` through `_as_dict`. From
+     `view`: `custom_view_name`, `view_type`, `group_by_field`.
+  2. **`@me` and `default_filters`** (`:242-247`, `:91-111`): `@me` resolved in either
+     filter shape; a dict `default_filters` overrides a dict `filters` key by key, and
+     otherwise the conditions are appended.
+  3. **List and group-by** (`:256-317`, when `view_type` is not `kanban`). Sent
+     `columns` or `rows` make a custom view (`is_default` false); a missing one takes
+     the fallback. Without a custom view, the caller's own saved standard view
+     (`crm_app/metadata_hooks.py:27-51`: `{dt, type: view_type or "list", is_standard,
+     user}`, newest by `modified`, ignored when both its lists are empty) gives
+     `columns` and `rows`, and `is_default` is false. Otherwise the definition's
+     `columns` and `rows`, each falling back when empty. The dead clause
+     `is_default and has_default_list_data` (`:275`) is ported as it is. Then every
+     column's `key` is added to `rows`; a `_liked_by` column 10rem wide becomes 50px;
+     a column flagged `hidden`, or whose key is a definition hidden field, is dropped
+     (iterating a copy, `:285-303`). `group_by_field` is added to `rows`. The query runs
+     with `page_length` through `coerce_page_length`, then the definition's `parse`
+     (the list branch only).
+  4. **Kanban** (`:319-331`, `:405-528`): `rows` default to the definition's rows.
+     Without `kanban_columns` and with a `column_field`, the columns come from the
+     **model** (`:426-450`): a forward foreign key gives the target's rows through the
+     target's list rule, ordered by `modified` (else `pk`), and **a target no resource
+     serves gives no columns** (the routed rule map, as milestone 7's lookup after A-43;
+     PE-22: the old backend builds the column list whether or not the link target is
+     served); a field with choices gives its choices. A `column_field` the model lacks
+     gives an empty board without sent columns and "Unknown field 'x' for this document
+     type" with them, as `backend/`; one it has but the caller may not filter on is
+     "Cannot filter on 'x'". `title_field` defaults to the
+     definition's (else `name`) and joins `rows`; `kanban_fields` default to the
+     definition's (a JSON string parsed), else `["name"]`, and join `rows`. Only an
+     equality filter on `column_field` pre-selects a column (`:468-482`): every other
+     column, and a column flagged `delete`, is answered empty; any other operator on
+     the column field stays and is AND-ed. Each column: its own `page_length`
+     (default 20; 0 means no limit, parity), a manual `order` fetched as the named cards
+     first, newest `creation` first, then the rest (`:531-561`) and re-sorted by
+     `order`; `all_count` through the caller's rules and `count` the cards answered;
+     the four badge counts per card (below). Answers `data` as
+     `[{column, fields, data}]`; in kanban, `row_count` is the number of columns and
+     `columns` is echoed unprocessed (parity).
+  5. **`fields`** (`:333-341`): every concrete model field as `{label, fieldtype,
+     fieldname, options}` with `backend/`'s types (`:114-134`,
+     `frappe_core/metadata.py:175-201`: never `Select`; `options` only for a link).
+     Milestone 5's `configuration/field_meta.py:128-134` answers `Select` and is not
+     reused. The seven standard fields (`:47-55`) join `rows` and, when missing,
+     `fields`; PE-16 is applied **after** they are added, so a hidden one is not
+     re-added.
+  6. **`is_default`** (`:343-348`): when not default and a `custom_view_name` is sent,
+     the named view's `load_default_columns`, read under milestone 7's read rule: a view
+     the caller may not read, or a name that is not an integer, counts as no view
+     (PE-21's "Where", PE-12e).
+  7. **Group-by options** (`:350-351`, `:601-630`): for `view_type` `group_by`,
+     `group_by_field` becomes `{label, fieldname, fieldtype, options}`: a Select's
+     options, or else the page's own distinct non-empty values, plus `""` when a row is
+     empty, all sorted together (so `""` first), descending only when `order_by` sorts
+     that field `desc`. A
+     field not in `fields` is answered as the plain name.
+  8. **The answer** (`:353-372`): `data`, `columns`, `rows`, `fields`, `column_field`,
+     `title_field`, `kanban_columns`, `kanban_fields`, `group_by_field`, `page_length`
+     and `page_length_count` (both echoed raw, parity), `is_default`, `views`
+     (milestone 7's `get_views`), `total_count` through the caller's rules,
+     `row_count`, `form_script` and `list_script` (`get_form_script`, milestone 6),
+     `view_type`. Every key present, even when empty.
+- **Which allowlist checks which input** (root rule 10; DECISIONS 53). Readable:
+  `rows`, the column keys, `title_field`, `kanban_fields`, `group_by_field`.
+  Filterable: `filters`, `default_filters`, and `column_field`, checked **before** any
+  column is built. Sortable: `order_by`. The engine's own fixed clauses (`creation desc`
+  and the `name in` / `not in` pair of a manual kanban order, `:540-557`) are not
+  checked against the caller's lists. Row keys the model lacks are named together in
+  the old `_selectable`'s 417 ("Unknown field 'x' for Foundation Widget", "Unknown
+  fields 'a', 'b' for …", `:375-402`; a number or null in `rows` too); a known field the
+  caller may not read, filter or sort is refused with `core`'s existing texts ("Field
+  'x' is not readable", for a group-by field too; "Cannot filter on 'x'"; "Cannot order
+  by 'x'"). A manual card order's names are read as the key field holds them; one the
+  key cannot hold (a word on an integer key, an object, null) names no card, as the old
+  filter builder coerced them. The engine adds names the caller never typed
+  (`group_by_field` to `rows` in the list and group-by views; the screen always sends
+  `owner`; the seven standard fields), so a guard checks that every resource that opts in has the
+  seven standard fields readable, and that every definition and kanban default names
+  only readable fields and no restricted one. Group-by here checks the **readable** list, unlike
+  `core.query.resolve_group_by` (sortable) and milestone 5's guard (filterable); the
+  difference is recorded, not unified now.
+- **Standard entries a model lacks** (on User: `owner`, `modified_by`, the
+  `_`-prefixed fields; `tests/guards/test_field_helper_names.py`): offered by the
+  metadata helpers, as `backend/`, and refused by the engine, as `backend/` refuses
+  them (a filter: 400 "Unknown field 'owner' for this document type",
+  `frappe_core/filters.py:468-470`; a sort: 417 "Cannot order by unknown field
+  'owner'"; a group-by: 417 from `_selectable`, `:375-402`). Only User lacks them.
+- **Badge counts** (`:564-598`): `_email_count` (Communication and Automated Message
+  together), `_comment_count`, `_task_count`, `_note_count` per card, counts of related
+  rows, **not** filtered by the caller's rules, as `backend/`; only the cards were
+  filtered first. They come from a provider setting with a system check, like
+  `MAIL_ACCOUNT_PROVIDER`: `counts_for(doctype, names) -> {name: {the four keys}}`,
+  batched (one grouped query per kind per column). The default answers 0 for all four
+  (the screen hides 0 and a missing key alike, `Deals.vue:179`); ACTIVITIES' check
+  fails when its app is installed and the setting does not point at it. `core` never
+  imports `activities`.
+- **Crashes become 417 (PE-12e):** a `columns` or `kanban_columns` entry that is not an
+  object; a `rows` or `kanban_fields` entry that is not a string; a column's `order`
+  that is not a list. A `custom_view_name` that is not an integer counts as no view.
+- **A cap (PE-23):** a sent `kanban_columns` list longer than `MAX_PAGE_LENGTH` is 417.
+  A column's `page_length` of 0 still means no limit, and `page_length=0` every row
+  (parity).
+- **Gating.** Ported now onto `test-widgets/list-view/`: all of `test_get_data.py`
+  (`:301` with a real view row; `:322`, `:345` with `hidden_fields`; `:284` with the
+  second resource; `:442`, `:448` become 401 and the route's 404). Twins now:
+  `test_phase4_metadata.py:251-339` and `:900-940` on Widget; `:347` with Widget's
+  owner field; `:362` once a field with choices is added to `tests_support`; `:403`,
+  `:422`; from `test_kanban_counts.py`, "an invisible row gets no counts" and
+  "`all_count` is ruled". Waiting: `:374` and the count values (ACTIVITIES);
+  `test_kanban_defaults.py:23`, `:36` (SALES, ACTIVITIES; `:53` is dropped with
+  migration 0011); all of `test_list_definitions.py` but a `parse` twin. `.http`: no
+  `get_data` block can run (each names Lead, Deal, Task or Organization); `07` 5.8 runs
+  as a negative case with the generic 404 body.
 
 ## 5. Acceptance
 
@@ -713,7 +846,7 @@ this section "the read rule" and "the write rule" are the resource's.
   | `13_bulk_and_misc` | 9.9-9.11 | 2 | — |
   | `12_settings_singletons` | 0.10, 1.1-1.12, 1.14-1.16 | 3 | 1.13 (CRM Lead: SALES); sections 2-4 INTEGRATIONS |
   | `13_bulk_and_misc` | 5.2, 5.3 (exchange rate) | 3 | — |
-  | `07_views_and_metadata` | the resource-only blocks 0.12-0.15, 2.5, 6.7, 7.1-7.3, 7.5, 8.5-8.8, 9.12-9.14; the view blocks §4.7 names (7) | 5-8 | every other block: SALES, ACTIVITIES, CONTACTS |
+  | `07_views_and_metadata` | the resource-only blocks 0.12-0.15, 2.5, 6.7, 7.1-7.3, 7.5, 8.5-8.8, 9.12-9.14; the view blocks §4.7 names (7); 5.8 as a negative case, the generic 404 body (8) | 5-8 | every other block, every `get_data` block among them: SALES, ACTIVITIES, CONTACTS |
 
   `12` 1.14 and 1.15 (a second POST, a DELETE on the singleton, 403 in `backend/`) answer
   405 under the singleton route (PE-1); so does `test_system_settings.py`
@@ -748,9 +881,10 @@ this section "the read rule" and "the write rule" are the resource's.
 | 10 | Sensitive column names in field metadata | decided (A-35, DECISIONS 43): every metadata answer leaves out the fields the caller may not read, sensitive and restricted (PE-16) |
 | 3 | The saved-view rules (§4.7) | decided (A-39, DECISIONS 49-52): `user`, `public`, `is_standard`, `is_default` read-only on the resource (PE-19); `public` also applies the read rule (PE-20); `set_as_default` with a name on the caller's own view, `fetch_and_update_kanban_columns` under the read rule, saving under the write rule (PE-21); crashes become errors (PE-12d); the rest parity |
 | 14 | `TRACKED_FIELDS` on CRM View Settings | decided (A-39): none, as `backend/`; its test ported as a guard |
-| 6 | Kanban badge counts before ACTIVITIES | **open — before milestone 8** |
-| — | `get_data` on a withheld or child doctype | **open — before milestone 8** [default: refused, as the contract says] |
-| — | The standard filter, group-by and sort entries a model lacks (on User: `owner`, `modified_by`, the `_`-prefixed fields; `tests/guards/test_field_helper_names.py`) | **open — before milestone 8**, where the User list view is built [today: offered, as `backend/`; the alternative is a parity exception dropping them] |
+| 6 | Kanban badge counts before ACTIVITIES | decided (A-40): a batched provider setting with a system check, answering 0 until ACTIVITIES (§4.8) |
+| — | `get_data` on a withheld or child doctype | decided (A-40): no list-view route, so the generic 404 (PE-22) |
+| — | The standard filter, group-by and sort entries a model lacks (on User: `owner`, `modified_by`, the `_`-prefixed fields; `tests/guards/test_field_helper_names.py`) | decided (A-40): parity, offered by the helpers and refused by the engine, as `backend/` (§4.8) |
+| — | The list-view convention | decided by FOUNDATION Q6 (`specs/FOUNDATION.md:349`): `list_view_class` on the ViewSet, a class in each app's `list_views.py` (§4.8) |
 
 Departures from `backend/` in any of these are flagged for the owner and recorded in
 `PARITY_EXCEPTIONS.md` before they are built. `API_CONTRACT.md:209` (404 for a child table)
@@ -809,4 +943,4 @@ Moved here by ACCOUNTS' spec rewrite (`temp` A-21 D-D; flagged for the owner).
 | **5. Field metadata** | the metadata file, its generator and CI check; "doctype exists"; `getdoctype`; `user_settings`; the four field helpers; export's provider factory; PE-14 to PE-16 | yes (A-35), on this unit's own doctypes and `tests_support` |
 | **6. Layouts, scripts, quick filters** | CRM Fields Layout and its three calls, CRM Form Script and the internal `get_form_script`, CRM Global Settings, the two quick-filter calls, the default rows as `seed_dev_data` steps; PE-12c, PE-17, PE-18 | yes (A-37); content cases on Lead, Deal and Task wait |
 | 7. Saved views | CRM View Settings, the eight calls, `get_views` | rules yes; default columns need a list definition |
-| 8. List engine | `get_data` as the list-view mixin, the list-definition convention, `User.default_list_data` | on `tests_support` and `User` only; the real gate is SALES and ACTIVITIES |
+| 8. List engine | `get_data` as the list-view mixin, the base `ListView` and `list_view_class`, `UserListView`, the badge-count provider; PE-12e, PE-22, PE-23. After milestone 7, whose views it reads | on `tests_support` and `User` only; the real gate is SALES and ACTIVITIES |

@@ -195,6 +195,10 @@ DIRECT_MANAGER_READS = {
         "The contact-specific unlink path clears its direct field with a plain update, "
         "matching the old endpoint's unstamped write."
     ),
+    ("configuration/list_engine.py", "kanban_link_columns", "target._default_manager"): (
+        "A kanban's columns are its column field's link target's names, read through that "
+        "target's own list rule (old doc.py:432-448); a target no resource serves gives none."
+    ),
     ("configuration/view_settings.py", "kanban_link_columns", "model._default_manager"): (
         "A saved kanban's columns are a link target's names, read through that target's "
         "own list rule (old view_settings.py:91-100); a target no resource serves gives none."

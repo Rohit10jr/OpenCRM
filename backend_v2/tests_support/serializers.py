@@ -64,6 +64,7 @@ class WidgetSerializer(DocumentSerializer):
             "active",
             "due_date",
             "notes",
+            "priority",
             "widget_owner",
             "rows",
             "poly_rows",
