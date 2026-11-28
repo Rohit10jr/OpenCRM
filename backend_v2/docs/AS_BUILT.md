@@ -241,6 +241,15 @@ System Manager or Administrator writes; the rows written by a data migration) an
 `industries/` (open to every signed-in user), each with `search/`. The lists are in
 `contacts/reference_rows.py`; `contacts/dev_data.py` adds two `seed_dev_data` steps,
 one putting back a deleted salutation or gender and one writing the 51 industries.
+Its second milestone adds `addresses/` (everyone reads, writes and creates; System
+Manager or Administrator deletes) with its Dynamic Link rows (`links`, a polymorphic
+child declared on the model). An address is named `<title>-<type>` plus the collision
+number, and its save deduplicates its links, stores each linked document's name as its
+title (as `backend/`) and clears a preferred
+flag on the other addresses linked to the same document. Search reads the old
+`address_query` link filters and hides disabled addresses. A record a Dynamic Link row
+names cannot be deleted, and the refusal names the row's place ("at Row: <idx>"), as
+for every child-table row.
 
 Django admin exposes `accounts.User` only for enabling and disabling. Identity fields are
 read-only, the Administrator and Guest flags are also read-only, adding and deleting are

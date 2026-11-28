@@ -107,7 +107,8 @@ plus the standard fields: `name`, `owner`, `modified_by`, `creation`, `modified`
     link_doctype, link_name, link_title`
 - **Contact's and Address's metadata come from the model**, so the columns are declared
   in the old order with the old verbose names, or `getdoctype` differs.
-- **Dynamic Link's `link_title`** is set as `backend/` sets it (DECISIONS 60).
+- **Dynamic Link's `link_title`** is the linked document's name, as `backend/` stores
+  it (its title-field lookup finds none; DECISIONS 65).
 
 ### Tests (REBUILD_PLAN S14)
 
@@ -324,7 +325,7 @@ rate, and a provider failure refuses the save (`core_sales.py:58-96,133-139`;
 
 The four save steps (`models.py:1962-2030`): on create, an address with no links takes
 the links of the Contact whose email is the owner's; links are deduplicated, the first
-kept; each link's `link_title` is the linked document's title or name; a preferred flag
+kept; each link's `link_title` is the linked document's name; a preferred flag
 set here is cleared on every other enabled address linked to the same document. Search
 hides disabled addresses (FINDINGS 45); list-shaped search filters follow ACCOUNTS'
 User precedent (`AS_BUILT.md:503-504`).
@@ -386,7 +387,7 @@ Upstream does each of these; `backend/` does not, and neither does `backend_v2`:
 | I | Deal contacts on contact delete | decided by the supervisor, flagged for the owner: SALES' (§9) |
 | J | Users with no CRM role | decided by the supervisor, flagged for the owner: the old openness, stated (§4; DECISIONS 58) |
 | K | "Remove contact" and deleting linked documents in `core` | decided by the supervisor, flagged for the owner: **PE-25**, **PE-26** (proposed), milestone 0 (DECISIONS 59) |
-| L | Dynamic Link's `link_title` | parked for the owner (DECISIONS 60): as `backend/` meanwhile |
+| L | Dynamic Link's `link_title` | decided (DECISIONS 65, correcting 60): the linked document's name, as `backend/` stores it |
 
 PE entries for this unit (PE-22 and PE-23 are CONFIGURATION milestone 8's), neutral:
 
