@@ -50,39 +50,39 @@ DELETE {{host}}/api/resource/CRM%20Deal/{{leftovers.response.body.$.data[1].name
 Authorization: Bearer {{token}}
 
 ### 0.5 cleanup contacts -> 200|404
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{contact}}/ZZ%20Jane%20Roe
+DELETE {{host}}/api/v1/contacts/ZZ%20Jane%20Roe/
 Authorization: Bearer {{token}}
 
 ### 0.6 -> 200|404
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{contact}}/ZZ%20Jane%20Roe-1
+DELETE {{host}}/api/v1/contacts/ZZ%20Jane%20Roe-1/
 Authorization: Bearer {{token}}
 
 ### 0.7 -> 200|404
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{contact}}/ZZ%20Jane%20Renamed
+DELETE {{host}}/api/v1/contacts/ZZ%20Jane%20Renamed/
 Authorization: Bearer {{token}}
 
 ### 0.8 -> 200|404
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{contact}}/ZZ%20John%20Doe
+DELETE {{host}}/api/v1/contacts/ZZ%20John%20Doe/
 Authorization: Bearer {{token}}
 
 ### 0.9 -> 200|404
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{contact}}/ZZ%20Acme%20Only
+DELETE {{host}}/api/v1/contacts/ZZ%20Acme%20Only/
 Authorization: Bearer {{token}}
 
 ### 0.9b -> 200|404
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{contact}}/ZZ%20No%20Mail
+DELETE {{host}}/api/v1/contacts/ZZ%20No%20Mail/
 Authorization: Bearer {{token}}
 
 ### 0.10 cleanup organizations -> 200|404
@@ -168,125 +168,125 @@ Content-Type: application/json
 
 # ---- contact naming and validation ----------------------------------------------------
 
-### 2.1 first + last -> 201, named by the full name, full_name derived
-# @waiting CONTACTS
-# @expect $.data.name == ZZ Jane Roe
-# @expect $.data.full_name == ZZ Jane Roe
-POST {{contact}}
+### 2.1 first + last -> 200, named by the full name, full_name derived
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.name == ZZ Jane Roe
+# @expect $.message.full_name == ZZ Jane Roe
+POST {{host}}/api/v1/contacts/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"first_name": "ZZ Jane", "last_name": "Roe", "company_name": "ZZ Contact Org"}
 
-### 2.2 the same name again -> 201, suffixed -1 (append_number_if_name_exists)
-# @waiting CONTACTS
-# @expect $.data.name == ZZ Jane Roe-1
-POST {{contact}}
+### 2.2 the same name again -> 200, suffixed -1 (append_number_if_name_exists)
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.name == ZZ Jane Roe-1
+POST {{host}}/api/v1/contacts/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"first_name": "ZZ Jane", "last_name": "Roe"}
 
-### 2.3 no person's name: company_name is the fallback, never a suffix -> 201
-# @waiting CONTACTS
-# @expect $.data.name == ZZ Acme Only
-# @expect $.data.full_name == ZZ Acme Only
-POST {{contact}}
+### 2.3 no person's name: company_name is the fallback, never a suffix -> 200
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.name == ZZ Acme Only
+# @expect $.message.full_name == ZZ Acme Only
+POST {{host}}/api/v1/contacts/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"company_name": "ZZ Acme Only"}
 
-### 2.3b a contact with no email at all, for the search test -> 201
-# @waiting CONTACTS
-# @expect $.data.name == ZZ No Mail
-POST {{contact}}
+### 2.3b a contact with no email at all, for the search test -> 200
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.name == ZZ No Mail
+POST {{host}}/api/v1/contacts/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"first_name": "ZZ No", "last_name": "Mail"}
 
 ### 2.4 nothing to name it by -> 417 "No Name Specified for Contact" (500 today: finding 2)
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.message contains No Name Specified
-POST {{contact}}
+POST {{host}}/api/v1/contacts/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"designation": "Nobody"}
 
-### 2.5 email rows on create: the primary's address is copied to email_id -> 201
-# @waiting CONTACTS
-# @expect $.data.name == ZZ John Doe
-# @expect $.data.email_ids count 2
-# @expect $.data.email_ids[0].is_primary == true
-# @expect $.data.email_id == john@zz.test
-POST {{contact}}
+### 2.5 email rows on create: the primary's address is copied to email_id -> 200
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.name == ZZ John Doe
+# @expect $.message.email_ids count 2
+# @expect $.message.email_ids[0].is_primary == true
+# @expect $.message.email_id == john@zz.test
+POST {{host}}/api/v1/contacts/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"first_name": "ZZ John", "last_name": "Doe", "email_ids": [{"email_id": "john@zz.test", "is_primary": 1}, {"email_id": "john2@zz.test"}]}
 
 ### 2.6 a single email row with no primary flag becomes primary by itself -> 200
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # contact.py:184 - `if len(self.email_ids) == 1: self.email_ids[0].is_primary = 1`
-PUT {{contact}}/ZZ%20Acme%20Only
+PATCH {{host}}/api/v1/contacts/ZZ%20Acme%20Only/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"email_ids": [{"email_id": "acme@zz.test"}]}
 
 ### 2.7 -> is_primary true, email_id follows
-# @waiting CONTACTS
-# @expect $.data.email_ids[0].is_primary == true
-# @expect $.data.email_id == acme@zz.test
-GET {{contact}}/ZZ%20Acme%20Only
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.email_ids[0].is_primary == true
+# @expect $.message.email_id == acme@zz.test
+GET {{host}}/api/v1/contacts/ZZ%20Acme%20Only/
 Authorization: Bearer {{token}}
 
 ### 2.8 a top-level email_id with NO rows is cleared on save (contact.py:176-178) -> 200
-# @waiting CONTACTS
-PUT {{contact}}/ZZ%20Jane%20Roe-1
+# @resource-envelope {"data"}/201 -> {"message"}/200
+PATCH {{host}}/api/v1/contacts/ZZ%20Jane%20Roe-1/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"email_id": "orphan@zz.test"}
 
 ### 2.9 -> email_id is empty: the child table is the truth, the column only mirrors it
-# @waiting CONTACTS
-# @expect $.data.email_id ==
-GET {{contact}}/ZZ%20Jane%20Roe-1
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.email_id ==
+GET {{host}}/api/v1/contacts/ZZ%20Jane%20Roe-1/
 Authorization: Bearer {{token}}
 
 ### 2.10 two primary emails -> 417, contact.py:181 verbatim
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.message == Only one <strong>Email ID</strong> can be set as primary.
-PUT {{contact}}/ZZ%20John%20Doe
+PATCH {{host}}/api/v1/contacts/ZZ%20John%20Doe/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"email_ids": [{"email_id": "john@zz.test", "is_primary": 1}, {"email_id": "john2@zz.test", "is_primary": 1}]}
 
 ### 2.11 phone rows: separate primary flags for mobile and phone -> 200
-# @waiting CONTACTS
-PUT {{contact}}/ZZ%20John%20Doe
+# @resource-envelope {"data"}/201 -> {"message"}/200
+PATCH {{host}}/api/v1/contacts/ZZ%20John%20Doe/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"phone_nos": [{"phone": "+1 333", "is_primary_mobile_no": 1}, {"phone": "+1 444", "is_primary_phone": 1}]}
 
 ### 2.12 -> mobile_no and phone each follow their own primary
-# @waiting CONTACTS
-# @expect $.data.phone_nos count 2
-# @expect $.data.mobile_no == +1 333
-# @expect $.data.phone == +1 444
-GET {{contact}}/ZZ%20John%20Doe
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.phone_nos count 2
+# @expect $.message.mobile_no == +1 333
+# @expect $.message.phone == +1 444
+GET {{host}}/api/v1/contacts/ZZ%20John%20Doe/
 Authorization: Bearer {{token}}
 
 ### 2.13 an email row that is not an address -> 417 InvalidEmailAddressError (base_document.py:936-940, validate_email_address)
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @expect $.exc_type == InvalidEmailAddressError
 # @expect $.message == not-an-email is not a valid Email Address
-PUT {{contact}}/ZZ%20John%20Doe
+PATCH {{host}}/api/v1/contacts/ZZ%20John%20Doe/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -295,125 +295,109 @@ Content-Type: application/json
 # ---- crm.api.contact.* ---------------------------------------------------------------
 
 ### 3.1 create_new email: the first one is primary -> 200, true
-# @waiting CONTACTS
 # @expect $.message == true
-POST {{host}}/api/method/crm.api.contact.create_new
+POST {{host}}/api/v1/contacts/ZZ Jane Roe/create-new-email-or-phone/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"contact": "ZZ Jane Roe", "field": "email", "value": "jane@zz.test"}
+{"field": "email", "value": "jane@zz.test"}
 
 ### 3.2 -> one row, primary, email_id set
-# @waiting CONTACTS
-# @expect $.data.email_ids count 1
-# @expect $.data.email_ids[0].is_primary == true
-# @expect $.data.email_id == jane@zz.test
-GET {{contact}}/ZZ%20Jane%20Roe
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.email_ids count 1
+# @expect $.message.email_ids[0].is_primary == true
+# @expect $.message.email_id == jane@zz.test
+GET {{host}}/api/v1/contacts/ZZ%20Jane%20Roe/
 Authorization: Bearer {{token}}
 
 ### 3.3 a second email is NOT primary -> 200
-# @waiting CONTACTS
-POST {{host}}/api/method/crm.api.contact.create_new
+POST {{host}}/api/v1/contacts/ZZ Jane Roe/create-new-email-or-phone/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"contact": "ZZ Jane Roe", "field": "email", "value": "jane.alt@zz.test"}
+{"field": "email", "value": "jane.alt@zz.test"}
 
 ### 3.4 -> two rows, email_id unchanged
-# @waiting CONTACTS
-# @expect $.data.email_ids count 2
-# @expect $.data.email_ids[1].is_primary == false
-# @expect $.data.email_id == jane@zz.test
-GET {{contact}}/ZZ%20Jane%20Roe
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.email_ids count 2
+# @expect $.message.email_ids[1].is_primary == false
+# @expect $.message.email_id == jane@zz.test
+GET {{host}}/api/v1/contacts/ZZ%20Jane%20Roe/
 Authorization: Bearer {{token}}
 
 ### 3.5 set_as_primary the second -> 200
-# @waiting CONTACTS
-POST {{host}}/api/method/crm.api.contact.set_as_primary
+POST {{host}}/api/v1/contacts/ZZ Jane Roe/set-as-primary/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"contact": "ZZ Jane Roe", "field": "email", "value": "jane.alt@zz.test"}
+{"field": "email", "value": "jane.alt@zz.test"}
 
 ### 3.6 -> exactly one primary, and email_id follows it
-# @waiting CONTACTS
-# @expect $.data.email_ids[0].is_primary == false
-# @expect $.data.email_ids[1].is_primary == true
-# @expect $.data.email_id == jane.alt@zz.test
-GET {{contact}}/ZZ%20Jane%20Roe
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.email_ids[0].is_primary == false
+# @expect $.message.email_ids[1].is_primary == true
+# @expect $.message.email_id == jane.alt@zz.test
+GET {{host}}/api/v1/contacts/ZZ%20Jane%20Roe/
 Authorization: Bearer {{token}}
 
 ### 3.7 create_new mobile_no: the first phone row is the primary mobile -> 200
-# @waiting CONTACTS
-POST {{host}}/api/method/crm.api.contact.create_new
+POST {{host}}/api/v1/contacts/ZZ Jane Roe/create-new-email-or-phone/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"contact": "ZZ Jane Roe", "field": "mobile_no", "value": "+49 30 1"}
+{"field": "mobile_no", "value": "+49 30 1"}
 
 ### 3.8 create_new phone: a second row, not primary -> 200
-# @waiting CONTACTS
-POST {{host}}/api/method/crm.api.contact.create_new
+POST {{host}}/api/v1/contacts/ZZ Jane Roe/create-new-email-or-phone/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"contact": "ZZ Jane Roe", "field": "phone", "value": "+49 30 2"}
+{"field": "phone", "value": "+49 30 2"}
 
 ### 3.9 set_as_primary phone on the second row -> 200
-# @waiting CONTACTS
-POST {{host}}/api/method/crm.api.contact.set_as_primary
+POST {{host}}/api/v1/contacts/ZZ Jane Roe/set-as-primary/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"contact": "ZZ Jane Roe", "field": "phone", "value": "+49 30 2"}
+{"field": "phone", "value": "+49 30 2"}
 
 ### 3.10 -> mobile_no from row 1, phone from row 2
-# @waiting CONTACTS
-# @expect $.data.phone_nos count 2
-# @expect $.data.mobile_no == +49 30 1
-# @expect $.data.phone == +49 30 2
-GET {{contact}}/ZZ%20Jane%20Roe
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.phone_nos count 2
+# @expect $.message.mobile_no == +49 30 1
+# @expect $.message.phone == +49 30 2
+GET {{host}}/api/v1/contacts/ZZ%20Jane%20Roe/
 Authorization: Bearer {{token}}
 
 ### 3.11 an unknown field -> 417 "Invalid field", crm/api/contact.py:80 verbatim
-# @waiting CONTACTS
 # @expect $.message == Invalid field
-POST {{host}}/api/method/crm.api.contact.create_new
+POST {{host}}/api/v1/contacts/ZZ Jane Roe/create-new-email-or-phone/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"contact": "ZZ Jane Roe", "field": "fax", "value": "1"}
+{"field": "fax", "value": "1"}
 
 ### 3.12 a contact that does not exist -> 403 PermissionError "Not permitted", as upstream
-# @waiting CONTACTS
 # has_permission("Contact", "write", "<missing>") is False upstream, so it is a
 # PermissionError, not a validation failure.
 # @expect $.exc_type == PermissionError
 # @expect $.message == Not permitted
-POST {{host}}/api/method/crm.api.contact.create_new
+POST {{host}}/api/v1/contacts/ZZ Nobody/create-new-email-or-phone/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"contact": "ZZ Nobody", "field": "email", "value": "x@y.test"}
+{"field": "email", "value": "x@y.test"}
 
 ### 3.13 search_emails: lists, not dicts - [full_name, email_id, name] -> 200
-# @waiting CONTACTS
 # @expect $.message[0] count 3
 # @expect $.message[0][2] == ZZ Jane Roe
-POST {{host}}/api/method/crm.api.contact.search_emails
+GET {{host}}/api/v1/contacts/search-emails/?txt=ZZ%20Jane%20Roe
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{"txt": "ZZ Jane Roe"}
 
 ### 3.14 search_emails only returns contacts that have an email -> ZZ No Mail is absent
-# @waiting CONTACTS
 # @expect $.message count 0
-POST {{host}}/api/method/crm.api.contact.search_emails
+GET {{host}}/api/v1/contacts/search-emails/?txt=ZZ%20No%20Mail
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{"txt": "ZZ No Mail"}
 
 # ---- linkage to deals -------------------------------------------------------------------
 
@@ -505,10 +489,10 @@ Content-Type: application/json
 {"doctype": "Contact", "old_name": "ZZ Jane Roe", "new_name": "ZZ Jane Renamed"}
 
 ### 5.4 -> the contact kept its own email and phone rows
-# @waiting CONTACTS
-# @expect $.data.email_ids count 2
-# @expect $.data.phone_nos count 2
-GET {{contact}}/ZZ%20Jane%20Renamed
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message.email_ids count 2
+# @expect $.message.phone_nos count 2
+GET {{host}}/api/v1/contacts/ZZ%20Jane%20Renamed/
 Authorization: Bearer {{token}}
 
 ### 5.5 -> and the deal still links to it, under the new name
@@ -596,15 +580,11 @@ Content-Type: application/json
 {"doctype": "CRM Organization", "txt": "ZZ Ren", "filters": {"industry": "No Such Industry"}}
 
 ### 7.4 get_doc_permissions -> the map the frontend greys buttons with
-# @waiting CONTACTS
 # @expect $.message.permissions.read == true
 # @expect $.message.permissions.write == true
 # @expect $.message.permissions.delete == true
-POST {{host}}/api/method/frappe.client.get_doc_permissions
+GET {{host}}/api/v1/contacts/None/permissions/?docname=ZZ%20Jane%20Roe-1
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{"doctype": "Contact", "docname": "ZZ Jane Roe-1"}
 
 ### 7.5 ...and for a document that does not exist, an empty map rather than an error
 # @waiting CONTACTS
@@ -629,33 +609,33 @@ DELETE {{host}}/api/resource/CRM%20Deal/{{deal}}
 Authorization: Bearer {{token}}
 
 ### 8.2 delete contacts -> 200|404 (5.3 may or may not have renamed, depending on findings)
-# @waiting CONTACTS
-DELETE {{contact}}/ZZ%20Jane%20Renamed
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/contacts/ZZ%20Jane%20Renamed/
 Authorization: Bearer {{token}}
 
 ### 8.3 -> 200|404
-# @waiting CONTACTS
-DELETE {{contact}}/ZZ%20Jane%20Roe
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/contacts/ZZ%20Jane%20Roe/
 Authorization: Bearer {{token}}
 
 ### 8.4 -> 200
-# @waiting CONTACTS
-DELETE {{contact}}/ZZ%20Jane%20Roe-1
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/contacts/ZZ%20Jane%20Roe-1/
 Authorization: Bearer {{token}}
 
 ### 8.5 -> 200
-# @waiting CONTACTS
-DELETE {{contact}}/ZZ%20John%20Doe
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/contacts/ZZ%20John%20Doe/
 Authorization: Bearer {{token}}
 
 ### 8.6 -> 200
-# @waiting CONTACTS
-DELETE {{contact}}/ZZ%20Acme%20Only
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/contacts/ZZ%20Acme%20Only/
 Authorization: Bearer {{token}}
 
 ### 8.6b -> 200
-# @waiting CONTACTS
-DELETE {{contact}}/ZZ%20No%20Mail
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/contacts/ZZ%20No%20Mail/
 Authorization: Bearer {{token}}
 
 ### 8.7 delete organizations -> 200|404 (one of the two names exists, depending on 5.1)
@@ -689,9 +669,9 @@ DELETE {{host}}/api/v1/industries/ZZ%20Industry/
 Authorization: Bearer {{token}}
 
 ### 8.13 nothing left behind -> 200, empty
-# @waiting CONTACTS
-# @expect $.data count 0
-GET {{contact}}?fields=["name"]&filters=[["name","like","ZZ %25"]]
+# @resource-envelope {"data"}/201 -> {"message"}/200
+# @expect $.message count 0
+GET {{host}}/api/v1/contacts/?fields=["name"]&filters=[["name","like","ZZ %25"]]
 Authorization: Bearer {{token}}
 
 ### 8.14 delete what 8.13 listed, by name -> 200|417

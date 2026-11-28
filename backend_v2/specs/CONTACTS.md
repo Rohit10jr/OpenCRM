@@ -242,9 +242,10 @@ today; both come before Contact opts in.
   flag and empties the column, still answering `true`; two rows with the same value
   raise "Only one …" and the transaction rolls back (`contact.py:131-137`).
 - **(i)** `create_new` makes the row primary only when the table was empty; `mobile_no`
-  and `phone` both set `is_primary_mobile_no`. Its rows keep `idx` 0 (parity,
-  `contact.py:87-97`); child rows are read ordered by `idx`, then `name`, so the answer
-  is stable (`05` 3.4 and 3.6 assert by index).
+  and `phone` both set `is_primary_mobile_no`. Its row gets the next `idx`, as
+  upstream's `append` numbers it (PE-36; the old backend left 0). Child rows are read
+  ordered by `idx` alone (`core/children.py`), never by `name` (random hex), so the
+  numbering is what makes the answer stable (`05` 3.4 and 3.6 assert by index).
 
 `test_platform_models.py:210-214` ("first email wins") and `test_contact_rules.py:50-56`
 ("two unflagged rows give an empty column") pass together only because of (c) and (f):

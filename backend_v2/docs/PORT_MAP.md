@@ -261,8 +261,8 @@ today. CONFIGURATION still owns the field labels and fieldtypes used by export h
 | Contact | main | controller (full name + `append_number_if_name_exists`) | ruled: list rule, object rule |  | `frappe_platform.Contact` | `GET /api/v1/contacts/`, `POST /api/v1/contacts/`, `GET /api/v1/contacts/value/`, `GET /api/v1/contacts/search/`, `POST /api/v1/contacts/search/`, `GET /api/v1/contacts/<name>/`, `PATCH /api/v1/contacts/<name>/`, `DELETE /api/v1/contacts/<name>/`, `GET /api/v1/contacts/<name>/permissions/`; the shared actions of `CONTACTS.md` §8 when built | contacts | built |
 | Gender | main | `FieldValue('gender')` | ruled: list rule, object rule |  | `frappe_platform.Gender` | `GET /api/v1/genders/`, `POST /api/v1/genders/`, `GET /api/v1/genders/value/`, `GET /api/v1/genders/search/`, `POST /api/v1/genders/search/`, `GET /api/v1/genders/<name>/`, `PATCH /api/v1/genders/<name>/`, `DELETE /api/v1/genders/<name>/`, `GET /api/v1/genders/<name>/permissions/` | contacts | built |
 | Salutation | main | `FieldValue('salutation')` | ruled: list rule, object rule |  | `frappe_platform.Salutation` | `GET /api/v1/salutations/`, `POST /api/v1/salutations/`, `GET /api/v1/salutations/value/`, `GET /api/v1/salutations/search/`, `POST /api/v1/salutations/search/`, `GET /api/v1/salutations/<name>/`, `PATCH /api/v1/salutations/<name>/`, `DELETE /api/v1/salutations/<name>/`, `GET /api/v1/salutations/<name>/permissions/`, `POST /api/v1/salutations/<name>/rename/` | contacts | built |
-| Contact Email | child | `Hash(10)` | n/a |  | `frappe_platform.ContactEmail` | `PATCH /api/v1/contacts/<name>/email-ids/<row>/`, `DELETE /api/v1/contacts/<name>/email-ids/<row>/` (old `frappe.client.set_value` and `delete` on the row; the value moves into the body as `{"<fieldname>": <value>}`) | contacts | — |
-| Contact Phone | child | `Hash(10)` | n/a |  | `frappe_platform.ContactPhone` | `PATCH /api/v1/contacts/<name>/phone-nos/<row>/`, `DELETE /api/v1/contacts/<name>/phone-nos/<row>/` (as Contact Email) | contacts | — |
+| Contact Email | child | `Hash(10)` | n/a |  | `frappe_platform.ContactEmail` | `PATCH /api/v1/contacts/<name>/email-ids/<row>/`, `DELETE /api/v1/contacts/<name>/email-ids/<row>/` (old `frappe.client.set_value` and `delete` on the row; the value moves into the body as `{"<fieldname>": <value>}`) | contacts | built |
+| Contact Phone | child | `Hash(10)` | n/a |  | `frappe_platform.ContactPhone` | `PATCH /api/v1/contacts/<name>/phone-nos/<row>/`, `DELETE /api/v1/contacts/<name>/phone-nos/<row>/` (as Contact Email) | contacts | built |
 | Dynamic Link | child | `Hash(10)` | n/a |  | `frappe_platform.DynamicLink` | none (rows of their parent) | contacts | — |
 
 ### Method paths (4)
@@ -272,9 +272,9 @@ the owner, 20 Nov 2026).
 
 | Dotted path | Verbs | Access | Old source | New route | New app | Status |
 |---|---|---|---|---|---|---|
-| `crm.api.contact.create_new` | GET/POST | auth | `crm_app/api/contact.py:create_new` | `POST /api/v1/contacts/<name>/create-new-email-or-phone/` (`contact` in the URL; `field`, `value` in the body) | contacts | — |
-| `crm.api.contact.search_emails` | GET/POST | auth | `crm_app/api/contact.py:search_emails` | `GET /api/v1/contacts/search-emails/` (`txt` kept as input) | contacts | — |
-| `crm.api.contact.set_as_primary` | GET/POST | auth | `crm_app/api/contact.py:set_as_primary` | `POST /api/v1/contacts/<name>/set-as-primary/` (`contact` in the URL; `field`, `value` in the body) | contacts | — |
+| `crm.api.contact.create_new` | GET/POST | auth | `crm_app/api/contact.py:create_new` | `POST /api/v1/contacts/<name>/create-new-email-or-phone/` (`contact` in the URL; `field`, `value` in the body) | contacts | built |
+| `crm.api.contact.search_emails` | GET/POST | auth | `crm_app/api/contact.py:search_emails` | `GET /api/v1/contacts/search-emails/` (`txt` kept as input) | contacts | built |
+| `crm.api.contact.set_as_primary` | GET/POST | auth | `crm_app/api/contact.py:set_as_primary` | `POST /api/v1/contacts/<name>/set-as-primary/` (`contact` in the URL; `field`, `value` in the body) | contacts | built |
 | `crm.api.session.get_organizations` | GET/POST | auth | `crm_app/api/session.py:get_organizations` | `GET /api/v1/organizations/directory/` | contacts | — |
 
 ## NOTIFICATIONS

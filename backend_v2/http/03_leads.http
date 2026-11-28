@@ -45,9 +45,9 @@ DELETE {{host}}/api/resource/CRM%20Deal/{{old_deal.response.body.$.data[0].name}
 Authorization: Bearer {{token}}
 
 ### 0.1d and the contact the conversion made from lead 4's email -> 200|404
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{host}}/api/resource/Contact/zz.mail
+DELETE {{host}}/api/v1/contacts/zz.mail/
 Authorization: Bearer {{token}}
 
 ### 0.2 find leads left by an earlier run -> 200
@@ -596,8 +596,8 @@ DELETE {{host}}/api/resource/CRM%20Deal/{{converted}}
 Authorization: Bearer {{token}}
 
 ### 7.0b delete the contact the conversion made -> 200
-# @waiting CONTACTS
-DELETE {{host}}/api/resource/Contact/zz.mail
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/contacts/zz.mail/
 Authorization: Bearer {{token}}
 
 ### 7.1 delete lead 1 -> 200

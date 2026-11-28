@@ -19,8 +19,15 @@ from contacts.serializers import (
     GenderSerializer,
     SalutationSerializer,
 )
+from rest_framework.decorators import action
+from rest_framework.response import Response
+
+from contacts import actions as contact_actions
+from contacts import child_rows
 from core.access import Access
+from core.inputs import build_payload
 from core.mixins import LinkSearchMixin, RenameMixin
+from core.renderers import Envelope
 from core.views import DocumentViewSet
 
 
@@ -188,6 +195,55 @@ class ContactViewSet(LinkSearchMixin, DocumentViewSet):
             return True
         owner = getattr(document, "owner_id", None)
         return bool(owner) and str(owner) == str(user.name)
+
+    # The contact calls take the contact from the URL but never load it through
+    # get_object(): a missing or refused contact is 403, not the base 404 (§4).
+    @action(detail=True, methods=("post",), url_path="create-new-email-or-phone")
+    def create_new_email_or_phone(self, request, **kwargs):
+        """`crm.api.contact.create_new` (§11.4: the route's name)."""
+        inputs = build_payload(request)
+        result = contact_actions.create_new(
+            type(self), request.user, self._url_name(), inputs.get("field"), inputs.get("value")
+        )
+        return Response(Envelope(result, "message"))
+
+    @action(detail=True, methods=("post",), url_path="set-as-primary")
+    def set_as_primary(self, request, **kwargs):
+        """`crm.api.contact.set_as_primary`."""
+        inputs = build_payload(request)
+        result = contact_actions.set_as_primary(
+            type(self), request.user, self._url_name(), inputs.get("field"), inputs.get("value")
+        )
+        return Response(Envelope(result, "message"))
+
+    @action(detail=False, methods=("get",), url_path="search-emails")
+    def search_emails(self, request):
+        """`crm.api.contact.search_emails`; the frontend's POST is the generator's (§1)."""
+        inputs = build_payload(request)
+        result = contact_actions.search_emails(self.get_queryset(), request.user, inputs.get("txt"))
+        return Response(Envelope(result, "message"))
+
+    # The row routes (§4, DECISIONS 60): the row in the URL, the values in the body.
+    @action(detail=True, methods=("patch", "delete"), url_path=r"email-ids/(?P<row>[^/]+)")
+    def email_row(self, request, row=None, **kwargs):
+        return self._row_route(request, "email_ids", row)
+
+    @action(detail=True, methods=("patch", "delete"), url_path=r"phone-nos/(?P<row>[^/]+)")
+    def phone_row(self, request, row=None, **kwargs):
+        return self._row_route(request, "phone_nos", row)
+
+    def _row_route(self, request, table, row):
+        if request.method == "DELETE":
+            child_rows.delete_row(type(self), request.user, self._url_name(), table, row)
+            return Response(Envelope(None, "message"))
+        contact = child_rows.edit_row(
+            type(self), request.user, self._url_name(), table, row, request.data
+        )  # the body only, as the document PATCH: a query parameter is not a value
+        data = self.get_serializer(contact).data
+        return Response(Envelope(data, "message"))
+
+    def _url_name(self):
+        return self.kwargs[self.lookup_url_kwarg or self.lookup_field]
 
 
 class CRMIndustryViewSet(RenameMixin, LinkSearchMixin, DocumentViewSet):

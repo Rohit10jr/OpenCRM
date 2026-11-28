@@ -551,6 +551,22 @@ sent kanban columns again, as the old backend and upstream. The number is not re
 - **Why:** replaces a crash with an error
 - **Recorded by:** CONFIGURATION, 18 Nov 2026
 
+### PE-12f. The contact calls' missing arguments answer as errors
+
+- **Status:** approved — PE-12's kind, it only replaces a crash (`specs/CONTACTS.md` §4
+  "Validation"; `temp` A-42 items 7-12); built with this entry (CONTACTS milestone 4)
+- **Where:** `POST /api/v1/contacts/<name>/create-new-email-or-phone/`,
+  `POST /api/v1/contacts/<name>/set-as-primary/`, `GET /api/v1/contacts/search-emails/`
+  (old `crm.api.contact.create_new`, `set_as_primary`, `search_emails`)
+- **Old backend:** a missing `field`, `value` or `txt` is dropped by `bind_arguments`,
+  so the call raises a `TypeError` and answers 500 (`backend/frappe_core/whitelist.py:
+  75-92`; the calls in `backend/crm_app/api/contact.py`)
+- **backend_v2:** 417 "Field is required", "Value is required" or "Search text is
+  required", after the contact check (a missing or refused contact is still 403 first);
+  an empty `txt` still lists every contact with an email
+- **Why:** replaces a crash with an error
+- **Recorded by:** CONTACTS, 23 Nov 2026
+
 ### PE-24. Rename is served where upstream allows a rename
 
 - **Status:** approved by the owner (20 Nov 2026), rewriting the supervisor's first
@@ -558,7 +574,8 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   2026; rewritten by `temp` A-48 3c; Currency added by `temp` A-63 item 1); built for
   the resources already served: Email Account (before), Currency, CRM Fields Layout, CRM
   Form Script, Salutation, Address and CRM Industry, then User and CRM Invitation (ACCOUNTS
-  §10); later units as they are built. User's rename needs System Manager or
+  §10), and the Contact Email and Contact Phone row routes (CONTACTS milestone 4); later
+  units as they are built. User's rename needs System Manager or
   Administrator, not the write rule (PE-32); and "the caches are written by their own
   calls" has one more writer, the User rename's `_assign` / `_liked_by` rewrite
 - **Where:** `POST /api/v1/<resource>/<name>/rename/` (old `frappe.client.rename_doc`);
@@ -803,8 +820,8 @@ sent kanban columns again, as the old backend and upstream. The number is not re
 ### PE-35. Contact's `user` is filled from the User with the contact's email
 
 - **Status:** approved by the owner (20 Nov 2026, `temp` A-48 6.2; the match A-65, A-67;
-  `specs/CONTACTS.md` §11.2); built with this entry for the contact's save and its row
-  signal; `create_new` and `set_as_primary` follow with milestone 4
+  `specs/CONTACTS.md` §11.2); built for the contact's save and its row signal
+  (milestone 3) and for `create_new` and `set_as_primary` (milestone 4)
 - **Where:** `POST` / `PATCH /api/v1/contacts/...`, and every write of a contact's
   email rows
 - **Old backend:** leaves `user` as sent
@@ -817,6 +834,25 @@ sent kanban columns again, as the old backend and upstream. The number is not re
   (`frappe/database/database.py:623`, `frappe/database/query.py:329-338`) and whose `=`
   ignores case on its default MariaDB collation
 - **Recorded by:** CONTACTS, 22 Nov 2026
+
+### PE-36. A row added by `create_new` gets the next `idx`
+
+- **Status:** approved — decided by the supervisor on the owner's behalf (`temp` A-81
+  item 2, 23 Nov 2026); built with this entry (CONTACTS milestone 4)
+- **Where:** `POST /api/v1/contacts/<name>/create-new-email-or-phone/` (old
+  `crm.api.contact.create_new`), and so every read of a contact's `email_ids` and
+  `phone_nos`
+- **Old backend:** creates the row with `idx` 0 (`backend/crm_app/api/contact.py`
+  `create_new`); child rows are read ordered by `idx` alone
+  (`backend/frappe_core/children.py:90`), so rows added this way come back in whatever
+  order PostgreSQL returns, and an UPDATE can change it
+- **backend_v2:** the row gets the highest `idx` of its table plus one, so the table
+  reads back in the order the rows were added
+- **Why:** upstream's `contact.append(...)` numbers the row `len(table) + 1`
+  (`crm/api/contact.py:76-83`; v15 `frappe/model/base_document.py:331-335`), so its order is
+  stable; the highest plus one is the same while the table has no gaps, and stays unique
+  after a row is deleted
+- **Recorded by:** CONTACTS, 23 Nov 2026
 
 ---
 

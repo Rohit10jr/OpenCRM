@@ -131,9 +131,9 @@ DELETE {{lead}}/{{old_leads.response.body.$.data[1].name}}
 Authorization: Bearer {{token}}
 
 ### 0.16 cleanup contact -> 200|404
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{host}}/api/resource/Contact/ZZ%20Caller
+DELETE {{host}}/api/v1/contacts/ZZ%20Caller/
 Authorization: Bearer {{token}}
 
 # ---- fixtures ----------------------------------------------------------------------------
@@ -150,9 +150,9 @@ Content-Type: application/json
 ###
 @lead_name = {{lead_req.response.body.$.data.name}}
 
-### 1.2 a contact with a mobile number, for the phone lookups -> 201
-# @waiting CONTACTS
-POST {{host}}/api/resource/Contact
+### 1.2 a contact with a mobile number, for the phone lookups -> 200
+# @resource-envelope {"data"}/201 -> {"message"}/200
+POST {{host}}/api/v1/contacts/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -574,8 +574,8 @@ DELETE {{call}}/ZZ-CALL-1
 Authorization: Bearer {{token}}
 
 ### 7.7 delete the contact -> 200
-# @waiting CONTACTS
-DELETE {{host}}/api/resource/Contact/ZZ%20Caller
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/contacts/ZZ%20Caller/
 Authorization: Bearer {{token}}
 
 ### 7.8 delete the lead -> 200

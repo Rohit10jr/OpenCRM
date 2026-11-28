@@ -57,8 +57,11 @@ def parse_built_routes(text):
                             f"Malformed built New route at line {index + 1}: "
                             f"{values['New route']}"
                         )
+                    # Placeholder names carry no meaning here: the served side writes
+                    # every URL parameter as <name> (_normalise_pattern), so a
+                    # documented <row> is compared as <name> too.
                     routes.update(
-                        (method, path.rstrip("."))
+                        (method, PLACEHOLDER.sub("<name>", path.rstrip(".")))
                         for method, path in matches
                         if "<resource>" not in path and "<settings>" not in path
                     )
@@ -122,6 +125,22 @@ def test_every_production_api_pattern_is_recorded_as_built():
         f"Production routes missing from PORT_MAP: {sorted(served - mapped)}; "
         f"built PORT_MAP routes not served: {sorted(mapped - served)}"
     )
+
+
+def test_a_documented_placeholder_is_compared_by_position_not_by_name():
+    """`<row>` is read as `<name>`, as every served parameter is; a wrong literal segment
+    still differs from the served route."""
+    table = """\
+| Dotted path | New route | Status |
+|---|---|---|
+| `a` | `PATCH /api/v1/contacts/<name>/email-ids/<row>/` | built |
+| `b` | `DELETE /api/v1/contacts/<name>/email-id/<row>/` | built |
+"""
+    served = _normalise_pattern(r"^api/v1/contacts/(?P<pk>[^/]+)/email-ids/(?P<row>[^/]+)/?$")
+    routes = parse_built_routes(table)
+    assert ("PATCH", "/" + served) in routes
+    assert ("DELETE", "/" + served) not in routes
+    assert ("DELETE", "/api/v1/contacts/<name>/email-id/<name>/") in routes
 
 
 def test_malformed_route_table_rows_fail_loudly():

@@ -46,13 +46,15 @@ slash.
 | `/api/v1/<resource>/` | A collection: list (`GET`), create (`POST`) |
 | `/api/v1/<resource>/<name>/` | One document: read (`GET`), update (`PATCH`), delete (`DELETE`) |
 | `/api/v1/<resource>/<name>/<action>/` | An action on one document, e.g. `POST /api/v1/leads/<name>/convert-to-deal/` |
+| `/api/v1/<resource>/<name>/<table>/<row>/` | One row of a document's child table, e.g. `PATCH /api/v1/contacts/<name>/email-ids/<row>/`. Served only where the route map lists it (CONTACTS: Contact Email and Contact Phone) |
 | `/api/v1/<resource>/<action>/` | An action on a collection |
 | `/api/v1/<area>/<endpoint>/` | An endpoint that is not a resource, such as login or a dashboard chart |
 
 - **Every route and its method is listed in the route map.** No other route is served.
   The naming rules are REBUILD_PLAN S25: plural hyphenated resources (`leads`,
   `call-logs`), hyphenated action verbs (`convert-to-deal`), settings records without a
-  name in the URL, one level of nesting at most, and an optional trailing slash.
+  name in the URL, one level of nesting at most (the child-row routes, the next section, are the one
+  exception), and an optional trailing slash.
 - **The HTTP method says what happens:** `GET` reads, `POST` creates or runs an action,
   `PATCH` updates, `DELETE` deletes. **PUT is not served** — every old update was
   partial, so updates are PATCH only.
@@ -260,7 +262,12 @@ exceptions, and keep their capitals.
 - **A Link field is its target's name as a plain string** — never a nested object.
 - **Child tables are inline**: a list of row objects under the parent's field.
 - **A write replaces a child table wholesale** — the rows sent are the rows kept.
-- **A child row is never reachable on its own**; it has no route.
+- **A child row is reached through its document.** As a rule it has no route of its own.
+  The exception, as the old backend: Contact's email and phone rows have
+  `PATCH` and `DELETE` at `/api/v1/contacts/<name>/<table>/<row>/` (CONTACTS §4,
+  milestone 4). The contact's own rule decides: a refused edit is 403, a refused or
+  unknown row on delete is 404, and the answers are the old backend's sentences.
+  Any other child table is still written only through its document.
 
 ### Values — the traps
 
