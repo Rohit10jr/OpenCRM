@@ -650,9 +650,11 @@ sent kanban columns again, as the old backend and upstream. The number is not re
 
 ### PE-29. Contact, CRM Organization, CRM Industry and Address need a CRM role
 
-- **Status:** approved by the owner (20 Nov 2026; `temp` A-48 2d, A-61 item 4); built
-  with this entry for CRM Industry and Address; Contact and CRM Organization to be built
-  with their milestones, and until then they are not served
+- **Status:** approved by the owner (20 Nov 2026; `temp` A-48 2d, A-61 item 4; CRM
+  Territory added by A-74); built for CRM Industry, Address and Contact (CONTACTS
+  milestone 3: a CRM role reads, writes and creates; delete is the owner's, a System
+  Manager's or Administrator's, with a CRM role); CRM Organization and CRM Territory to be
+  built with their milestones, and until then they are not served
 - **Where:** `/api/v1/industries/...` and `/api/v1/addresses/...`: list, create, read,
   PATCH, delete, `value/`, `search/` and every other route that reads the list or the
   object rule (old `/api/resource/CRM Industry`, `/api/resource/Address`)
@@ -771,6 +773,50 @@ sent kanban columns again, as the old backend and upstream. The number is not re
 - **Why:** upstream writes them on install (`crm/install.py:17-35`) and serves
   `restore_defaults` as a desk button the port does not have
 - **Recorded by:** CONFIGURATION, 22 Nov 2026
+
+### PE-34. A delete is refused while a text Link or a PROTECT foreign key names the record
+
+- **Status:** approved by the owner (20 Nov 2026, `temp` A-48 6.3; 22 Nov 2026, A-74;
+  `specs/CONTACTS.md` §11.3); built with this entry
+- **Where:** every delete door: `DELETE /api/v1/<resource>/<name>/`,
+  `POST /api/v1/<resource>/bulk-delete/`, and the linked-documents delete
+- **Old backend:** checks dynamic links only (`backend/frappe_core/delete_doc.py:164-180`);
+  a text Link to a deleted record is left dangling, and a PROTECT foreign key is refused
+  by the database with "Cannot delete or cancel because …"
+- **backend_v2:** before the dynamic links, as upstream's order, a text Link
+  (`TEXT_LINK_FIELDS`, singletons included) or a PROTECT foreign key other than `owner` /
+  `modified_by` still naming the record refuses the delete with 417 `LinkExistsError`:
+  "You can disable this {doctype} instead of deleting it." when the record has
+  `enabled` or `disabled`, else "Cannot delete or cancel because {doctype} {name} is
+  linked with {doctype} {name}", upstream's text: no row position (only the dynamic
+  check names one), a child row named by its parent document, a Single named once.
+  Fields a model allows to dangle (`ALLOW_DANGLING_LINK_FIELDS`) never refuse, and a
+  record's links to itself, or within one bulk delete, do not either. Newly refused:
+  a Currency System Settings or FCRM Settings names (the disable sentence); since
+  CONTACTS milestone 3, a Salutation or Gender a Contact names (the second message) and
+  an Address a Contact names (the disable sentence); with milestone 5, an Address an
+  Organization names (the disable sentence)
+- **Why:** upstream's `check_if_doc_is_linked` (v15 `frappe/model/delete_doc.py:141-153,
+  276-339`)
+- **Recorded by:** CONTACTS, 22 Nov 2026
+
+### PE-35. Contact's `user` is filled from the User with the contact's email
+
+- **Status:** approved by the owner (20 Nov 2026, `temp` A-48 6.2; the match A-65, A-67;
+  `specs/CONTACTS.md` §11.2); built with this entry for the contact's save and its row
+  signal; `create_new` and `set_as_primary` follow with milestone 4
+- **Where:** `POST` / `PATCH /api/v1/contacts/...`, and every write of a contact's
+  email rows
+- **Old backend:** leaves `user` as sent
+- **backend_v2:** when `user` is empty and the primary email is set, `user` becomes the
+  User whose `email` equals it, ignoring case; of two, the most recently modified. An
+  explicit `user` is kept; no match leaves it empty; existing contacts get it on their
+  next save (no backfill)
+- **Why:** upstream's `Contact.set_user` (v15 `frappe/contacts/doctype/contact/contact.py:
+  71,131-133`), whose `get_value` orders by `modified` descending
+  (`frappe/database/database.py:623`, `frappe/database/query.py:329-338`) and whose `=`
+  ignores case on its default MariaDB collation
+- **Recorded by:** CONTACTS, 22 Nov 2026
 
 ---
 

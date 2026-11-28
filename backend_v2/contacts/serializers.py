@@ -2,7 +2,7 @@
 
 from core.serializers import DocumentSerializer
 
-from .models import Address, CRMIndustry, Gender, Salutation
+from .models import Address, Contact, CRMIndustry, Gender, Salutation
 
 DOCUMENT_FIELDS = (
     "name",
@@ -54,6 +54,40 @@ ADDRESS_FIELDS = (
     "is_shipping_address",
     "disabled",
 )
+
+
+CONTACT_FIELDS = (
+    "first_name",
+    "middle_name",
+    "last_name",
+    "full_name",
+    "salutation",
+    "company_name",
+    "designation",
+    "gender",
+    "image",
+    "status",
+    "address",
+    "user",
+    "email_id",
+    "mobile_no",
+    "phone",
+)
+
+
+class ContactSerializer(DocumentSerializer):
+    """The contact and its `email_ids` / `phone_nos` rows (specs/CONTACTS.md §3, §4).
+    The document route saves the contact again once its rows are written, so the
+    primary rules apply over the whole table (FINDINGS 8)."""
+
+    CHILD_TABLES = {
+        "email_ids": ("contacts.ContactEmail", "parent_contact"),
+        "phone_nos": ("contacts.ContactPhone", "parent_contact"),
+    }
+
+    class Meta:
+        model = Contact
+        fields = (*DOCUMENT_FIELDS, *CONTACT_FIELDS, "email_ids", "phone_nos")
 
 
 class AddressSerializer(DocumentSerializer):

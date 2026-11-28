@@ -10,7 +10,7 @@ from core.children import (
     delete_polymorphic_children_batch,
     delete_references_batch,
 )
-from core.delete import check_dynamic_links_batch
+from core.delete import check_dynamic_links_batch, check_static_links_batch
 from core.doctypes import doctype_of
 from core.exceptions import PermissionError, throw
 from core.inputs import build_payload
@@ -98,6 +98,7 @@ def perform_bulk_delete(
                 delete_if_permitted(rules, user, instance)
 
         target_instances = list(model._default_manager.filter(pk__in=targets))
+        check_static_links_batch(target_instances)
         check_dynamic_links_batch(target_instances)
         delete_polymorphic_children_batch(model, targets)
         delete_references_batch(doctype_of(model), targets)
