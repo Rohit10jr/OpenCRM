@@ -116,16 +116,16 @@ DELETE {{territory}}/ZZ%20World
 Authorization: Bearer {{token}}
 
 ### 0.15 cleanup industry -> 200|404
-# @waiting CONTACTS
+# @resource-envelope {"data"}/201 -> {"message"}/200
 # @cleanup
-DELETE {{host}}/api/resource/CRM%20Industry/ZZ%20Industry
+DELETE {{host}}/api/v1/industries/ZZ%20Industry/
 Authorization: Bearer {{token}}
 
 # ---- fixtures ----------------------------------------------------------------------------
 
-### 1.1 industry -> 201
-# @waiting CONTACTS
-POST {{host}}/api/resource/CRM%20Industry
+### 1.1 industry -> 200
+# @resource-envelope {"data"}/201 -> {"message"}/200
+POST {{host}}/api/v1/industries/
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -684,8 +684,8 @@ DELETE {{territory}}/ZZ%20World
 Authorization: Bearer {{token}}
 
 ### 8.12 delete industry -> 200
-# @waiting CONTACTS
-DELETE {{host}}/api/resource/CRM%20Industry/ZZ%20Industry
+# @resource-envelope {"data"}/201 -> {"message"}/200
+DELETE {{host}}/api/v1/industries/ZZ%20Industry/
 Authorization: Bearer {{token}}
 
 ### 8.13 nothing left behind -> 200, empty

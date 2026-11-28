@@ -32,7 +32,9 @@ def test_every_default_layout_is_json_with_fieldnames_only():
 
 
 def test_the_steps_run_after_users_in_order():
-    assert [step.key for step in STEPS] == ["users", "fields_layouts", "quick_filters", "form_scripts"]
+    """CONFIGURATION's three steps follow users; later units' steps come after."""
+    keys = [step.key for step in STEPS]
+    assert keys[:4] == ["users", "fields_layouts", "quick_filters", "form_scripts"]
 
 
 def test_layouts_are_written_once_and_recorded(administrator):

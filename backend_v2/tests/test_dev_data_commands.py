@@ -80,8 +80,9 @@ def test_seed_creates_the_four_users_with_passwords_and_roles(passwords):
         assert account.check_password(password)
         assert set(account.groups.values_list("name", flat=True)) == roles
     assert "users: 3 created, 4 reset" in output.getvalue()
-    # With CONFIGURATION's steps: 14 layouts, 6 quick filters, 3 form scripts.
-    assert "26 row(s) created" in output.getvalue()
+    # With CONFIGURATION's steps (14 layouts, 6 quick filters, 3 form scripts) and
+    # CONTACTS' (51 industries; the salutations and genders exist from the migration).
+    assert "77 row(s) created" in output.getvalue()
 
 
 def test_seed_refuses_before_writing_when_a_password_is_missing(
@@ -158,8 +159,9 @@ def test_clear_removes_only_the_three_non_builtin_seed_users(passwords, make_use
     assert set(Group.objects.values_list("name", flat=True)) == role_names
     assert set(SEEDED_ROLES) <= role_names
     assert "users: 3" in output.getvalue()
-    # With CONFIGURATION's steps: 14 layouts, 6 quick filters, 3 form scripts.
-    assert "26 row(s) removed" in output.getvalue()
+    # With CONFIGURATION's steps (14 layouts, 6 quick filters, 3 form scripts) and
+    # CONTACTS' 51 industries.
+    assert "77 row(s) removed" in output.getvalue()
 
 
 def test_demo_is_accepted_and_reports_that_it_adds_nothing_yet(passwords):

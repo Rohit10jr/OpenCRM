@@ -342,12 +342,16 @@ Upstream does each of these; `backend/` does not, and neither does `backend_v2`:
 
 - **Salutation and Gender by data migration**, as `backend/` does
   (`frappe_platform/migrations/0014_seed_salutations_and_genders.py`, through
-  `reference_data.py:34-60`): a save is refused without them (FINDINGS 66). The
-  migration uses the historical model; a `seed_dev_data` step reuses the same functions
-  (`add_salutations`, `add_genders`), so a deleted row comes back as the old
-  `seed_defaults` brings it back (`crm_app/setup.py:563-564`;
-  `test_salutation_gender.py:35-47` expects the functions' counts). Parity, not the
-  parked S20 question.
+  `reference_data.py:34-60`): a save is refused without them (FINDINGS 66). Two writers
+  share the lists in `contacts/reference_rows.py`: the migration, on the historical
+  model, and a `seed_dev_data` step through the normal save, so a deleted row comes back
+  as the old `seed_defaults` brings it back (`crm_app/setup.py:563-564`;
+  `test_salutation_gender.py:35-47`). A restored row is not recorded, so
+  `clear_dev_data` never removes it: these rows are promised to every database, and the
+  old backend has no clear. The migration stamps the rows' `owner` and `modified_by` as
+  Administrator, as v2's Currency rows; the old migration saves with no session
+  (`frappe_platform/migrations/0014_seed_salutations_and_genders.py:19-23`), flagged to
+  the owner. Parity otherwise, not the parked S20 question.
 - **The 51 industries** are a `seed_dev_data` step (S20; DECISIONS 44 stays parked),
   as CONFIGURATION's milestone 6 steps are.
 
