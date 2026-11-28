@@ -10,7 +10,7 @@ from accounts.roles import (
 )
 from accounts.directory import session_role_flags
 from configuration.export_fields import export_field_info_for
-from contacts.models import Address, Contact
+from contacts.models import Address, Contact, CRMOrganization
 from contacts.serializers import (
     ADDRESS_FIELDS,
     CONTACT_FIELDS,
@@ -311,11 +311,21 @@ class CRMTerritoryViewSet(RenameMixin, LinkSearchMixin, DocumentViewSet):
         return _has_crm_role(user)
 
 
-class CRMOrganizationViewSet(LinkSearchMixin, DocumentViewSet):
-    """CRM Organization (specs/CONTACTS.md §4): PE-29's rule, as CRM Industry's (a CRM role
-    for every action). Every column readable, filterable and sortable; search matches
-    `name` (§8). The shared actions come at milestone 6b, the list views at 7."""
+class CRMOrganizationViewSet(
+    BulkDeleteMixin,
+    BulkUpdateMixin,
+    LinkedDocumentsMixin,
+    LinkSearchMixin,
+    ListExportMixin,
+    RenameMixin,
+    DocumentViewSet,
+):
+    """CRM Organization (specs/CONTACTS.md §4, §8): PE-29's rule, as CRM Industry's (a CRM
+    role for every action). Every column readable, filterable and sortable; search matches
+    `name` (§8). The shared actions (milestone 6b) take the same rule; rename sets
+    `organization_name` (PE-24, PE-31). The list views come at 7."""
 
+    export_field_info = staticmethod(export_field_info_for(CRMOrganization))
     access = Access.ruled()
     serializer_class = CRMOrganizationSerializer
     readable_fields = CRMOrganizationSerializer.Meta.fields
